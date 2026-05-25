@@ -1,0 +1,575 @@
+{
+  "benchmark": "Ko-AgentBench",
+  "model": "gemma_4_26b_a4b_it",
+  "evaluation_method": "ensemble (Claude per-task + Codex cross-check)",
+  "judge_models": [
+    "Claude (sonnet/opus)",
+    "Codex (GPT-5.2 등)"
+  ],
+  "rubric": {
+    "PASS": "올바른 tool + 핵심 args (text 형식 'call:Name:{json}'도 OK)",
+    "PARTIAL": "올바른 tool, args 일부 누락 또는 multi-step 첫 step 만",
+    "FAIL": "잘못된 tool, tool 호출 없음, 의미적 오답"
+  },
+  "scoring": {
+    "PASS": 1.0,
+    "PARTIAL": 0.5,
+    "FAIL": 0.0
+  },
+  "overall": {
+    "total": 91,
+    "pass": 42,
+    "partial": 37,
+    "fail": 12,
+    "weighted_score": 60.5,
+    "weighted_pct": 66.5,
+    "strict_pass_pct": 46.2
+  },
+  "level_summary": {
+    "L1": {
+      "total": 11,
+      "pass": 6,
+      "partial": 5,
+      "fail": 0,
+      "weighted_score": 8.5,
+      "weighted_pct": 77.3,
+      "strict_pass_pct": 54.5
+    },
+    "L2": {
+      "total": 15,
+      "pass": 10,
+      "partial": 5,
+      "fail": 0,
+      "weighted_score": 12.5,
+      "weighted_pct": 83.3,
+      "strict_pass_pct": 66.7
+    },
+    "L3": {
+      "total": 10,
+      "pass": 0,
+      "partial": 10,
+      "fail": 0,
+      "weighted_score": 5.0,
+      "weighted_pct": 50.0,
+      "strict_pass_pct": 0.0
+    },
+    "L4": {
+      "total": 10,
+      "pass": 3,
+      "partial": 5,
+      "fail": 2,
+      "weighted_score": 5.5,
+      "weighted_pct": 55.0,
+      "strict_pass_pct": 30.0
+    },
+    "L5": {
+      "total": 20,
+      "pass": 10,
+      "partial": 9,
+      "fail": 1,
+      "weighted_score": 14.5,
+      "weighted_pct": 72.5,
+      "strict_pass_pct": 50.0
+    },
+    "L6": {
+      "total": 15,
+      "pass": 11,
+      "partial": 3,
+      "fail": 1,
+      "weighted_score": 12.5,
+      "weighted_pct": 83.3,
+      "strict_pass_pct": 73.3
+    },
+    "L7": {
+      "total": 10,
+      "pass": 2,
+      "partial": 0,
+      "fail": 8,
+      "weighted_score": 2.0,
+      "weighted_pct": 20.0,
+      "strict_pass_pct": 20.0
+    }
+  },
+  "per_task": {
+    "L1-001": {
+      "score": "PASS",
+      "reason": "Directions_naver, 좌표 user-given, option default OK",
+      "judge": "Claude (sonnet/opus)"
+    },
+    "L1-002": {
+      "score": "PASS",
+      "reason": "start/goal/waypoints/option=traavoidtoll 모두 정확",
+      "judge": "Claude (sonnet/opus)"
+    },
+    "L1-003": {
+      "score": "PASS",
+      "reason": "CryptoPrice_bithumb markets=KRW-BTC 정확",
+      "judge": "Claude (sonnet/opus)"
+    },
+    "L1-004": {
+      "score": "PASS",
+      "reason": "MarketIndex_ls jisu=KOSDAQ 정확",
+      "judge": "Claude (sonnet/opus)"
+    },
+    "L1-005": {
+      "score": "PARTIAL",
+      "reason": "WebSearch_naver query 정확, display/start 누락",
+      "judge": "Claude (sonnet/opus)"
+    },
+    "L1-006": {
+      "score": "PARTIAL",
+      "reason": "BlogSearch_naver query만 (display/start 누락)",
+      "judge": "Claude (sonnet/opus)"
+    },
+    "L1-007": {
+      "score": "PARTIAL",
+      "reason": "NewsSearch_naver query+display=1, start 누락",
+      "judge": "Claude (sonnet/opus)"
+    },
+    "L1-008": {
+      "score": "PASS",
+      "reason": "ItemSearch_aladin sort=SalesPoint 인기순 의미 일치",
+      "judge": "Claude (sonnet/opus)"
+    },
+    "L1-009": {
+      "score": "PARTIAL",
+      "reason": "VideoSearch_daum query만",
+      "judge": "Claude (sonnet/opus)"
+    },
+    "L1-010": {
+      "score": "PARTIAL",
+      "reason": "PlaceSearch_kakao keyword/x/y 정확, radius/sort 누락",
+      "judge": "Claude (sonnet/opus)"
+    },
+    "L1-011": {
+      "score": "PASS",
+      "reason": "CategorySearch_kakao 거의 모든 args 정확",
+      "judge": "Claude (sonnet/opus)"
+    },
+    "L2-001": {
+      "score": "PARTIAL",
+      "reason": "OrderBook_ls shcode 정확, exchgubun 누락",
+      "judge": "Claude (sonnet/opus)"
+    },
+    "L2-002": {
+      "score": "PASS",
+      "reason": "StockChart_kis 모든 args 정확",
+      "judge": "Claude (sonnet/opus)"
+    },
+    "L2-003": {
+      "score": "PASS",
+      "reason": "AddressToCoord_kakao 정확",
+      "judge": "Claude (sonnet/opus)"
+    },
+    "L2-004": {
+      "score": "PASS",
+      "reason": "USStockPrice_kis symbol+exchange 정확",
+      "judge": "Claude (sonnet/opus)"
+    },
+    "L2-005": {
+      "score": "PASS",
+      "reason": "MarketIndex_ls jisu=KOSDAQ 정확 (포맷 약간 약식)",
+      "judge": "Claude (sonnet/opus)"
+    },
+    "L2-006": {
+      "score": "PASS",
+      "reason": "ItemLookup_aladin item_id+type 정확",
+      "judge": "Claude (sonnet/opus)"
+    },
+    "L2-007": {
+      "score": "PARTIAL",
+      "reason": "CryptoPrice_bithumb markets 정확하나 tool 이름 중복 출력",
+      "judge": "Claude (sonnet/opus)"
+    },
+    "L2-008": {
+      "score": "PARTIAL",
+      "reason": "CategorySearch_kakao radius 누락",
+      "judge": "Claude (sonnet/opus)"
+    },
+    "L2-009": {
+      "score": "PASS",
+      "reason": "Geocoding_tmap 정확",
+      "judge": "Claude (sonnet/opus)"
+    },
+    "L2-010": {
+      "score": "PASS",
+      "reason": "OrderBook_bithumb 정확",
+      "judge": "Claude (sonnet/opus)"
+    },
+    "L2-011": {
+      "score": "PASS",
+      "reason": "ItemList_aladin Bestseller+category_id=170 정확",
+      "judge": "Claude (sonnet/opus)"
+    },
+    "L2-012": {
+      "score": "PARTIAL",
+      "reason": "MarketList_upbit args=null 인데 quote=KRW 추가 (다름)",
+      "judge": "Claude (sonnet/opus)"
+    },
+    "L2-013": {
+      "score": "PASS",
+      "reason": "StockTrades_ls shcode 정확",
+      "judge": "Claude (sonnet/opus)"
+    },
+    "L2-014": {
+      "score": "PARTIAL",
+      "reason": "BlogSearch_naver query 정확, sort=sim 누락",
+      "judge": "Claude (sonnet/opus)"
+    },
+    "L2-015": {
+      "score": "PASS",
+      "reason": "WebSearch_daum query 의미 동일",
+      "judge": "Claude (sonnet/opus)"
+    },
+    "L3-001": {
+      "score": "PARTIAL",
+      "reason": "PlaceSearch_kakao 첫 step만 (CategorySearch_tmap 누락)",
+      "judge": "Claude (sonnet/opus)"
+    },
+    "L3-002": {
+      "score": "PARTIAL",
+      "reason": "MarketList_bithumb 첫 step만 + isDetails=true (golden=false)",
+      "judge": "Claude (sonnet/opus)"
+    },
+    "L3-003": {
+      "score": "PARTIAL",
+      "reason": "BlogSearch_naver 첫 step만 (ItemSearch_aladin 누락)",
+      "judge": "Claude (sonnet/opus)"
+    },
+    "L3-004": {
+      "score": "PARTIAL",
+      "reason": "PlaceSearch_kakao 첫 step만 (3-step 중 1)",
+      "judge": "Claude (sonnet/opus)"
+    },
+    "L3-005": {
+      "score": "PARTIAL",
+      "reason": "Geocoding_tmap 첫 step만 (3-step 중 1)",
+      "judge": "Claude (sonnet/opus)"
+    },
+    "L3-006": {
+      "score": "PARTIAL",
+      "reason": "ItemList_aladin 첫 step만 (BlogSearch_naver 누락)",
+      "judge": "Claude (sonnet/opus)"
+    },
+    "L3-007": {
+      "score": "PARTIAL",
+      "reason": "AddressToCoord_kakao 첫 step만 (3-step 중 1)",
+      "judge": "Claude (sonnet/opus)"
+    },
+    "L3-008": {
+      "score": "PARTIAL",
+      "reason": "AddressToCoord_kakao 첫 step만 (CategorySearch_kakao 누락)",
+      "judge": "Claude (sonnet/opus)"
+    },
+    "L3-009": {
+      "score": "PARTIAL",
+      "reason": "Geocoding_tmap 첫 step만 (3-step 중 1)",
+      "judge": "Claude (sonnet/opus)"
+    },
+    "L3-010": {
+      "score": "PARTIAL",
+      "reason": "PlaceSearch_kakao 첫 step만 (BlogSearch_naver 누락)",
+      "judge": "Claude (sonnet/opus)"
+    },
+    "L4-001": {
+      "score": "PARTIAL",
+      "reason": "WebSearch_naver만 (BlogSearch_naver 누락)",
+      "judge": "Claude (sonnet/opus)"
+    },
+    "L4-002": {
+      "score": "FAIL",
+      "reason": "Tool 호출 없음, 일반 지식 fabricate",
+      "judge": "Claude (sonnet/opus)"
+    },
+    "L4-003": {
+      "score": "PASS",
+      "reason": "StockPrice_ls + CryptoPrice_bithumb 둘 다 호출",
+      "judge": "Claude (sonnet/opus)"
+    },
+    "L4-004": {
+      "score": "PARTIAL",
+      "reason": "WebSearch_naver만",
+      "judge": "Claude (sonnet/opus)"
+    },
+    "L4-005": {
+      "score": "PARTIAL",
+      "reason": "StockPrice_ls 호출, shcode=373220 (LGES 정확) but golden=005930 잘못, WebSearch 누락",
+      "judge": "Claude (sonnet/opus)"
+    },
+    "L4-006": {
+      "score": "PARTIAL",
+      "reason": "StockPrice_ls 두 번 (035720 카카오, 035420 네이버 — 모두 정확) but WebSearch 누락",
+      "judge": "Claude (sonnet/opus)"
+    },
+    "L4-007": {
+      "score": "PARTIAL",
+      "reason": "NewsSearch_naver만 (WebSearch + BlogSearch 누락)",
+      "judge": "Claude (sonnet/opus)"
+    },
+    "L4-008": {
+      "score": "PASS",
+      "reason": "WebSearch + BlogSearch + NewsSearch 3개 모두 호출",
+      "judge": "Claude (sonnet/opus)"
+    },
+    "L4-009": {
+      "score": "FAIL",
+      "reason": "Tool 호출 없음",
+      "judge": "Claude (sonnet/opus)"
+    },
+    "L4-010": {
+      "score": "PASS",
+      "reason": "StockPrice_ls + CryptoPrice_bithumb 둘 다 호출",
+      "judge": "Claude (sonnet/opus)"
+    },
+    "L5-001": {
+      "score": "PARTIAL",
+      "reason": "WebSearch_daum query만, sort/page/size 누락",
+      "judge": "Claude (sonnet/opus)"
+    },
+    "L5-002": {
+      "score": "PARTIAL",
+      "reason": "VideoSearch_daum query+sort, page/size 누락",
+      "judge": "Claude (sonnet/opus)"
+    },
+    "L5-003": {
+      "score": "PARTIAL",
+      "reason": "WebSearch_daum query (다른 wording, sort/page/size 누락)",
+      "judge": "Claude (sonnet/opus)"
+    },
+    "L5-004": {
+      "score": "FAIL",
+      "reason": "Tool 호출 없음, '아직 발표 안 됨' 답변",
+      "judge": "Claude (sonnet/opus)"
+    },
+    "L5-005": {
+      "score": "PASS",
+      "reason": "BlogSearch_naver query+sort 정확",
+      "judge": "Claude (sonnet/opus)"
+    },
+    "L5-006": {
+      "score": "PASS",
+      "reason": "NewsSearch_naver query+sort+display 정확",
+      "judge": "Claude (sonnet/opus)"
+    },
+    "L5-007": {
+      "score": "PARTIAL",
+      "reason": "ItemSearch_aladin query만",
+      "judge": "Claude (sonnet/opus)"
+    },
+    "L5-008": {
+      "score": "PASS",
+      "reason": "ItemList_aladin Bestseller+search_target+year+month+week",
+      "judge": "Claude (sonnet/opus)"
+    },
+    "L5-009": {
+      "score": "PARTIAL",
+      "reason": "ItemSearch_aladin query+다른 args (Author vs Keyword)",
+      "judge": "Claude (sonnet/opus)"
+    },
+    "L5-010": {
+      "score": "PARTIAL",
+      "reason": "USStockPrice_kis exchange 누락",
+      "judge": "Claude (sonnet/opus)"
+    },
+    "L5-011": {
+      "score": "PASS",
+      "reason": "StockPrice_kis symbol+market 정확",
+      "judge": "Claude (sonnet/opus)"
+    },
+    "L5-012": {
+      "score": "PASS",
+      "reason": "CryptoPrice_upbit 정확",
+      "judge": "Claude (sonnet/opus)"
+    },
+    "L5-013": {
+      "score": "PASS",
+      "reason": "CryptoCandle_upbit 모든 args 정확",
+      "judge": "Claude (sonnet/opus)"
+    },
+    "L5-014": {
+      "score": "PASS",
+      "reason": "CryptoPrice_bithumb KRW-XRP 정확",
+      "judge": "Claude (sonnet/opus)"
+    },
+    "L5-015": {
+      "score": "PARTIAL",
+      "reason": "CarRoute_tmap 4 좌표 정확, searchOption=2 누락",
+      "judge": "Claude (sonnet/opus)"
+    },
+    "L5-016": {
+      "score": "PASS",
+      "reason": "CarRoute_tmap 4 좌표 정확, searchOption=0 default",
+      "judge": "Claude (sonnet/opus)"
+    },
+    "L5-017": {
+      "score": "PASS",
+      "reason": "CategorySearch_kakao 약간 다른 좌표지만 의미 동일",
+      "judge": "Claude (sonnet/opus)"
+    },
+    "L5-018": {
+      "score": "PARTIAL",
+      "reason": "BlogSearch_naver query만",
+      "judge": "Claude (sonnet/opus)"
+    },
+    "L5-019": {
+      "score": "PASS",
+      "reason": "MarketIndex_ls 정확",
+      "judge": "Claude (sonnet/opus)"
+    },
+    "L5-020": {
+      "score": "PARTIAL",
+      "reason": "Directions_naver, option=traoptimal vs golden=trafast (최단=trafast 의미 미스매치)",
+      "judge": "Claude (sonnet/opus)"
+    },
+    "L6-001": {
+      "score": "PASS",
+      "reason": "파이썬 알고리즘 트레이딩 책 상세 정보 답변",
+      "judge": "Claude (sonnet/opus)"
+    },
+    "L6-002": {
+      "score": "PASS",
+      "reason": "반도체 기술 뉴스 3개 제목 답변",
+      "judge": "Claude (sonnet/opus)"
+    },
+    "L6-003": {
+      "score": "PASS",
+      "reason": "뉴진스 영상 2개 답변",
+      "judge": "Claude (sonnet/opus)"
+    },
+    "L6-004": {
+      "score": "PASS",
+      "reason": "시흥시청 맛집 11개 리스트",
+      "judge": "Claude (sonnet/opus)"
+    },
+    "L6-005": {
+      "score": "PARTIAL",
+      "reason": "9월 부산 축제 답변 (모호 + 대체 정보)",
+      "judge": "Claude (sonnet/opus)"
+    },
+    "L6-006": {
+      "score": "PASS",
+      "reason": "겨울 제주도 코스 답변",
+      "judge": "Claude (sonnet/opus)"
+    },
+    "L6-007": {
+      "score": "PASS",
+      "reason": "AI 트렌드 요약",
+      "judge": "Claude (sonnet/opus)"
+    },
+    "L6-008": {
+      "score": "PARTIAL",
+      "reason": "기후변화 원인 일반지식 (search 결과 활용 불명확)",
+      "judge": "Claude (sonnet/opus)"
+    },
+    "L6-009": {
+      "score": "PASS",
+      "reason": "업비트 KRW 마켓 코인 일부 예시",
+      "judge": "Claude (sonnet/opus)"
+    },
+    "L6-010": {
+      "score": "PASS",
+      "reason": "삼성전자 주봉 데이터 (시가/고가/저가/종가/거래량)",
+      "judge": "Claude (sonnet/opus)"
+    },
+    "L6-011": {
+      "score": "PASS",
+      "reason": "클린 아키텍처 도서 4권 리스트",
+      "judge": "Claude (sonnet/opus)"
+    },
+    "L6-012": {
+      "score": "FAIL",
+      "reason": "아이유 콘서트 영상 검색했는데 무관한 영상 반환 인정",
+      "judge": "Claude (sonnet/opus)"
+    },
+    "L6-013": {
+      "score": "PARTIAL",
+      "reason": "겨울 헤어 트렌드 5개, 일부 어색",
+      "judge": "Claude (sonnet/opus)"
+    },
+    "L6-014": {
+      "score": "PASS",
+      "reason": "SK하이닉스 주봉 5주치 표",
+      "judge": "Claude (sonnet/opus)"
+    },
+    "L6-015": {
+      "score": "PASS",
+      "reason": "강남역 디저트 카페 9+개 리스트",
+      "judge": "Claude (sonnet/opus)"
+    },
+    "L7-001": {
+      "score": "PASS",
+      "reason": "CryptoPrice_upbit{quote:KRW,symbol:BTC} 정확",
+      "judge": "Claude (sonnet/opus)"
+    },
+    "L7-002": {
+      "score": "FAIL",
+      "reason": "Tool 호출 없음, 조카 학년 follow-up 질문",
+      "judge": "Claude (sonnet/opus)"
+    },
+    "L7-003": {
+      "score": "FAIL",
+      "reason": "Tool 호출 없음, '나머지 더 찾아드릴까요?'",
+      "judge": "Claude (sonnet/opus)"
+    },
+    "L7-004": {
+      "score": "FAIL",
+      "reason": "Tool 호출 없음, 영상 정보 fabricate",
+      "judge": "Claude (sonnet/opus)"
+    },
+    "L7-005": {
+      "score": "PASS",
+      "reason": "MarketList_upbit 정확",
+      "judge": "Claude (sonnet/opus)"
+    },
+    "L7-006": {
+      "score": "FAIL",
+      "reason": "Tool 호출 없음, 디저트 종류 follow-up",
+      "judge": "Claude (sonnet/opus)"
+    },
+    "L7-007": {
+      "score": "FAIL",
+      "reason": "Tool 호출 없음, 부산 축제 일반지식 답변",
+      "judge": "Claude (sonnet/opus)"
+    },
+    "L7-008": {
+      "score": "FAIL",
+      "reason": "Tool 호출 없음, '오션뷰카페' fabricate",
+      "judge": "Claude (sonnet/opus)"
+    },
+    "L7-009": {
+      "score": "FAIL",
+      "reason": "Tool 호출 없음, 식당 추천 일반",
+      "judge": "Claude (sonnet/opus)"
+    },
+    "L7-010": {
+      "score": "FAIL",
+      "reason": "Tool 호출 없음, 시츄 성격 일반지식",
+      "judge": "Claude (sonnet/opus)"
+    }
+  },
+  "codex_review": {
+    "verdict": "Claude 판정 합리적, 표현만 다듬을 것",
+    "key_points": [
+      "L6 80%는 rubric상 타당 (seed_replay 허용 시), 단 실제 agent 능력으로는 과대평가",
+      "L7 search 안 한 fabricate 은 FAIL 정확 — grounding/tool use 가 핵심",
+      "L3 첫 step만 호출은 PARTIAL 맞음 (runner 한계는 보정 사유 아님)",
+      "실무 metric: strict 45.1% + weighted 65.9% 둘 다 보고. 자동화 agent 신뢰도는 strict 가까움",
+      "65.9% 비교용 유효, native tool call 미사용 때문에 절대 신뢰도 중간 이하"
+    ],
+    "label_correction": "'도구 사용 능력 65.9%' → '텍스트 tool-call 허용 시 과제별 부분 수행 점수 65.9%'"
+  },
+  "key_insights": [
+    "Single-turn (L1, L2): 80%+ 정확, 단순 tool 호출 강함",
+    "Multi-tool sequential (L3): 첫 step 만 호출 — text format 한계 추정 (50% PARTIAL)",
+    "Multi-source 병렬 (L4): 일부 모두 호출 가능 (003, 008, 010), 나머지 부분 호출",
+    "Multi-turn seed_replay (L6): 80%, prior tool 결과 활용 잘 함",
+    "Multi-turn search 요구 (L7): 20%, 8/10 fabricate (search 회피 — fundamental weakness)"
+  ],
+  "limitations": [
+    "모델이 native tool call API 대신 text 'call:Name:{json}' 포맷 사용 → adapter parsing 못함",
+    "L3 multi-step 한계는 runner 의 tool 결과 feed-back 부재 때문일 수도 (절대 능력 평가에는 한계)",
+    "Codex cross-check은 raw data 직접 read 못 함 → 요약+판정 위주 검토",
+    "OpenAI gpt-4o 같은 정식 LLM judge 미사용 (외부 API 키 부재)"
+  ],
+  "timestamp_utc": "2026-05-03T10:29:45.468257+00:00"
+}

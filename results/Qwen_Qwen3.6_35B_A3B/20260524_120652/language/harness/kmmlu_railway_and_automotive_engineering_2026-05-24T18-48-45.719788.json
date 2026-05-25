@@ -1,0 +1,143 @@
+{
+  "results": {
+    "kmmlu_railway_and_automotive_engineering": {
+      "name": "kmmlu_railway_and_automotive_engineering",
+      "alias": "kmmlu_railway_and_automotive_engineering",
+      "sample_len": 1000,
+      "acc,none": 0.545,
+      "acc_stderr,none": 0.015755101498347232
+    }
+  },
+  "group_subtasks": {},
+  "configs": {
+    "kmmlu_railway_and_automotive_engineering": {
+      "task": "kmmlu_railway_and_automotive_engineering",
+      "dataset_path": "HAERAE-HUB/KMMLU",
+      "dataset_name": "Railway-and-Automotive-Engineering",
+      "test_split": "test",
+      "fewshot_split": "dev",
+      "doc_to_text": "{{question.strip()}}\nA. {{A}}\nB. {{B}}\nC. {{C}}\nD. {{D}}\n정답：",
+      "doc_to_target": "{{answer-1}}",
+      "unsafe_code": false,
+      "doc_to_choice": [
+        "A",
+        "B",
+        "C",
+        "D"
+      ],
+      "description": "",
+      "target_delimiter": " ",
+      "fewshot_delimiter": "\n\n",
+      "fewshot_config": {
+        "sampler": "default",
+        "split": "dev",
+        "process_docs": null,
+        "fewshot_indices": null,
+        "samples": null,
+        "doc_to_text": "{{question.strip()}}\nA. {{A}}\nB. {{B}}\nC. {{C}}\nD. {{D}}\n정답：",
+        "doc_to_choice": [
+          "A",
+          "B",
+          "C",
+          "D"
+        ],
+        "doc_to_target": "{{answer-1}}",
+        "gen_prefix": null,
+        "fewshot_delimiter": "\n\n",
+        "target_delimiter": " "
+      },
+      "num_fewshot": 5,
+      "metric_list": [
+        {
+          "metric": "acc",
+          "aggregation": "mean",
+          "higher_is_better": true
+        }
+      ],
+      "output_type": "multiple_choice",
+      "repeats": 1,
+      "should_decontaminate": false,
+      "metadata": {
+        "version": 2.0,
+        "model": "qwen3.6-35b-a3b",
+        "base_url": "http://127.0.0.1:18023/v1/completions",
+        "tokenizer_backend": "huggingface",
+        "tokenizer": "/home/rainis/Desktop/workplace/models/Qwen_Qwen3.6-35B-A3B",
+        "num_concurrent": 8,
+        "max_retries": 3,
+        "max_length": 4096,
+        "config_source": "/home/rainis/Desktop/workplace/source/model_test/data/lm-evaluation-harness/lm_eval/tasks/kmmlu/default/kmmlu_railway_and_automotive_engineering.yaml"
+      }
+    }
+  },
+  "versions": {
+    "kmmlu_railway_and_automotive_engineering": 2.0
+  },
+  "n-shot": {
+    "kmmlu_railway_and_automotive_engineering": 5
+  },
+  "higher_is_better": {
+    "kmmlu_railway_and_automotive_engineering": {
+      "acc": true
+    }
+  },
+  "n-samples": {
+    "kmmlu_railway_and_automotive_engineering": {
+      "original": 1000,
+      "effective": 1000
+    }
+  },
+  "config": {
+    "model": "local-completions",
+    "model_args": {
+      "model": "qwen3.6-35b-a3b",
+      "base_url": "http://127.0.0.1:18023/v1/completions",
+      "tokenizer_backend": "huggingface",
+      "tokenizer": "/home/rainis/Desktop/workplace/models/Qwen_Qwen3.6-35B-A3B",
+      "num_concurrent": 8,
+      "max_retries": 3,
+      "max_length": 4096
+    },
+    "batch_size": "1",
+    "batch_sizes": [],
+    "device": "cuda:0",
+    "use_cache": null,
+    "limit": null,
+    "bootstrap_iters": 100000,
+    "gen_kwargs": {},
+    "random_seed": 0,
+    "numpy_seed": 1234,
+    "torch_seed": 1234,
+    "fewshot_seed": 1234
+  },
+  "git_hash": null,
+  "date": 1779615390.51481,
+  "pretty_env_info": "PyTorch version: 2.8.0+cpu\nIs debug build: False\nCUDA used to build PyTorch: Could not collect\nROCM used to build PyTorch: N/A\n\nOS: Ubuntu 24.04.4 LTS (aarch64)\nGCC version: (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0\nClang version: Could not collect\nCMake version: version 3.28.3\nLibc version: glibc-2.39\n\nPython version: 3.12.3 (main, Mar  3 2026, 12:15:18) [GCC 13.3.0] (64-bit runtime)\nPython platform: Linux-6.17.0-1014-nvidia-aarch64-with-glibc2.39\nIs CUDA available: False\nCUDA runtime version: 13.0.88\nCUDA_MODULE_LOADING set to: N/A\nGPU models and configuration: GPU 0: NVIDIA GB10\nNvidia driver version: 580.142\ncuDNN version: Could not collect\nHIP runtime version: N/A\nMIOpen runtime version: N/A\nIs XNNPACK available: True\n\nCPU:\n아키텍처:                         aarch64\nCPU 동작 모드:                    64-bit\n바이트 순서:                      Little Endian\nCPU:                              20\n온라인 CPU 목록:                  0-19\n제조자 ID:                        ARM\n모델 이름:                        Cortex-X925\n모델:                             1\n코어 당 스레드:                   1\n소켓 당 코어 수:                  10\n소켓:                             1\n스테핑:                           r0p1\n주파수 가속:                      비활성\nCPU 스케일링 MHz:                 100%\n최대 CPU MHz:                     3900.0000\n최소 CPU MHz:                     1378.0000\nBogoMIPS:                         2000.00\n플래그:                           fp asimd evtstrm aes pmull sha1 sha2 crc32 atomics fphp asimdhp cpuid asimdrdm jscvt fcma lrcpc dcpop sha3 sm3 sm4 asimddp sha512 sve asimdfhm dit uscat ilrcpc flagm sb paca pacg dcpodp sve2 sveaes svepmull svebitperm svesha3 svesm4 flagm2 frint svei8mm svebf16 i8mm bf16 dgh bti ecv afp wfxt\n모델 이름:                        Cortex-A725\n모델:                             1\n코어 당 스레드:                   1\n소켓 당 코어 수:                  10\n소켓:                             1\n스테핑:                           r0p1\nCPU 스케일링 MHz:                 100%\n최대 CPU MHz:                     2808.0000\n최소 CPU MHz:                     338.0000\nBogoMIPS:                         2000.00\n플래그:                           fp asimd evtstrm aes pmull sha1 sha2 crc32 atomics fphp asimdhp cpuid asimdrdm jscvt fcma lrcpc dcpop sha3 sm3 sm4 asimddp sha512 sve asimdfhm dit uscat ilrcpc flagm sb paca pacg dcpodp sve2 sveaes svepmull svebitperm svesha3 svesm4 flagm2 frint svei8mm svebf16 i8mm bf16 dgh bti ecv afp wfxt\nL1d 캐시:                         1.3 MiB (인스턴스 20건)\nL1i 캐시:                         1.3 MiB (인스턴스 20건)\nL2 캐시:                          25 MiB (인스턴스 20건)\nL3 캐시:                          24 MiB (인스턴스 2건)\nNUMA 노드:                        1\nNUMA 노드0 CPU:                   0-19\nGather data sampling 취약성:      Not affected\nGhostwrite 취약성:                Not affected\nIndirect target selection 취약성: Not affected\nItlb multihit 취약성:             Not affected\nL1tf 취약성:                      Not affected\nMds 취약성:                       Not affected\nMeltdown 취약성:                  Not affected\nMmio stale data 취약성:           Not affected\nOld microcode 취약성:             Not affected\nReg file data sampling 취약성:    Not affected\nRetbleed 취약성:                  Not affected\nSpec rstack overflow 취약성:      Not affected\nSpec store bypass 취약성:         Mitigation; Speculative Store Bypass disabled via prctl\nSpectre v1 취약성:                Mitigation; __user pointer sanitization\nSpectre v2 취약성:                Mitigation; CSV2, BHB\nSrbds 취약성:                     Not affected\nTsa 취약성:                       Not affected\nTsx async abort 취약성:           Not affected\nVmscape 취약성:                   Not affected\n\nVersions of relevant libraries:\n[pip3] numpy==2.2.6\n[pip3] nvidia-cublas==13.1.0.3\n[pip3] nvidia-cuda-cupti==13.0.85\n[pip3] nvidia-cuda-nvrtc==13.0.88\n[pip3] nvidia-cuda-runtime==13.0.96\n[pip3] nvidia-cudnn-cu13==9.19.0.56\n[pip3] nvidia-cufft==12.0.0.61\n[pip3] nvidia-curand==10.4.0.35\n[pip3] nvidia-cusolver==12.0.4.66\n[pip3] nvidia-cusparse==12.6.3.3\n[pip3] nvidia-cusparselt-cu13==0.8.0\n[pip3] nvidia-nccl-cu13==2.28.9\n[pip3] nvidia-nvjitlink==13.0.88\n[pip3] nvidia-nvtx==13.0.85\n[pip3] torch==2.8.0\n[pip3] torchaudio==2.8.0\n[pip3] torchvision==0.23.0\n[pip3] triton==3.6.0\n[conda] Could not collect",
+  "transformers_version": "5.7.0",
+  "lm_eval_version": "0.4.12.dev0",
+  "upper_git_hash": null,
+  "tokenizer_pad_token": [
+    "<|endoftext|>",
+    "248044"
+  ],
+  "tokenizer_eos_token": [
+    "<|im_end|>",
+    "248046"
+  ],
+  "tokenizer_bos_token": [
+    null,
+    "None"
+  ],
+  "eot_token_id": 248046,
+  "max_length": 4095,
+  "task_hashes": {},
+  "model_source": "local-completions",
+  "model_name": "qwen3.6-35b-a3b",
+  "model_name_sanitized": "qwen3.6-35b-a3b",
+  "system_instruction": null,
+  "system_instruction_sha": null,
+  "fewshot_as_multiturn": true,
+  "chat_template": "{%- set image_count = namespace(value=0) %}\n{%- set video_count = namespace(value=0) %}\n{%- macro render_content(content, do_vision_count, is_system_content=false) %}\n    {%- if content is string %}\n        {{- content }}\n    {%- elif content is iterable and content is not mapping %}\n        {%- for item in content %}\n            {%- if 'image' in item or 'image_url' in item or item.type == 'image' %}\n                {%- if is_system_content %}\n                    {{- raise_exception('System message cannot contain images.') }}\n                {%- endif %}\n                {%- if do_vision_count %}\n                    {%- set image_count.value = image_count.value + 1 %}\n                {%- endif %}\n                {%- if add_vision_id %}\n                    {{- 'Picture ' ~ image_count.value ~ ': ' }}\n                {%- endif %}\n                {{- '<|vision_start|><|image_pad|><|vision_end|>' }}\n            {%- elif 'video' in item or item.type == 'video' %}\n                {%- if is_system_content %}\n                    {{- raise_exception('System message cannot contain videos.') }}\n                {%- endif %}\n                {%- if do_vision_count %}\n                    {%- set video_count.value = video_count.value + 1 %}\n                {%- endif %}\n                {%- if add_vision_id %}\n                    {{- 'Video ' ~ video_count.value ~ ': ' }}\n                {%- endif %}\n                {{- '<|vision_start|><|video_pad|><|vision_end|>' }}\n            {%- elif 'text' in item %}\n                {{- item.text }}\n            {%- else %}\n                {{- raise_exception('Unexpected item type in content.') }}\n            {%- endif %}\n        {%- endfor %}\n    {%- elif content is none or content is undefined %}\n        {{- '' }}\n    {%- else %}\n        {{- raise_exception('Unexpected content type.') }}\n    {%- endif %}\n{%- endmacro %}\n{%- if not messages %}\n    {{- raise_exception('No messages provided.') }}\n{%- endif %}\n{%- if tools and tools is iterable and tools is not mapping %}\n    {{- '<|im_start|>system\\n' }}\n    {{- \"# Tools\\n\\nYou have access to the following functions:\\n\\n<tools>\" }}\n    {%- for tool in tools %}\n        {{- \"\\n\" }}\n        {{- tool | tojson }}\n    {%- endfor %}\n    {{- \"\\n</tools>\" }}\n    {{- '\\n\\nIf you choose to call a function ONLY reply in the following format with NO suffix:\\n\\n<tool_call>\\n<function=example_function_name>\\n<parameter=example_parameter_1>\\nvalue_1\\n</parameter>\\n<parameter=example_parameter_2>\\nThis is the value for the second parameter\\nthat can span\\nmultiple lines\\n</parameter>\\n</function>\\n</tool_call>\\n\\n<IMPORTANT>\\nReminder:\\n- Function calls MUST follow the specified format: an inner <function=...></function> block must be nested within <tool_call></tool_call> XML tags\\n- Required parameters MUST be specified\\n- You may provide optional reasoning for your function call in natural language BEFORE the function call, but NOT after\\n- If there is no function call available, answer the question like normal with your current knowledge and do not tell the user about function calls\\n</IMPORTANT>' }}\n    {%- if messages[0].role == 'system' %}\n        {%- set content = render_content(messages[0].content, false, true)|trim %}\n        {%- if content %}\n            {{- '\\n\\n' + content }}\n        {%- endif %}\n    {%- endif %}\n    {{- '<|im_end|>\\n' }}\n{%- else %}\n    {%- if messages[0].role == 'system' %}\n        {%- set content = render_content(messages[0].content, false, true)|trim %}\n        {{- '<|im_start|>system\\n' + content + '<|im_end|>\\n' }}\n    {%- endif %}\n{%- endif %}\n{%- set ns = namespace(multi_step_tool=true, last_query_index=messages|length - 1) %}\n{%- for message in messages[::-1] %}\n    {%- set index = (messages|length - 1) - loop.index0 %}\n    {%- if ns.multi_step_tool and message.role == \"user\" %}\n        {%- set content = render_content(message.content, false)|trim %}\n        {%- if not(content.startswith('<tool_response>') and content.endswith('</tool_response>')) %}\n            {%- set ns.multi_step_tool = false %}\n            {%- set ns.last_query_index = index %}\n        {%- endif %}\n    {%- endif %}\n{%- endfor %}\n{%- if ns.multi_step_tool %}\n    {{- raise_exception('No user query found in messages.') }}\n{%- endif %}\n{%- for message in messages %}\n    {%- set content = render_content(message.content, true)|trim %}\n    {%- if message.role == \"system\" %}\n        {%- if not loop.first %}\n            {{- raise_exception('System message must be at the beginning.') }}\n        {%- endif %}\n    {%- elif message.role == \"user\" %}\n        {{- '<|im_start|>' + message.role + '\\n' + content + '<|im_end|>' + '\\n' }}\n    {%- elif message.role == \"assistant\" %}\n        {%- set reasoning_content = '' %}\n        {%- if message.reasoning_content is string %}\n            {%- set reasoning_content = message.reasoning_content %}\n        {%- else %}\n            {%- if '</think>' in content %}\n                {%- set reasoning_content = content.split('</think>')[0].rstrip('\\n').split('<think>')[-1].lstrip('\\n') %}\n                {%- set content = content.split('</think>')[-1].lstrip('\\n') %}\n            {%- endif %}\n        {%- endif %}\n        {%- set reasoning_content = reasoning_content|trim %}\n        {%- if (preserve_thinking is defined and preserve_thinking is true) or (loop.index0 > ns.last_query_index) %}\n            {{- '<|im_start|>' + message.role + '\\n<think>\\n' + reasoning_content + '\\n</think>\\n\\n' + content }}\n        {%- else %}\n            {{- '<|im_start|>' + message.role + '\\n' + content }}\n        {%- endif %}\n        {%- if message.tool_calls and message.tool_calls is iterable and message.tool_calls is not mapping %}\n            {%- for tool_call in message.tool_calls %}\n                {%- if tool_call.function is defined %}\n                    {%- set tool_call = tool_call.function %}\n                {%- endif %}\n                {%- if loop.first %}\n                    {%- if content|trim %}\n                        {{- '\\n\\n<tool_call>\\n<function=' + tool_call.name + '>\\n' }}\n                    {%- else %}\n                        {{- '<tool_call>\\n<function=' + tool_call.name + '>\\n' }}\n                    {%- endif %}\n                {%- else %}\n                    {{- '\\n<tool_call>\\n<function=' + tool_call.name + '>\\n' }}\n                {%- endif %}\n                {%- if tool_call.arguments is defined %}\n                    {%- for args_name, args_value in tool_call.arguments|items %}\n                        {{- '<parameter=' + args_name + '>\\n' }}\n                        {%- set args_value = args_value | string if args_value is string else args_value | tojson | safe %}\n                        {{- args_value }}\n                        {{- '\\n</parameter>\\n' }}\n                    {%- endfor %}\n                {%- endif %}\n                {{- '</function>\\n</tool_call>' }}\n            {%- endfor %}\n        {%- endif %}\n        {{- '<|im_end|>\\n' }}\n    {%- elif message.role == \"tool\" %}\n        {%- if loop.previtem and loop.previtem.role != \"tool\" %}\n            {{- '<|im_start|>user' }}\n        {%- endif %}\n        {{- '\\n<tool_response>\\n' }}\n        {{- content }}\n        {{- '\\n</tool_response>' }}\n        {%- if not loop.last and loop.nextitem.role != \"tool\" %}\n            {{- '<|im_end|>\\n' }}\n        {%- elif loop.last %}\n            {{- '<|im_end|>\\n' }}\n        {%- endif %}\n    {%- else %}\n        {{- raise_exception('Unexpected message role.') }}\n    {%- endif %}\n{%- endfor %}\n{%- if add_generation_prompt %}\n    {{- '<|im_start|>assistant\\n' }}\n    {%- if enable_thinking is defined and enable_thinking is true %}\n        {{- '<think>\\n' }}\n    {%- else %}\n        {{- '<think>\\n\\n</think>\\n\\n' }}\n    {%- endif %}\n{%- endif %}",
+  "chat_template_sha": "67dd2d0f73feccb4c5aa392b6e462e2b870498d6b98b9d30abc5694402d603ef",
+  "total_evaluation_time_seconds": "737.7781033329993"
+}
