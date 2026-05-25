@@ -1,0 +1,24 @@
+# 평가 모델 설정 — Gemma-4-26B-A4B-it (vsm)
+
+model: google_gemma_4_26B_A4B_it
+tokenizer_path: /home/rainis/Desktop/workplace/models/google_gemma_4_26B_A4B_it
+class: vsm
+
+endpoint:
+  chat: http://127.0.0.1:18023/v1/chat/completions
+  v1: http://127.0.0.1:18023/v1
+
+tracks:
+  - harness
+  - nlu
+  - agent
+  - multimodal
+
+backend_reference:
+  engine: vllm
+  notes: |
+    gpustack 에 vllm backend 로 등록 시 권장 옵션:
+      --enable-auto-tool-choice
+      --enable-prefix-caching
+      --async-scheduling
+    Gemma 4 는 chat_template 디폴트가 non-thinking 이라 별도 옵션 불필요.

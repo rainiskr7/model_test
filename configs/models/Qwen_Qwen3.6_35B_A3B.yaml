@@ -1,0 +1,31 @@
+# 평가 모델 설정 — Qwen3.6-35B-A3B (vsm)
+
+model: Qwen_Qwen3.6_35B_A3B
+tokenizer_path: /home/rainis/Desktop/workplace/models/Qwen_Qwen3.6-35B-A3B
+class: vsm
+
+endpoint:
+  chat: http://127.0.0.1:18023/v1/chat/completions
+  v1: http://127.0.0.1:18023/v1
+
+tracks:
+  - harness
+  - nlu
+  - agent
+  - multimodal
+
+backend_reference:
+  engine: vllm
+  notes: |
+    gpustack 에 vllm backend 로 등록 시 권장 옵션:
+      --enable-auto-tool-choice
+      --tool-call-parser qwen3_coder
+      --reasoning-parser qwen3
+      --default-chat-template-kwargs '{"enable_thinking": false}'
+      --limit-mm-per-prompt.image 4
+      --enable-prefix-caching
+      --async-scheduling
+    Qwen3.6 는 chat_template 디폴트가 thinking ON 이라
+    --default-chat-template-kwargs 로 false 강제 필요.
+    또한 models/Qwen_Qwen3.6-35B-A3B/chat_template.jinja 패치본 사용
+    (디폴트를 non-thinking 으로 뒤집은 버전 — lm_eval client-side 평가용).

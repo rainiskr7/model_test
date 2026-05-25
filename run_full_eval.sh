@@ -46,11 +46,49 @@ trap 'cleanup EXIT' EXIT
 source "$SCRIPT_DIR/.venv/bin/activate"
 export MODEL_TEST_BASE="$SCRIPT_DIR"
 
-MODEL="gemma_4_31b_it"
-TOKENIZER="/home/rainis/Desktop/workplace/models/google_gemma_4_31B_it"
-BASE_URL_CHAT="http://127.0.0.1:18023/v1/chat/completions"
-BASE_URL_V1="http://127.0.0.1:18023/v1"
-export OPENAI_API_KEY="gpustack_59c26841407595f9_344d01c4b30e6c66895b76dbe134fd03"
+# 첫 인자 = 모델 config 명 (configs/models/<NAME>.yaml). 미지정 시 사용 가능 목록 안내.
+if [ -z "${1:-}" ]; then
+  echo "Usage: $0 <model_config_name>" >&2
+  echo "사용 가능:" >&2
+  ls "$SCRIPT_DIR/configs/models/" 2>/dev/null | sed 's/\.yaml$//' | sed 's/^/  /' >&2
+  exit 2
+fi
+MODEL_CONFIG="$1"
+
+# yaml → env 변수 (MODEL, TOKENIZER, MODEL_CLASS, BASE_URL_CHAT, BASE_URL_V1, TRACKS)
+# shellcheck disable=SC1090
+source <(python "$SCRIPT_DIR/configs/load_model_config.py" "$MODEL_CONFIG")
+echo "[full_eval] config=$MODEL_CONFIG → MODEL=$MODEL CLASS=$MODEL_CLASS"
+
+# API key 외부화: .env 파일 또는 env 변수에서 로드 (하드코딩 금지)
+# .env 파일은 .gitignore 됨 — `OPENAI_API_KEY=gpustack_...` 형식
+if [ -f "$SCRIPT_DIR/.env" ]; then
+  # shellcheck disable=SC1091
+  source "$SCRIPT_DIR/.env"
+fi
+: "${OPENAI_API_KEY:?OPENAI_API_KEY 필요 (.env 파일 작성 또는 env 변수 export)}"
+export OPENAI_API_KEY
+
+# vllm preflight: 서버 살아있고 MODEL 명 일치하는지 검증
+# 미일치 시 평가 시작 후 모든 트랙이 404 로 실패하는 시간 낭비 방지
+echo "[full_eval] vllm preflight: $BASE_URL_V1/models"
+PREFLIGHT_MODELS=$(curl -s --max-time 5 "$BASE_URL_V1/models" 2>/dev/null) || {
+  echo "[full_eval] ERROR: vllm endpoint 응답 없음 ($BASE_URL_V1/models). vllm 서빙 중인지 확인하세요." >&2
+  exit 1
+}
+if ! echo "$PREFLIGHT_MODELS" | python3 -c "
+import json, sys
+try: d = json.loads(sys.stdin.read())
+except Exception as e: sys.exit(f'JSON parse 실패: {e}')
+ids = [m['id'] for m in d.get('data', [])]
+if '$MODEL' not in ids:
+    sys.exit(f'MODEL=$MODEL 가 vllm 응답에 없음. 사용 가능: {ids}')
+print(f'[full_eval] preflight OK: MODEL=$MODEL 응답 확인')
+"; then
+  echo "[full_eval] ERROR: vllm preflight 실패. --served-model-name $MODEL 로 띄워야 합니다." >&2
+  exit 1
+fi
+
 export EVAL_TIMESTAMP="$(cat .eval_session)"
 
 # harness 동시성 (run_harness.sh 의 num_concurrent)
@@ -83,10 +121,18 @@ echo "[full_eval] MODEL=$MODEL" | tee -a "$LOG_DIR/_master.log"
 echo "[full_eval] NUM_CONCURRENT=$NUM_CONCURRENT" | tee -a "$LOG_DIR/_master.log"
 echo "[full_eval] PID=$$ PGID=$PGID" | tee -a "$LOG_DIR/_master.log"
 
-run_track harness    bash "$SCRIPT_DIR/vsm/harness/run_harness.sh" "$MODEL" "$TOKENIZER" "$BASE_URL_CHAT"
-run_track nlu        bash "$SCRIPT_DIR/vsm/nlu/run_nlu.sh" --model "$MODEL" --endpoint "$BASE_URL_CHAT"
-run_track agent      bash "$SCRIPT_DIR/vsm/agent/run_gpustack_custom.sh" "$MODEL" "$BASE_URL_CHAT"
-run_track multimodal bash "$SCRIPT_DIR/vsm/multimodal/run_all.sh" "$MODEL" "$BASE_URL_V1"
+# TRACK 호출 — yaml 의 tracks 목록 + MODEL_CLASS 기반 path
+# (shared/ symlink 덕에 클래스 path 가 같은 실체를 가리킴)
+TRACK_BASE="$SCRIPT_DIR/$MODEL_CLASS"
+for track in $TRACKS; do
+  case "$track" in
+    harness)    run_track harness    bash "$TRACK_BASE/harness/run_harness.sh" "$MODEL" "$TOKENIZER" "$BASE_URL_CHAT" ;;
+    nlu)        run_track nlu        bash "$TRACK_BASE/nlu/run_nlu.sh" --model "$MODEL" --endpoint "$BASE_URL_CHAT" ;;
+    agent)      run_track agent      bash "$TRACK_BASE/agent/run_gpustack_custom.sh" "$MODEL" "$BASE_URL_CHAT" ;;
+    multimodal) run_track multimodal bash "$TRACK_BASE/multimodal/run_all.sh" "$MODEL" "$BASE_URL_V1" ;;
+    *) echo "[full_eval] WARN: unknown track '$track' (configs/models/$MODEL_CONFIG.yaml)" ;;
+  esac
+done
 
 echo "[full_eval] DONE @ $(date +%H:%M:%S)" | tee -a "$LOG_DIR/_master.log"
 

@@ -1,0 +1,38 @@
+# 평가 모델 설정 — Gemma-4-31B-it (vsm)
+# run_full_eval.sh 가 이 파일을 로드해서 환경변수로 export.
+# 평가는 gpustack 의 OpenAI-compat endpoint 를 통해 진행.
+
+# gpustack 에 등록된 모델 ID (gpustack 의 served-model-name)
+# 평가 코드가 이 ID 로 chat completion 호출
+model: google_gemma_4_31B_it
+
+# 로컬 또는 HF tokenizer 경로 (lm_eval 의 --model_args tokenizer=)
+tokenizer_path: /home/rainis/Desktop/workplace/models/google_gemma_4_31B_it
+
+# 평가 클래스 (llm | slm | vsm | vlm) — 트랙 선택에 사용
+class: vsm
+
+# gpustack endpoint (모든 트랙 공통)
+# OPENAI_API_KEY 는 .env 에서 별도 로드 (gpustack token)
+endpoint:
+  chat: http://127.0.0.1:18023/v1/chat/completions
+  v1: http://127.0.0.1:18023/v1
+
+# 평가 트랙
+tracks:
+  - harness
+  - nlu
+  - agent
+  - multimodal
+
+# 백엔드 등록 참고 메모 — 평가 코드는 사용 안 함
+# 새 서버에서 같은 환경 재현 시 gpustack 에 이 옵션으로 모델 등록 권장
+backend_reference:
+  engine: vllm
+  notes: |
+    gpustack 에 vllm backend 로 등록 시 권장 옵션:
+      --enable-auto-tool-choice
+      --enable-prefix-caching
+      --async-scheduling
+    Gemma 4 는 chat_template 디폴트가 non-thinking 이라
+    --default-chat-template-kwargs 불필요.
