@@ -44,16 +44,17 @@ patch_kreta_infer_gpt() {
   #   - BASE_URL / KRETA_WORKERS(default 2) env 지원
   #   - request timeout 60→300 (저대역폭 GB10 의 큰 비전 prefill 수용)
   #   - OpenAI 클라이언트 sample마다 생성→단일 재사용 (커넥션 누수 수정, 점진적 열화 방지)
-  # pin_repo(git checkout SHA) 직후라 파일이 upstream 원본 → 항상 깨끗한 베이스에 apply.
+  # 아래 'git checkout -- ...' 로 파일을 pinned SHA 원본으로 되돌린 뒤 apply → rerun 안전(idempotent).
   # (과거엔 sed 2줄로 BASE_URL/WORKERS 만 패치했으나, client 재사용은 다중라인 구조변경이라 patch 로 전환.)
+  # 패치 실패는 치명적: 조용히 upstream 기본동작(URL 하드코딩/WORKERS=20/timeout 60/누수)으로
+  # 남으면 평가가 잘못되므로 set -e 로 즉시 중단시킨다 (경고 후 계속 X).
   local PATCH="$SCRIPT_DIR/patches/kreta_infer_gpt.patch"
-  if [ -f "$PATCH" ]; then
-    ( cd KRETA && git checkout -- eval/infer/infer_gpt.py 2>/dev/null; git apply "$PATCH" ) \
-      && echo "[install] KRETA infer_gpt.py 패치 적용 완료 (env/timeout/client 재사용)" \
-      || echo "[install] WARN: KRETA infer_gpt.py 패치 실패 (이미 적용됐거나 SHA 불일치)"
-  else
-    echo "[install] WARN: $PATCH 없음 — KRETA infer_gpt.py 패치 스킵"
+  if [ ! -f "$PATCH" ]; then
+    echo "[install] ERROR: $PATCH 없음 — KRETA infer_gpt.py 패치 불가" >&2
+    exit 1
   fi
+  ( cd KRETA && git checkout -- eval/infer/infer_gpt.py && git apply "$PATCH" )
+  echo "[install] KRETA infer_gpt.py 패치 적용 완료 (env/timeout/client 재사용)"
 }
 
 if [ ! -d "KRETA" ]; then
