@@ -115,6 +115,8 @@ bash vsm/agent/install.sh          # Ko-AgentBench clone + 설치
 
 외부 repo들은 모두 `data/`에 중앙 집중으로 clone된다. 재현성을 위해 commit SHA를 env로 핀할 수 있다 (`KRETA_SHA`, `KOFFVQA_SHA`, `KOVLM_SHA`).
 
+> **KRETA 로컬 패치:** `vsm/multimodal/install.sh`는 KRETA를 clone·SHA 핀한 뒤 `shared/multimodal/patches/kreta_infer_gpt.patch`를 `git apply`한다. 패치 내용 — ① `OPENAI_BASE_URL` / `KRETA_WORKERS`(기본 2) env 지원, ② 요청 timeout 60→300초(저대역폭 GB10의 큰 비전 prefill 수용), ③ OpenAI 클라이언트를 sample마다 생성하던 것을 단일 인스턴스 재사용으로 변경(커넥션 누수·점진적 열화 수정). 패치 적용이 실패하면 install은 즉시 중단된다(조용히 upstream 기본동작으로 남는 사고 방지).
+
 ### 3.3 단일 트랙 실행
 
 ```bash
@@ -141,6 +143,8 @@ bash vsm/multimodal/run_all.sh \
 ```
 
 개별 벤치마크 실행은 `vsm/multimodal/run_<benchmark>.sh` 직접 호출.
+
+KRETA가 중단된 경우 `vsm/multimodal/run_kreta_resume.sh`로 이어서 진행한다. `run_kreta.sh`와 달리 `./output`의 jsonl을 삭제하지 않아, 이미 처리된 `id`는 skip하고 남은 샘플만 추론한다(idempotent resume). 추론 완료 후 evaluate · 결과 복사 · 키 검증까지 자동 수행.
 
 ### 3.4 전체 평가 (한 모델 4트랙 일괄)
 
@@ -207,6 +211,15 @@ DGX Spark 2대 (192.168.0.7 ↔ .8) 사이 rsync 래퍼:
 
 `.venv/`, `__pycache__/`, `.eval_session` 등은 자동 제외. `data/`(외부 clone)와 `results/`는 동기화 대상.
 
+### 3.8 운영 노트 — 대형 Dense 모델 / GB10 (DGX Spark)
+
+GB10은 통합 메모리(LPDDR5X, 대역폭 ~273 GB/s)라 dense 대형 모델의 디코딩이 대역폭 바운드다 (예: BF16 27B ≈ 단일 스트림 ~5 tok/s). KRETA처럼 고해상도 이미지(비전 토큰 최대 ~16K)를 다루는 트랙에서 특히 느려, 다음을 권장:
+
+- **vLLM `--max-model-len`**: KRETA 요청 최대 컨텍스트 ≈ 비전(~16K) + 텍스트 + 출력(4096) ≈ 20.5K. **24576 이상** 필요 (16384는 ~1.3% 요청이 길이 초과로 거부됨).
+- **`KRETA_WORKERS`**: 메모리 압박 완화를 위해 dense 대형 모델은 **2** 권장. (`run_kreta.sh`는 기본 4로 실행하므로 `KRETA_WORKERS=2`를 명시하거나, 기본 2인 `run_kreta_resume.sh`를 사용.)
+- **요청 timeout**: 300초 (install 패치 기본값). 큰 비전 prefill이 60초를 넘겨 타임아웃→오답으로 기록되는 것을 방지.
+- vLLM 엔진이 장시간/메모리 압박으로 deadlock되면(`/v1/models`는 응답하나 `/v1/chat`만 hang) 모델 컨테이너 재시작으로 해소.
+
 ---
 
 ## 4. 디렉토리 구조
@@ -220,7 +233,9 @@ model_test/
 │       ├── agent/                # Ko-AgentBench 래퍼 + GPUStack 어댑터
 │       ├── multimodal/           # vlm/vsm 에만 존재
 │       │   ├── benches/          # 개별 벤치마크 runner
+│       │   ├── patches/          # 외부 repo 로컬 패치 (kreta_infer_gpt.patch)
 │       │   ├── run_<bench>.sh
+│       │   ├── run_kreta_resume.sh  # KRETA 중단-재개 (jsonl 보존)
 │       │   ├── run_all.sh
 │       │   └── install.sh
 │       ├── recommended_models.md
@@ -229,7 +244,7 @@ model_test/
 │   ├── KRETA/  KOFFVQA/  KO-VLM-Benchmark/
 │   ├── Ko-AgentBench/
 │   └── lm-evaluation-harness/
-├── results/                       # 평가 결과 (.gitignore)
+├── results/                       # 평가 결과 (git 추적 — 모델별 결과 누적)
 ├── logs/                          # 트랙별 실행 로그 (.gitignore)
 ├── run_full_eval.sh               # 한 모델 4트랙 일괄
 ├── start_eval_session.sh / end_eval_session.sh
