@@ -1,0 +1,1530 @@
+{
+  "metadata": {
+    "timestamp": "2026-05-03T19:09:28.191720",
+    "model": "gemma_4_26b_a4b_it",
+    "level": "L5",
+    "total_tasks": 20,
+    "successful_tasks": 20,
+    "failed_tasks": 0,
+    "success_rate": 100.0,
+    "total_execution_time": 37.4,
+    "average_execution_time": 1.87,
+    "total_steps": 20,
+    "average_steps": 1.0,
+    "total_tool_calls": 0,
+    "average_tool_calls": 0.0,
+    "total_tokens": 6568,
+    "average_tokens_per_task": 328.4,
+    "average_prompt_tokens": 286.8,
+    "average_completion_tokens": 41.6,
+    "average_tps": 175.61,
+    "ttft": {
+      "average": 1.8698,
+      "min": 0.8227,
+      "max": 7.8142,
+      "unit": "seconds"
+    }
+  },
+  "tool_usage_statistics": {},
+  "results": [
+    {
+      "task_id": "L5-001",
+      "instruction": "아이폰 17 출시일 검색해줘.",
+      "level": 5,
+      "category": "Robustness",
+      "success": true,
+      "execution_time": 1.0603916645050049,
+      "steps_taken": 1,
+      "error": null,
+      "expected_tools": [
+        "WebSearch_daum"
+      ],
+      "golden_action": [
+        {
+          "tool": "WebSearch_daum",
+          "args": {
+            "query": "아이폰 17 출시일",
+            "sort": "recency",
+            "page": 1,
+            "size": 1
+          }
+        }
+      ],
+      "minimum_steps": null,
+      "data_flow": [],
+      "error_injection": {
+        "tool": "WebSearch_daum",
+        "error_type": "timeout"
+      },
+      "fallback_options": [
+        {
+          "tool": "WebSearch_naver",
+          "args": {
+            "query": "아이폰 17 출시일",
+            "display": 1
+          }
+        }
+      ],
+      "resp_schema": {},
+      "arg_schema": {},
+      "repetitions": 1,
+      "repetition_results": [
+        true
+      ],
+      "token_usage": {
+        "prompt_tokens": 195,
+        "completion_tokens": 22,
+        "total_tokens": 217
+      },
+      "ttft_stats": {
+        "average": 1.0601353110105265,
+        "min": 1.0601353110105265,
+        "max": 1.0601353110105265,
+        "count": 1
+      },
+      "tool_calls": [],
+      "final_response": "call:WebSearch_daum:{\"query\":\"아이폰 17 출시일\"}",
+      "conversation_log": {
+        "total_messages": 2,
+        "messages": [
+          {
+            "role": "user",
+            "content": "아이폰 17 출시일 검색해줘."
+          },
+          {
+            "role": "assistant",
+            "content": "call:WebSearch_daum:{\"query\":\"아이폰 17 출시일\"}"
+          }
+        ]
+      }
+    },
+    {
+      "task_id": "L5-002",
+      "instruction": "'아이유 콘서트 직캠' 최신 동영상 찾아서 제목만 하나 알려줘",
+      "level": 5,
+      "category": "Robustness",
+      "success": true,
+      "execution_time": 1.3422880172729492,
+      "steps_taken": 1,
+      "error": null,
+      "expected_tools": [
+        "VideoSearch_daum"
+      ],
+      "golden_action": [
+        {
+          "tool": "VideoSearch_daum",
+          "args": {
+            "query": "아이유 콘서트 직캠",
+            "sort": "recency",
+            "page": 1,
+            "size": 1
+          }
+        }
+      ],
+      "minimum_steps": null,
+      "data_flow": [],
+      "error_injection": {
+        "tool": "VideoSearch_daum",
+        "error_type": "complete_unavailable"
+      },
+      "fallback_options": [
+        {
+          "tool": "WebSearch_naver",
+          "args": {
+            "query": "아이유 콘서트 직캠",
+            "display": 5
+          }
+        },
+        {
+          "tool": "WebSearch_daum",
+          "args": {
+            "query": "아이유 콘서트 직캠",
+            "page": 1,
+            "size": 5
+          }
+        }
+      ],
+      "resp_schema": {},
+      "arg_schema": {},
+      "repetitions": 1,
+      "repetition_results": [
+        true
+      ],
+      "token_usage": {
+        "prompt_tokens": 204,
+        "completion_tokens": 29,
+        "total_tokens": 233
+      },
+      "ttft_stats": {
+        "average": 1.3420737839769572,
+        "min": 1.3420737839769572,
+        "max": 1.3420737839769572,
+        "count": 1
+      },
+      "tool_calls": [],
+      "final_response": "call:VideoSearch_daum:{\"query\": \"아이유 콘서트 직캠\", \"sort\": \"recency\"}",
+      "conversation_log": {
+        "total_messages": 2,
+        "messages": [
+          {
+            "role": "user",
+            "content": "'아이유 콘서트 직캠' 최신 동영상 찾아서 제목만 하나 알려줘"
+          },
+          {
+            "role": "assistant",
+            "content": "call:VideoSearch_daum:{\"query\": \"아이유 콘서트 직캠\", \"sort\": \"recency\"}"
+          }
+        ]
+      }
+    },
+    {
+      "task_id": "L5-003",
+      "instruction": "2025년 LoL 월드 챔피언쉽에 진출한 한국팀 명단을 검색해줘",
+      "level": 5,
+      "category": "Robustness",
+      "success": true,
+      "execution_time": 1.606900930404663,
+      "steps_taken": 1,
+      "error": null,
+      "expected_tools": [
+        "WebSearch_daum"
+      ],
+      "golden_action": [
+        {
+          "tool": "WebSearch_daum",
+          "args": {
+            "query": "2025 LoL 월드 챔피언쉽 한국팀 명단",
+            "sort": "recency",
+            "page": 1,
+            "size": 1
+          }
+        }
+      ],
+      "minimum_steps": null,
+      "data_flow": [],
+      "error_injection": {
+        "tool": "WebSearch_daum",
+        "error_type": "timeout"
+      },
+      "fallback_options": [
+        {
+          "tool": "WebSearch_naver",
+          "args": {
+            "query": "2025 LoL 월드 챔피언쉽 한국팀 명단",
+            "display": 10,
+            "start": 1
+          }
+        }
+      ],
+      "resp_schema": {},
+      "arg_schema": {},
+      "repetitions": 1,
+      "repetition_results": [
+        true
+      ],
+      "token_usage": {
+        "prompt_tokens": 209,
+        "completion_tokens": 35,
+        "total_tokens": 244
+      },
+      "ttft_stats": {
+        "average": 1.6066758499946445,
+        "min": 1.6066758499946445,
+        "max": 1.6066758499946445,
+        "count": 1
+      },
+      "tool_calls": [],
+      "final_response": "call:WebSearch_daum:{\"query\": \"2025 LoL 월드 챔피언십 진출 한국팀 명단\"}",
+      "conversation_log": {
+        "total_messages": 2,
+        "messages": [
+          {
+            "role": "user",
+            "content": "2025년 LoL 월드 챔피언쉽에 진출한 한국팀 명단을 검색해줘"
+          },
+          {
+            "role": "assistant",
+            "content": "call:WebSearch_daum:{\"query\": \"2025 LoL 월드 챔피언십 진출 한국팀 명단\"}"
+          }
+        ]
+      }
+    },
+    {
+      "task_id": "L5-004",
+      "instruction": "2025년도 노벨화학상 수상자를 검색해줘",
+      "level": 5,
+      "category": "Robustness",
+      "success": true,
+      "execution_time": 7.814434289932251,
+      "steps_taken": 1,
+      "error": null,
+      "expected_tools": [
+        "WebSearch_naver"
+      ],
+      "golden_action": [
+        {
+          "tool": "WebSearch_naver",
+          "args": {
+            "query": "2025 노벨화학상 수상자",
+            "display": 10,
+            "start": 1
+          }
+        }
+      ],
+      "minimum_steps": null,
+      "data_flow": [],
+      "error_injection": {
+        "tool": "WebSearch_naver",
+        "error_type": "timeout"
+      },
+      "fallback_options": [
+        {
+          "tool": "WebSearch_daum",
+          "args": {
+            "query": "2025 노벨화학상 수상자",
+            "page": 1,
+            "size": 10
+          }
+        }
+      ],
+      "resp_schema": {},
+      "arg_schema": {},
+      "repetitions": 1,
+      "repetition_results": [
+        true
+      ],
+      "token_usage": {
+        "prompt_tokens": 209,
+        "completion_tokens": 184,
+        "total_tokens": 393
+      },
+      "ttft_stats": {
+        "average": 7.81422529098927,
+        "min": 7.81422529098927,
+        "max": 7.81422529098927,
+        "count": 1
+      },
+      "tool_calls": [],
+      "final_response": "현재 시점(2024년 하반기) 기준으로 **2025년 노벨 화학상 수상자는 아직 발표되지 않았습니다.**\n\n노벨상은 매년 **10월 초**에 발표됩니다. 따라서 2025년 노벨 화학상 수상자는 **2025년 10월경**에 알 수 있습니다.\n\n참고로 가장 최근 수상자인 **2024년 노벨 화학상** 수상자는 다음과 같습니다:\n*   **수상자:** 데미스 허사비스(Demis Hassabis), 존 점퍼(John Jumper), 데이비드 베이커(David Baker)\n*   **수상 이유:** 단백질 구조 예측 및 설계(단백질 구조를 예측하는 AI 모델인 '알파폴드' 개발 및 단백질 설계 기술)를 통한 공로",
+      "conversation_log": {
+        "total_messages": 2,
+        "messages": [
+          {
+            "role": "user",
+            "content": "2025년도 노벨화학상 수상자를 검색해줘"
+          },
+          {
+            "role": "assistant",
+            "content": "현재 시점(2024년 하반기) 기준으로 **2025년 노벨 화학상 수상자는 아직 발표되지 않았습니다.**\n\n노벨상은 매년 **10월 초**에 발표됩니다. 따라서 2025년 노벨 화학상 수상자는 **2025년 10월경**에 알 수 있습니다.\n\n참고로 가장 최근 수상자인 **2024년 노벨 화학상** 수상자는 다음과 같습니다:\n*   **수상자:** 데미스 허사비스(Demis Hassabis), 존 점퍼(John Jumper), 데이비드 베이커(David Baker)\n*   **수상 이유:** 단백질 구조 예측 및 설계(단백질 구조를 예측하는 AI 모델인 '알파폴드' 개발 및 단백질 설계 기술)를 통한 공로"
+          }
+        ]
+      }
+    },
+    {
+      "task_id": "L5-005",
+      "instruction": "성수동 카페 추천해주는 블로그 하나만 소개해줘",
+      "level": 5,
+      "category": "Robustness",
+      "success": true,
+      "execution_time": 1.3943684101104736,
+      "steps_taken": 1,
+      "error": null,
+      "expected_tools": [
+        "BlogSearch_naver"
+      ],
+      "golden_action": [
+        {
+          "tool": "BlogSearch_naver",
+          "args": {
+            "query": "성수동 카페 추천",
+            "display": 10,
+            "start": 1,
+            "sort": "sim"
+          }
+        }
+      ],
+      "minimum_steps": null,
+      "data_flow": [],
+      "error_injection": {
+        "tool": "BlogSearch_naver",
+        "error_type": "data_not_available"
+      },
+      "fallback_options": [
+        {
+          "tool": "WebSearch_daum",
+          "args": {
+            "query": "성수동 카페 추천 블로그",
+            "sort": "accuracy",
+            "page": 1,
+            "size": 1
+          }
+        },
+        {
+          "tool": "WebSearch_naver",
+          "args": {
+            "query": "성수동 카페 추천 블로그",
+            "display": 10,
+            "start": 1
+          }
+        }
+      ],
+      "resp_schema": {},
+      "arg_schema": {},
+      "repetitions": 1,
+      "repetition_results": [
+        true
+      ],
+      "token_usage": {
+        "prompt_tokens": 251,
+        "completion_tokens": 31,
+        "total_tokens": 282
+      },
+      "ttft_stats": {
+        "average": 1.394188529025996,
+        "min": 1.394188529025996,
+        "max": 1.394188529025996,
+        "count": 1
+      },
+      "tool_calls": [],
+      "final_response": "call:BlogSearch_naver:{\"query\":\"성수동 카페 추천\", \"display\": 5, \"sort\": \"sim\"}",
+      "conversation_log": {
+        "total_messages": 2,
+        "messages": [
+          {
+            "role": "user",
+            "content": "성수동 카페 추천해주는 블로그 하나만 소개해줘"
+          },
+          {
+            "role": "assistant",
+            "content": "call:BlogSearch_naver:{\"query\":\"성수동 카페 추천\", \"display\": 5, \"sort\": \"sim\"}"
+          }
+        ]
+      }
+    },
+    {
+      "task_id": "L5-006",
+      "instruction": "국산 NPU 관련 가장 최신 뉴스 하나만 골라 기사 제목만 알려줘.",
+      "level": 5,
+      "category": "Robustness",
+      "success": true,
+      "execution_time": 1.2725319862365723,
+      "steps_taken": 1,
+      "error": null,
+      "expected_tools": [
+        "NewsSearch_naver"
+      ],
+      "golden_action": [
+        {
+          "tool": "NewsSearch_naver",
+          "args": {
+            "query": "국산 NPU",
+            "display": 1,
+            "start": 1,
+            "sort": "date"
+          }
+        }
+      ],
+      "minimum_steps": null,
+      "data_flow": [],
+      "error_injection": {
+        "tool": "NewsSearch_naver",
+        "error_type": "data_not_available"
+      },
+      "fallback_options": [
+        {
+          "tool": "WebSearch_daum",
+          "args": {
+            "query": "국산 NPU",
+            "sort": "recency",
+            "page": 1,
+            "size": 1
+          }
+        },
+        {
+          "tool": "WebSearch_naver",
+          "args": {
+            "query": "국산 NPU",
+            "display": 10,
+            "start": 1
+          }
+        }
+      ],
+      "resp_schema": {},
+      "arg_schema": {},
+      "repetitions": 1,
+      "repetition_results": [
+        true
+      ],
+      "token_usage": {
+        "prompt_tokens": 257,
+        "completion_tokens": 28,
+        "total_tokens": 285
+      },
+      "ttft_stats": {
+        "average": 1.2723232909920625,
+        "min": 1.2723232909920625,
+        "max": 1.2723232909920625,
+        "count": 1
+      },
+      "tool_calls": [],
+      "final_response": "call:NewsSearch_naver:{\"query\":\"국산 NPU\", \"sort\":\"date\", \"display\":1}",
+      "conversation_log": {
+        "total_messages": 2,
+        "messages": [
+          {
+            "role": "user",
+            "content": "국산 NPU 관련 가장 최신 뉴스 하나만 골라 기사 제목만 알려줘."
+          },
+          {
+            "role": "assistant",
+            "content": "call:NewsSearch_naver:{\"query\":\"국산 NPU\", \"sort\":\"date\", \"display\":1}"
+          }
+        ]
+      }
+    },
+    {
+      "task_id": "L5-007",
+      "instruction": "알라딘에서 '인공지능' 검색해서 맨 위 결과의 제목만 한 줄로 알려줘.",
+      "level": 5,
+      "category": "Robustness",
+      "success": true,
+      "execution_time": 0.9339690208435059,
+      "steps_taken": 1,
+      "error": null,
+      "expected_tools": [
+        "ItemSearch_aladin"
+      ],
+      "golden_action": [
+        {
+          "tool": "ItemSearch_aladin",
+          "args": {
+            "query": "인공지능",
+            "query_type": "Keyword",
+            "search_target": "Book",
+            "start": 1,
+            "max_results": 10,
+            "sort": "Accuracy"
+          }
+        }
+      ],
+      "minimum_steps": null,
+      "data_flow": [],
+      "error_injection": {
+        "tool": "ItemSearch_aladin",
+        "error_type": "timeout"
+      },
+      "fallback_options": [
+        {
+          "tool": "WebSearch_naver",
+          "args": {
+            "query": "알라딘 인공지능 책",
+            "display": 5
+          }
+        },
+        {
+          "tool": "WebSearch_daum",
+          "args": {
+            "query": "알라딘 인공지능 책",
+            "page": 1,
+            "size": 5
+          }
+        }
+      ],
+      "resp_schema": {},
+      "arg_schema": {},
+      "repetitions": 1,
+      "repetition_results": [
+        true
+      ],
+      "token_usage": {
+        "prompt_tokens": 444,
+        "completion_tokens": 19,
+        "total_tokens": 463
+      },
+      "ttft_stats": {
+        "average": 0.9337356819887646,
+        "min": 0.9337356819887646,
+        "max": 0.9337356819887646,
+        "count": 1
+      },
+      "tool_calls": [],
+      "final_response": "call:ItemSearch_aladin:{\"query\":\"인공지능\"}",
+      "conversation_log": {
+        "total_messages": 2,
+        "messages": [
+          {
+            "role": "user",
+            "content": "알라딘에서 '인공지능' 검색해서 맨 위 결과의 제목만 한 줄로 알려줘."
+          },
+          {
+            "role": "assistant",
+            "content": "call:ItemSearch_aladin:{\"query\":\"인공지능\"}"
+          }
+        ]
+      }
+    },
+    {
+      "task_id": "L5-008",
+      "instruction": "2025년 9월 1주차 알라딘 국내도서 베스트셀러 3위 제목만 알려줘",
+      "level": 5,
+      "category": "Robustness",
+      "success": true,
+      "execution_time": 1.8098042011260986,
+      "steps_taken": 1,
+      "error": null,
+      "expected_tools": [
+        "ItemList_aladin"
+      ],
+      "golden_action": [
+        {
+          "tool": "ItemList_aladin",
+          "args": {
+            "query_type": "Bestseller",
+            "search_target": "Book",
+            "year": 2025,
+            "month": 9,
+            "week": 1,
+            "start": 1,
+            "max_results": 10
+          }
+        }
+      ],
+      "minimum_steps": null,
+      "data_flow": [],
+      "error_injection": {
+        "tool": "ItemList_aladin",
+        "error_type": "complete_unavailable"
+      },
+      "fallback_options": [
+        {
+          "tool": "WebSearch_naver",
+          "args": {
+            "query": "알라딘 베스트셀러 2025년 9월 1주",
+            "display": 1
+          }
+        },
+        {
+          "tool": "WebSearch_daum",
+          "args": {
+            "query": "알라딘 베스트셀러 2025년 9월 1주",
+            "page": 1,
+            "size": 1
+          }
+        }
+      ],
+      "resp_schema": {},
+      "arg_schema": {},
+      "repetitions": 1,
+      "repetition_results": [
+        true
+      ],
+      "token_usage": {
+        "prompt_tokens": 692,
+        "completion_tokens": 40,
+        "total_tokens": 732
+      },
+      "ttft_stats": {
+        "average": 1.8096114950021729,
+        "min": 1.8096114950021729,
+        "max": 1.8096114950021729,
+        "count": 1
+      },
+      "tool_calls": [],
+      "final_response": "call:ItemList_aladin:{\"query_type\":\"Bestseller\",\"search_target\":\"Book\",\"year\":2025,\"month\":9,\"week\":1}",
+      "conversation_log": {
+        "total_messages": 2,
+        "messages": [
+          {
+            "role": "user",
+            "content": "2025년 9월 1주차 알라딘 국내도서 베스트셀러 3위 제목만 알려줘"
+          },
+          {
+            "role": "assistant",
+            "content": "call:ItemList_aladin:{\"query_type\":\"Bestseller\",\"search_target\":\"Book\",\"year\":2025,\"month\":9,\"week\":1}"
+          }
+        ]
+      }
+    },
+    {
+      "task_id": "L5-009",
+      "instruction": "알라딘에서 한강 작가의 책 한권 추천해줘",
+      "level": 5,
+      "category": "Robustness",
+      "success": true,
+      "execution_time": 1.7960422039031982,
+      "steps_taken": 1,
+      "error": null,
+      "expected_tools": [
+        "ItemSearch_aladin"
+      ],
+      "golden_action": [
+        {
+          "tool": "ItemSearch_aladin",
+          "args": {
+            "query": "한강",
+            "query_type": "Keyword",
+            "search_target": "Book",
+            "max_results": 10,
+            "start": 1,
+            "sort": "Accuracy"
+          }
+        }
+      ],
+      "minimum_steps": null,
+      "data_flow": [],
+      "error_injection": {
+        "tool": "ItemSearch_aladin",
+        "error_type": "timeout"
+      },
+      "fallback_options": [
+        {
+          "tool": "WebSearch_naver",
+          "args": {
+            "query": "한강 알라딘"
+          }
+        },
+        {
+          "tool": "WebSearch_daum",
+          "args": {
+            "query": "한강 알라딘",
+            "page": 1,
+            "size": 1
+          }
+        }
+      ],
+      "resp_schema": {},
+      "arg_schema": {},
+      "repetitions": 1,
+      "repetition_results": [
+        true
+      ],
+      "token_usage": {
+        "prompt_tokens": 434,
+        "completion_tokens": 40,
+        "total_tokens": 474
+      },
+      "ttft_stats": {
+        "average": 1.7958375989983324,
+        "min": 1.7958375989983324,
+        "max": 1.7958375989983324,
+        "count": 1
+      },
+      "tool_calls": [],
+      "final_response": "call:ItemSearch_aladin:{\"query\": \"한강\", \"query_type\": \"Author\", \"max_results\": 5, \"sort\": \"SalesPoint\"}",
+      "conversation_log": {
+        "total_messages": 2,
+        "messages": [
+          {
+            "role": "user",
+            "content": "알라딘에서 한강 작가의 책 한권 추천해줘"
+          },
+          {
+            "role": "assistant",
+            "content": "call:ItemSearch_aladin:{\"query\": \"한강\", \"query_type\": \"Author\", \"max_results\": 5, \"sort\": \"SalesPoint\"}"
+          }
+        ]
+      }
+    },
+    {
+      "task_id": "L5-010",
+      "instruction": "애플(AAPL) 현재가를 숫자만 한 줄로 알려줘.",
+      "level": 5,
+      "category": "Robustness",
+      "success": true,
+      "execution_time": 0.8228609561920166,
+      "steps_taken": 1,
+      "error": null,
+      "expected_tools": [
+        "USStockPrice_kis"
+      ],
+      "golden_action": [
+        {
+          "tool": "USStockPrice_kis",
+          "args": {
+            "symbol": "AAPL",
+            "exchange": "NASDAQ"
+          }
+        }
+      ],
+      "minimum_steps": null,
+      "data_flow": [],
+      "error_injection": {
+        "tool": "USStockPrice_kis",
+        "error_type": "timeout"
+      },
+      "fallback_options": [
+        {
+          "tool": "WebSearch_naver",
+          "args": {
+            "query": "AAPL 주가 현재가",
+            "display": 1
+          }
+        },
+        {
+          "tool": "WebSearch_daum",
+          "args": {
+            "query": "AAPL 주가 현재가",
+            "page": 1,
+            "size": 1
+          }
+        }
+      ],
+      "resp_schema": {},
+      "arg_schema": {},
+      "repetitions": 1,
+      "repetition_results": [
+        true
+      ],
+      "token_usage": {
+        "prompt_tokens": 186,
+        "completion_tokens": 17,
+        "total_tokens": 203
+      },
+      "ttft_stats": {
+        "average": 0.8226752420014236,
+        "min": 0.8226752420014236,
+        "max": 0.8226752420014236,
+        "count": 1
+      },
+      "tool_calls": [],
+      "final_response": "call:USStockPrice_kis:{\"symbol\": \"AAPL\"}",
+      "conversation_log": {
+        "total_messages": 2,
+        "messages": [
+          {
+            "role": "user",
+            "content": "애플(AAPL) 현재가를 숫자만 한 줄로 알려줘."
+          },
+          {
+            "role": "assistant",
+            "content": "call:USStockPrice_kis:{\"symbol\": \"AAPL\"}"
+          }
+        ]
+      }
+    },
+    {
+      "task_id": "L5-011",
+      "instruction": "삼성전자(005930) 현재가격 얼마야? 소수점 둘째자리까지 부탁해",
+      "level": 5,
+      "category": "Robustness",
+      "success": true,
+      "execution_time": 1.3721630573272705,
+      "steps_taken": 1,
+      "error": null,
+      "expected_tools": [
+        "StockPrice_kis"
+      ],
+      "golden_action": [
+        {
+          "tool": "StockPrice_kis",
+          "args": {
+            "symbol": "005930",
+            "market": "KOSPI"
+          }
+        }
+      ],
+      "minimum_steps": null,
+      "data_flow": [],
+      "error_injection": {
+        "tool": "StockPrice_kis",
+        "error_type": "timeout"
+      },
+      "fallback_options": [
+        {
+          "tool": "StockPrice_ls",
+          "args": {
+            "shcode": "005930",
+            "exchgubun": "K"
+          }
+        }
+      ],
+      "resp_schema": {},
+      "arg_schema": {},
+      "repetitions": 1,
+      "repetition_results": [
+        true
+      ],
+      "token_usage": {
+        "prompt_tokens": 201,
+        "completion_tokens": 29,
+        "total_tokens": 230
+      },
+      "ttft_stats": {
+        "average": 1.3719245780084748,
+        "min": 1.3719245780084748,
+        "max": 1.3719245780084748,
+        "count": 1
+      },
+      "tool_calls": [],
+      "final_response": "call:StockPrice_kis:{\"symbol\": \"005930\", \"market\": \"KOSPI\"}",
+      "conversation_log": {
+        "total_messages": 2,
+        "messages": [
+          {
+            "role": "user",
+            "content": "삼성전자(005930) 현재가격 얼마야? 소수점 둘째자리까지 부탁해"
+          },
+          {
+            "role": "assistant",
+            "content": "call:StockPrice_kis:{\"symbol\": \"005930\", \"market\": \"KOSPI\"}"
+          }
+        ]
+      }
+    },
+    {
+      "task_id": "L5-012",
+      "instruction": "비트코인(KRW) 현재가 얼마야? 소수점까지 알려줄 필요는 없어",
+      "level": 5,
+      "category": "Robustness",
+      "success": true,
+      "execution_time": 1.1649541854858398,
+      "steps_taken": 1,
+      "error": null,
+      "expected_tools": [
+        "CryptoPrice_upbit"
+      ],
+      "golden_action": [
+        {
+          "tool": "CryptoPrice_upbit",
+          "args": {
+            "symbol": "BTC",
+            "quote": "KRW"
+          }
+        }
+      ],
+      "minimum_steps": null,
+      "data_flow": [],
+      "error_injection": {
+        "tool": "CryptoPrice_upbit",
+        "error_type": "timeout"
+      },
+      "fallback_options": [
+        {
+          "tool": "CryptoPrice_bithumb",
+          "args": {
+            "markets": "KRW-BTC"
+          }
+        }
+      ],
+      "resp_schema": {},
+      "arg_schema": {},
+      "repetitions": 1,
+      "repetition_results": [
+        true
+      ],
+      "token_usage": {
+        "prompt_tokens": 211,
+        "completion_tokens": 24,
+        "total_tokens": 235
+      },
+      "ttft_stats": {
+        "average": 1.164746438007569,
+        "min": 1.164746438007569,
+        "max": 1.164746438007569,
+        "count": 1
+      },
+      "tool_calls": [],
+      "final_response": "call:CryptoPrice_upbit:{\"symbol\": \"BTC\", \"quote\": \"KRW\"}",
+      "conversation_log": {
+        "total_messages": 2,
+        "messages": [
+          {
+            "role": "user",
+            "content": "비트코인(KRW) 현재가 얼마야? 소수점까지 알려줄 필요는 없어"
+          },
+          {
+            "role": "assistant",
+            "content": "call:CryptoPrice_upbit:{\"symbol\": \"BTC\", \"quote\": \"KRW\"}"
+          }
+        ]
+      }
+    },
+    {
+      "task_id": "L5-013",
+      "instruction": "이더리움 1분봉 30개 중 마지막 종가를 간단하게 알려줘.",
+      "level": 5,
+      "category": "Robustness",
+      "success": true,
+      "execution_time": 1.734114170074463,
+      "steps_taken": 1,
+      "error": null,
+      "expected_tools": [
+        "CryptoCandle_upbit"
+      ],
+      "golden_action": [
+        {
+          "tool": "CryptoCandle_upbit",
+          "args": {
+            "symbol": "ETH",
+            "quote": "KRW",
+            "candle_type": "minutes",
+            "unit": 1,
+            "count": 30
+          }
+        }
+      ],
+      "minimum_steps": null,
+      "data_flow": [],
+      "error_injection": {
+        "tool": "CryptoCandle_upbit",
+        "error_type": "data_not_available"
+      },
+      "fallback_options": [
+        {
+          "tool": "CryptoCandle_bithumb",
+          "args": {
+            "time": "minutes",
+            "unit": 1,
+            "market": "KRW-ETH",
+            "count": 30
+          }
+        }
+      ],
+      "resp_schema": {},
+      "arg_schema": {},
+      "repetitions": 1,
+      "repetition_results": [
+        true
+      ],
+      "token_usage": {
+        "prompt_tokens": 389,
+        "completion_tokens": 37,
+        "total_tokens": 426
+      },
+      "ttft_stats": {
+        "average": 1.7339089100132696,
+        "min": 1.7339089100132696,
+        "max": 1.7339089100132696,
+        "count": 1
+      },
+      "tool_calls": [],
+      "final_response": "call:CryptoCandle_upbit{candle_type:minutes,count:30,symbol:ETH,unit:1}",
+      "conversation_log": {
+        "total_messages": 2,
+        "messages": [
+          {
+            "role": "user",
+            "content": "이더리움 1분봉 30개 중 마지막 종가를 간단하게 알려줘."
+          },
+          {
+            "role": "assistant",
+            "content": "call:CryptoCandle_upbit{candle_type:minutes,count:30,symbol:ETH,unit:1}"
+          }
+        ]
+      }
+    },
+    {
+      "task_id": "L5-014",
+      "instruction": "리플(KRW) 현재가격 얼마야?",
+      "level": 5,
+      "category": "Robustness",
+      "success": true,
+      "execution_time": 0.9975574016571045,
+      "steps_taken": 1,
+      "error": null,
+      "expected_tools": [
+        "CryptoPrice_bithumb"
+      ],
+      "golden_action": [
+        {
+          "tool": "CryptoPrice_bithumb",
+          "args": {
+            "markets": "KRW-XRP"
+          }
+        }
+      ],
+      "minimum_steps": null,
+      "data_flow": [],
+      "error_injection": {
+        "tool": "CryptoPrice_bithumb",
+        "error_type": "timeout"
+      },
+      "fallback_options": [
+        {
+          "tool": "CryptoPrice_upbit",
+          "args": {
+            "symbol": "XRP",
+            "quote": "KRW"
+          }
+        }
+      ],
+      "resp_schema": {},
+      "arg_schema": {},
+      "repetitions": 1,
+      "repetition_results": [
+        true
+      ],
+      "token_usage": {
+        "prompt_tokens": 204,
+        "completion_tokens": 21,
+        "total_tokens": 225
+      },
+      "ttft_stats": {
+        "average": 0.9973462600028142,
+        "min": 0.9973462600028142,
+        "max": 0.9973462600028142,
+        "count": 1
+      },
+      "tool_calls": [],
+      "final_response": "call:CryptoPrice_bithumb:{\"markets\":\"KRW-XRP\"}",
+      "conversation_log": {
+        "total_messages": 2,
+        "messages": [
+          {
+            "role": "user",
+            "content": "리플(KRW) 현재가격 얼마야?"
+          },
+          {
+            "role": "assistant",
+            "content": "call:CryptoPrice_bithumb:{\"markets\":\"KRW-XRP\"}"
+          }
+        ]
+      }
+    },
+    {
+      "task_id": "L5-015",
+      "instruction": "강남역(127.027621,37.497942)에서 서울시청(126.977022,37.566536)까지 얼마나 걸려? 차타고 갈거야.",
+      "level": 5,
+      "category": "Robustness",
+      "success": true,
+      "execution_time": 2.7957966327667236,
+      "steps_taken": 1,
+      "error": null,
+      "expected_tools": [
+        "CarRoute_tmap"
+      ],
+      "golden_action": [
+        {
+          "tool": "CarRoute_tmap",
+          "args": {
+            "startX": 127.027621,
+            "startY": 37.497942,
+            "endX": 126.977022,
+            "endY": 37.566536,
+            "searchOption": 2
+          }
+        }
+      ],
+      "minimum_steps": null,
+      "data_flow": [],
+      "error_injection": {
+        "tool": "CarRoute_tmap",
+        "error_type": "timeout"
+      },
+      "fallback_options": [
+        {
+          "tool": "Directions_naver",
+          "args": {
+            "start": "127.027621,37.497942",
+            "goal": "126.977022,37.566536",
+            "option": "trafast"
+          }
+        }
+      ],
+      "resp_schema": {},
+      "arg_schema": {},
+      "repetitions": 1,
+      "repetition_results": [
+        true
+      ],
+      "token_usage": {
+        "prompt_tokens": 283,
+        "completion_tokens": 63,
+        "total_tokens": 346
+      },
+      "ttft_stats": {
+        "average": 2.7955382830114104,
+        "min": 2.7955382830114104,
+        "max": 2.7955382830114104,
+        "count": 1
+      },
+      "tool_calls": [],
+      "final_response": "call:CarRoute_tmap{endX:126.977022,endY:37.566536,startX:127.027621,startY:37.497942}",
+      "conversation_log": {
+        "total_messages": 2,
+        "messages": [
+          {
+            "role": "user",
+            "content": "강남역(127.027621,37.497942)에서 서울시청(126.977022,37.566536)까지 얼마나 걸려? 차타고 갈거야."
+          },
+          {
+            "role": "assistant",
+            "content": "call:CarRoute_tmap{endX:126.977022,endY:37.566536,startX:127.027621,startY:37.497942}"
+          }
+        ]
+      }
+    },
+    {
+      "task_id": "L5-016",
+      "instruction": "인천국제공항(126.450517,37.46019)에서 코엑스(127.0592,37.511)까지 차타고 거리 얼마나 가야해?",
+      "level": 0,
+      "category": "Robustness",
+      "success": true,
+      "execution_time": 2.5049235820770264,
+      "steps_taken": 1,
+      "error": null,
+      "expected_tools": [
+        "CarRoute_tmap"
+      ],
+      "golden_action": [
+        {
+          "tool": "CarRoute_tmap",
+          "args": {
+            "startX": 126.450517,
+            "startY": 37.46019,
+            "endX": 127.0592,
+            "endY": 37.511,
+            "searchOption": 0
+          }
+        }
+      ],
+      "minimum_steps": null,
+      "data_flow": [],
+      "error_injection": {
+        "tool": "CarRoute_tmap",
+        "error_type": "complete_unavailable"
+      },
+      "fallback_options": [
+        {
+          "tool": "Directions_naver",
+          "args": {
+            "start": "126.450517,37.46019",
+            "goal": "127.0592,37.511",
+            "option": "traoptimal"
+          }
+        }
+      ],
+      "resp_schema": {},
+      "arg_schema": {},
+      "repetitions": 1,
+      "repetition_results": [
+        true
+      ],
+      "token_usage": {
+        "prompt_tokens": 278,
+        "completion_tokens": 57,
+        "total_tokens": 335
+      },
+      "ttft_stats": {
+        "average": 2.5047372809785884,
+        "min": 2.5047372809785884,
+        "max": 2.5047372809785884,
+        "count": 1
+      },
+      "tool_calls": [],
+      "final_response": "call:CarRoute_tmap{endX:127.0592,endY:37.511,startX:126.450517,startY:37.46019}",
+      "conversation_log": {
+        "total_messages": 2,
+        "messages": [
+          {
+            "role": "user",
+            "content": "인천국제공항(126.450517,37.46019)에서 코엑스(127.0592,37.511)까지 차타고 거리 얼마나 가야해?"
+          },
+          {
+            "role": "assistant",
+            "content": "call:CarRoute_tmap{endX:127.0592,endY:37.511,startX:126.450517,startY:37.46019}"
+          }
+        ]
+      }
+    },
+    {
+      "task_id": "L5-017",
+      "instruction": "홍대입구역 근처 500m 안에서 편의점 하나만 찾아줘. 어디야?",
+      "level": 5,
+      "category": "Robustness",
+      "success": true,
+      "execution_time": 2.286484479904175,
+      "steps_taken": 1,
+      "error": null,
+      "expected_tools": [
+        "CategorySearch_kakao"
+      ],
+      "golden_action": [
+        {
+          "tool": "CategorySearch_kakao",
+          "args": {
+            "category": "CS2",
+            "x": 126.9237,
+            "y": 37.5563,
+            "radius": 500,
+            "page": 1,
+            "size": 1
+          }
+        }
+      ],
+      "minimum_steps": null,
+      "data_flow": [],
+      "error_injection": {
+        "tool": "CategorySearch_kakao",
+        "error_type": "timeout"
+      },
+      "fallback_options": [
+        {
+          "tool": "PlaceSearch_kakao",
+          "args": {
+            "keyword": "편의점",
+            "x": 126.9237,
+            "y": 37.5563,
+            "radius": 500,
+            "sort": "distance",
+            "page": 1,
+            "size": 1
+          }
+        }
+      ],
+      "resp_schema": {},
+      "arg_schema": {},
+      "repetitions": 1,
+      "repetition_results": [
+        true
+      ],
+      "token_usage": {
+        "prompt_tokens": 274,
+        "completion_tokens": 52,
+        "total_tokens": 326
+      },
+      "ttft_stats": {
+        "average": 2.286279074003687,
+        "min": 2.286279074003687,
+        "max": 2.286279074003687,
+        "count": 1
+      },
+      "tool_calls": [],
+      "final_response": "call:CategorySearch_kakao{category: \"CS2\", x: 126.9244, y: 37.5565, radius: 500, size: 1}",
+      "conversation_log": {
+        "total_messages": 2,
+        "messages": [
+          {
+            "role": "user",
+            "content": "홍대입구역 근처 500m 안에서 편의점 하나만 찾아줘. 어디야?"
+          },
+          {
+            "role": "assistant",
+            "content": "call:CategorySearch_kakao{category: \"CS2\", x: 126.9244, y: 37.5565, radius: 500, size: 1}"
+          }
+        ]
+      }
+    },
+    {
+      "task_id": "L5-018",
+      "instruction": "네이버에서 '제주도 가을 여행 코스' 블로그 글 뭐 있어? 하나만 알려줘.",
+      "level": 5,
+      "category": "Robustness",
+      "success": true,
+      "execution_time": 1.0219626426696777,
+      "steps_taken": 1,
+      "error": null,
+      "expected_tools": [
+        "BlogSearch_naver"
+      ],
+      "golden_action": [
+        {
+          "tool": "BlogSearch_naver",
+          "args": {
+            "query": "제주도 가을 여행 코스",
+            "display": 1,
+            "start": 1
+          }
+        }
+      ],
+      "minimum_steps": null,
+      "data_flow": [],
+      "error_injection": {
+        "tool": "BlogSearch_naver",
+        "error_type": "timeout"
+      },
+      "fallback_options": [
+        {
+          "tool": "WebSearch_daum",
+          "args": {
+            "query": "제주도 가을 여행 코스 블로그",
+            "sort": "accuracy",
+            "page": 1,
+            "size": 1
+          }
+        }
+      ],
+      "resp_schema": {},
+      "arg_schema": {},
+      "repetitions": 1,
+      "repetition_results": [
+        true
+      ],
+      "token_usage": {
+        "prompt_tokens": 262,
+        "completion_tokens": 22,
+        "total_tokens": 284
+      },
+      "ttft_stats": {
+        "average": 1.0217322079988662,
+        "min": 1.0217322079988662,
+        "max": 1.0217322079988662,
+        "count": 1
+      },
+      "tool_calls": [],
+      "final_response": "call:BlogSearch_naver:{\"query\":\"제주도 가을 여행 코스\"}",
+      "conversation_log": {
+        "total_messages": 2,
+        "messages": [
+          {
+            "role": "user",
+            "content": "네이버에서 '제주도 가을 여행 코스' 블로그 글 뭐 있어? 하나만 알려줘."
+          },
+          {
+            "role": "assistant",
+            "content": "call:BlogSearch_naver:{\"query\":\"제주도 가을 여행 코스\"}"
+          }
+        ]
+      }
+    },
+    {
+      "task_id": "L5-019",
+      "instruction": "KOSDAQ 지수 현재 가격 얼마냐?",
+      "level": 5,
+      "category": "Robustness",
+      "success": true,
+      "execution_time": 0.8650436401367188,
+      "steps_taken": 1,
+      "error": null,
+      "expected_tools": [
+        "MarketIndex_ls"
+      ],
+      "golden_action": [
+        {
+          "tool": "MarketIndex_ls",
+          "args": {
+            "jisu": "KOSDAQ"
+          }
+        }
+      ],
+      "minimum_steps": null,
+      "data_flow": [],
+      "error_injection": {
+        "tool": "MarketIndex_ls",
+        "error_type": "complete_unavailable"
+      },
+      "fallback_options": [
+        {
+          "tool": "WebSearch_naver",
+          "args": {
+            "query": "KOSDAQ 지수 현재가",
+            "display": 1
+          }
+        },
+        {
+          "tool": "WebSearch_daum",
+          "args": {
+            "query": "KOSDAQ 지수 현재가",
+            "page": 1,
+            "size": 1
+          }
+        }
+      ],
+      "resp_schema": {},
+      "arg_schema": {},
+      "repetitions": 1,
+      "repetition_results": [
+        true
+      ],
+      "token_usage": {
+        "prompt_tokens": 203,
+        "completion_tokens": 18,
+        "total_tokens": 221
+      },
+      "ttft_stats": {
+        "average": 0.8648175119888037,
+        "min": 0.8648175119888037,
+        "max": 0.8648175119888037,
+        "count": 1
+      },
+      "tool_calls": [],
+      "final_response": "call:MarketIndex_ls:{\"jisu\":\"KOSDAQ\"}",
+      "conversation_log": {
+        "total_messages": 2,
+        "messages": [
+          {
+            "role": "user",
+            "content": "KOSDAQ 지수 현재 가격 얼마냐?"
+          },
+          {
+            "role": "assistant",
+            "content": "call:MarketIndex_ls:{\"jisu\":\"KOSDAQ\"}"
+          }
+        ]
+      }
+    },
+    {
+      "task_id": "L5-020",
+      "instruction": "판교역(127.108882,37.394274)에서 여의도(126.92490,37.52190)까지 자차로 가는 최단 경로의 소요 시간 알려줘.",
+      "level": 5,
+      "category": "Robustness",
+      "success": true,
+      "execution_time": 2.8042874336242676,
+      "steps_taken": 1,
+      "error": null,
+      "expected_tools": [
+        "Directions_naver"
+      ],
+      "golden_action": [
+        {
+          "tool": "Directions_naver",
+          "args": {
+            "start": "127.108882,37.394274",
+            "goal": "126.92490,37.52190",
+            "option": "trafast"
+          }
+        }
+      ],
+      "minimum_steps": null,
+      "data_flow": [],
+      "error_injection": {
+        "tool": "Directions_naver",
+        "error_type": "timeout"
+      },
+      "fallback_options": [
+        {
+          "tool": "CarRoute_tmap",
+          "args": {
+            "startX": 127.108882,
+            "startY": 37.394274,
+            "endX": 126.9249,
+            "endY": 37.5219,
+            "searchOption": 2
+          }
+        }
+      ],
+      "resp_schema": {},
+      "arg_schema": {},
+      "repetitions": 1,
+      "repetition_results": [
+        true
+      ],
+      "token_usage": {
+        "prompt_tokens": 350,
+        "completion_tokens": 64,
+        "total_tokens": 414
+      },
+      "ttft_stats": {
+        "average": 2.804045025986852,
+        "min": 2.804045025986852,
+        "max": 2.804045025986852,
+        "count": 1
+      },
+      "tool_calls": [],
+      "final_response": "call:Directions_naver:{\"start\": \"127.108882,37.394274\", \"goal\": \"126.92490,37.52190\", \"option\": \"traoptimal\"}",
+      "conversation_log": {
+        "total_messages": 2,
+        "messages": [
+          {
+            "role": "user",
+            "content": "판교역(127.108882,37.394274)에서 여의도(126.92490,37.52190)까지 자차로 가는 최단 경로의 소요 시간 알려줘."
+          },
+          {
+            "role": "assistant",
+            "content": "call:Directions_naver:{\"start\": \"127.108882,37.394274\", \"goal\": \"126.92490,37.52190\", \"option\": \"traoptimal\"}"
+          }
+        ]
+      }
+    }
+  ]
+}

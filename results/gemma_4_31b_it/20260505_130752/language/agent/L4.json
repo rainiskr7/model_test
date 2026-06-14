@@ -1,0 +1,719 @@
+{
+  "metadata": {
+    "timestamp": "2026-05-25T00:37:18.794365",
+    "model": "gemma_4_31b_it",
+    "level": "L4",
+    "total_tasks": 10,
+    "successful_tasks": 10,
+    "failed_tasks": 0,
+    "success_rate": 100.0,
+    "total_execution_time": 120.0,
+    "average_execution_time": 12.0,
+    "total_steps": 10,
+    "average_steps": 1.0,
+    "total_tool_calls": 0,
+    "average_tool_calls": 0.0,
+    "total_tokens": 4725,
+    "average_tokens_per_task": 472.5,
+    "average_prompt_tokens": 426.6,
+    "average_completion_tokens": 45.9,
+    "average_tps": 39.37,
+    "ttft": {
+      "average": 11.9999,
+      "min": 5.8805,
+      "max": 30.602,
+      "unit": "seconds"
+    }
+  },
+  "tool_usage_statistics": {},
+  "results": [
+    {
+      "task_id": "L4-001",
+      "instruction": "2024년 겨울 헤어 트렌드를 다양한 소스에서 찾아서 어떤 스타일이 가장 인기인지 비교 분석해줘",
+      "level": 4,
+      "category": "Multi Tool Parallel",
+      "success": true,
+      "execution_time": 9.760862112045288,
+      "steps_taken": 1,
+      "error": null,
+      "expected_tools": [
+        "WebSearch_naver",
+        "BlogSearch_naver"
+      ],
+      "golden_action": [
+        {
+          "tool": "WebSearch_naver",
+          "args": {
+            "query": "2024 겨울 헤어 트렌드",
+            "display": 10
+          }
+        },
+        {
+          "tool": "BlogSearch_naver",
+          "args": {
+            "query": "2024 겨울 헤어 트렌드",
+            "display": 10
+          }
+        }
+      ],
+      "minimum_steps": null,
+      "data_flow": [],
+      "error_injection": null,
+      "fallback_options": [],
+      "resp_schema": {},
+      "arg_schema": {},
+      "repetitions": 1,
+      "repetition_results": [
+        true
+      ],
+      "token_usage": {
+        "prompt_tokens": 398,
+        "completion_tokens": 37,
+        "total_tokens": 435
+      },
+      "ttft_stats": {
+        "average": 9.760536447996856,
+        "min": 9.760536447996856,
+        "max": 9.760536447996856,
+        "count": 1
+      },
+      "tool_calls": [],
+      "final_response": "{\"tool_call\": {\"name\": \"WebSearch_naver\", \"arguments\": {\"query\": \"2024년 겨울 헤어 트렌드 추천 스타일\"}}}",
+      "conversation_log": {
+        "total_messages": 2,
+        "messages": [
+          {
+            "role": "user",
+            "content": "2024년 겨울 헤어 트렌드를 다양한 소스에서 찾아서 어떤 스타일이 가장 인기인지 비교 분석해줘"
+          },
+          {
+            "role": "assistant",
+            "content": "{\"tool_call\": {\"name\": \"WebSearch_naver\", \"arguments\": {\"query\": \"2024년 겨울 헤어 트렌드 추천 스타일\"}}}"
+          }
+        ]
+      }
+    },
+    {
+      "task_id": "L4-002",
+      "instruction": "2025 여의도 불꽃축제 몇시부터 몇시까지야?",
+      "level": 4,
+      "category": "Multi Tool Parallel",
+      "success": true,
+      "execution_time": 6.9445881843566895,
+      "steps_taken": 1,
+      "error": null,
+      "expected_tools": [
+        "WebSearch_naver",
+        "NewsSearch_naver"
+      ],
+      "golden_action": [
+        {
+          "tool": "WebSearch_naver",
+          "args": {
+            "query": "2025 여의도 불꽃축제 운영시간",
+            "display": 10
+          }
+        },
+        {
+          "tool": "NewsSearch_naver",
+          "args": {
+            "query": "2025 여의도 불꽃축제 운영시간",
+            "display": 10
+          }
+        }
+      ],
+      "minimum_steps": null,
+      "data_flow": [],
+      "error_injection": null,
+      "fallback_options": [],
+      "resp_schema": {},
+      "arg_schema": {},
+      "repetitions": 1,
+      "repetition_results": [
+        true
+      ],
+      "token_usage": {
+        "prompt_tokens": 389,
+        "completion_tokens": 26,
+        "total_tokens": 415
+      },
+      "ttft_stats": {
+        "average": 6.944375487997604,
+        "min": 6.944375487997604,
+        "max": 6.944375487997604,
+        "count": 1
+      },
+      "tool_calls": [],
+      "final_response": "call:WebSearch_naver{query: \"2025 여의도 불꽃축제 시간\"}",
+      "conversation_log": {
+        "total_messages": 2,
+        "messages": [
+          {
+            "role": "user",
+            "content": "2025 여의도 불꽃축제 몇시부터 몇시까지야?"
+          },
+          {
+            "role": "assistant",
+            "content": "call:WebSearch_naver{query: \"2025 여의도 불꽃축제 시간\"}"
+          }
+        ]
+      }
+    },
+    {
+      "task_id": "L4-003",
+      "instruction": "카카오(035720)와 비트코인 두 가격 어떻게 돼?",
+      "level": 4,
+      "category": "Multi Tool Parallel",
+      "success": true,
+      "execution_time": 15.886486053466797,
+      "steps_taken": 1,
+      "error": null,
+      "expected_tools": [
+        "StockPrice_ls",
+        "CryptoPrice_bithumb"
+      ],
+      "golden_action": [
+        {
+          "tool": "StockPrice_ls",
+          "args": {
+            "shcode": "035720",
+            "exchgubun": "K"
+          }
+        },
+        {
+          "tool": "CryptoPrice_bithumb",
+          "args": {
+            "markets": "KRW-BTC"
+          }
+        }
+      ],
+      "minimum_steps": null,
+      "data_flow": [],
+      "error_injection": null,
+      "fallback_options": [],
+      "resp_schema": {},
+      "arg_schema": {},
+      "repetitions": 1,
+      "repetition_results": [
+        true
+      ],
+      "token_usage": {
+        "prompt_tokens": 371,
+        "completion_tokens": 61,
+        "total_tokens": 432
+      },
+      "ttft_stats": {
+        "average": 15.88628604800033,
+        "min": 15.88628604800033,
+        "max": 15.88628604800033,
+        "count": 1
+      },
+      "tool_calls": [],
+      "final_response": "{\"tool_call\": {\"name\": \"StockPrice_ls\", \"arguments\": {\"shcode\": \"035720\"}}}\n{\"tool_call\": {\"name\": \"CryptoPrice_bithumb\", \"arguments\": {\"markets\": \"KRW-BTC\"}}}",
+      "conversation_log": {
+        "total_messages": 2,
+        "messages": [
+          {
+            "role": "user",
+            "content": "카카오(035720)와 비트코인 두 가격 어떻게 돼?"
+          },
+          {
+            "role": "assistant",
+            "content": "{\"tool_call\": {\"name\": \"StockPrice_ls\", \"arguments\": {\"shcode\": \"035720\"}}}\n{\"tool_call\": {\"name\": \"CryptoPrice_bithumb\", \"arguments\": {\"markets\": \"KRW-BTC\"}}}"
+          }
+        ]
+      }
+    },
+    {
+      "task_id": "L4-004",
+      "instruction": "2025년 봄 메이크업 트렌드는 어떤 스타일이야?",
+      "level": 4,
+      "category": "Multi Tool Parallel",
+      "success": true,
+      "execution_time": 6.903976202011108,
+      "steps_taken": 1,
+      "error": null,
+      "expected_tools": [
+        "WebSearch_naver",
+        "BlogSearch_naver"
+      ],
+      "golden_action": [
+        {
+          "tool": "WebSearch_naver",
+          "args": {
+            "query": "2025 봄 메이크업 트렌드",
+            "display": 10
+          }
+        },
+        {
+          "tool": "BlogSearch_naver",
+          "args": {
+            "query": "2025 봄 메이크업 트렌드",
+            "display": 10
+          }
+        }
+      ],
+      "minimum_steps": null,
+      "data_flow": [],
+      "error_injection": null,
+      "fallback_options": [],
+      "resp_schema": {},
+      "arg_schema": {},
+      "repetitions": 1,
+      "repetition_results": [
+        true
+      ],
+      "token_usage": {
+        "prompt_tokens": 387,
+        "completion_tokens": 26,
+        "total_tokens": 413
+      },
+      "ttft_stats": {
+        "average": 6.903767872005119,
+        "min": 6.903767872005119,
+        "max": 6.903767872005119,
+        "count": 1
+      },
+      "tool_calls": [],
+      "final_response": "call:WebSearch_naver{query: \"2025년 봄 메이크업 트렌드\"}",
+      "conversation_log": {
+        "total_messages": 2,
+        "messages": [
+          {
+            "role": "user",
+            "content": "2025년 봄 메이크업 트렌드는 어떤 스타일이야?"
+          },
+          {
+            "role": "assistant",
+            "content": "call:WebSearch_naver{query: \"2025년 봄 메이크업 트렌드\"}"
+          }
+        ]
+      }
+    },
+    {
+      "task_id": "L4-005",
+      "instruction": "LG에너지솔루션(005930) 주식의 현재가와 최근 배터리 시장 동향을 종합해서 투자 전망을 분석해줘",
+      "level": 4,
+      "category": "Multi Tool Parallel",
+      "success": true,
+      "execution_time": 13.059435606002808,
+      "steps_taken": 1,
+      "error": null,
+      "expected_tools": [
+        "StockPrice_ls",
+        "WebSearch_naver"
+      ],
+      "golden_action": [
+        {
+          "tool": "StockPrice_ls",
+          "args": {
+            "shcode": "005930",
+            "exchgubun": "K"
+          }
+        },
+        {
+          "tool": "WebSearch_naver",
+          "args": {
+            "query": "LG에너지솔루션 2024 투자전망",
+            "display": 10
+          }
+        }
+      ],
+      "minimum_steps": null,
+      "data_flow": [],
+      "error_injection": null,
+      "fallback_options": [],
+      "resp_schema": {},
+      "arg_schema": {},
+      "repetitions": 1,
+      "repetition_results": [
+        true
+      ],
+      "token_usage": {
+        "prompt_tokens": 387,
+        "completion_tokens": 50,
+        "total_tokens": 437
+      },
+      "ttft_stats": {
+        "average": 13.059240015994874,
+        "min": 13.059240015994874,
+        "max": 13.059240015994874,
+        "count": 1
+      },
+      "tool_calls": [],
+      "final_response": "call:StockPrice_ls{\"shcode\": \"373220\"}call:WebSearch_naver{\"query\": \"최근 배터리 시장 동향 및 LG에너지솔루션 전망\"}",
+      "conversation_log": {
+        "total_messages": 2,
+        "messages": [
+          {
+            "role": "user",
+            "content": "LG에너지솔루션(005930) 주식의 현재가와 최근 배터리 시장 동향을 종합해서 투자 전망을 분석해줘"
+          },
+          {
+            "role": "assistant",
+            "content": "call:StockPrice_ls{\"shcode\": \"373220\"}call:WebSearch_naver{\"query\": \"최근 배터리 시장 동향 및 LG에너지솔루션 전망\"}"
+          }
+        ]
+      }
+    },
+    {
+      "task_id": "L4-006",
+      "instruction": "2024년 카카오(005930)와 네이버(000660) 주가를 동시에 확인해서 국내 IT 플랫폼 기업들의 최근 주식 성과를 비교 분석해줘",
+      "level": 4,
+      "category": "Multi Tool Parallel",
+      "success": true,
+      "execution_time": 10.70128059387207,
+      "steps_taken": 1,
+      "error": null,
+      "expected_tools": [
+        "StockPrice_ls",
+        "WebSearch_naver"
+      ],
+      "golden_action": [
+        {
+          "tool": "StockPrice_ls",
+          "args": {
+            "shcode": "005930",
+            "exchgubun": "K"
+          }
+        },
+        {
+          "tool": "StockPrice_ls",
+          "args": {
+            "shcode": "000660",
+            "exchgubun": "K"
+          }
+        },
+        {
+          "tool": "WebSearch_naver",
+          "args": {
+            "query": "카카오 2024 투자전망",
+            "display": 10
+          }
+        },
+        {
+          "tool": "WebSearch_naver",
+          "args": {
+            "query": "네이버 2024 투자전망",
+            "display": 10
+          }
+        }
+      ],
+      "minimum_steps": null,
+      "data_flow": [],
+      "error_injection": null,
+      "fallback_options": [],
+      "resp_schema": {},
+      "arg_schema": {},
+      "repetitions": 1,
+      "repetition_results": [
+        true
+      ],
+      "token_usage": {
+        "prompt_tokens": 397,
+        "completion_tokens": 41,
+        "total_tokens": 438
+      },
+      "ttft_stats": {
+        "average": 10.70106579199637,
+        "min": 10.70106579199637,
+        "max": 10.70106579199637,
+        "count": 1
+      },
+      "tool_calls": [],
+      "final_response": "call:StockPrice_ls{\"shcode\": \"035720\"}call:StockPrice_ls{\"shcode\": \"035420\"}",
+      "conversation_log": {
+        "total_messages": 2,
+        "messages": [
+          {
+            "role": "user",
+            "content": "2024년 카카오(005930)와 네이버(000660) 주가를 동시에 확인해서 국내 IT 플랫폼 기업들의 최근 주식 성과를 비교 분석해줘"
+          },
+          {
+            "role": "assistant",
+            "content": "call:StockPrice_ls{\"shcode\": \"035720\"}call:StockPrice_ls{\"shcode\": \"035420\"}"
+          }
+        ]
+      }
+    },
+    {
+      "task_id": "L4-007",
+      "instruction": "2025년 정부의 민생지원금 정책에 대한 사람들의 반응을 종합해서 분석해줘.",
+      "level": 4,
+      "category": "Multi Tool Parallel",
+      "success": true,
+      "execution_time": 9.803682804107666,
+      "steps_taken": 1,
+      "error": null,
+      "expected_tools": [
+        "WebSearch_naver",
+        "BlogSearch_naver",
+        "NewsSearch_naver"
+      ],
+      "golden_action": [
+        {
+          "tool": "WebSearch_naver",
+          "args": {
+            "query": "2025 민생지원금 정책",
+            "display": 10
+          }
+        },
+        {
+          "tool": "BlogSearch_naver",
+          "args": {
+            "query": "2025 민생지원금 정책",
+            "display": 10
+          }
+        },
+        {
+          "tool": "NewsSearch_naver",
+          "args": {
+            "query": "2025 민생지원금 정책",
+            "display": 10
+          }
+        }
+      ],
+      "minimum_steps": null,
+      "data_flow": [],
+      "error_injection": null,
+      "fallback_options": [],
+      "resp_schema": {},
+      "arg_schema": {},
+      "repetitions": 1,
+      "repetition_results": [
+        true
+      ],
+      "token_usage": {
+        "prompt_tokens": 572,
+        "completion_tokens": 37,
+        "total_tokens": 609
+      },
+      "ttft_stats": {
+        "average": 9.803459839997231,
+        "min": 9.803459839997231,
+        "max": 9.803459839997231,
+        "count": 1
+      },
+      "tool_calls": [],
+      "final_response": "{\"tool_call\": {\"name\": \"WebSearch_naver\", \"arguments\": {\"query\": \"2025년 정부 민생지원금 정책 반응 분석\"}}}",
+      "conversation_log": {
+        "total_messages": 2,
+        "messages": [
+          {
+            "role": "user",
+            "content": "2025년 정부의 민생지원금 정책에 대한 사람들의 반응을 종합해서 분석해줘."
+          },
+          {
+            "role": "assistant",
+            "content": "{\"tool_call\": {\"name\": \"WebSearch_naver\", \"arguments\": {\"query\": \"2025년 정부 민생지원금 정책 반응 분석\"}}}"
+          }
+        ]
+      }
+    },
+    {
+      "task_id": "L4-008",
+      "instruction": "2024년 의료진 파업 이슈를 웹, 블로그, 뉴스에서 각각 검색해서 찬반 의견과 해결방안을 종합 분석해줘",
+      "level": 4,
+      "category": "Multi Tool Parallel",
+      "success": true,
+      "execution_time": 30.602264165878296,
+      "steps_taken": 1,
+      "error": null,
+      "expected_tools": [
+        "WebSearch_naver",
+        "BlogSearch_naver",
+        "NewsSearch_naver"
+      ],
+      "golden_action": [
+        {
+          "tool": "WebSearch_naver",
+          "args": {
+            "query": "2024 의료진 파업 이슈",
+            "display": 10
+          }
+        },
+        {
+          "tool": "BlogSearch_naver",
+          "args": {
+            "query": "2024 의료진 파업 이슈",
+            "display": 10
+          }
+        },
+        {
+          "tool": "NewsSearch_naver",
+          "args": {
+            "query": "2024 의료진 파업 이슈",
+            "display": 10
+          }
+        }
+      ],
+      "minimum_steps": null,
+      "data_flow": [],
+      "error_injection": null,
+      "fallback_options": [],
+      "resp_schema": {},
+      "arg_schema": {},
+      "repetitions": 1,
+      "repetition_results": [
+        true
+      ],
+      "token_usage": {
+        "prompt_tokens": 581,
+        "completion_tokens": 119,
+        "total_tokens": 700
+      },
+      "ttft_stats": {
+        "average": 30.602042351994896,
+        "min": 30.602042351994896,
+        "max": 30.602042351994896,
+        "count": 1
+      },
+      "tool_calls": [],
+      "final_response": "{\"tool_call\": {\"name\": \"WebSearch_naver\", \"arguments\": {\"query\": \"2024년 의료진 파업 찬반 의견 해결방안\"}}}{\"tool_call\": {\"name\": \"BlogSearch_naver\", \"arguments\": {\"query\": \"2024년 의대 증원 파업 생각 찬성 반대\"}}}{\"tool_call\": {\"name\": \"NewsSearch_naver\", \"arguments\": {\"query\": \"2024년 의료진 파업 해결책 정부 의료계 입장\"}}}",
+      "conversation_log": {
+        "total_messages": 2,
+        "messages": [
+          {
+            "role": "user",
+            "content": "2024년 의료진 파업 이슈를 웹, 블로그, 뉴스에서 각각 검색해서 찬반 의견과 해결방안을 종합 분석해줘"
+          },
+          {
+            "role": "assistant",
+            "content": "{\"tool_call\": {\"name\": \"WebSearch_naver\", \"arguments\": {\"query\": \"2024년 의료진 파업 찬반 의견 해결방안\"}}}{\"tool_call\": {\"name\": \"BlogSearch_naver\", \"arguments\": {\"query\": \"2024년 의대 증원 파업 생각 찬성 반대\"}}}{\"tool_call\": {\"name\": \"NewsSearch_naver\", \"arguments\": {\"query\": \"2024년 의료진 파업 해결책 정부 의료계 입장\"}}}"
+          }
+        ]
+      }
+    },
+    {
+      "task_id": "L4-009",
+      "instruction": "제니가 사용한 스마트폰을 연도별로 정리해줘",
+      "level": 4,
+      "category": "Multi Tool Parallel",
+      "success": true,
+      "execution_time": 5.880639314651489,
+      "steps_taken": 1,
+      "error": null,
+      "expected_tools": [
+        "WebSearch_naver",
+        "BlogSearch_naver"
+      ],
+      "golden_action": [
+        {
+          "tool": "WebSearch_naver",
+          "args": {
+            "query": "제니가 사용한 스마트폰 사용 기록",
+            "display": 10
+          }
+        },
+        {
+          "tool": "BlogSearch_naver",
+          "args": {
+            "query": "제니가 사용한 스마트폰 사용 기록",
+            "display": 10
+          }
+        }
+      ],
+      "minimum_steps": null,
+      "data_flow": [],
+      "error_injection": null,
+      "fallback_options": [],
+      "resp_schema": {},
+      "arg_schema": {},
+      "repetitions": 1,
+      "repetition_results": [
+        true
+      ],
+      "token_usage": {
+        "prompt_tokens": 386,
+        "completion_tokens": 22,
+        "total_tokens": 408
+      },
+      "ttft_stats": {
+        "average": 5.880450431999634,
+        "min": 5.880450431999634,
+        "max": 5.880450431999634,
+        "count": 1
+      },
+      "tool_calls": [],
+      "final_response": "call:WebSearch_naver{query: \"제니 사용 스마트폰 연도별\"}",
+      "conversation_log": {
+        "total_messages": 2,
+        "messages": [
+          {
+            "role": "user",
+            "content": "제니가 사용한 스마트폰을 연도별로 정리해줘"
+          },
+          {
+            "role": "assistant",
+            "content": "call:WebSearch_naver{query: \"제니 사용 스마트폰 연도별\"}"
+          }
+        ]
+      }
+    },
+    {
+      "task_id": "L4-010",
+      "instruction": "2024년 현대차(005930) 주가와 비트코인 시세를 비교해서 자동차 산업 투자와 암호화폐 투자 중 어느 쪽이 더 수익성이 좋은지 분석해줘",
+      "level": 4,
+      "category": "Multi Tool Parallel",
+      "success": true,
+      "execution_time": 10.45790433883667,
+      "steps_taken": 1,
+      "error": null,
+      "expected_tools": [
+        "StockPrice_ls",
+        "CryptoPrice_bithumb"
+      ],
+      "golden_action": [
+        {
+          "tool": "StockPrice_ls",
+          "args": {
+            "shcode": "005930",
+            "exchgubun": "K"
+          }
+        },
+        {
+          "tool": "CryptoPrice_bithumb",
+          "args": {
+            "markets": "KRW-BTC"
+          }
+        }
+      ],
+      "minimum_steps": null,
+      "data_flow": [],
+      "error_injection": null,
+      "fallback_options": [],
+      "resp_schema": {},
+      "arg_schema": {},
+      "repetitions": 1,
+      "repetition_results": [
+        true
+      ],
+      "token_usage": {
+        "prompt_tokens": 398,
+        "completion_tokens": 40,
+        "total_tokens": 438
+      },
+      "ttft_stats": {
+        "average": 10.457585488002223,
+        "min": 10.457585488002223,
+        "max": 10.457585488002223,
+        "count": 1
+      },
+      "tool_calls": [],
+      "final_response": "call:StockPrice_ls{\"shcode\": \"005380\"}call:CryptoPrice_bithumb{\"markets\": \"KRW-BTC\"}",
+      "conversation_log": {
+        "total_messages": 2,
+        "messages": [
+          {
+            "role": "user",
+            "content": "2024년 현대차(005930) 주가와 비트코인 시세를 비교해서 자동차 산업 투자와 암호화폐 투자 중 어느 쪽이 더 수익성이 좋은지 분석해줘"
+          },
+          {
+            "role": "assistant",
+            "content": "call:StockPrice_ls{\"shcode\": \"005380\"}call:CryptoPrice_bithumb{\"markets\": \"KRW-BTC\"}"
+          }
+        ]
+      }
+    }
+  ]
+}
