@@ -54,8 +54,8 @@ python "$SCRIPT_DIR/benches/common.py" \
 # infer_gpt.py 가 --base_url 인자 미지원이므로 env var 로 전달.
 # (KRETA install 후 BASE_URL 라인을 os.environ.get(...) 으로 패치된 상태)
 export OPENAI_BASE_URL="$BASE_URL"
-# WORKERS env 로 동시성 조정 가능 (default 4)
-export KRETA_WORKERS="${KRETA_WORKERS:-4}"
+# WORKERS env 로 동시성 조정 가능 (default 2 — GB10 메모리 압박으로 4는 모델 인스턴스 hang 유발 사례 있어 낮춤)
+export KRETA_WORKERS="${KRETA_WORKERS:-2}"
 
 cd "$KRETA_REPO/eval" || { echo "ERROR: $KRETA_REPO/eval not found. Run install.sh first."; exit 1; }
 
