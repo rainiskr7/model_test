@@ -1,0 +1,926 @@
+{
+  "metadata": {
+    "timestamp": "2026-06-13T17:47:50.689252",
+    "model": "qwen3.5_27b",
+    "level": "L3",
+    "total_tasks": 10,
+    "successful_tasks": 10,
+    "failed_tasks": 0,
+    "success_rate": 100.0,
+    "total_execution_time": 157.48,
+    "average_execution_time": 15.75,
+    "total_steps": 10,
+    "average_steps": 1.0,
+    "total_tool_calls": 0,
+    "average_tool_calls": 0.0,
+    "total_tokens": 5247,
+    "average_tokens_per_task": 524.7,
+    "average_prompt_tokens": 455.4,
+    "average_completion_tokens": 69.3,
+    "average_tps": 33.32,
+    "ttft": {
+      "average": 15.7473,
+      "min": 6.5097,
+      "max": 29.2263,
+      "unit": "seconds"
+    }
+  },
+  "tool_usage_statistics": {},
+  "results": [
+    {
+      "task_id": "L3-001",
+      "instruction": "청량리역 근처에 있는 대학교 찾아보고, 그 학교 근처에 병원이 몇개 있는지 조사해줘.",
+      "level": 3,
+      "category": "Multi Tool Sequential",
+      "success": true,
+      "execution_time": 14.311182498931885,
+      "steps_taken": 1,
+      "error": null,
+      "expected_tools": [
+        "PlaceSearch_kakao",
+        "CategorySearch_tmap"
+      ],
+      "golden_action": [
+        {
+          "step": 1,
+          "tool": "PlaceSearch_kakao",
+          "args": {
+            "keyword": "청량리역 근처 대학교",
+            "size": 1
+          }
+        },
+        {
+          "step": 2,
+          "tool": "CategorySearch_tmap",
+          "args": {
+            "categories": "병원",
+            "centerLon": "127.059028",
+            "centerLat": "37.583917",
+            "radius": 10
+          }
+        }
+      ],
+      "minimum_steps": 2,
+      "data_flow": [
+        {
+          "to_step": 2,
+          "to_parameter": "centerLat",
+          "from_step": 1,
+          "from_output": "latitude"
+        },
+        {
+          "to_step": 2,
+          "to_parameter": "centerLon",
+          "from_step": 1,
+          "from_output": "longtitude"
+        }
+      ],
+      "error_injection": null,
+      "fallback_options": [],
+      "resp_schema": {},
+      "arg_schema": {},
+      "repetitions": 1,
+      "repetition_results": [
+        true
+      ],
+      "token_usage": {
+        "prompt_tokens": 486,
+        "completion_tokens": 64,
+        "total_tokens": 550
+      },
+      "ttft_stats": {
+        "average": 14.310699409001245,
+        "min": 14.310699409001245,
+        "max": 14.310699409001245,
+        "count": 1
+      },
+      "tool_calls": [],
+      "final_response": "{\"tool_call\": {\"name\": \"PlaceSearch_kakao\", \"arguments\": {\"keyword\": \"대학교\", \"x\": 127.0489, \"y\": 37.5636, \"radius\": 2000, \"size\": 5}}}",
+      "conversation_log": {
+        "total_messages": 2,
+        "messages": [
+          {
+            "role": "user",
+            "content": "청량리역 근처에 있는 대학교 찾아보고, 그 학교 근처에 병원이 몇개 있는지 조사해줘."
+          },
+          {
+            "role": "assistant",
+            "content": "{\"tool_call\": {\"name\": \"PlaceSearch_kakao\", \"arguments\": {\"keyword\": \"대학교\", \"x\": 127.0489, \"y\": 37.5636, \"radius\": 2000, \"size\": 5}}}"
+          }
+        ]
+      }
+    },
+    {
+      "task_id": "L3-002",
+      "instruction": "빗썸의 KRW 마켓에 상장된 암호화폐 10개를 조사하고, 그 현재가를 조회해줘.",
+      "level": 3,
+      "category": "Multi Tool Sequential",
+      "success": true,
+      "execution_time": 16.633309602737427,
+      "steps_taken": 1,
+      "error": null,
+      "expected_tools": [
+        "MarketList_bithumb",
+        "CryptoPrice_bithumb"
+      ],
+      "golden_action": [
+        {
+          "step": 1,
+          "tool": "MarketList_bithumb",
+          "args": {
+            "isDetails": false
+          }
+        },
+        {
+          "step": 2,
+          "tool": "CryptoPrice_bithumb",
+          "args": {
+            "markets": "{markets}"
+          }
+        }
+      ],
+      "minimum_steps": 2,
+      "data_flow": [
+        {
+          "to_step": 2,
+          "to_parameter": "markets",
+          "from_step": 1,
+          "from_output": "market_list"
+        }
+      ],
+      "error_injection": null,
+      "fallback_options": [],
+      "resp_schema": {},
+      "arg_schema": {},
+      "repetitions": 1,
+      "repetition_results": [
+        true
+      ],
+      "token_usage": {
+        "prompt_tokens": 277,
+        "completion_tokens": 75,
+        "total_tokens": 352
+      },
+      "ttft_stats": {
+        "average": 16.633001662001334,
+        "min": 16.633001662001334,
+        "max": 16.633001662001334,
+        "count": 1
+      },
+      "tool_calls": [],
+      "final_response": "빗썸의 KRW 마켓에 상장된 암호화폐 목록을 먼저 조회한 후, 그중 10개의 현재가를 확인해 드리겠습니다.\n\n먼저 빗썸 거래 가능 마켓 리스트를 조회합니다.\n{\"tool_call\": {\"name\": \"MarketList_bithumb\", \"arguments\": {\"isDetails\": false}}}",
+      "conversation_log": {
+        "total_messages": 2,
+        "messages": [
+          {
+            "role": "user",
+            "content": "빗썸의 KRW 마켓에 상장된 암호화폐 10개를 조사하고, 그 현재가를 조회해줘."
+          },
+          {
+            "role": "assistant",
+            "content": "빗썸의 KRW 마켓에 상장된 암호화폐 목록을 먼저 조회한 후, 그중 10개의 현재가를 확인해 드리겠습니다.\n\n먼저 빗썸 거래 가능 마켓 리스트를 조회합니다.\n{\"tool_call\": {\"name\": \"MarketList_bithumb\", \"arguments\": {\"isDetails\": false}}}"
+          }
+        ]
+      }
+    },
+    {
+      "task_id": "L3-003",
+      "instruction": "‘정보처리기사 독학 책’에 대한 후기글을 블로그에서 찾아보고, 제일 먼저 나온 책의 가격을 알라딘에서 찾아줘",
+      "level": 3,
+      "category": "Multi Tool Sequential",
+      "success": true,
+      "execution_time": 11.182355642318726,
+      "steps_taken": 1,
+      "error": null,
+      "expected_tools": [
+        "BlogSearch_naver",
+        "ItemSearch_aladin"
+      ],
+      "golden_action": [
+        {
+          "step": 1,
+          "tool": "BlogSearch_naver",
+          "args": {
+            "query": "정보처리기사 독학 책 후기",
+            "display": 20,
+            "sort": "sim"
+          }
+        },
+        {
+          "step": 2,
+          "tool": "ItemSearch_aladin",
+          "args": {
+            "query": "{book_title}"
+          }
+        }
+      ],
+      "minimum_steps": null,
+      "data_flow": [
+        {
+          "to_step": 2,
+          "to_parameter": "query",
+          "from_step": 1,
+          "from_output": "book_title"
+        }
+      ],
+      "error_injection": null,
+      "fallback_options": [],
+      "resp_schema": {},
+      "arg_schema": {},
+      "repetitions": 1,
+      "repetition_results": [
+        true
+      ],
+      "token_usage": {
+        "prompt_tokens": 612,
+        "completion_tokens": 49,
+        "total_tokens": 661
+      },
+      "ttft_stats": {
+        "average": 11.182152795998263,
+        "min": 11.182152795998263,
+        "max": 11.182152795998263,
+        "count": 1
+      },
+      "tool_calls": [],
+      "final_response": "{\"tool_call\": {\"name\": \"BlogSearch_naver\", \"arguments\": {\"query\": \"정보처리기사 독학 책 후기\", \"display\": 10, \"start\": 1, \"sort\": \"sim\"}}}",
+      "conversation_log": {
+        "total_messages": 2,
+        "messages": [
+          {
+            "role": "user",
+            "content": "‘정보처리기사 독학 책’에 대한 후기글을 블로그에서 찾아보고, 제일 먼저 나온 책의 가격을 알라딘에서 찾아줘"
+          },
+          {
+            "role": "assistant",
+            "content": "{\"tool_call\": {\"name\": \"BlogSearch_naver\", \"arguments\": {\"query\": \"정보처리기사 독학 책 후기\", \"display\": 10, \"start\": 1, \"sort\": \"sim\"}}}"
+          }
+        ]
+      }
+    },
+    {
+      "task_id": "L3-004",
+      "instruction": "강남역에서 가장 가까운 애플 매장까지 걸어서 얼마나 걸리는지 알려줘.",
+      "level": 3,
+      "category": "Multi Tool Sequential",
+      "success": true,
+      "execution_time": 16.658289670944214,
+      "steps_taken": 1,
+      "error": null,
+      "expected_tools": [
+        "PlaceSearch_kakao",
+        "WalkRoute_tmap"
+      ],
+      "golden_action": [
+        {
+          "step": 1,
+          "tool": "PlaceSearch_kakao",
+          "args": {
+            "keyword": "강남역",
+            "size": 1,
+            "sort": "accuracy"
+          }
+        },
+        {
+          "step": 2,
+          "tool": "PlaceSearch_kakao",
+          "args": {
+            "keyword": "애플 매장",
+            "x": "{x}",
+            "y": "{y}",
+            "sort": "accuracy",
+            "size": 1
+          }
+        },
+        {
+          "step": 3,
+          "tool": "WalkRoute_tmap",
+          "args": {
+            "startX": "{startX}",
+            "startY": "{startY}",
+            "endX": "{endX}",
+            "endY": "{endY}"
+          }
+        }
+      ],
+      "minimum_steps": 3,
+      "data_flow": [
+        {
+          "to_step": 2,
+          "to_parameter": "x",
+          "from_step": 1,
+          "from_output": "longitude"
+        },
+        {
+          "to_step": 2,
+          "to_parameter": "y",
+          "from_step": 1,
+          "from_output": "latitude"
+        },
+        {
+          "to_step": 3,
+          "to_parameter": "startX",
+          "from_step": 1,
+          "from_output": "longitude"
+        },
+        {
+          "to_step": 3,
+          "to_parameter": "startY",
+          "from_step": 1,
+          "from_output": "latitude"
+        },
+        {
+          "to_step": 3,
+          "to_parameter": "endX",
+          "from_step": 2,
+          "from_output": "longitude"
+        },
+        {
+          "to_step": 3,
+          "to_parameter": "endY",
+          "from_step": 2,
+          "from_output": "latitude"
+        }
+      ],
+      "error_injection": null,
+      "fallback_options": [],
+      "resp_schema": {},
+      "arg_schema": {},
+      "repetitions": 1,
+      "repetition_results": [
+        true
+      ],
+      "token_usage": {
+        "prompt_tokens": 342,
+        "completion_tokens": 75,
+        "total_tokens": 417
+      },
+      "ttft_stats": {
+        "average": 16.65791104500022,
+        "min": 16.65791104500022,
+        "max": 16.65791104500022,
+        "count": 1
+      },
+      "tool_calls": [],
+      "final_response": "{\"tool_call\": {\"name\": \"PlaceSearch_kakao\", \"arguments\": {\"keyword\": \"애플스토어\", \"x\": 127.0276, \"y\": 37.4979, \"radius\": 5000, \"size\": 1, \"sort\": \"distance\"}}}",
+      "conversation_log": {
+        "total_messages": 2,
+        "messages": [
+          {
+            "role": "user",
+            "content": "강남역에서 가장 가까운 애플 매장까지 걸어서 얼마나 걸리는지 알려줘."
+          },
+          {
+            "role": "assistant",
+            "content": "{\"tool_call\": {\"name\": \"PlaceSearch_kakao\", \"arguments\": {\"keyword\": \"애플스토어\", \"x\": 127.0276, \"y\": 37.4979, \"radius\": 5000, \"size\": 1, \"sort\": \"distance\"}}}"
+          }
+        ]
+      }
+    },
+    {
+      "task_id": "L3-005",
+      "instruction": "강남구 역삼동에서 용산구 이태원동까지 차로 가는 법 알려줘",
+      "level": 3,
+      "category": "Multi Tool Sequential",
+      "success": true,
+      "execution_time": 29.144840002059937,
+      "steps_taken": 1,
+      "error": null,
+      "expected_tools": [
+        "Geocoding_tmap",
+        "CarRoute_tmap"
+      ],
+      "golden_action": [
+        {
+          "step": 1,
+          "tool": "Geocoding_tmap",
+          "args": {
+            "city_do": "서울특별시",
+            "gu_gun": "강남구",
+            "dong": "역삼동"
+          }
+        },
+        {
+          "step": 1,
+          "tool": "Geocoding_tmap",
+          "args": {
+            "city_do": "서울특별시",
+            "gu_gun": "용산구",
+            "dong": "이태원동"
+          }
+        },
+        {
+          "step": 2,
+          "tool": "CarRoute_tmap",
+          "args": {
+            "startX": "{startX}",
+            "startY": "{startY}",
+            "endX": "{endX}",
+            "endY": "{endY}",
+            "searchOption": 0
+          }
+        }
+      ],
+      "minimum_steps": 2,
+      "data_flow": [
+        {
+          "to_step": 2,
+          "to_parameter": "startX",
+          "from_step": 1,
+          "from_output": "lon"
+        },
+        {
+          "to_step": 2,
+          "to_parameter": "startY",
+          "from_step": 1,
+          "from_output": "lat"
+        },
+        {
+          "to_step": 2,
+          "to_parameter": "endX",
+          "from_step": 1,
+          "from_output": "lon"
+        },
+        {
+          "to_step": 2,
+          "to_parameter": "endY",
+          "from_step": 1,
+          "from_output": "lat"
+        }
+      ],
+      "error_injection": null,
+      "fallback_options": [],
+      "resp_schema": {},
+      "arg_schema": {},
+      "repetitions": 1,
+      "repetition_results": [
+        true
+      ],
+      "token_usage": {
+        "prompt_tokens": 409,
+        "completion_tokens": 130,
+        "total_tokens": 539
+      },
+      "ttft_stats": {
+        "average": 29.144561846002034,
+        "min": 29.144561846002034,
+        "max": 29.144561846002034,
+        "count": 1
+      },
+      "tool_calls": [],
+      "final_response": "강남구 역삼동에서 용산구 이태원동까지 자동차 경로를 안내해 드리겠습니다. 먼저 출발지와 도착지의 좌표를 확인한 후 경로를 계산하겠습니다.\n\n{\"tool_call\": {\"name\": \"Geocoding_tmap\", \"arguments\": {\"city_do\": \"서울특별시\", \"gu_gun\": \"강남구\", \"dong\": \"역삼동\"}}}\n{\"tool_call\": {\"name\": \"Geocoding_tmap\", \"arguments\": {\"city_do\": \"서울특별시\", \"gu_gun\": \"용산구\", \"dong\": \"이태원동\"}}}",
+      "conversation_log": {
+        "total_messages": 2,
+        "messages": [
+          {
+            "role": "user",
+            "content": "강남구 역삼동에서 용산구 이태원동까지 차로 가는 법 알려줘"
+          },
+          {
+            "role": "assistant",
+            "content": "강남구 역삼동에서 용산구 이태원동까지 자동차 경로를 안내해 드리겠습니다. 먼저 출발지와 도착지의 좌표를 확인한 후 경로를 계산하겠습니다.\n\n{\"tool_call\": {\"name\": \"Geocoding_tmap\", \"arguments\": {\"city_do\": \"서울특별시\", \"gu_gun\": \"강남구\", \"dong\": \"역삼동\"}}}\n{\"tool_call\": {\"name\": \"Geocoding_tmap\", \"arguments\": {\"city_do\": \"서울특별시\", \"gu_gun\": \"용산구\", \"dong\": \"이태원동\"}}}"
+          }
+        ]
+      }
+    },
+    {
+      "task_id": "L3-006",
+      "instruction": "이번주 알라딘 베스트 셀러를 3권 조회해서, 그 책의 후기를 네이버 블로그에서 찾아줘",
+      "level": 3,
+      "category": "Multi Tool Sequential",
+      "success": true,
+      "execution_time": 12.133894920349121,
+      "steps_taken": 1,
+      "error": null,
+      "expected_tools": [
+        "ItemList_aladin",
+        "BlogSearch_naver"
+      ],
+      "golden_action": [
+        {
+          "step": 1,
+          "tool": "ItemList_aladin",
+          "args": {
+            "query_type": "Bestseller",
+            "max_results": 1
+          }
+        },
+        {
+          "step": 2,
+          "tool": "BlogSearch_naver",
+          "args": {
+            "query": "{title}후기"
+          }
+        }
+      ],
+      "minimum_steps": null,
+      "data_flow": [
+        {
+          "to_step": 2,
+          "to_parameter": "query",
+          "from_step": 1,
+          "from_output": "title"
+        }
+      ],
+      "error_injection": null,
+      "fallback_options": [],
+      "resp_schema": {},
+      "arg_schema": {},
+      "repetitions": 1,
+      "repetition_results": [
+        true
+      ],
+      "token_usage": {
+        "prompt_tokens": 828,
+        "completion_tokens": 50,
+        "total_tokens": 878
+      },
+      "ttft_stats": {
+        "average": 12.133577692999097,
+        "min": 12.133577692999097,
+        "max": 12.133577692999097,
+        "count": 1
+      },
+      "tool_calls": [],
+      "final_response": "{\"tool_call\": {\"name\": \"ItemList_aladin\", \"arguments\": {\"query_type\": \"Bestseller\", \"search_target\": \"Book\", \"max_results\": 3, \"start\": 1, \"cover\": \"Mid\"}}",
+      "conversation_log": {
+        "total_messages": 2,
+        "messages": [
+          {
+            "role": "user",
+            "content": "이번주 알라딘 베스트 셀러를 3권 조회해서, 그 책의 후기를 네이버 블로그에서 찾아줘"
+          },
+          {
+            "role": "assistant",
+            "content": "{\"tool_call\": {\"name\": \"ItemList_aladin\", \"arguments\": {\"query_type\": \"Bestseller\", \"search_target\": \"Book\", \"max_results\": 3, \"start\": 1, \"cover\": \"Mid\"}}"
+          }
+        ]
+      }
+    },
+    {
+      "task_id": "L3-007",
+      "instruction": "남양주를 좌표로 변경해서, 그 지점 1km 내 맛집 검색해주고, 그 맛집 후기 영상을 검색해줘.",
+      "level": 3,
+      "category": "Multi Tool Sequential",
+      "success": true,
+      "execution_time": 6.5101096630096436,
+      "steps_taken": 1,
+      "error": null,
+      "expected_tools": [
+        "AddressToCoord_kakao",
+        "PlaceSearch_kakao",
+        "VideoSearch_daum"
+      ],
+      "golden_action": [
+        {
+          "step": 1,
+          "tool": "AddressToCoord_kakao",
+          "args": {
+            "keyword": "남양주",
+            "size": 5
+          }
+        },
+        {
+          "step": 2,
+          "tool": "PlaceSearch_kakao",
+          "args": {
+            "keyword": "맛집",
+            "x": 127.216475764948,
+            "y": 37.6360236390492,
+            "size": 5
+          }
+        },
+        {
+          "step": 3,
+          "tool": "VideoSearch_daum",
+          "args": {
+            "query": "{places[0].name} 후기"
+          }
+        }
+      ],
+      "minimum_steps": 2,
+      "data_flow": [
+        {
+          "to_step": 2,
+          "to_parameter": "x",
+          "from_step": 1,
+          "from_output": "longitude"
+        },
+        {
+          "to_step": 2,
+          "to_parameter": "y",
+          "from_step": 1,
+          "from_output": "latitude"
+        },
+        {
+          "to_step": 3,
+          "to_parameter": "query",
+          "from_step": 2,
+          "from_output": "places[0].name"
+        },
+        {
+          "to_step": 3,
+          "to_parameter": "query",
+          "from_step": 2,
+          "from_output": "places[0].name"
+        }
+      ],
+      "error_injection": null,
+      "fallback_options": [],
+      "resp_schema": {},
+      "arg_schema": {},
+      "repetitions": 1,
+      "repetition_results": [
+        true
+      ],
+      "token_usage": {
+        "prompt_tokens": 437,
+        "completion_tokens": 27,
+        "total_tokens": 464
+      },
+      "ttft_stats": {
+        "average": 6.509704975000204,
+        "min": 6.509704975000204,
+        "max": 6.509704975000204,
+        "count": 1
+      },
+      "tool_calls": [],
+      "final_response": "{\"tool_call\": {\"name\": \"AddressToCoord_kakao\", \"arguments\": {\"address\": \"남양주\"}}",
+      "conversation_log": {
+        "total_messages": 2,
+        "messages": [
+          {
+            "role": "user",
+            "content": "남양주를 좌표로 변경해서, 그 지점 1km 내 맛집 검색해주고, 그 맛집 후기 영상을 검색해줘."
+          },
+          {
+            "role": "assistant",
+            "content": "{\"tool_call\": {\"name\": \"AddressToCoord_kakao\", \"arguments\": {\"address\": \"남양주\"}}"
+          }
+        ]
+      }
+    },
+    {
+      "task_id": "L3-008",
+      "instruction": "부산 해운대구의 좌표를 검색해서, 그 지점 근처 편의점 중에 걸어서 10분내에 갈 수 있는 곳 알려줘",
+      "level": 3,
+      "category": "Multi Tool Sequential",
+      "success": true,
+      "execution_time": 6.64073920249939,
+      "steps_taken": 1,
+      "error": null,
+      "expected_tools": [
+        "AddressToCoord_kakao",
+        "CategorySearch_kakao"
+      ],
+      "golden_action": [
+        {
+          "step": 1,
+          "tool": "AddressToCoord_kakao",
+          "args": {
+            "address": "부산광역시 해운대구"
+          }
+        },
+        {
+          "step": 2,
+          "tool": "CategorySearch_kakao",
+          "args": {
+            "category": "CS2",
+            "x": "{longitude}",
+            "y": "{latitude}",
+            "radius": 500
+          }
+        }
+      ],
+      "minimum_steps": 2,
+      "data_flow": [
+        {
+          "to_step": 2,
+          "to_parameter": "x",
+          "from_step": 1,
+          "from_output": "longitude"
+        },
+        {
+          "to_step": 2,
+          "to_parameter": "y",
+          "from_step": 1,
+          "from_output": "latitude"
+        }
+      ],
+      "error_injection": null,
+      "fallback_options": [],
+      "resp_schema": {},
+      "arg_schema": {},
+      "repetitions": 1,
+      "repetition_results": [
+        true
+      ],
+      "token_usage": {
+        "prompt_tokens": 322,
+        "completion_tokens": 28,
+        "total_tokens": 350
+      },
+      "ttft_stats": {
+        "average": 6.640341138001531,
+        "min": 6.640341138001531,
+        "max": 6.640341138001531,
+        "count": 1
+      },
+      "tool_calls": [],
+      "final_response": "{\"tool_call\": {\"name\": \"AddressToCoord_kakao\", \"arguments\": {\"address\": \"부산 해운대구\"}}",
+      "conversation_log": {
+        "total_messages": 2,
+        "messages": [
+          {
+            "role": "user",
+            "content": "부산 해운대구의 좌표를 검색해서, 그 지점 근처 편의점 중에 걸어서 10분내에 갈 수 있는 곳 알려줘"
+          },
+          {
+            "role": "assistant",
+            "content": "{\"tool_call\": {\"name\": \"AddressToCoord_kakao\", \"arguments\": {\"address\": \"부산 해운대구\"}}"
+          }
+        ]
+      }
+    },
+    {
+      "task_id": "L3-009",
+      "instruction": "강남구 역삼동에서 송파구 잠실동까지 자동차로 가는 경로와 예상 시간을 알려주세요.",
+      "level": 3,
+      "category": "Multi Tool Sequential",
+      "success": true,
+      "execution_time": 29.22660517692566,
+      "steps_taken": 1,
+      "error": null,
+      "expected_tools": [
+        "Geocoding_tmap",
+        "CarRoute_tmap"
+      ],
+      "golden_action": [
+        {
+          "step": 1,
+          "tool": "Geocoding_tmap",
+          "args": {
+            "city_do": "서울특별시",
+            "gu_gun": "강남구",
+            "dong": "역삼동"
+          }
+        },
+        {
+          "step": 1,
+          "tool": "Geocoding_tmap",
+          "args": {
+            "city_do": "서울특별시",
+            "gu_gun": "송파구",
+            "dong": "잠실동"
+          }
+        },
+        {
+          "step": 2,
+          "tool": "CarRoute_tmap",
+          "args": {
+            "startX": "{step1.lon}",
+            "startY": "{step1.lat}",
+            "endX": "{step2.lon}",
+            "endY": "{step2.lat}"
+          }
+        }
+      ],
+      "minimum_steps": 2,
+      "data_flow": [
+        {
+          "to_step": 2,
+          "to_parameter": "startX",
+          "from_step": 1,
+          "from_output": "lon"
+        },
+        {
+          "to_step": 2,
+          "to_parameter": "startY",
+          "from_step": 1,
+          "from_output": "lat"
+        },
+        {
+          "to_step": 2,
+          "to_parameter": "endX",
+          "from_step": 1,
+          "from_output": "lon"
+        },
+        {
+          "to_step": 2,
+          "to_parameter": "endY",
+          "from_step": 1,
+          "from_output": "lat"
+        }
+      ],
+      "error_injection": null,
+      "fallback_options": [],
+      "resp_schema": {},
+      "arg_schema": {},
+      "repetitions": 1,
+      "repetition_results": [
+        true
+      ],
+      "token_usage": {
+        "prompt_tokens": 413,
+        "completion_tokens": 130,
+        "total_tokens": 543
+      },
+      "ttft_stats": {
+        "average": 29.22629481200056,
+        "min": 29.22629481200056,
+        "max": 29.22629481200056,
+        "count": 1
+      },
+      "tool_calls": [],
+      "final_response": "강남구 역삼동에서 송파구 잠실동까지의 자동차 경로와 예상 시간을 확인하기 위해, 먼저 출발지와 도착지의 좌표를 구한 후 경로를 검색하겠습니다.\n\n{\"tool_call\": {\"name\": \"Geocoding_tmap\", \"arguments\": {\"city_do\": \"서울특별시\", \"gu_gun\": \"강남구\", \"dong\": \"역삼동\"}}}\n{\"tool_call\": {\"name\": \"Geocoding_tmap\", \"arguments\": {\"city_do\": \"서울특별시\", \"gu_gun\": \"송파구\", \"dong\": \"잠실동\"}}}",
+      "conversation_log": {
+        "total_messages": 2,
+        "messages": [
+          {
+            "role": "user",
+            "content": "강남구 역삼동에서 송파구 잠실동까지 자동차로 가는 경로와 예상 시간을 알려주세요."
+          },
+          {
+            "role": "assistant",
+            "content": "강남구 역삼동에서 송파구 잠실동까지의 자동차 경로와 예상 시간을 확인하기 위해, 먼저 출발지와 도착지의 좌표를 구한 후 경로를 검색하겠습니다.\n\n{\"tool_call\": {\"name\": \"Geocoding_tmap\", \"arguments\": {\"city_do\": \"서울특별시\", \"gu_gun\": \"강남구\", \"dong\": \"역삼동\"}}}\n{\"tool_call\": {\"name\": \"Geocoding_tmap\", \"arguments\": {\"city_do\": \"서울특별시\", \"gu_gun\": \"송파구\", \"dong\": \"잠실동\"}}}"
+          }
+        ]
+      }
+    },
+    {
+      "task_id": "L3-010",
+      "instruction": "롯데월드 주변의 주차장 하나만 찾아보고, 그 주차장 가격 후기를 블로그에서 찾아줘.",
+      "level": 3,
+      "category": "Multi Tool Sequential",
+      "success": true,
+      "execution_time": 15.03503155708313,
+      "steps_taken": 1,
+      "error": null,
+      "expected_tools": [
+        "PlaceSearch_kakao",
+        "BlogSearch_naver"
+      ],
+      "golden_action": [
+        {
+          "step": 1,
+          "tool": "PlaceSearch_kakao",
+          "args": {
+            "keyword": "롯데월드 주차장",
+            "sort": "distance",
+            "size": 1
+          }
+        },
+        {
+          "step": 2,
+          "tool": "BlogSearch_naver",
+          "args": {
+            "query": "{places[0].name} 가격 후기"
+          }
+        }
+      ],
+      "minimum_steps": 2,
+      "data_flow": [
+        {
+          "to_step": 2,
+          "to_parameter": "query",
+          "from_step": 1,
+          "from_output": "places[0].name"
+        }
+      ],
+      "error_injection": null,
+      "fallback_options": [],
+      "resp_schema": {},
+      "arg_schema": {},
+      "repetitions": 1,
+      "repetition_results": [
+        true
+      ],
+      "token_usage": {
+        "prompt_tokens": 428,
+        "completion_tokens": 65,
+        "total_tokens": 493
+      },
+      "ttft_stats": {
+        "average": 15.03477454500171,
+        "min": 15.03477454500171,
+        "max": 15.03477454500171,
+        "count": 1
+      },
+      "tool_calls": [],
+      "final_response": "{\"tool_call\": {\"name\": \"PlaceSearch_kakao\", \"arguments\": {\"keyword\": \"롯데월드 주차장\", \"x\": 127.0488, \"y\": 37.5928, \"size\": 1, \"sort\": \"distance\"}}}",
+      "conversation_log": {
+        "total_messages": 2,
+        "messages": [
+          {
+            "role": "user",
+            "content": "롯데월드 주변의 주차장 하나만 찾아보고, 그 주차장 가격 후기를 블로그에서 찾아줘."
+          },
+          {
+            "role": "assistant",
+            "content": "{\"tool_call\": {\"name\": \"PlaceSearch_kakao\", \"arguments\": {\"keyword\": \"롯데월드 주차장\", \"x\": 127.0488, \"y\": 37.5928, \"size\": 1, \"sort\": \"distance\"}}}"
+          }
+        ]
+      }
+    }
+  ]
+}
