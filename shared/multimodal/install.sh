@@ -40,13 +40,19 @@ pin_repo() {
 
 # 2) KRETA → data/KRETA
 patch_kreta_infer_gpt() {
-  local F="KRETA/eval/infer/infer_gpt.py"
-  if [ -f "$F" ]; then
-    # BASE_URL 을 env 변수로 받게
-    sed -i 's|^BASE_URL = "https://api.openai.com/v1"$|BASE_URL = os.environ.get("OPENAI_BASE_URL", "https://api.openai.com/v1")|' "$F"
-    # WORKERS 를 env 변수로 받게 (default 4, 기존 hardcoded 20 → 서버 부하 완화)
-    sed -i 's|^WORKERS = 20$|WORKERS = int(os.environ.get("KRETA_WORKERS", "4"))|' "$F"
-    echo "[install] KRETA infer_gpt.py 패치 완료 (BASE_URL/WORKERS env 지원)"
+  # upstream infer_gpt.py 에 로컬 수정 일괄 적용 (patches/kreta_infer_gpt.patch):
+  #   - BASE_URL / KRETA_WORKERS(default 2) env 지원
+  #   - request timeout 60→300 (저대역폭 GB10 의 큰 비전 prefill 수용)
+  #   - OpenAI 클라이언트 sample마다 생성→단일 재사용 (커넥션 누수 수정, 점진적 열화 방지)
+  # pin_repo(git checkout SHA) 직후라 파일이 upstream 원본 → 항상 깨끗한 베이스에 apply.
+  # (과거엔 sed 2줄로 BASE_URL/WORKERS 만 패치했으나, client 재사용은 다중라인 구조변경이라 patch 로 전환.)
+  local PATCH="$SCRIPT_DIR/patches/kreta_infer_gpt.patch"
+  if [ -f "$PATCH" ]; then
+    ( cd KRETA && git checkout -- eval/infer/infer_gpt.py 2>/dev/null; git apply "$PATCH" ) \
+      && echo "[install] KRETA infer_gpt.py 패치 적용 완료 (env/timeout/client 재사용)" \
+      || echo "[install] WARN: KRETA infer_gpt.py 패치 실패 (이미 적용됐거나 SHA 불일치)"
+  else
+    echo "[install] WARN: $PATCH 없음 — KRETA infer_gpt.py 패치 스킵"
   fi
 }
 
