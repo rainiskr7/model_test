@@ -1,5 +1,5 @@
 diff --git a/eval/infer/infer_gpt.py b/eval/infer/infer_gpt.py
-index 5119c2c..304631a 100644
+index 5119c2c..11fc6ad 100644
 --- a/eval/infer/infer_gpt.py
 +++ b/eval/infer/infer_gpt.py
 @@ -12,7 +12,7 @@ from tqdm import tqdm
@@ -37,7 +37,7 @@ index 5119c2c..304631a 100644
      text,
      image,
 -    timeout=60,
-+    timeout=300,
++    timeout=600,
      max_tokens=300,
      base_url=BASE_URL,
      api_key=API_KEY,
@@ -114,7 +114,12 @@ index 5119c2c..304631a 100644
          )
      except Exception as e:
          print(f"Error: {e}")
-@@ -144,21 +160,6 @@ def process_prompt(data, model_components):
+@@ -140,25 +156,10 @@ def process_prompt(data, model_components):
+     prompt = kotextvqa_doc_to_text(data)
+     image = vision_kotextvqa_doc_to_visual(data)
+ 
+-    return infer(prompt, image, max_tokens=4096, **model_components), data
++    return infer(prompt, image, max_tokens=512, **model_components), data
  
  
  def run_and_save():
@@ -136,7 +141,7 @@ index 5119c2c..304631a 100644
      dataset = load_dataset("tabtoyou/KoTextVQA", split="test")
      model_components = load_model(
          model_name=MODEL_NAME,
-@@ -168,32 +169,65 @@ def run_and_save():
+@@ -168,32 +169,84 @@ def run_and_save():
      )
  
      def process_and_save_part(part_data, part_name, model_components):
@@ -150,8 +155,8 @@ index 5119c2c..304631a 100644
          output_path = f"./output/{MODEL}_{part_name}.jsonl"
 +        os.makedirs(os.path.dirname(output_path), exist_ok=True)
  
-+        # checkpoint: 기존 jsonl 에서 처리된 id 수집
-+        processed_ids = set()
++        # checkpoint: keep only valid completed rows, dropping corrupt/error rows.
++        kept_by_id = {}
          if os.path.exists(output_path):
 -            with open(output_path, "r", encoding="utf-8") as infile:
 -                for line in infile:
@@ -173,11 +178,29 @@ index 5119c2c..304631a 100644
 +                for line in f:
 +                    try:
 +                        d = json.loads(line)
-+                        if "id" in d:
-+                            processed_ids.add(d["id"])
 +                    except json.JSONDecodeError:
 +                        continue
-+            print(f"  resume: {len(processed_ids)} 개 이미 처리됨")
++                    item_id = d.get("id")
++                    response = d.get("response")
++                    if (
++                        item_id
++                        and "response" in d
++                        and response is not None
++                        and not (isinstance(response, dict) and "error" in response)
++                    ):
++                        kept_by_id[item_id] = d
++
++            tmp_path = output_path + ".tmp"
++            with open(tmp_path, "w", encoding="utf-8") as outfile:
++                for item_id in kept_by_id:
++                    json.dump(kept_by_id[item_id], outfile, ensure_ascii=False)
++                    outfile.write("\n")
++                outfile.flush()
++                os.fsync(outfile.fileno())
++            os.replace(tmp_path, output_path)
++
++        processed_ids = set(kept_by_id)
++        print(f"  resume: {len(processed_ids)} 개 이미 처리됨")
 +
 +        remaining = [d for d in part_data if d.get("id") not in processed_ids]
 +        print(f"  남은 작업: {len(remaining)} / {len(part_data)}")
@@ -205,6 +228,7 @@ index 5119c2c..304631a 100644
 +                    }
 +                    outfile.write(json.dumps(data, ensure_ascii=False) + "\n")
 +                    outfile.flush()  # disk sync — 중단 시에도 진행분 보존
++                    os.fsync(outfile.fileno())
  
          return output_path
  
