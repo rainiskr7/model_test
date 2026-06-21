@@ -1,5 +1,5 @@
 diff --git a/eval/infer/infer_gpt.py b/eval/infer/infer_gpt.py
-index 5119c2c..11fc6ad 100644
+index 5119c2c..53eb0dd 100644
 --- a/eval/infer/infer_gpt.py
 +++ b/eval/infer/infer_gpt.py
 @@ -12,7 +12,7 @@ from tqdm import tqdm
@@ -114,12 +114,7 @@ index 5119c2c..11fc6ad 100644
          )
      except Exception as e:
          print(f"Error: {e}")
-@@ -140,25 +156,10 @@ def process_prompt(data, model_components):
-     prompt = kotextvqa_doc_to_text(data)
-     image = vision_kotextvqa_doc_to_visual(data)
- 
--    return infer(prompt, image, max_tokens=4096, **model_components), data
-+    return infer(prompt, image, max_tokens=512, **model_components), data
+@@ -144,21 +160,6 @@ def process_prompt(data, model_components):
  
  
  def run_and_save():
@@ -141,7 +136,7 @@ index 5119c2c..11fc6ad 100644
      dataset = load_dataset("tabtoyou/KoTextVQA", split="test")
      model_components = load_model(
          model_name=MODEL_NAME,
-@@ -168,32 +169,84 @@ def run_and_save():
+@@ -168,32 +169,116 @@ def run_and_save():
      )
  
      def process_and_save_part(part_data, part_name, model_components):
@@ -229,6 +224,38 @@ index 5119c2c..11fc6ad 100644
 +                    outfile.write(json.dumps(data, ensure_ascii=False) + "\n")
 +                    outfile.flush()  # disk sync — 중단 시에도 진행분 보존
 +                    os.fsync(outfile.fileno())
++
++        # 완주 검증: 모든 sample 이 1행씩 기록됐는지 확인.
++        # 이유: 전처리(doc_to_text/visual)가 예외나면 그 sample 이 조용히 누락되어
++        # 최종 행수 < len(part_data) 가 되고, evaluate.py 가 NUM 불일치로 파일 전체를
++        # 스킵(빈 results.json)하는 사고가 난다. 누락분은 다음 resume 에서 재시도되므로
++        # 여기서 fail-loud 하게 막아 사용자가 재실행하도록 한다.
++        seen_ids = set()
++        error_rows = 0
++        with open(output_path, "r", encoding="utf-8") as f:
++            for line in f:
++                line = line.strip()
++                if not line:
++                    continue
++                try:
++                    d = json.loads(line)
++                except json.JSONDecodeError:
++                    continue
++                if d.get("id") is not None:
++                    seen_ids.add(d["id"])
++                resp = d.get("response")
++                if resp is None or (isinstance(resp, dict) and "error" in resp):
++                    error_rows += 1
++        if error_rows:
++            print(
++                f"  [warn] {error_rows} 개 행이 에러(타임아웃 등) — 다음 resume 실행 시 재시도됨",
++                file=sys.stderr,
++            )
++        if len(seen_ids) != len(part_data):
++            sys.exit(
++                f"[ERROR] {part_name}: 기록된 고유 id {len(seen_ids)} != 데이터셋 {len(part_data)}. "
++                f"누락 sample 존재 → resume 재실행 필요. evaluate 스킵 방지 위해 중단."
++            )
  
          return output_path
  
