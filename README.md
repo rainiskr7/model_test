@@ -148,6 +148,8 @@ KRETA가 중단된 경우 `vsm/multimodal/run_kreta_resume.sh`로 이어서 진�
 
 KRETA 러너는 3번째 인자로 프롬프트 모드(`SETTING`)를 받는다 — `direct`(글자만 답, 빠름·DGX Spark 권장) / `default`(추론 후 답). 모드별 생성 상한은 자동 설정되며 자세한 내용은 아래 §3.8 운영 노트 참고. 예: `bash vsm/multimodal/run_kreta_resume.sh <model> direct <url>`.
 
+KOFFVQA도 idempotent resume를 지원한다(`koffvqa_run.py`). 같은 `EVAL_TIMESTAMP`로 재실행하면 `out_dir/results.json`의 **유효 응답**(error 없음 + 비어있지 않은 prediction)은 `index` 기준으로 재사용하고, **에러·타임아웃·누락 항목만 다시 호출**한 뒤 results.json·xlsx·summary를 머지해 재생성한다. 따라서 일부 샘플이 타임아웃으로 실패하면 **같은 명령을 재실행하는 것만으로 복구**된다 — 별도 retry 스크립트 불필요. `run_koffvqa.sh`는 `KOFFVQA_TIMEOUT` env(기본 600초, kreta `KRETA_TIMEOUT`과 일관)를 받으며, 게이트웨이 200초 컷을 피하려면 직접 vLLM 포트를 `<url>`로 준다. 예: `KOFFVQA_TIMEOUT=600 bash vsm/multimodal/run_koffvqa.sh <model> http://<host>:<vllm_port>/v1`. 처음부터 다시 돌리려면 `koffvqa_run.py --no-resume`.
+
 ### 3.4 전체 평가 (한 모델 4트랙 일괄)
 
 `run_full_eval.sh`가 vsm 클래스의 4개 트랙(harness → nlu → agent → multimodal)을 순차 실행한다.

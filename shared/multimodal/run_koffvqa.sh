@@ -64,9 +64,13 @@ python "$SCRIPT_DIR/benches/common.py" \
 
 # 1) 자체 runner — 응답 생성
 PY="${PY:-$BASE_DIR/.venv/bin/python}"
+# KOFFVQA_TIMEOUT env 로 요청 timeout 조정 (default 600 — free-form 생성이라 길 수 있고,
+# 느린 HW(DGX Spark 등)에서 기본 60초로는 타임아웃 빈발. kreta KRETA_TIMEOUT 과 일관).
+# 재실행 시 koffvqa_run.py 가 idempotent resume → 에러/타임아웃 항목만 재시도.
 "$PY" "$SCRIPT_DIR/benches/koffvqa_run.py" \
   --model "$MODEL" \
-  --base-url "$BASE_URL"
+  --base-url "$BASE_URL" \
+  --timeout "${KOFFVQA_TIMEOUT:-600}"
 PRED_XLSX=$(ls -t "$DEST"/*_gen.xlsx 2>/dev/null | head -1)
 if [ -z "$PRED_XLSX" ]; then
   echo "[koffvqa] ERROR: 응답 xlsx 미생성"

@@ -63,6 +63,10 @@ def main():
         "--data", type=str, default=None,
         help="KOFFVQA tsv 경로 (default: <BASE>/data/KOFFVQA/data/KOFFVQA.tsv)",
     )
+    parser.add_argument(
+        "--no-resume", action="store_true",
+        help="기존 out_dir/results.json 무시하고 처음부터 (기본: 유효분 재사용 + 에러/누락만 재시도)",
+    )
     args = parser.parse_args()
 
     base_dir = get_base_dir(__file__)
@@ -85,9 +89,35 @@ def main():
 
     client = make_client(args.base_url, args.api_key)
 
+    # Resume: 같은 out_dir 의 기존 results.json 에서 유효(에러 없음 + 비어있지 않은 prediction)
+    # 항목은 재사용하고, 에러/누락 항목만 다시 호출한다. (kreta infer_gpt.py 와 동일한 정책)
+    # out_dir 는 EVAL_TIMESTAMP 로 스코프되므로, 새 타임스탬프면 빈 dict → 전량 신규 실행.
+    # --no-resume 로 끄면 항상 처음부터.
+    done = {}
+    results_path = out_dir / "results.json"
+    if not args.no_resume and results_path.exists():
+        try:
+            prev = json.loads(results_path.read_text(encoding="utf-8"))
+            for r in prev:
+                pred = r.get("prediction")
+                if r.get("error") is None and isinstance(pred, str) and pred.strip() != "":
+                    done[str(r.get("index"))] = r
+        except Exception as e:
+            print(f"[koffvqa] 기존 results.json 읽기 실패 → 처음부터: {e}")
+            done = {}
+        print(f"[koffvqa] resume: {len(done)}건 재사용, 나머지 {len(bench) - len(done)}건 재시도")
+
     results = []
     predictions = []
+    retried = 0
     for i, row in bench.iterrows():
+        idx = str(row["index"])
+        if idx in done:
+            r = done[idx]
+            results.append(r)
+            predictions.append(r.get("prediction", ""))
+            continue
+
         question = str(row["question"]) if pd.notna(row["question"]) else ""
         encoded = row["image"]
         try:
@@ -105,7 +135,7 @@ def main():
 
         predictions.append(response)
         results.append({
-            "index": str(row["index"]),
+            "index": idx,
             "category": str(row.get("category", "")),
             "l2_category": str(row.get("l2-category", "")),
             "question": question,
@@ -114,8 +144,9 @@ def main():
             "error": err,
         })
 
-        if (i + 1) % 25 == 0:
-            print(f"[koffvqa] {i+1}/{len(bench)}")
+        retried += 1
+        if retried % 25 == 0:
+            print(f"[koffvqa] 재시도/신규 {retried}건 처리")
 
     # 2) KOFFVQA evaluate.py 호환 xlsx 저장 (image 컬럼 제거 + prediction 추가)
     out_df = bench.drop(columns=["image"]).copy()
