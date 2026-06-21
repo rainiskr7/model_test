@@ -115,7 +115,7 @@ bash vsm/agent/install.sh          # Ko-AgentBench clone + 설치
 
 외부 repo들은 모두 `data/`에 중앙 집중으로 clone된다. 재현성을 위해 commit SHA를 env로 핀할 수 있다 (`KRETA_SHA`, `KOFFVQA_SHA`, `KOVLM_SHA`).
 
-> **KRETA 로컬 패치:** `vsm/multimodal/install.sh`는 KRETA를 clone·SHA 핀한 뒤 `shared/multimodal/patches/kreta_infer_gpt.patch`를 `git apply`한다. 패치 내용 — ① `OPENAI_BASE_URL` / `KRETA_WORKERS`(기본 2) env 지원, ② 요청 timeout 60→300초(저대역폭 GB10의 큰 비전 prefill 수용), ③ OpenAI 클라이언트를 sample마다 생성하던 것을 단일 인스턴스 재사용으로 변경(커넥션 누수·점진적 열화 수정). 패치 적용이 실패하면 install은 즉시 중단된다(조용히 upstream 기본동작으로 남는 사고 방지).
+> **KRETA 로컬 패치:** `vsm/multimodal/install.sh`는 KRETA를 clone·SHA 핀한 뒤 `shared/multimodal/patches/kreta_infer_gpt.patch`를 `git apply`한다. 패치 내용 — ① `OPENAI_BASE_URL` / `KRETA_WORKERS`(기본 2) / `KRETA_MAX_TOKENS`(기본 4096) / `KRETA_TIMEOUT`(기본 600초) env 지원, ② OpenAI 클라이언트를 sample마다 생성하던 것을 단일 인스턴스 재사용으로 변경(커넥션 누수·점진적 열화 수정), ③ streaming append(jsonl)+fsync 와 id 기반 idempotent resume(에러/타임아웃 행은 드롭 후 재시도), ④ 완주 invariant(기록 고유 id 수 != 2577 시 fail). 생성 상한·타임아웃 튜닝은 §3.8 참고. 패치 적용이 실패하면 install은 즉시 중단된다(조용히 upstream 기본동작으로 남는 사고 방지).
 
 ### 3.3 단일 트랙 실행
 
@@ -145,6 +145,8 @@ bash vsm/multimodal/run_all.sh \
 개별 벤치마크 실행은 `vsm/multimodal/run_<benchmark>.sh` 직접 호출.
 
 KRETA가 중단된 경우 `vsm/multimodal/run_kreta_resume.sh`로 이어서 진행한다. `run_kreta.sh`와 달리 `./output`의 jsonl을 삭제하지 않아, 이미 처리된 `id`는 skip하고 남은 샘플만 추론한다(idempotent resume). 추론 완료 후 evaluate · 결과 복사 · 키 검증까지 자동 수행.
+
+KRETA 러너는 3번째 인자로 프롬프트 모드(`SETTING`)를 받는다 — `direct`(글자만 답, 빠름·DGX Spark 권장) / `default`(추론 후 답). 모드별 생성 상한은 자동 설정되며 자세한 내용은 아래 §3.8 운영 노트 참고. 예: `bash vsm/multimodal/run_kreta_resume.sh <model> direct <url>`.
 
 ### 3.4 전체 평가 (한 모델 4트랙 일괄)
 
@@ -213,11 +215,22 @@ DGX Spark 2대 (192.168.0.7 ↔ .8) 사이 rsync 래퍼:
 
 ### 3.8 운영 노트 — 대형 Dense 모델 / GB10 (DGX Spark)
 
-GB10은 통합 메모리(LPDDR5X, 대역폭 ~273 GB/s)라 dense 대형 모델의 디코딩이 대역폭 바운드다 (예: BF16 27B ≈ 단일 스트림 ~5 tok/s). KRETA처럼 고해상도 이미지(비전 토큰 최대 ~16K)를 다루는 트랙에서 특히 느려, 다음을 권장:
+GB10은 통합 메모리(LPDDR5X, 대역폭 ~273 GB/s)라 dense 대형 모델의 디코딩이 대역폭 바운드다 (예: BF16 27B ≈ 단일 스트림 ~5 tok/s). KRETA처럼 고해상도 이미지(비전 토큰 최대 ~16K)를 다루는 트랙에서 특히 느리다.
 
-- **vLLM `--max-model-len`**: KRETA 요청 최대 컨텍스트 ≈ 비전(~16K) + 텍스트 + 출력(4096) ≈ 20.5K. **24576 이상** 필요 (16384는 ~1.3% 요청이 길이 초과로 거부됨).
-- **`KRETA_WORKERS`**: 메모리 압박 완화를 위해 dense 대형 모델은 **2** 권장. (`run_kreta.sh`는 기본 4로 실행하므로 `KRETA_WORKERS=2`를 명시하거나, 기본 2인 `run_kreta_resume.sh`를 사용.)
-- **요청 timeout**: 300초 (install 패치 기본값). 큰 비전 prefill이 60초를 넘겨 타임아웃→오답으로 기록되는 것을 방지.
+> **⚠️ KRETA `default` 모드는 Spark에서 비실용적.** `default` 프롬프트는 모델이 추론을 길게 쓴 뒤 마지막 줄에 답하게 한다 → 응답이 수백~3400토큰까지 나오고, 대역폭 바운드 디코딩 + 큰 비전 prefill이 겹쳐 **샘플당 100~350초, 전체 2577개에 수일**이 걸리며 일부는 timeout→오답으로 오염된다. **Spark를 시험대로 쓰는 모델 랭킹 목적이면 KRETA는 `direct` 모드로 돌릴 것.**
+
+**KRETA 프롬프트 모드** (러너 3번째 인자 `SETTING`):
+
+- **`direct`** (Spark 권장): "보기 글자 하나로 바로 답해" → 응답 **1토큰**. **타임아웃·절단 0, ~10배 빠름**(샘플당 비전 prefill 시간만 듦). 모든 모델에 동일 적용 시 랭킹 비교는 공정하다. 점수의 절대값은 추론 모드보다 낮을 수 있으나 상대 순위 측정엔 충분. 예: `run_kreta_resume.sh <model> direct <url>`.
+- **`default`**: 추론 후 답. 점수 상한은 높을 수 있으나 Spark에선 위 사유로 비실용적 — 추론 트레이스가 필요하고 충분히 빠른 HW일 때만.
+
+**튜닝 env / 권장값:**
+
+- **`KRETA_MAX_TOKENS`** (생성 상한): 러너가 모드별 기본값을 자동 export — `direct`→**32**, 그 외→**4096**. env로 override 가능.
+  - ⚠️ `default` 모드를 1024 등으로 낮추지 말 것: 응답의 ~13%(가장 긴 = 가장 어려운 문항)가 잘려 답이 유실되고, 손실이 난이도 쪽으로 **편향**되어 랭킹을 왜곡한다. `default`는 4096 유지, 속도가 필요하면 `direct` 사용.
+- **`KRETA_TIMEOUT`** (요청 timeout, 기본 **600초**): 큰 비전 prefill/긴 생성이 timeout→오답으로 기록되는 것을 방지.
+- **vLLM `--max-model-len`**: KRETA 요청 최대 컨텍스트 ≈ 비전(~16K) + 텍스트 + 출력 ≈ 20.5K. **24576 이상** 필요 (16384는 ~1.3% 요청이 길이 초과로 거부됨).
+- **`KRETA_WORKERS`**: 메모리 압박 완화를 위해 dense 대형 모델은 **2** 권장 (4 이상은 모델 인스턴스 hang 사례 있음). 러너 기본 2.
 - vLLM 엔진이 장시간/메모리 압박으로 deadlock되면(`/v1/models`는 응답하나 `/v1/chat`만 hang) 모델 컨테이너 재시작으로 해소.
 
 ---
