@@ -60,8 +60,8 @@ mkdir -p ./output
 find ./output -maxdepth 1 -type f -name 'results.json' -delete
 echo "[multimodal/kreta] RESUME: jsonl 보존, results.json 만 정리"
 
-python infer/infer_gpt.py "$MODEL" "$SETTING"
-python evaluate.py
+python infer/infer_gpt.py "$MODEL" "$SETTING" || { echo "[multimodal/kreta] ERROR: infer 실패(exit $?) — sample 누락/중단 의심, evaluate 스킵 후 중단"; exit 1; }
+python evaluate.py || { echo "[multimodal/kreta] ERROR: evaluate 실패 — 중단"; exit 1; }
 
 # KRETA 산출물 경로:
 #   infer_gpt.py: ./output/{MODEL}_{part_name}.jsonl
@@ -83,6 +83,8 @@ if not p.exists():
     sys.exit(f"results.json 없음: {p}")
 d = json.loads(p.read_text())
 keys = list(d.keys())
+if not keys:
+    sys.exit("results.json 이 비어있음(평가 0건) — 불완전 실행/sample 누락 의심, 실패 처리")
 expected_prefix = "$MODEL" + "_"
 unexpected = [k for k in keys if not k.startswith(expected_prefix)]
 if unexpected:
