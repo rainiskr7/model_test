@@ -56,6 +56,14 @@ python "$SCRIPT_DIR/benches/common.py" \
 export OPENAI_BASE_URL="$BASE_URL"
 # WORKERS env 로 동시성 조정 가능 (default 2 — GB10 메모리 압박으로 4는 모델 인스턴스 hang 유발 사례 있어 낮춤)
 export KRETA_WORKERS="${KRETA_WORKERS:-2}"
+# 모드별 생성 상한 기본값 (env 로 override 가능):
+#   direct(글자만 답) → 32 로 작게: 타임아웃·절단 없음, GB10 등 느린 HW 안전.
+#   default(추론 후 답) → 4096: 추론 공간 확보(짧추면 긴 답 절단 → 답 유실).
+if [ "$SETTING" = "direct" ]; then
+  export KRETA_MAX_TOKENS="${KRETA_MAX_TOKENS:-32}"
+else
+  export KRETA_MAX_TOKENS="${KRETA_MAX_TOKENS:-4096}"
+fi
 
 cd "$KRETA_REPO/eval" || { echo "ERROR: $KRETA_REPO/eval not found. Run install.sh first."; exit 1; }
 

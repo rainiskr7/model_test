@@ -1,7 +1,7 @@
-diff --git a/eval/infer/infer_gpt.py b/eval/infer/infer_gpt.py
-index 5119c2c..53eb0dd 100644
---- a/eval/infer/infer_gpt.py
-+++ b/eval/infer/infer_gpt.py
+diff --git aa/eval/infer/infer_gpt.py bb/eval/infer/infer_gpt.py
+index 5119c2c..a6d2d46 100644
+--- aa/eval/infer/infer_gpt.py
++++ bb/eval/infer/infer_gpt.py
 @@ -12,7 +12,7 @@ from tqdm import tqdm
  # Load API key and set endpoint - OPENAI
  load_dotenv()
@@ -11,16 +11,21 @@ index 5119c2c..53eb0dd 100644
  
  # Get model and setting from command line
  if len(sys.argv) == 3:
-@@ -29,7 +29,7 @@ else:
+@@ -29,7 +29,12 @@ else:
  MODEL_NAME = re.split(r"-\d{4}-\d{2}-\d{2}", MODEL)[0].upper()
  
  # Set number of workers
 -WORKERS = 20
 +WORKERS = int(os.environ.get("KRETA_WORKERS", "2"))
++# 생성 상한/타임아웃 env (모드별 튜닝용).
++# default(추론 후 답) 모드는 크게(4096), direct(글자만) 모드는 작게(예 32) 권장.
++# GB10 등 대역폭 바운드 HW 에서 큰 max_tokens + 긴 생성은 timeout 유발 → 모드/HW 별 조정.
++MAX_TOKENS = int(os.environ.get("KRETA_MAX_TOKENS", "4096"))
++REQUEST_TIMEOUT = int(os.environ.get("KRETA_TIMEOUT", "600"))
  
  prompt_config = {
      "default": "Please select the correct answer from the options above. The last line of your response should be of the following format: 'Answer: LETTER' (without quotes) where LETTER is one of options.",
-@@ -76,6 +76,11 @@ def load_model(model_name="GPT4", base_url="", api_key="", model="gpt-4o-mini"):
+@@ -76,6 +81,11 @@ def load_model(model_name="GPT4", base_url="", api_key="", model="gpt-4o-mini"):
      model_components["model"] = model
      model_components["base_url"] = base_url
      model_components["api_key"] = api_key
@@ -32,12 +37,12 @@ index 5119c2c..53eb0dd 100644
      return model_components
  
  
-@@ -83,35 +88,44 @@ def load_model(model_name="GPT4", base_url="", api_key="", model="gpt-4o-mini"):
+@@ -83,35 +93,44 @@ def load_model(model_name="GPT4", base_url="", api_key="", model="gpt-4o-mini"):
  def request_with_image(
      text,
      image,
 -    timeout=60,
-+    timeout=600,
++    timeout=REQUEST_TIMEOUT,
      max_tokens=300,
      base_url=BASE_URL,
      api_key=API_KEY,
@@ -98,7 +103,7 @@ index 5119c2c..53eb0dd 100644
  
  
  def infer(prompt, image, max_tokens=4096, use_vllm=False, **kwargs):
-@@ -119,6 +133,7 @@ def infer(prompt, image, max_tokens=4096, use_vllm=False, **kwargs):
+@@ -119,6 +138,7 @@ def infer(prompt, image, max_tokens=4096, use_vllm=False, **kwargs):
      base_url = kwargs.get("base_url")
      api_key = kwargs.get("api_key")
      model_name = kwargs.get("model_name", None)
@@ -106,7 +111,7 @@ index 5119c2c..53eb0dd 100644
  
      try:
          response = request_with_image(
-@@ -128,6 +143,7 @@ def infer(prompt, image, max_tokens=4096, use_vllm=False, **kwargs):
+@@ -128,6 +148,7 @@ def infer(prompt, image, max_tokens=4096, use_vllm=False, **kwargs):
              base_url=base_url,
              api_key=api_key,
              model=model,
@@ -114,7 +119,12 @@ index 5119c2c..53eb0dd 100644
          )
      except Exception as e:
          print(f"Error: {e}")
-@@ -144,21 +160,6 @@ def process_prompt(data, model_components):
+@@ -140,25 +161,10 @@ def process_prompt(data, model_components):
+     prompt = kotextvqa_doc_to_text(data)
+     image = vision_kotextvqa_doc_to_visual(data)
+ 
+-    return infer(prompt, image, max_tokens=4096, **model_components), data
++    return infer(prompt, image, max_tokens=MAX_TOKENS, **model_components), data
  
  
  def run_and_save():
@@ -136,7 +146,7 @@ index 5119c2c..53eb0dd 100644
      dataset = load_dataset("tabtoyou/KoTextVQA", split="test")
      model_components = load_model(
          model_name=MODEL_NAME,
-@@ -168,32 +169,116 @@ def run_and_save():
+@@ -168,32 +174,116 @@ def run_and_save():
      )
  
      def process_and_save_part(part_data, part_name, model_components):
