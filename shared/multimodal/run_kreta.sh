@@ -62,26 +62,26 @@ cd "$KRETA_REPO/eval" || { echo "ERROR: $KRETA_REPO/eval not found. Run install.
 # KRETA evaluate.py 는 ./output 안의 모든 jsonl 을 일괄 평가해 results.json 에 누적함.
 # 이전 모델의 jsonl 이 남아 있으면 cross-contamination 발생 → 평가 전 cleanup.
 mkdir -p ./output
-find ./output -maxdepth 1 -type f \( -name '*.jsonl' -o -name 'results.json' \) -delete
+find ./output -maxdepth 1 -type f \( -name '*.jsonl' -o -name '*.jsonl.tmp' -o -name 'results.json' \) -delete || { echo "[multimodal/kreta] ERROR: ./output 정리 실패 — 중단"; exit 1; }
 echo "[multimodal/kreta] ./output stale 정리 완료"
 
-python infer/infer_gpt.py "$MODEL" "$SETTING"
-python evaluate.py
+python infer/infer_gpt.py "$MODEL" "$SETTING" || { echo "[multimodal/kreta] ERROR: infer 실패(exit $?) — sample 누락/중단 의심, evaluate 스킵 후 중단"; exit 1; }
+python evaluate.py || { echo "[multimodal/kreta] ERROR: evaluate 실패 — 중단"; exit 1; }
 
 # KRETA 산출물 경로 (KRETA 소스 확인 결과):
 #   infer_gpt.py: ./output/{MODEL}_{part_name}.jsonl
 #   evaluate.py:  ./output/results.json
 if [ -d "./output" ]; then
   echo "[multimodal/kreta] copy ./output -> $DEST/"
-  cp -r ./output/. "$DEST/"
+  cp -r ./output/. "$DEST/" || { echo "[multimodal/kreta] ERROR: 결과 복사 실패 — 중단"; exit 1; }
 else
   echo "[multimodal/kreta] WARN: ./output 디렉토리 없음 (KRETA 실행 실패 의심)"
   exit 1
 fi
 
-# 평가 후 검증: results.json 의 top-level key 가 현재 MODEL 하나뿐인지 assert.
-# 누구든 ./output 에 stale jsonl 떨굴 가능성 대비한 사후 가드.
-python - <<PY || { echo "[multimodal/kreta] ERROR: results.json key 검증 실패"; exit 1; }
+# 평가 후 검증: results.json 의 key 가 정확히 {MODEL}_{SETTING} 하나인지 assert.
+# 정확 일치로 검사 → 빈 평가(0건)·stale jsonl 오염(다른 setting/모델)·중복키를 한 번에 차단.
+python - <<PY || { echo "[multimodal/kreta] ERROR: results.json 검증 실패"; exit 1; }
 import json, sys
 from pathlib import Path
 p = Path("$DEST/results.json")
@@ -89,10 +89,10 @@ if not p.exists():
     sys.exit(f"results.json 없음: {p}")
 d = json.loads(p.read_text())
 keys = list(d.keys())
-expected_prefix = "$MODEL" + "_"
-unexpected = [k for k in keys if not k.startswith(expected_prefix)]
-if unexpected:
-    sys.exit(f"results.json 에 stale key 감지: {unexpected} (expected prefix={expected_prefix!r})")
+expected = "$MODEL" + "_" + "$SETTING"
+if keys != [expected]:
+    sys.exit(f"results.json 키가 정확히 ['{expected}'] 가 아님: {keys} "
+             f"(빈 평가/stale jsonl 오염/중복 의심)")
 print(f"[multimodal/kreta] results.json keys OK: {keys}")
 PY
 
