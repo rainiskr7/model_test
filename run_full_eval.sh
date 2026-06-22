@@ -72,7 +72,7 @@ export OPENAI_API_KEY
 # vllm preflight: 서버 살아있고 MODEL 명 일치하는지 검증
 # 미일치 시 평가 시작 후 모든 트랙이 404 로 실패하는 시간 낭비 방지
 echo "[full_eval] vllm preflight: $BASE_URL_V1/models"
-PREFLIGHT_MODELS=$(curl -s --max-time 5 "$BASE_URL_V1/models" 2>/dev/null) || {
+PREFLIGHT_MODELS=$(curl -s --max-time 5 -H "Authorization: Bearer $OPENAI_API_KEY" "$BASE_URL_V1/models" 2>/dev/null) || {
   echo "[full_eval] ERROR: vllm endpoint 응답 없음 ($BASE_URL_V1/models). vllm 서빙 중인지 확인하세요." >&2
   exit 1
 }

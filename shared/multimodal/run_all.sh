@@ -38,8 +38,10 @@ bash "$SCRIPT_DIR/run_mtvqa_kr.sh" "$MODEL" "$BASE_URL" || echo "[run_all] MTVQA
 echo "=== K-MMBench (4,330) ==="
 bash "$SCRIPT_DIR/run_k_mmbench.sh" "$MODEL" "$BASE_URL" || echo "[run_all] K-MMBench 실패 — 계속"
 
-echo "=== KRETA ==="
-bash "$SCRIPT_DIR/run_kreta.sh" "$MODEL" default "$BASE_URL" || echo "[run_all] KRETA 실패 — 계속"
+echo "=== KRETA (mode=${KRETA_SETTING:-default}) ==="
+# KRETA 프롬프트 모드: KRETA_SETTING env 로 override (기본 default).
+#   direct → 글자만 답(빠름, Spark/느린 HW 권장) / default → 추론 후 답.
+bash "$SCRIPT_DIR/run_kreta.sh" "$MODEL" "${KRETA_SETTING:-default}" "$BASE_URL" || echo "[run_all] KRETA 실패 — 계속"
 
 # KO-VLM-Benchmark — stub (외부 코드 OpenAI-compat 미지원, 별도 작업 필요)
 echo "=== KO-VLM-Benchmark (stub — skip) ==="
