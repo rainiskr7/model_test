@@ -1,0 +1,23 @@
+# 평가 모델 설정 — bge-m3-korean (embedding)
+key: bge-m3-ko
+model: upskyy/bge-m3-korean
+class: embedding
+backend: local
+local_backend: sentence_transformers   # ⚠️ 한국어 파인튜닝은 dense 전용(sparse 헤드 없음)
+representations: [dense]
+
+local:
+  hf_name: upskyy/bge-m3-korean
+  revision: null          # TODO: 고정
+  uses_prompts: false     # BGE-M3 계열은 query instruction 불필요
+  # ⚠️ precision/max_seq_length 는 전역 SETTINGS 고정(공정비교). 아래는 참고용.
+  precision: bf16
+  max_seq_length: 512
+
+endpoint:
+  base_url: null
+  api_key_env: OPENAI_API_KEY
+  model_id: null
+  normalize_embeddings: true
+
+tracks: [smoke, korean, financial, cost]

@@ -1,0 +1,23 @@
+# 평가 모델 설정 — kanana-nano-2.1b-embedding (embedding)
+key: kanana-2.1b
+model: kakaocorp/kanana-nano-2.1b-embedding
+class: embedding
+backend: local
+local_backend: sentence_transformers   # dense 전용
+representations: [dense]
+
+local:
+  hf_name: kakaocorp/kanana-nano-2.1b-embedding
+  revision: null          # TODO: 고정
+  uses_prompts: true      # instruction 기반 권장
+  # ⚠️ precision/max_seq_length 는 전역 SETTINGS 고정(공정비교). 아래는 참고용.
+  precision: bf16
+  max_seq_length: 512
+
+endpoint:
+  base_url: null
+  api_key_env: OPENAI_API_KEY
+  model_id: null
+  normalize_embeddings: true
+
+tracks: [smoke, korean, financial, cost]

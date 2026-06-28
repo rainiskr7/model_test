@@ -1,0 +1,23 @@
+# 평가 모델 설정 — BAAI/bge-m3 (원본 멀티기능: dense+sparse+colbert)
+# repr 트랙(dense/sparse/hybrid 비교)용. 한국어 파인튜닝(bge-m3-ko)은 dense 전용이라 별도.
+key: bge-m3
+model: BAAI/bge-m3
+class: embedding
+backend: local
+local_backend: flagembedding   # sentence_transformers | flagembedding(BGEM3FlagModel)
+
+local:
+  hf_name: BAAI/bge-m3
+  revision: null               # TODO: 고정
+  uses_prompts: false
+  # precision/max_seq_length 는 전역 SETTINGS 고정(공정비교). 아래는 참고용.
+  precision: bf16
+  max_seq_length: 512
+
+# repr 표현 비교 설정
+representations: [dense, sparse, hybrid]
+hybrid_alpha: 0.5                       # hybrid = alpha*minmax(dense) + (1-alpha)*minmax(sparse)
+hybrid_normalization: per_query_minmax  # 쿼리별 min-max 정규화(점수 스케일 정합)
+
+# repr 은 sparse 가능 모델 전용 트랙. dense MTEB 비교가 필요하면 dense-only 모델 config 사용.
+tracks: [repr]

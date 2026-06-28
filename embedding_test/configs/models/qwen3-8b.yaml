@@ -1,0 +1,26 @@
+# 평가 모델 설정 — Qwen3-Embedding-8B (embedding)
+# 참조 model_test/configs/models/*.yaml 패턴. key=run.py 내부키, model=원본 풀네임(→safe_model_name).
+key: qwen3-8b
+model: Qwen/Qwen3-Embedding-8B
+class: embedding
+backend: local            # local | endpoint
+local_backend: sentence_transformers   # dense 전용(sparse 미지원)
+representations: [dense]
+
+local:
+  hf_name: Qwen/Qwen3-Embedding-8B
+  revision: null          # TODO: 재현성 위해 실행 직전 커밋 해시로 고정
+  uses_prompts: true      # query/passage instruction 사용(recommended 모드에서 적용)
+  # ⚠️ precision/max_seq_length 는 모델 간 공정비교를 위해 전역 SETTINGS 로 고정된다.
+  #    아래 값은 참고용(정보성)이며 평가에 직접 주입되지 않는다(embeval/config.py RunSettings 참고).
+  precision: bf16
+  max_seq_length: 512
+
+# backend: endpoint 일 때 사용(OpenAI 호환 /v1/embeddings — TEI/infinity/vllm 등)
+endpoint:
+  base_url: null          # 예: http://127.0.0.1:8080/v1
+  api_key_env: OPENAI_API_KEY
+  model_id: null          # 서버에 등록된 모델 id(served-model-name)
+  normalize_embeddings: true
+
+tracks: [smoke, korean, financial, cost]
