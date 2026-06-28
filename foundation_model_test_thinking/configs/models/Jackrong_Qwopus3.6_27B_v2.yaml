@@ -1,0 +1,46 @@
+# 평가 모델 설정 — Jackrong/Qwopus3.6-27B-v2 (vsm)
+# HF: Jackrong/Qwopus3.6-27B-v2 (Qwen3.5 VL 계열 머지/파인튜닝, 멀티모달)
+# arch: Qwen3_5ForConditionalGeneration (vision+video), thinking 디폴트 ON.
+# ⚠️ model 필드는 gpustack 등록 시 --served-model-name 과 반드시 일치해야 함.
+
+model: Jackrong_Qwopus3.6_27B_v2
+tokenizer_path: /home/rainis/Desktop/workplace/models/Jackrong_Qwopus3.6_27B_v2
+class: vsm
+
+endpoint:
+  chat: http://127.0.0.1:18023/v1/chat/completions
+  v1: http://127.0.0.1:18023/v1
+
+tracks:
+  - harness
+  - nlu
+  - agent
+  - multimodal
+
+# thinking sampling (Qwen 계열 thinking 권장값). load_model_config.py 가 THINK_* env 로 export.
+sampling:
+  temperature: 0.6
+  top_p: 0.95
+  top_k: 20
+  max_tokens: 8192
+  seed: 42
+  timeout: 600
+
+backend_reference:
+  engine: vllm
+  notes: |
+    gpustack 에 vllm backend 로 등록 시 권장 옵션 (★ thinking 파이프라인):
+      --served-model-name Jackrong_Qwopus3.6_27B_v2
+      --enable-auto-tool-choice
+      --tool-call-parser qwen3_coder
+      --reasoning-parser qwen3
+      --default-chat-template-kwargs '{"enable_thinking": true}'
+      --limit-mm-per-prompt.image 4
+      --enable-prefix-caching
+      --async-scheduling
+      --max-model-len 24576   # text max_position 262144 라 여유. 8192 금지
+                              # (thinking 출력 + 큰 비전 prefill 수용 — qwen3.5_35b 교훈)
+    chat_template 디폴트가 thinking ON ({%- if enable_thinking ... false %} 분기)
+    이라 thinking 파이프라인은 이를 *켠 채* 평가 → true 명시(또는 디폴트 유지).
+    --reasoning-parser qwen3 로 추론을 reasoning_content 로 분리(권장).
+    ~54GB bf16 (27B) — 단일 노드 VRAM 확인 필요.

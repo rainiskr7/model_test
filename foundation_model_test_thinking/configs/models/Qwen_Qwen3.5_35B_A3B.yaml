@@ -1,0 +1,44 @@
+# 평가 모델 설정 — Qwen3.5-35B-A3B (vsm)
+# vllm 의 served-model-name 이 'qwen_qwen3.5_35b_a3b' (소문자) 라서 model 필드는 그것에 맞춤.
+# 결과 디렉토리도 그 명으로 생성됨.
+
+model: qwen_qwen3.5_35b_a3b-thinking
+tokenizer_path: /home/rainis/Desktop/workplace/models/Qwen_Qwen3.5_35B_A3B
+class: vsm
+
+endpoint:
+  chat: http://127.0.0.1:18023/v1/chat/completions
+  v1: http://127.0.0.1:18023/v1
+
+tracks:
+  - harness
+  - nlu
+  - agent
+  - multimodal
+
+# thinking sampling (Qwen3 thinking 공식 권장값). load_model_config.py 가 THINK_* env 로 export.
+sampling:
+  temperature: 0.6
+  top_p: 0.95
+  top_k: 20
+  max_tokens: 8192
+  seed: 42
+  timeout: 600
+
+backend_reference:
+  engine: vllm
+  notes: |
+    gpustack 에 vllm backend 로 등록 시 사용된 옵션 (★ thinking 파이프라인):
+      --enable-auto-tool-choice
+      --tool-call-parser qwen3_coder
+      --reasoning-parser qwen3
+      --default-chat-template-kwargs '{"enable_thinking": true}'
+      --limit-mm-per-prompt.image 4
+      --enable-prefix-caching
+      --async-scheduling
+      --max-model-len 24576   # ⚠️ 8192 금지: 추론 트레이스 + 비전 prefill 수용
+    Qwen3.5-35B-A3B (MoE, active 3B). thinking 디폴트 ON 이며, thinking 파이프라인은
+    이를 *켠 채* 평가 → --default-chat-template-kwargs 로 true 명시(또는 디폴트 유지).
+    --reasoning-parser qwen3 권장: 추론이 reasoning_content 로 분리돼 파싱이 깨끗해짐
+    (평가 코드는 분리/인라인 <think> 양쪽 모두 견고 처리).
+    ⚠️ thinking 은 출력이 길어 --max-model-len 8192 로는 부족 — 24576+ 필수.

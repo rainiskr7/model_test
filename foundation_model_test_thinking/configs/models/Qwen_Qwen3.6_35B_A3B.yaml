@@ -1,0 +1,40 @@
+# 평가 모델 설정 — Qwen3.6-35B-A3B (vsm)
+
+model: Qwen_Qwen3.6_35B_A3B
+tokenizer_path: /home/rainis/Desktop/workplace/models/Qwen_Qwen3.6-35B-A3B
+class: vsm
+
+endpoint:
+  chat: http://127.0.0.1:18023/v1/chat/completions
+  v1: http://127.0.0.1:18023/v1
+
+tracks:
+  - harness
+  - nlu
+  - agent
+  - multimodal
+
+# thinking sampling (Qwen3 thinking 공식 권장값). load_model_config.py 가 THINK_* env 로 export.
+sampling:
+  temperature: 0.6
+  top_p: 0.95
+  top_k: 20
+  max_tokens: 8192
+  seed: 42
+  timeout: 600
+
+backend_reference:
+  engine: vllm
+  notes: |
+    gpustack 에 vllm backend 로 등록 시 권장 옵션 (★ thinking 파이프라인):
+      --enable-auto-tool-choice
+      --tool-call-parser qwen3_coder
+      --reasoning-parser qwen3
+      --default-chat-template-kwargs '{"enable_thinking": true}'
+      --limit-mm-per-prompt.image 4
+      --enable-prefix-caching
+      --async-scheduling
+      --max-model-len 24576   # thinking 출력 + 비전 prefill 수용
+    Qwen3.6 는 chat_template 디폴트가 thinking ON — thinking 파이프라인은 이를 *켠 채* 평가.
+    --reasoning-parser qwen3 로 추론을 reasoning_content 로 분리(권장). non-thinking 용으로
+    디폴트를 뒤집은 chat_template.jinja 패치본은 thinking 파이프라인에서 쓰지 말 것(원본 유지).

@@ -1,0 +1,302 @@
+diff --git aa/eval/infer/infer_gpt.py bb/eval/infer/infer_gpt.py
+index 5119c2c..a6d2d46 100644
+--- aa/eval/infer/infer_gpt.py
++++ bb/eval/infer/infer_gpt.py
+@@ -12,7 +12,7 @@ from tqdm import tqdm
+ # Load API key and set endpoint - OPENAI
+ load_dotenv()
+ API_KEY = os.getenv("OPENAI_API_KEY")
+-BASE_URL = "https://api.openai.com/v1"
++BASE_URL = os.environ.get("OPENAI_BASE_URL", "https://api.openai.com/v1")
+ 
+ # Get model and setting from command line
+ if len(sys.argv) == 3:
+@@ -29,7 +29,26 @@ else:
+ MODEL_NAME = re.split(r"-\d{4}-\d{2}-\d{2}", MODEL)[0].upper()
+
+ # Set number of workers
+-WORKERS = 20
++WORKERS = int(os.environ.get("KRETA_WORKERS", "2"))
++# 생성 상한/타임아웃 env (thinking: 추론 트레이스 + 답 공간 확보 위해 크게).
++# ⚠️ thinking 파이프라인에서는 direct(글자만, 32토큰) 모드를 쓰지 말 것 — 추론 불가.
++MAX_TOKENS = int(os.environ.get("KRETA_MAX_TOKENS", "4096"))
++REQUEST_TIMEOUT = int(os.environ.get("KRETA_TIMEOUT", "600"))
++# thinking sampling (KRETA_* 우선, 없으면 THINK_* 공통값). greedy 는 thinking 에서 비권장.
++KRETA_TEMPERATURE = float(os.environ.get("KRETA_TEMPERATURE", os.environ.get("THINK_TEMPERATURE", "0.6")))
++KRETA_TOP_P = float(os.environ.get("KRETA_TOP_P", os.environ.get("THINK_TOP_P", "0.95")))
++KRETA_TOP_K = int(os.environ.get("KRETA_TOP_K", os.environ.get("THINK_TOP_K", "20")))
++# 응답의 <think>...</think> 추론 블록 제거 → evaluate.py 가 최종 'Answer: LETTER' 만 파싱.
++_THINK_RE = re.compile(r"<think>.*?</think>", re.DOTALL | re.IGNORECASE)
++def _strip_think(text):
++    if not text:
++        return text
++    cleaned = _THINK_RE.sub("", text)
++    low = cleaned.lower()
++    if "</think>" in low:
++        cleaned = cleaned[low.rfind("</think>") + len("</think>"):]
++    elif "<think>" in low:
++        # 닫힘 없이 잘린 경우: <think> 뒤(말미 Answer 후보)를 남김.
++        cleaned = cleaned[low.rfind("<think>") + len("<think>"):]
++    return cleaned.strip()
+
+ prompt_config = {
+     "default": "Please select the correct answer from the options above. The last line of your response should be of the following format: 'Answer: LETTER' (without quotes) where LETTER is one of options.",
+@@ -76,6 +81,11 @@ def load_model(model_name="GPT4", base_url="", api_key="", model="gpt-4o-mini"):
+     model_components["model"] = model
+     model_components["base_url"] = base_url
+     model_components["api_key"] = api_key
++    # 단일 클라이언트 1회 생성 → 모든 sample 이 재사용 (커넥션 풀 재사용).
++    # 이유: 과거엔 request_with_image 가 sample 마다 OpenAI() 를 새로 만들고 close 안 해서
++    # 커넥션/소켓이 churn 되며 점진적으로 느려지는 누수가 있었음. httpx.Client 는
++    # thread-safe(shared between threads) 라 ThreadPoolExecutor worker 들이 공유해도 안전.
++    model_components["client"] = OpenAI(base_url=base_url, api_key=api_key)
+     return model_components
+ 
+ 
+@@ -83,35 +93,44 @@ def load_model(model_name="GPT4", base_url="", api_key="", model="gpt-4o-mini"):
+ def request_with_image(
+     text,
+     image,
+-    timeout=60,
++    timeout=REQUEST_TIMEOUT,
+     max_tokens=300,
+     base_url=BASE_URL,
+     api_key=API_KEY,
+     model=MODEL,
++    client=None,
+ ):
+-    client = OpenAI(base_url=base_url, api_key=api_key)
++    # client 가 주입되면 재사용(권장). 없으면 단독 호출용으로 임시 생성 후 반드시 close.
++    close_client = False
++    if client is None:
++        client = OpenAI(base_url=base_url, api_key=api_key)
++        close_client = True
+ 
+     base64_image = image
+ 
+-    response = client.chat.completions.create(
+-        model=model,
+-        messages=[
+-            {"role": "system", "content": "You are a helpful assistant."},
+-            {
+-                "role": "user",
+-                "content": [
+-                    {"type": "text", "text": text},
+-                    {
+-                        "type": "image_url",
+-                        "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"},
+-                    },
+-                ],
+-            },
+-        ],
+-        max_tokens=max_tokens,
+-        timeout=timeout,
+-    )
+-    return response.choices[0].message.content
++    try:
++        response = client.chat.completions.create(
++            model=model,
++            messages=[
++                {"role": "system", "content": "You are a helpful assistant."},
++                {
++                    "role": "user",
++                    "content": [
++                        {"type": "text", "text": text},
++                        {
++                            "type": "image_url",
++                            "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"},
++                        },
++                    ],
++                },
++            ],
++            max_tokens=max_tokens,
++            temperature=KRETA_TEMPERATURE,
++            top_p=KRETA_TOP_P,
++            timeout=timeout,
++            extra_body=({"top_k": KRETA_TOP_K} if KRETA_TOP_K > 0 else None),
++        )
++        return _strip_think(response.choices[0].message.content)
++    finally:
++        if close_client:
++            client.close()
+ 
+ 
+ def infer(prompt, image, max_tokens=4096, use_vllm=False, **kwargs):
+@@ -119,6 +138,7 @@ def infer(prompt, image, max_tokens=4096, use_vllm=False, **kwargs):
+     base_url = kwargs.get("base_url")
+     api_key = kwargs.get("api_key")
+     model_name = kwargs.get("model_name", None)
++    client = kwargs.get("client")
+ 
+     try:
+         response = request_with_image(
+@@ -128,6 +148,7 @@ def infer(prompt, image, max_tokens=4096, use_vllm=False, **kwargs):
+             base_url=base_url,
+             api_key=api_key,
+             model=model,
++            client=client,
+         )
+     except Exception as e:
+         print(f"Error: {e}")
+@@ -140,25 +161,10 @@ def process_prompt(data, model_components):
+     prompt = kotextvqa_doc_to_text(data)
+     image = vision_kotextvqa_doc_to_visual(data)
+ 
+-    return infer(prompt, image, max_tokens=4096, **model_components), data
++    return infer(prompt, image, max_tokens=MAX_TOKENS, **model_components), data
+ 
+ 
+ def run_and_save():
+-    def save_results_to_file(results, output_path):
+-        os.makedirs(os.path.dirname(output_path), exist_ok=True)
+-        
+-        with open(output_path, "w", encoding="utf-8") as outfile:
+-            for output, data in results:
+-                data["response"] = output
+-                # Exclude image fields but keep topic_difficulty and image_type
+-                data = {
+-                    k: v
+-                    for k, v in data.items()
+-                    if not (k.startswith("image") and k != "image_type")
+-                }
+-                json.dump(data, outfile, ensure_ascii=False)
+-                outfile.write("\n")
+-
+     dataset = load_dataset("tabtoyou/KoTextVQA", split="test")
+     model_components = load_model(
+         model_name=MODEL_NAME,
+@@ -168,32 +174,116 @@ def run_and_save():
+     )
+ 
+     def process_and_save_part(part_data, part_name, model_components):
++        # Streaming append + idempotent resume.
++        # 이유: 평가 도중 중단되면 in-memory 누적된 모든 결과가 손실되던 문제 (2577 샘플 KRETA 에서
++        # 5+ 시간 진행 후 죽으면 전부 날아감) 를 해결하기 위해 결과를 매 sample 마다 jsonl 에
++        # 즉시 append + flush. 재시작 시 이미 처리된 id 는 skip.
++        from concurrent.futures import as_completed
+         print(f"Begin processing {part_name}")
+-        results = []
+         output_path = f"./output/{MODEL}_{part_name}.jsonl"
++        os.makedirs(os.path.dirname(output_path), exist_ok=True)
+ 
++        # checkpoint: keep only valid completed rows, dropping corrupt/error rows.
++        kept_by_id = {}
+         if os.path.exists(output_path):
+-            with open(output_path, "r", encoding="utf-8") as infile:
+-                for line in infile:
+-                    data = json.loads(line)
+-                    results.append((data["response"], data))
+-            print(f"Loaded existing results for {part_name}")
+-        else:
+-            with ThreadPoolExecutor(max_workers=WORKERS) as executor:
+-                futures = [
+-                    executor.submit(process_prompt, data, model_components)
+-                    for data in part_data
+-                ]
+-                for future in tqdm(futures, desc=f"Processing {part_name}"):
+-                    result, data = future.result()
+-                    results.append((result, data))
+-
+-            save_results_to_file(results, output_path)
++            with open(output_path, "r", encoding="utf-8") as f:
++                for line in f:
++                    try:
++                        d = json.loads(line)
++                    except json.JSONDecodeError:
++                        continue
++                    item_id = d.get("id")
++                    response = d.get("response")
++                    if (
++                        item_id
++                        and "response" in d
++                        and response is not None
++                        and not (isinstance(response, dict) and "error" in response)
++                    ):
++                        kept_by_id[item_id] = d
++
++            tmp_path = output_path + ".tmp"
++            with open(tmp_path, "w", encoding="utf-8") as outfile:
++                for item_id in kept_by_id:
++                    json.dump(kept_by_id[item_id], outfile, ensure_ascii=False)
++                    outfile.write("\n")
++                outfile.flush()
++                os.fsync(outfile.fileno())
++            os.replace(tmp_path, output_path)
++
++        processed_ids = set(kept_by_id)
++        print(f"  resume: {len(processed_ids)} 개 이미 처리됨")
++
++        remaining = [d for d in part_data if d.get("id") not in processed_ids]
++        print(f"  남은 작업: {len(remaining)} / {len(part_data)}")
++
++        if remaining:
++            # streaming append: 'a' 모드 + 매 write 후 flush
++            with open(output_path, "a", encoding="utf-8") as outfile, \
++                 ThreadPoolExecutor(max_workers=WORKERS) as executor:
++                futures = {
++                    executor.submit(process_prompt, data, model_components): data
++                    for data in remaining
++                }
++                for future in tqdm(as_completed(futures), total=len(remaining),
++                                   desc=f"Processing {part_name}"):
++                    try:
++                        result, data = future.result()
++                    except Exception as e:
++                        print(f"  [warn] task failed: {e}", file=sys.stderr)
++                        continue
++                    data["response"] = result
++                    data = {
++                        k: v
++                        for k, v in data.items()
++                        if not (k.startswith("image") and k != "image_type")
++                    }
++                    outfile.write(json.dumps(data, ensure_ascii=False) + "\n")
++                    outfile.flush()  # disk sync — 중단 시에도 진행분 보존
++                    os.fsync(outfile.fileno())
++
++        # 완주 검증: 모든 sample 이 1행씩 기록됐는지 확인.
++        # 이유: 전처리(doc_to_text/visual)가 예외나면 그 sample 이 조용히 누락되어
++        # 최종 행수 < len(part_data) 가 되고, evaluate.py 가 NUM 불일치로 파일 전체를
++        # 스킵(빈 results.json)하는 사고가 난다. 누락분은 다음 resume 에서 재시도되므로
++        # 여기서 fail-loud 하게 막아 사용자가 재실행하도록 한다.
++        seen_ids = set()
++        error_rows = 0
++        with open(output_path, "r", encoding="utf-8") as f:
++            for line in f:
++                line = line.strip()
++                if not line:
++                    continue
++                try:
++                    d = json.loads(line)
++                except json.JSONDecodeError:
++                    continue
++                if d.get("id") is not None:
++                    seen_ids.add(d["id"])
++                resp = d.get("response")
++                if resp is None or (isinstance(resp, dict) and "error" in resp):
++                    error_rows += 1
++        if error_rows:
++            print(
++                f"  [warn] {error_rows} 개 행이 에러(타임아웃 등) — 다음 resume 실행 시 재시도됨",
++                file=sys.stderr,
++            )
++        if len(seen_ids) != len(part_data):
++            sys.exit(
++                f"[ERROR] {part_name}: 기록된 고유 id {len(seen_ids)} != 데이터셋 {len(part_data)}. "
++                f"누락 sample 존재 → resume 재실행 필요. evaluate 스킵 방지 위해 중단."
++            )
+ 
+         return output_path
+ 
+     temp_files = []
+-    temp_files.append(process_and_save_part(dataset, SETTING, model_components))
++    try:
++        temp_files.append(process_and_save_part(dataset, SETTING, model_components))
++    finally:
++        # 공유 클라이언트 명시적 종료 (커넥션 풀 정리)
++        client = model_components.get("client")
++        if client is not None:
++            client.close()
+ 
+ 
+ def main():

@@ -1,0 +1,80 @@
+"""Shared utilities for vsm/multimodal Korean benchmark runners — facade.
+
+기능별 모듈로 분리하고 여기서 re-export 한다 (기존 `from common import ...` 호환 유지):
+  - paths.py     : safe_model_name / get_base_dir / get_timestamp / get_results_dir / save_json / append_jsonl
+  - client.py    : make_client / image_to_data_url / chat_with_image  (thinking 추론 분리 포함)
+  - cli.py       : add_thinking_sampling_args / standard_argparser
+  - textnorm.py  : normalize_text / normalize_number
+  - metadata.py  : get_hf_dataset_revision / get_git_commit / get_package_version /
+                   get_eval_script_hash / resolve_dataset_revision / build_run_config
+  - reasoning.py / answer_parse.py : 추론 분리 / 답 추출 (별도 import)
+
+__main__ 은 셸 wrapper(KRETA, KOFFVQA, KO-VLM-Benchmark)용 run_config.json 작성 CLI.
+"""
+
+import argparse
+from pathlib import Path
+
+from paths import (
+    safe_model_name, get_base_dir, get_timestamp, get_results_dir,
+    save_json, append_jsonl,
+)
+from client import (
+    make_client, image_to_data_url, chat_with_image,
+)
+from cli import (
+    add_thinking_sampling_args, standard_argparser,
+)
+from textnorm import (
+    normalize_text, normalize_number,
+)
+from metadata import (
+    get_hf_dataset_revision, get_git_commit, get_package_version,
+    get_eval_script_hash, resolve_dataset_revision, build_run_config,
+)
+
+__all__ = [
+    "safe_model_name", "get_base_dir", "get_timestamp", "get_results_dir",
+    "save_json", "append_jsonl",
+    "make_client", "image_to_data_url", "chat_with_image",
+    "add_thinking_sampling_args", "standard_argparser",
+    "normalize_text", "normalize_number",
+    "get_hf_dataset_revision", "get_git_commit", "get_package_version",
+    "get_eval_script_hash", "resolve_dataset_revision", "build_run_config",
+]
+
+
+# ── CLI: 셸 wrapper(KRETA, KOFFVQA, KO-VLM-Benchmark)에서 run_config.json 작성 ──
+# Usage:
+#   python common.py --out PATH --benchmark NAME --model M --base-url URL \
+#                    [--dataset-id ID] [--repo-dir DIR]
+# decoding 기본값은 THINK_* env 에서 가져와 thinking sampling 을 run_config.json 에 그대로 기록.
+if __name__ == "__main__":
+    ap = argparse.ArgumentParser(description="Write run_config.json for shell-based bench wrappers")
+    ap.add_argument("--out", required=True, help="run_config.json 경로")
+    ap.add_argument("--benchmark", required=True)
+    ap.add_argument("--model", required=True)
+    ap.add_argument("--base-url", required=True)
+    ap.add_argument("--dataset-id", default=None)
+    ap.add_argument("--repo-dir", default=None)
+    # thinking sampling 인자(공통 정의 — standard_argparser/b4 와 동일). run_config 기록용.
+    add_thinking_sampling_args(ap, max_tokens_fallback="8192")
+    args = ap.parse_args()
+
+    cfg = build_run_config(
+        benchmark=args.benchmark,
+        model=args.model,
+        base_url=args.base_url,
+        temperature=args.temperature,
+        max_tokens=args.max_tokens,
+        top_p=args.top_p,
+        top_k=args.top_k,
+        seed=args.seed,
+        timeout=args.timeout,
+        dataset_id=args.dataset_id,
+        repo_dir=Path(args.repo_dir) if args.repo_dir else None,
+    )
+    out_path = Path(args.out)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    save_json(out_path, cfg)
+    print(f"[run_config] {out_path}")

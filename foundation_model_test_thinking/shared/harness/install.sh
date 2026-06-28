@@ -1,0 +1,27 @@
+#!/bin/bash
+# LM-Evaluation-Harness 설치
+# https://github.com/EleutherAI/lm-evaluation-harness
+#
+# clone 위치: <BASE>/data/lm-evaluation-harness (중앙 집중)
+# 평가 시점: 시스템에 lm_eval 명령이 설치되어 있으면 어느 클래스 폴더에서나 호출 가능.
+
+set -e
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+BASE_DIR="${MODEL_TEST_BASE:-$(cd "$SCRIPT_DIR/../.." && pwd)}"
+DATA_DIR="$BASE_DIR/data"
+mkdir -p "$DATA_DIR"
+cd "$DATA_DIR"
+
+# === 재현성: commit SHA 핀 (env var 로 override 가능) ===
+LM_EVAL_SHA="${LM_EVAL_SHA:-9b2b9280330a3a5b20953346c8b51e23c4c8c4e2}"
+
+if [ ! -d "lm-evaluation-harness" ]; then
+  git clone https://github.com/EleutherAI/lm-evaluation-harness.git
+fi
+( cd lm-evaluation-harness && git checkout "$LM_EVAL_SHA" )
+echo "[harness/install] pin lm-evaluation-harness @ $LM_EVAL_SHA"
+
+"$BASE_DIR/.venv/bin/pip" install -e "$DATA_DIR/lm-evaluation-harness"
+"$BASE_DIR/.venv/bin/pip" install "lm_eval[api]"
+
+echo "[harness/install] done. lm_eval 명령 사용 가능."

@@ -1,0 +1,43 @@
+# KMMLU CoT(생성기반) thinking 변형 템플릿.
+#
+# 왜 신설하나: 기본 KMMLU(default)는 output_type=multiple_choice (loglikelihood) 라
+# 프롬프트와 보기 사이에 추론 트레이스가 들어갈 자리가 구조적으로 없다 → thinking 측정 불가.
+# 또 upstream kmmlu/direct 는 until=["\n\n","."] 라 <think> 첫 줄바꿈에서 즉시 잘린다.
+#
+# 그래서: generate_until 로 모델이 추론 후 '정답: X' 를 쓰게 하고, until 은 추론을 끊지
+# 않도록 "질문:" 만 둔다. 답은 filter(정답 마커의 *마지막* 매치)로 추출 → <think> 인라인,
+# 서버 reasoning_content 분리 양쪽 모두에서 동작(둘 다 content 끝에 '정답: X' 가 남음).
+#
+# dataset_name(과목)·task 명은 leaf yaml(kmmlu_think_<subject>.yaml)에서 채운다.
+dataset_path: HAERAE-HUB/KMMLU
+output_type: generate_until
+test_split: test
+fewshot_split: dev
+doc_to_text: "다음 문제를 단계별로 신중히 추론한 뒤, 마지막 줄에 반드시 '정답: X' 형식으로 답하세요 (X는 A, B, C, D 중 하나).\n\n질문: {{question.strip()}}\nA. {{A}}\nB. {{B}}\nC. {{C}}\nD. {{D}}\n"
+doc_to_target: "{{['A', 'B', 'C', 'D'][answer-1]}}"
+metric_list:
+  - metric: exact_match
+    aggregation: mean
+    higher_is_better: true
+    ignore_case: true
+    ignore_punctuation: true
+# zero-shot CoT: thinking 모델은 few-shot 없이도 추론한다. few-shot CoT 예시를 과목별로
+# 날조하면 편향이 생기므로 0 으로 둔다(필요 시 run_harness 의 NUM_FEWSHOT 로 override).
+num_fewshot: 0
+generation_kwargs:
+  until:
+    - "질문:"
+  do_sample: true
+  temperature: 0.6
+  top_p: 0.95
+  max_gen_toks: 8192
+filter_list:
+  - name: "get-answer"
+    filter:
+      # '정답: X' 의 보기 문자만 캡처, 마지막 매치 채택(<think> 중간 흔적 회피).
+      - function: "regex"
+        regex_pattern: "정답[\\s:]*\\(?\\s*([ABCD])"
+        group_select: -1
+      - function: "take_first"
+metadata:
+  version: 1.0

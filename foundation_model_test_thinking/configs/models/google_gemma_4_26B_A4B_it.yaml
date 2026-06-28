@@ -1,0 +1,36 @@
+# 평가 모델 설정 — Gemma-4-26B-A4B-it (vsm)
+
+model: google_gemma_4_26B_A4B_it
+tokenizer_path: /home/rainis/Desktop/workplace/models/google_gemma_4_26B_A4B_it
+class: vsm
+
+endpoint:
+  chat: http://127.0.0.1:18023/v1/chat/completions
+  v1: http://127.0.0.1:18023/v1
+
+tracks:
+  - harness
+  - nlu
+  - agent
+  - multimodal
+
+# sampling: Gemma 4 는 thinking 토글이 없으나 thinking 파이프라인의 CoT 프롬프트로 평가된다
+# (추론 트레이스 없이 '정답: X'만 — 파서 견고 처리). Gemma 권장 sampling 사용.
+sampling:
+  temperature: 1.0
+  top_p: 0.95
+  top_k: 64
+  max_tokens: 8192
+  seed: 42
+  timeout: 600
+
+backend_reference:
+  engine: vllm
+  notes: |
+    gpustack 에 vllm backend 로 등록 시 권장 옵션:
+      --enable-auto-tool-choice
+      --enable-prefix-caching
+      --async-scheduling
+    Gemma 4 는 chat_template 디폴트가 non-thinking 이라 enable_thinking 옵션 불필요.
+    thinking 파이프라인에서도 CoT 프롬프트 + 생성기반 채점으로 평가 가능하나,
+    추론 트레이스가 없으므로 thinking 비교의 baseline 으로만 해석할 것.
