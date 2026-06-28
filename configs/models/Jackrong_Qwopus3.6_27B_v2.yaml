@@ -1,0 +1,37 @@
+# 평가 모델 설정 — Jackrong/Qwopus3.6-27B-v2 (vsm)
+# HF: Jackrong/Qwopus3.6-27B-v2 (Qwen3.5 VL 계열 머지/파인튜닝, 멀티모달)
+# arch: Qwen3_5ForConditionalGeneration (vision+video), thinking 디폴트 ON.
+# ⚠️ model 필드는 gpustack 등록 시 --served-model-name 과 반드시 일치해야 함.
+
+model: Jackrong_Qwopus3.6_27B_v2
+tokenizer_path: /home/rainis/Desktop/workplace/models/Jackrong_Qwopus3.6_27B_v2
+class: vsm
+
+endpoint:
+  chat: http://127.0.0.1:18023/v1/chat/completions
+  v1: http://127.0.0.1:18023/v1
+
+tracks:
+  - harness
+  - nlu
+  - agent
+  - multimodal
+
+backend_reference:
+  engine: vllm
+  notes: |
+    gpustack 에 vllm backend 로 등록 시 권장 옵션:
+      --served-model-name Jackrong_Qwopus3.6_27B_v2
+      --enable-auto-tool-choice
+      --tool-call-parser qwen3_coder
+      --reasoning-parser qwen3
+      --default-chat-template-kwargs '{"enable_thinking": false}'
+      --limit-mm-per-prompt.image 4
+      --enable-prefix-caching
+      --async-scheduling
+      --max-model-len 24576   # text max_position 262144 라 여유. 8192 금지
+                              # (큰 비전 prefill 이 8192 넘으면 400 거부 — qwen3.5_35b 교훈)
+    chat_template 디폴트가 thinking ON ({%- if enable_thinking ... false %} 분기)
+    이라 Qwen3.6 과 동일하게 --default-chat-template-kwargs 로 false 강제 필요
+    (라인업 전체 non-thinking 기준 공정 비교용).
+    ~54GB bf16 (27B) — 단일 노드 VRAM 확인 필요.

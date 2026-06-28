@@ -7,7 +7,6 @@ Source: https://huggingface.co/datasets/ByteDance/MTVQA
 
 import re
 import unicodedata
-from pathlib import Path
 
 try:
     from datasets import load_dataset

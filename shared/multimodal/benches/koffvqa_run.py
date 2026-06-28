@@ -16,12 +16,9 @@ Judge 단계는 별도:
 - (b) 우리 koffvqa_api_judge.py: 외부 OpenAI-compat judge
 """
 
-import argparse
 import base64
 import io
 import json
-import os
-import sys
 from pathlib import Path
 
 try:

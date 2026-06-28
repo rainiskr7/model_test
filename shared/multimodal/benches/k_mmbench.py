@@ -8,7 +8,6 @@ plan #2의 "선별" 운영을 위해 --categories 옵션 제공.
 """
 
 import re
-from pathlib import Path
 
 try:
     from datasets import load_dataset

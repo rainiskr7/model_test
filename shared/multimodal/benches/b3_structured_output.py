@@ -30,10 +30,8 @@ Manifest 항목 형식:
 - value_match_rate: value_checks 평균 일치율
 """
 
-import argparse
 import json
 import re
-import sys
 from pathlib import Path
 
 try:

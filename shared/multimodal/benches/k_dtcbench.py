@@ -5,7 +5,6 @@ Source: https://huggingface.co/datasets/NCSOFT/K-DTCBench
 """
 
 import re
-from pathlib import Path
 
 try:
     from datasets import load_dataset
