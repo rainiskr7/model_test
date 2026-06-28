@@ -1,0 +1,15 @@
+# 리랭커 설정 — BAAI/bge-reranker-v2-m3 (CrossEncoder)
+key: bge-reranker-v2-m3
+model: BAAI/bge-reranker-v2-m3
+class: reranker
+backend: local                 # local | endpoint (실행 위치)
+local_backend: cross_encoder   # cross_encoder | causal_lm (스코어링 구현)
+local:
+  hf_name: BAAI/bge-reranker-v2-m3
+  revision: null               # TODO: 고정
+  uses_prompts: false
+endpoint:
+  base_url: null
+  api_key_env: OPENAI_API_KEY
+  model_id: null
+tracks: [native, rerank, latency]

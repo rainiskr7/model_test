@@ -29,7 +29,7 @@ import argparse
 import json
 from pathlib import Path
 
-from embeval.config import MODELS, PROMPT_MODES, SETTINGS
+from embeval.config import MODELS, PROMPT_MODES, SETTINGS, models_with_track
 
 
 def _common(p: argparse.ArgumentParser) -> None:
@@ -175,9 +175,9 @@ def build_parser() -> argparse.ArgumentParser:
     _common(po)
     po.set_defaults(func=cmd_official)
 
-    pr = sub.add_parser("repr", help="dense/sparse/hybrid 표현 비교(BGE-M3, FlagEmbedding)")
-    pr.add_argument("--models", nargs="+", default=["bge-m3"], choices=list(MODELS),
-                    help="평가할 모델 키(flagembedding backend 필요)")
+    pr = sub.add_parser("repr", help="dense/sparse/hybrid 표현 비교(FlagEmbedding)")
+    pr.add_argument("--models", nargs="+", default=models_with_track("repr"), choices=list(MODELS),
+                    help="평가할 모델 키(yaml tracks 에 repr 포함, flagembedding backend 필요)")
     pr.add_argument("--representations", nargs="+", default=None,
                     choices=["dense", "sparse", "hybrid"],
                     help="기본: yaml representations")

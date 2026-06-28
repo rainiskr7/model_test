@@ -1,4 +1,4 @@
-"""repr 트랙 — dense/sparse/hybrid 표현 비교(멀티기능 BGE-M3, 로컬 FlagEmbedding 전용).
+"""repr 트랙 — dense/sparse/hybrid 표현 비교(멀티기능 임베딩(BGEM3FlagModel), 로컬 FlagEmbedding 전용).
 
 계획: MTEB dense 경로와 별개로, 동일 코퍼스/쿼리/qrels/캡/지표 위에서 세 표현을 직접 비교한다
 (apples-to-apples, codex 검토 C). vLLM sparse 는 출력 포맷 미성숙이라 제외(로컬 한정).
@@ -204,7 +204,7 @@ def run_repr(model_keys: list[str], task_specs: list[TaskSpec] | None = None,
             raise SystemExit(
                 f"[repr] '{mk}' 는 flagembedding backend 가 아님(sparse/hybrid 불가). "
                 f"configs/models/{mk}.yaml 의 local_backend: flagembedding + representations 확인. "
-                f"sparse 가능 모델은 BAAI/bge-m3(원본)뿐 — 한국어 파인튜닝은 dense 전용.")
+                f"sparse/colbert 헤드를 보존한 멀티기능 임베딩(BGEM3FlagModel 호환) config 가 필요함.")
         reps = representations or model_representations(mk)
         from .config import resolve_spec
         spec = resolve_spec(mk)

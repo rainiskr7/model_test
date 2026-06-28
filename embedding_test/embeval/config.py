@@ -28,36 +28,62 @@ class ModelSpec:
     notes: str = ""
 
 
-MODELS: dict[str, ModelSpec] = {
-    "qwen3-8b": ModelSpec(
-        key="qwen3-8b",
-        hf_name="Qwen/Qwen3-Embedding-8B",
-        revision=None,  # TODO: 실행 직전 커밋 해시로 고정
-        uses_prompts=True,  # query: "Instruct: ...\nQuery: ..." 형식
-        notes="8B 대형. FP16/BF16 약 16GB+. 24GB GPU에서도 batch/length에 따라 OOM 가능(계획안 5절).",
-    ),
-    "kanana-2.1b": ModelSpec(
-        key="kanana-2.1b",
-        hf_name="kakaocorp/kanana-nano-2.1b-embedding",
-        revision=None,  # TODO: 고정
-        uses_prompts=True,  # instruction 기반 권장
-        notes="2.1B 국산 경량.",
-    ),
-    "bge-m3-ko": ModelSpec(
-        key="bge-m3-ko",
-        hf_name="upskyy/bge-m3-korean",
-        revision=None,  # TODO: 고정
-        uses_prompts=False,  # BGE-M3 계열은 query instruction 불필요
-        notes="BGE-M3 한국어 파인튜닝. dense 전용(sparse/colbert 헤드 없음).",
-    ),
-    "bge-m3": ModelSpec(
-        key="bge-m3",
-        hf_name="BAAI/bge-m3",
-        revision=None,  # TODO: 고정
-        uses_prompts=False,
-        notes="원본 멀티기능 BGE-M3. dense+sparse(+colbert). repr 트랙(sparse/hybrid)용.",
-    ),
-}
+# 모델은 코드에 하드코딩하지 않는다(모델 비종속). configs/models/*.yaml 이 단일 소스(SSOT)이며
+# 아래 발견 로직이 import 시 그 디렉토리를 스캔해 MODELS 를 만든다.
+from pathlib import Path as _Path
+
+_CONFIG_DIR = _Path(__file__).resolve().parents[1] / "configs" / "models"
+
+
+def _load_raw_configs() -> dict[str, dict]:
+    """configs/models/*.yaml 발견. 엄격: PyYAML 필수, 빈 디렉토리/파싱오류/stem!=key/
+    class!=embedding/필수필드 누락 → import 중단(SSOT 이므로 조용한 폴백 없음)."""
+    try:
+        import yaml
+    except ImportError as e:
+        raise RuntimeError("PyYAML 필요 — configs/models/*.yaml 로딩(requirements.txt).") from e
+    if not _CONFIG_DIR.is_dir():
+        raise RuntimeError(f"모델 config 디렉토리 없음: {_CONFIG_DIR}")
+    out: dict[str, dict] = {}
+    for path in sorted(_CONFIG_DIR.glob("*.yaml")):
+        stem = path.stem
+        try:
+            cfg = yaml.safe_load(path.read_text())
+        except Exception as e:
+            raise RuntimeError(f"yaml 파싱 실패: {path}: {e}") from e
+        if not isinstance(cfg, dict):
+            raise RuntimeError(f"yaml 형식 오류(dict 아님): {path}")
+        if cfg.get("key") != stem:
+            raise RuntimeError(f"파일명 stem('{stem}') != yaml key('{cfg.get('key')}'): {path}")
+        if cfg.get("class") != "embedding":
+            raise RuntimeError(f"class 는 정확히 'embedding' 이어야 함({cfg.get('class')}): {path}")
+        if not cfg.get("model"):
+            raise RuntimeError(f"필수 'model' 없음: {path}")
+        loc = cfg.get("local") or {}
+        # 모델 특화값은 코드 기본값으로 둠 없이 yaml 이 명시해야 한다(SSOT, 무하드코딩).
+        if not loc.get("hf_name"):
+            raise RuntimeError(f"필수 'local.hf_name' 없음: {path}")
+        if "uses_prompts" not in loc:
+            raise RuntimeError(f"필수 'local.uses_prompts'(모델 특화) 없음: {path}")
+        if not cfg.get("local_backend"):
+            raise RuntimeError(f"필수 'local_backend'(sentence_transformers|flagembedding) 없음: {path}")
+        out[stem] = cfg
+    if not out:
+        raise RuntimeError(f"모델 config 가 없음: {_CONFIG_DIR}/*.yaml")
+    return out
+
+
+_RAW_CONFIGS: dict[str, dict] = _load_raw_configs()
+
+
+def _build_model_spec(cfg: dict) -> ModelSpec:
+    loc = cfg.get("local") or {}
+    return ModelSpec(
+        key=cfg["key"], hf_name=loc["hf_name"], revision=loc.get("revision"),
+        uses_prompts=bool(loc.get("uses_prompts", False)), notes=cfg.get("notes", ""))
+
+
+MODELS: dict[str, ModelSpec] = {k: _build_model_spec(c) for k, c in _RAW_CONFIGS.items()}
 
 
 # --------------------------------------------------------------------------- #
@@ -121,7 +147,7 @@ def all_task_specs() -> list[TaskSpec]:
 
 
 # --------------------------------------------------------------------------- #
-# repr 트랙 — dense/sparse/hybrid 표현 비교(멀티기능 BGE-M3 전용).
+# repr 트랙 — dense/sparse/hybrid 표현 비교(멀티기능 임베딩(BGEM3FlagModel 호환) 전용).
 #   sparse 는 retrieval 에서만 의미 → retrieval 태스크만. 1차 구현은 한국어 중심 소수.
 # --------------------------------------------------------------------------- #
 REPR_TASKS: list[TaskSpec] = [
@@ -160,50 +186,25 @@ PROMPT_MODES = ("recommended", "controlled")
 
 
 # --------------------------------------------------------------------------- #
-# 운영 설정 오버레이 — configs/models/<key>.yaml (model_test 규약).
-#   MODELS(위)는 평가 로직의 SSOT(로컬 로딩/태스크). YAML 은 "어떻게 서빙/실행할지"
-#   (backend: local|endpoint, endpoint 정보)를 덧씌우는 운영 레이어다.
-#   yaml 이 없거나 PyYAML 미설치면 조용히 local 로 폴백 → 기존 동작/테스트 불변.
+# 모델 메타 접근자 — 모두 _RAW_CONFIGS(발견된 yaml) 를 읽는다. 코드에 모델값 없음.
+#   yaml top-level backend = local|endpoint(실행 위치),
+#   precision/max_seq_length 는 공정비교 위해 전역 SETTINGS 고정(yaml 의 값은 참고용).
 # --------------------------------------------------------------------------- #
-from pathlib import Path as _Path
-
-_CONFIG_DIR = _Path(__file__).resolve().parents[1] / "configs" / "models"
-
-
-def load_yaml_model(key: str) -> dict | None:
-    """configs/models/<key>.yaml 로드(있으면). 없거나 yaml 미설치면 None.
-
-    파싱 오류는 조용히 삼키지 않고 경고를 찍는다(잘못된 config 가 hardcoded local 런으로
-    둔갑하는 사고 방지). 단, 평가 자체는 fallback 으로 계속할 수 있도록 None 을 반환한다.
-    """
-    path = _CONFIG_DIR / f"{key}.yaml"
-    if not path.exists():
-        return None
-    try:
-        import yaml
-    except ImportError:
-        return None
-    try:
-        return yaml.safe_load(path.read_text())
-    except Exception as exc:
-        print(f"[config] ⚠️ yaml 파싱 실패({path}): {exc} → MODELS 하드코딩값으로 폴백")
-        return None
+def _raw(key: str) -> dict | None:
+    return _RAW_CONFIGS.get(key)
 
 
 def model_backend(key: str) -> tuple[str, dict]:
-    """모델 key 의 (backend, endpoint_cfg). 기본 ('local', {})."""
-    cfg = load_yaml_model(key)
+    """(backend, endpoint_cfg). backend=local|endpoint. 기본 ('local', {})."""
+    cfg = _raw(key)
     if not cfg:
         return "local", {}
     return str(cfg.get("backend", "local")), (cfg.get("endpoint") or {})
 
 
 def model_full_name(key: str) -> str:
-    """결과 디렉토리/summary 의 모델 풀네임(safe_model_name 의 입력).
-
-    yaml 의 `model` 필드(원본 풀네임)를 우선, 없으면 MODELS 의 hf_name.
-    """
-    cfg = load_yaml_model(key)
+    """결과 디렉토리/summary 의 모델 풀네임(yaml 'model')."""
+    cfg = _raw(key)
     if cfg and cfg.get("model"):
         return str(cfg["model"])
     spec = MODELS.get(key)
@@ -211,40 +212,29 @@ def model_full_name(key: str) -> str:
 
 
 def model_representations(key: str) -> list[str]:
-    """모델이 지원하는 표현 목록(yaml). 기본 ['dense']."""
-    cfg = load_yaml_model(key)
-    reps = (cfg or {}).get("representations")
+    """지원 표현 목록(yaml). 기본 ['dense']."""
+    reps = (_raw(key) or {}).get("representations")
     return [str(r) for r in reps] if reps else ["dense"]
 
 
 def model_local_backend(key: str) -> str:
-    """로컬 로더 종류(yaml local_backend). 'sentence_transformers' | 'flagembedding'."""
-    cfg = load_yaml_model(key)
-    return str((cfg or {}).get("local_backend", "sentence_transformers"))
+    """로컬 로더 종류(yaml). 'sentence_transformers' | 'flagembedding'."""
+    return str((_raw(key) or {}).get("local_backend", "sentence_transformers"))
 
 
 def model_hybrid(key: str) -> tuple[float, str]:
     """(hybrid_alpha, hybrid_normalization). 기본 (0.5, 'per_query_minmax')."""
-    cfg = load_yaml_model(key) or {}
+    cfg = _raw(key) or {}
     return float(cfg.get("hybrid_alpha", 0.5)), str(cfg.get("hybrid_normalization", "per_query_minmax"))
 
 
-def resolve_spec(key: str) -> "ModelSpec":
-    """local 로딩용 ModelSpec — yaml 의 local 블록을 MODELS[key] 위에 덧씌운다.
+def models_with_track(track: str) -> list[str]:
+    """yaml tracks 에 해당 트랙을 포함하는 모델 키 목록(CLI 기본값 도출용)."""
+    return [k for k, c in _RAW_CONFIGS.items() if track in (c.get("tracks") or [])]
 
-    yaml 이 model 식별값(hf_name/revision/uses_prompts)의 SSOT 가 되게 한다(혼동 방지).
-    precision/max_seq_length 는 모델 간 공정비교를 위해 전역 SETTINGS 로 고정(계획안 5절) →
-    의도적으로 per-model override 하지 않는다.
-    """
-    from dataclasses import replace
-    spec = MODELS[key]
-    cfg = load_yaml_model(key)
-    loc = (cfg or {}).get("local") or {}
-    if not loc:
-        return spec
-    return replace(
-        spec,
-        hf_name=loc.get("hf_name", spec.hf_name),
-        revision=loc.get("revision", spec.revision),
-        uses_prompts=bool(loc.get("uses_prompts", spec.uses_prompts)),
-    )
+
+def resolve_spec(key: str) -> ModelSpec:
+    """local 로딩용 ModelSpec. yaml 발견으로 이미 MODELS 가 구성됐으므로 그대로 반환."""
+    if key not in MODELS:
+        raise KeyError(f"알 수 없는 모델 키: {key} (configs/models/*.yaml: {list(MODELS)})")
+    return MODELS[key]

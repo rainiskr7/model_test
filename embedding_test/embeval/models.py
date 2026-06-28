@@ -1,7 +1,7 @@
 """모델 로딩 — 권장 프롬프트(recommended) vs 통제(controlled) 두 모드 지원.
 
-계획안 5절: Qwen3/BGE-M3의 query/passage prefix 가 검색 점수를 크게 좌우하므로
-"각 모델 권장 설정"과 "통제 설정" 결과를 분리 기록한다.
+계획안 5절: 일부 모델은 query/passage prefix·instruction 이 검색 점수를 크게 좌우하므로
+"각 모델 권장 설정"과 "통제 설정" 결과를 분리 기록한다(모델별 차이는 yaml 의 uses_prompts).
 
 - recommended: mteb의 모델 레지스트리(`mteb.get_model`)를 우선 사용한다.
   레지스트리에 모델 메타가 있으면 권장 query/passage 프롬프트가 자동 주입된다.
@@ -49,7 +49,7 @@ def _load_endpoint(spec: ModelSpec, endpoint_cfg: dict):
 def _load_recommended(spec: ModelSpec):
     """mteb 레지스트리 우선. 메타가 있으면 권장 프롬프트가 자동 적용된다.
 
-    주의(코덱스 리뷰 반영): prompt 의존 모델(Qwen3/kanana)이 레지스트리에 없으면
+    주의(코덱스 리뷰 반영): prompt 의존 모델(uses_prompts=true)이 레지스트리에 없으면
     조용히 plain SentenceTransformer 로 폴백하면 instruction 이 사라져 "recommended"
     측정이 controlled 와 같아진다 → 측정 왜곡. 따라서 uses_prompts 모델은 하드 실패시킨다.
     """

@@ -3,9 +3,13 @@
 from embeval import config
 
 
-def test_core_models_present():
-    # dense 비교 3종 + sparse/hybrid(repr)용 멀티기능 원본 bge-m3.
-    assert {"qwen3-8b", "kanana-2.1b", "bge-m3-ko", "bge-m3"} <= set(config.MODELS)
+def test_models_discovered_from_yaml():
+    # 모델은 코드 하드코딩이 아니라 configs/models/*.yaml 발견이어야 함(모델 비종속).
+    from pathlib import Path
+    cfg_dir = Path(config.__file__).resolve().parents[1] / "configs" / "models"
+    stems = {p.stem for p in cfg_dir.glob("*.yaml")}
+    assert stems, "configs/models/*.yaml 없음"
+    assert set(config.MODELS) == stems  # 코드가 yaml 을 발견해 구성
     for spec in config.MODELS.values():
         assert spec.hf_name and "/" in spec.hf_name
 

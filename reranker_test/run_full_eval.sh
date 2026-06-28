@@ -1,7 +1,7 @@
 #!/bin/bash
-# embedding 클래스 전체 트랙 순차 실행 — 참조 model_test/run_full_eval.sh 패턴.
-# Usage: ./run_full_eval.sh <model_config_name>      # 예: ./run_full_eval.sh qwen3-8b
-# 결과: results/<safe_model>/<EVAL_TIMESTAMP>/embedding/<track>/<bench>/summary.json
+# reranker 클래스 전체 트랙 순차 실행 — 참조 model_test/run_full_eval.sh 패턴.
+# Usage: ./run_full_eval.sh <model_config_name>      # 예: ./run_full_eval.sh bge-reranker-v2-m3
+# 결과: results/<safe_model>/<EVAL_TIMESTAMP>/reranker/<track>/<bench>/summary.json
 # 로그: logs/<EVAL_TIMESTAMP>/<track>.log
 
 set -u
@@ -25,7 +25,7 @@ fi
 MODEL_CONFIG="$1"
 
 # yaml → env (KEY, MODEL, MODEL_ID, MODEL_CLASS, BACKEND, BASE_URL, TRACKS)
-# (loader 가 파일명 stem == yaml key 를 강제하므로 run.py --models KEY 와 config.py 로딩이 일치)
+# (loader 가 파일명 stem == yaml key 를 강제하므로 run.py --rerankers KEY 와 config.py 로딩이 일치)
 # shellcheck disable=SC1090
 source <(python3 "$SCRIPT_DIR/configs/load_model_config.py" "$MODEL_CONFIG") || exit 1
 echo "[full_eval] config=$MODEL_CONFIG → KEY=$KEY MODEL=$MODEL BACKEND=$BACKEND"
@@ -81,12 +81,12 @@ echo "[full_eval] EVAL_TIMESTAMP=$EVAL_TIMESTAMP MODEL=$MODEL" | tee "$LOG_DIR/_
 
 for track in $TRACKS; do
   case "$track" in
-    smoke|korean|financial)
-      run_track "$track" python3 run.py "$track" --models "$KEY" ;;
-    repr)
-      run_track repr      python3 run.py repr --models "$KEY" ;;
-    cost)
-      run_track cost      python3 run.py cost --models "$KEY" ;;
+    native)
+      run_track native  python3 run.py native  --rerankers "$KEY" ;;
+    rerank)
+      run_track rerank  python3 run.py rerank  --rerankers "$KEY" ;;
+    latency)
+      run_track latency python3 run.py latency --rerankers "$KEY" ;;
     *) echo "[full_eval] WARN: unknown track '$track' (configs/models/$MODEL_CONFIG.yaml)" ;;
   esac
 done

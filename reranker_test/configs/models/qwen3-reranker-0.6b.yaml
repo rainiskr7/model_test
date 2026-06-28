@@ -1,0 +1,25 @@
+# 리랭커 설정 — Qwen/Qwen3-Reranker-0.6B (causal_lm)
+# 프롬프트 템플릿/토큰은 '이 모델의 데이터'로서 여기에만 둔다(코드엔 모델 특화 기본값 없음).
+# ⚠️ 모델 카드의 reranking 포맷과 대조 검증 후 확정할 것.
+key: qwen3-reranker-0.6b
+model: Qwen/Qwen3-Reranker-0.6B
+class: reranker
+backend: local
+local_backend: causal_lm
+local:
+  hf_name: Qwen/Qwen3-Reranker-0.6B
+  revision: null
+  uses_prompts: true
+  score_method: yes_no_softmax
+  yes_token: "yes"
+  no_token: "no"
+  prompt:
+    prefix: "<|im_start|>system\nJudge whether the Document meets the requirements based on the Query and the Instruct provided. Note that the answer can only be \"yes\" or \"no\".<|im_end|>\n<|im_start|>user\n"
+    suffix: "<|im_end|>\n<|im_start|>assistant\n<think>\n\n</think>\n\n"
+    instruct: "Given a search query, retrieve relevant passages that answer the query"
+    body_template: "<Instruct>: {instruct}\n<Query>: {query}\n<Document>: {document}"
+endpoint:
+  base_url: null
+  api_key_env: OPENAI_API_KEY
+  model_id: null
+tracks: [rerank, latency]   # native(MTEB CrossEncoder 경로) 비호환 → 제외
