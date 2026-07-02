@@ -1,0 +1,40 @@
+# 평가 모델 설정 — Qwen3.6-35B-A3B FP8 (vsm)
+# ⚠️ model 필드는 gpustack /v1/models 의 served-id 와 정확히 일치해야 함 (소문자).
+#    확인값: qwen_qwen3.6_35b_a3b_fp8 (run_full_eval.sh 프리플라이트가 이 문자열 검사)
+
+model: qwen_qwen3.6_35b_a3b_fp8
+tokenizer_path: /home/rainis/Desktop/workplace/models/Qwen_Qwen3.6_35B_A3B_FP8
+class: vsm
+
+endpoint:
+  chat: http://127.0.0.1:18023/v1/chat/completions
+  v1: http://127.0.0.1:18023/v1
+
+tracks:
+  - harness
+  - nlu
+  - agent
+  - multimodal
+
+backend_reference:
+  engine: vllm
+  notes: |
+    서빙 확인: vllm-0.23.1rc1.dev...d20260620 (GB10/aarch64). arch=qwen3_5_moe (MoE 256e/top8),
+    vision 포함, block-wise FP8 (quant_method fp8, 자동감지), MTP(mtp_num_hidden_layers 1) 포함.
+    gpustack 등록 시 권장 옵션:
+      --enable-auto-tool-choice
+      --tool-call-parser qwen3_coder     # Qwen 공식 카드 권장. (qwen3_xml 도 등록돼 있으나 공식은 coder)
+                                         #  참고: 리포 agent 트랙은 native_tool_calling=False 라 실영향 적음
+      --reasoning-parser qwen3           # 공식 카드 + vLLM 레지스트리 확인. reasoning 은 <think> 포맷.
+                                         #  ⚠️ qwen_xml/qwen3_xml 은 reasoning 파서 아님(그건 tool 파서)
+      --default-chat-template-kwargs '{"enable_thinking": false}'
+      --limit-mm-per-prompt.image 4
+      --enable-prefix-caching
+      --async-scheduling
+      --max-model-len 32768      # 이 스위트 요건(nlu/agent 출력 8192) 커버. 하한 24576, 262144 불필요
+      # MTP(선택) — Qwen3.6 FP8 공식 카드값:
+      --speculative-config '{"method":"qwen3_next_mtp","num_speculative_tokens":2}'
+    non-thinking: 서버측은 enable_thinking:false 로 처리됨(스모크서 reasoning=null 확인).
+    ⚠️ harness 는 chat_template 을 클라이언트측(tokenizer_path)에서 적용 →
+       models/Qwen_Qwen3.6_35B_A3B_FP8/chat_template.jinja 를 non-thinking 디폴트로
+       뒤집은 패치본으로 교체해야 harness 채점이 non-thinking 기준이 됨 (BF16 과 동일 처리).
