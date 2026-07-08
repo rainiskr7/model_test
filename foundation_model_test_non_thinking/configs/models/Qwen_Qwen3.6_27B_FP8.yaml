@@ -1,0 +1,35 @@
+# 평가 모델 설정 — Qwen3.6-27B FP8 (vsm, dense)
+# ⚠️ model 필드는 gpustack /v1/models 의 served-id 와 정확히 일치해야 함 (소문자).
+#    확인값: qwen_qwen3.6_27b_fp8 (run_full_eval.sh 프리플라이트가 이 문자열 검사)
+
+model: qwen_qwen3.6_27b_fp8
+tokenizer_path: /home/rainis/Desktop/workplace/models/Qwen_Qwen3.6_27B_FP8
+class: vsm
+
+endpoint:
+  chat: http://127.0.0.1:18023/v1/chat/completions
+  v1: http://127.0.0.1:18023/v1
+
+tracks:
+  - harness
+  - nlu
+  - agent
+  - multimodal
+
+backend_reference:
+  engine: vllm
+  notes: |
+    Qwen3.6-27B dense FP8. gpustack 등록 시 권장 옵션 (35B_A3B_FP8 와 동일 계열):
+      --enable-auto-tool-choice
+      --tool-call-parser qwen3_coder
+      --reasoning-parser qwen3
+      --default-chat-template-kwargs '{"enable_thinking": false}'
+      --limit-mm-per-prompt.image 4
+      --enable-prefix-caching
+      --async-scheduling
+      --max-model-len 32768      # nlu/agent 출력 8192 커버. 하한 24576(큰 비전 prefill 거부 방지)
+    non-thinking: 서버측 enable_thinking:false 처리.
+    ⚠️ harness 는 chat_template 을 클라이언트측(tokenizer_path)에서 적용 →
+       models/Qwen_Qwen3.6_27B_FP8/chat_template.jinja 를 non-thinking 디폴트로
+       뒤집은 패치본으로 교체 완료 (line 149: enable_thinking is true 분기, 디폴트 else=빈 think).
+       원본은 chat_template.jinja.orig 로 백업됨. (BF16/35B 라인업과 동일 처리)
