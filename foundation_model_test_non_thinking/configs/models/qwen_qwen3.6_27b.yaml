@@ -1,0 +1,23 @@
+# 평가 모델 설정 — qwen_qwen3.6_27b (KMMLU 이어하기용)
+# 서빙 id 는 gpustack /v1/models 의 실제 id = qwen_qwen3.6_27b (UI 표시명 qwen3.6_27b 과 다름).
+# preflight 는 이 id 와 대조하므로 반드시 일치시킬 것.
+
+model: qwen_qwen3.6_27b
+tokenizer_path: /home/rainis/Desktop/workplace/models/Qwen_Qwen3.6_27B
+class: vsm
+
+endpoint:
+  chat: http://127.0.0.1:18023/v1/chat/completions
+  v1: http://127.0.0.1:18023/v1
+
+# 이번 이어하기는 language/harness (KMMLU 나머지 28개) 만.
+# vision/multimodal 은 이미 완료 + skip 미지원이라 제외. 필요 시 tracks 에 추가.
+tracks:
+  - harness
+
+backend_reference:
+  engine: vllm
+  notes: |
+    gpustack vllm backend. Qwen3.6 는 chat_template 디폴트 thinking ON →
+    non-thinking 평가 시 --default-chat-template-kwargs '{"enable_thinking": false}' 권장.
+    harness(KMMLU) 는 local-completions + --apply_chat_template + 5-shot 로 logprob 채점.

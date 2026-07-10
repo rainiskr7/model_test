@@ -1,0 +1,195 @@
+{
+  "benchmark": "B-4 Latency Profile",
+  "model": "qwen_qwen3.5_35b_a3b_fp8",
+  "conditions": [
+    {
+      "condition": "text_only",
+      "reps": 50,
+      "successful": 50,
+      "failed": 0,
+      "ttft": {
+        "p50": 0.13153347700063023,
+        "p95": 0.1564329791537602,
+        "p99": 0.22217026730933853,
+        "mean": 0.13654355074017077,
+        "n": 50
+      },
+      "total": {
+        "p50": 0.5851486085011857,
+        "p95": 0.6167171696521109,
+        "p99": 0.6725638565544794,
+        "mean": 0.5903758203402686,
+        "n": 50
+      },
+      "completion_tokens": {
+        "p50": 32.0,
+        "p95": 32.0,
+        "p99": 32.0,
+        "mean": 32.0,
+        "n": 50
+      },
+      "tokens_per_sec": {
+        "p50": 54.68696249827248,
+        "p95": 55.31218182532416,
+        "p99": 55.456677875467705,
+        "mean": 54.25637712276651,
+        "n": 50
+      }
+    },
+    {
+      "condition": "image_256px",
+      "reps": 50,
+      "successful": 50,
+      "failed": 0,
+      "ttft": {
+        "p50": 0.16181641850198503,
+        "p95": 0.17133412370276346,
+        "p99": 0.17630617957751382,
+        "mean": 0.16259599614015316,
+        "n": 50
+      },
+      "total": {
+        "p50": 0.5860151060005592,
+        "p95": 0.5966930231541483,
+        "p99": 0.6078003763406014,
+        "mean": 0.5868123512000603,
+        "n": 50
+      },
+      "completion_tokens": {
+        "p50": 30.0,
+        "p95": 30.0,
+        "p99": 30.0,
+        "mean": 30.0,
+        "n": 50
+      },
+      "tokens_per_sec": {
+        "p50": 51.193219611673435,
+        "p95": 51.65435525372563,
+        "p99": 51.74490873272799,
+        "mean": 51.12830030548915,
+        "n": 50
+      }
+    },
+    {
+      "condition": "image_1024px",
+      "reps": 50,
+      "successful": 50,
+      "failed": 0,
+      "ttft": {
+        "p50": 0.3106889009977749,
+        "p95": 0.35209278469992566,
+        "p99": 0.458791469327334,
+        "mean": 0.31806234607996886,
+        "n": 50
+      },
+      "total": {
+        "p50": 0.7405045909981709,
+        "p95": 0.7821224099468963,
+        "p99": 0.888538183381024,
+        "mean": 0.7481051691202447,
+        "n": 50
+      },
+      "completion_tokens": {
+        "p50": 30.0,
+        "p95": 30.0,
+        "p99": 30.0,
+        "mean": 30.0,
+        "n": 50
+      },
+      "tokens_per_sec": {
+        "p50": 40.512915772426965,
+        "p95": 40.8036714384111,
+        "p99": 40.9371622025908,
+        "mean": 40.16150557498896,
+        "n": 50
+      }
+    },
+    {
+      "condition": "multi_image_3x512px",
+      "reps": 50,
+      "successful": 50,
+      "failed": 0,
+      "ttft": {
+        "p50": 0.27166738900268683,
+        "p95": 0.2894618229001935,
+        "p99": 0.3345654773397836,
+        "mean": 0.2751497193798423,
+        "n": 50
+      },
+      "total": {
+        "p50": 0.6988246830005664,
+        "p95": 0.7185889376018167,
+        "p99": 0.780339165199839,
+        "mean": 0.7039922040997771,
+        "n": 50
+      },
+      "completion_tokens": {
+        "p50": 30.0,
+        "p95": 30.0,
+        "p99": 30.0,
+        "mean": 30.0,
+        "n": 50
+      },
+      "tokens_per_sec": {
+        "p50": 42.92922298632108,
+        "p95": 43.16971120054015,
+        "p99": 43.244200105780976,
+        "mean": 42.63765779605247,
+        "n": 50
+      }
+    }
+  ],
+  "run_config": {
+    "benchmark": "B-4 Latency Profile",
+    "timestamp_utc": "2026-07-04T12:11:13.957470+00:00",
+    "model": {
+      "name": "qwen_qwen3.5_35b_a3b_fp8",
+      "safe_name": "qwen_qwen3.5_35b_a3b_fp8"
+    },
+    "endpoint": {
+      "base_url": "http://127.0.0.1:18023/v1"
+    },
+    "decoding": {
+      "temperature": 0.0,
+      "max_tokens": 256,
+      "seed": null
+    },
+    "request_policy": {
+      "timeout": 60.0,
+      "retry_max": null,
+      "retry_backoff": null
+    },
+    "dataset": {
+      "huggingface_id": null,
+      "revision": null,
+      "revision_source": null,
+      "git_repo": null,
+      "git_commit": null
+    },
+    "judge": {
+      "model": null,
+      "prompt_version": null
+    },
+    "eval_framework": {
+      "script_path": "/home/rainis/Desktop/workplace/source/model_test/foundation_model_test_non_thinking/shared/multimodal/benches/b4_latency_profile.py",
+      "script_hash_sha256_16": "5750a2104573d64a7e18ba1b0e912e72"
+    },
+    "environment": {
+      "python": "3.12.3",
+      "platform": "Linux-6.17.0-1021-nvidia-aarch64-with-glibc2.39",
+      "openai_pkg": "2.44.0",
+      "datasets_pkg": "5.0.0",
+      "pillow_pkg": "12.3.0",
+      "huggingface_hub_pkg": "1.21.0"
+    },
+    "env_vars": {
+      "MODEL_TEST_BASE": "/home/rainis/Desktop/workplace/source/model_test/foundation_model_test_non_thinking",
+      "EVAL_TIMESTAMP": "20260704_085237"
+    },
+    "extra": {
+      "reps_per_condition": 50,
+      "prompt": "다음 한국어 문단을 한 문장으로 요약해 주세요.\n\n인공지능 기술이 빠르게 발전하면서 다양한 분야에서 활용되고 있습니다.\n의료, 금융, 교육, 제조업 등 거의 모든 산업에서 AI가 도입되고 있으며,\n이는 효율성을 크게 향상시키고 있습니다.",
+      "skip_multi_image": false
+    }
+  }
+}

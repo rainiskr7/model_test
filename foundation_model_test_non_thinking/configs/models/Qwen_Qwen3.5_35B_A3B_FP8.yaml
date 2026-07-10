@@ -1,0 +1,31 @@
+# 평가 모델 설정 — Qwen3.5-35B-A3B FP8 (vsm)
+# 서빙 id = gpustack /v1/models 의 실제 id = qwen_qwen3.5_35b_a3b_fp8.
+# BF16 판(qwen_qwen3.5_35b_a3b)과 별개 모델 — 결과 폴더도 fp8 태그로 분리 생성됨.
+# preflight 는 이 id 와 대조하므로 반드시 일치시킬 것.
+
+model: qwen_qwen3.5_35b_a3b_fp8
+tokenizer_path: /home/rainis/Desktop/workplace/models/Qwen_Qwen3.5_35B_A3B_FP8
+class: vsm
+
+endpoint:
+  chat: http://127.0.0.1:18023/v1/chat/completions
+  v1: http://127.0.0.1:18023/v1
+
+tracks:
+  - harness
+  - nlu
+  - agent
+  - multimodal
+
+backend_reference:
+  engine: vllm
+  notes: |
+    gpustack vllm backend, FP8 양자화. Qwen3.5-35B-A3B (MoE, active 3B).
+    thinking 디폴트 ON 이라 --default-chat-template-kwargs '{"enable_thinking": false}'
+    로 non-thinking 강제 (라이브 엔드포인트 확인: reasoning_content 없음).
+    KRETA 는 direct 모드(max_tokens 32)로 실행 — run_full_eval 앞단에서
+    KRETA_SETTING=direct export. GB10 느린 디코드 안전 + 편향 절단 회피.
+    ⚠️ BF16 판이 --max-model-len 8192 로 서빙됐던 이력 있음 — fp8 서빙도
+    동일하면 큰 이미지 vision prefill 이 8192 초과 시 길이초과 거부 가능.
+    per-sample 에러는 idempotent resume 로 처리되나, 다수 실패 시 서빙
+    max-model-len 확인 필요.

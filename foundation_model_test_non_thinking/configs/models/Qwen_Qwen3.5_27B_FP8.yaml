@@ -1,0 +1,26 @@
+# 평가 모델 설정 — Qwen3.5-27B FP8 (vsm, dense)
+# 서빙 id = gpustack /v1/models 의 실제 id = qwen_qwen3.5_27b_fp8.
+# BF16 판(qwen3.5_27b)과 별개 모델 — 결과 폴더도 fp8 태그로 분리 생성됨.
+
+model: qwen_qwen3.5_27b_fp8
+tokenizer_path: /home/rainis/Desktop/workplace/models/Qwen_Qwen3.5_27B_FP8
+class: vsm
+
+endpoint:
+  chat: http://127.0.0.1:18023/v1/chat/completions
+  v1: http://127.0.0.1:18023/v1
+
+tracks:
+  - harness
+  - nlu
+  - agent
+  - multimodal
+
+backend_reference:
+  engine: vllm
+  notes: |
+    gpustack vllm backend, FP8 양자화. Qwen3.5 dense 27B.
+    thinking 모드 없음 (Qwen3.6 와 다름) — enable_thinking 옵션 불필요.
+    라이브 엔드포인트 확인: reasoning_content 없음(non-thinking).
+    KRETA 는 direct 모드(max_tokens 32)로 실행 — run_full_eval 앞단에서
+    KRETA_SETTING=direct export.
