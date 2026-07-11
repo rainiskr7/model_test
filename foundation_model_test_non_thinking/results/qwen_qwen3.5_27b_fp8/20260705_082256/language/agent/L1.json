@@ -1,0 +1,1027 @@
+{
+  "metadata": {
+    "timestamp": "2026-07-11T11:57:16.631223",
+    "model": "qwen_qwen3.5_27b_fp8",
+    "level": "L1",
+    "total_tasks": 11,
+    "successful_tasks": 11,
+    "failed_tasks": 0,
+    "success_rate": 100.0,
+    "total_execution_time": 75.32,
+    "average_execution_time": 6.85,
+    "total_steps": 11,
+    "average_steps": 1.0,
+    "total_tool_calls": 0,
+    "average_tool_calls": 0.0,
+    "total_tokens": 3672,
+    "average_tokens_per_task": 333.82,
+    "average_prompt_tokens": 277.64,
+    "average_completion_tokens": 56.18,
+    "average_tps": 48.75,
+    "ttft": {
+      "average": 6.8468,
+      "min": 3.2448,
+      "max": 15.6123,
+      "unit": "seconds"
+    }
+  },
+  "tool_usage_statistics": {},
+  "results": [
+    {
+      "task_id": "L1-001",
+      "instruction": "판교역(127.111221,37.395441)에서 잠실야구장(127.071707,37.514085)까지 자차로 몇 분 걸릴까?",
+      "level": 1,
+      "category": "Single Tool",
+      "success": true,
+      "execution_time": 9.065353393554688,
+      "steps_taken": 1,
+      "error": null,
+      "expected_tools": [
+        "Directions_naver"
+      ],
+      "golden_action": [
+        {
+          "tool": "Directions_naver",
+          "args": {
+            "start": "127.108882,37.394274",
+            "goal": "127.07190,37.51130",
+            "option": "traoptimal"
+          }
+        }
+      ],
+      "minimum_steps": null,
+      "data_flow": [],
+      "error_injection": null,
+      "fallback_options": [],
+      "resp_schema": {
+        "type": "string"
+      },
+      "arg_schema": {
+        "start": {
+          "type": "string",
+          "required": true
+        },
+        "goal": {
+          "type": "string",
+          "required": true
+        },
+        "waypoints": {
+          "type": "string",
+          "pattern": "^([0-9.]+,[0-9.]+(:[0-9.]+,[0-9.]+)?)(\\|[0-9.]+,[0-9.]+(:[0-9.]+,[0-9.]+)?){0,4}$"
+        },
+        "option": {
+          "type": "string",
+          "enum": [
+            "trafast",
+            "tracomfort",
+            "traoptimal",
+            "traavoidtoll",
+            "traavoidcaronly",
+            "trafast:traavoidtoll"
+          ]
+        }
+      },
+      "repetitions": 1,
+      "repetition_results": [
+        true
+      ],
+      "token_usage": {
+        "prompt_tokens": 348,
+        "completion_tokens": 74,
+        "total_tokens": 422
+      },
+      "ttft_stats": {
+        "average": 9.064957376998791,
+        "min": 9.064957376998791,
+        "max": 9.064957376998791,
+        "count": 1
+      },
+      "tool_calls": [],
+      "final_response": "{\"tool_call\": {\"name\": \"Directions_naver\", \"arguments\": {\"start\": \"127.111221,37.395441\", \"goal\": \"127.071707,37.514085\", \"option\": \"trafast\"}}}",
+      "conversation_log": {
+        "total_messages": 2,
+        "messages": [
+          {
+            "role": "user",
+            "content": "판교역(127.111221,37.395441)에서 잠실야구장(127.071707,37.514085)까지 자차로 몇 분 걸릴까?"
+          },
+          {
+            "role": "assistant",
+            "content": "{\"tool_call\": {\"name\": \"Directions_naver\", \"arguments\": {\"start\": \"127.111221,37.395441\", \"goal\": \"127.071707,37.514085\", \"option\": \"trafast\"}}}"
+          }
+        ]
+      }
+    },
+    {
+      "task_id": "L1-002",
+      "instruction": "서울역(126.97070,37.55360)에서 인천공항 제1터미널(126.45123,37.46349)까지 유료도로는 피하고, 광화문(126.97688,37.57594)와 여의도(126.92490,37.52190)를 경유해 이동하면 몇 분 걸리는지 알려줘.",
+      "level": 1,
+      "category": "Single Tool",
+      "success": true,
+      "execution_time": 15.61253809928894,
+      "steps_taken": 1,
+      "error": null,
+      "expected_tools": [
+        "Directions_naver"
+      ],
+      "golden_action": [
+        {
+          "tool": "Directions_naver",
+          "args": {
+            "start": "126.97070,37.55360",
+            "goal": "126.45123,37.46349",
+            "waypoints": "126.97688,37.57594|126.92490,37.52190",
+            "option": "traavoidtoll"
+          }
+        }
+      ],
+      "minimum_steps": null,
+      "data_flow": [],
+      "error_injection": null,
+      "fallback_options": [],
+      "resp_schema": {
+        "type": "string"
+      },
+      "arg_schema": {
+        "start": {
+          "type": "string",
+          "required": true
+        },
+        "goal": {
+          "type": "string",
+          "required": true
+        },
+        "waypoints": {
+          "type": "string",
+          "pattern": "^([0-9.]+,[0-9.]+(:[0-9.]+,[0-9.]+)?)(\\|[0-9.]+,[0-9.]+(:[0-9.]+,[0-9.]+)?){0,4}$"
+        },
+        "option": {
+          "type": "string",
+          "enum": [
+            "trafast",
+            "tracomfort",
+            "traoptimal",
+            "traavoidtoll",
+            "traavoidcaronly",
+            "trafast:traavoidtoll"
+          ]
+        }
+      },
+      "repetitions": 1,
+      "repetition_results": [
+        true
+      ],
+      "token_usage": {
+        "prompt_tokens": 403,
+        "completion_tokens": 130,
+        "total_tokens": 533
+      },
+      "ttft_stats": {
+        "average": 15.612321888002043,
+        "min": 15.612321888002043,
+        "max": 15.612321888002043,
+        "count": 1
+      },
+      "tool_calls": [],
+      "final_response": "요청하신 경로 정보를 바탕으로 자동차 경로를 조회해 드리겠습니다.\n\n{\"tool_call\": {\"name\": \"Directions_naver\", \"arguments\": {\"start\": \"126.97070,37.55360\", \"goal\": \"126.45123,37.46349\", \"waypoints\": \"126.97688,37.57594|126.92490,37.52190\", \"option\": \"traavoidtoll\"}}}",
+      "conversation_log": {
+        "total_messages": 2,
+        "messages": [
+          {
+            "role": "user",
+            "content": "서울역(126.97070,37.55360)에서 인천공항 제1터미널(126.45123,37.46349)까지 유료도로는 피하고, 광화문(126.97688,37.57594)와 여의도(126.92490,37.52190)를 경유해 이동하면 몇 분 걸리는지 알려줘."
+          },
+          {
+            "role": "assistant",
+            "content": "요청하신 경로 정보를 바탕으로 자동차 경로를 조회해 드리겠습니다.\n\n{\"tool_call\": {\"name\": \"Directions_naver\", \"arguments\": {\"start\": \"126.97070,37.55360\", \"goal\": \"126.45123,37.46349\", \"waypoints\": \"126.97688,37.57594|126.92490,37.52190\", \"option\": \"traavoidtoll\"}}}"
+          }
+        ]
+      }
+    },
+    {
+      "task_id": "L1-003",
+      "instruction": "빗썸에서 비트코인 원화 현재가 알려줘.",
+      "level": 1,
+      "category": "Single Tool",
+      "success": true,
+      "execution_time": 3.4804725646972656,
+      "steps_taken": 1,
+      "error": null,
+      "expected_tools": [
+        "CryptoPrice_bithumb"
+      ],
+      "golden_action": [
+        {
+          "tool": "CryptoPrice_bithumb",
+          "args": {
+            "markets": "KRW-BTC"
+          }
+        }
+      ],
+      "minimum_steps": null,
+      "data_flow": [],
+      "error_injection": null,
+      "fallback_options": [],
+      "resp_schema": {
+        "type": "string"
+      },
+      "arg_schema": {
+        "markets": {
+          "type": "string",
+          "enum": [
+            "KRW-BTC",
+            "BTC-ETH"
+          ],
+          "required": true
+        }
+      },
+      "repetitions": 1,
+      "repetition_results": [
+        true
+      ],
+      "token_usage": {
+        "prompt_tokens": 201,
+        "completion_tokens": 28,
+        "total_tokens": 229
+      },
+      "ttft_stats": {
+        "average": 3.4801232750032796,
+        "min": 3.4801232750032796,
+        "max": 3.4801232750032796,
+        "count": 1
+      },
+      "tool_calls": [],
+      "final_response": "{\"tool_call\": {\"name\": \"CryptoPrice_bithumb\", \"arguments\": {\"markets\": \"KRW-BTC\"}}}",
+      "conversation_log": {
+        "total_messages": 2,
+        "messages": [
+          {
+            "role": "user",
+            "content": "빗썸에서 비트코인 원화 현재가 알려줘."
+          },
+          {
+            "role": "assistant",
+            "content": "{\"tool_call\": {\"name\": \"CryptoPrice_bithumb\", \"arguments\": {\"markets\": \"KRW-BTC\"}}}"
+          }
+        ]
+      }
+    },
+    {
+      "task_id": "L1-004",
+      "instruction": "LS증권에서 KOSDAQ 지수의 등락률(%)을 소수점 2자리까지만 알려줘.",
+      "level": 1,
+      "category": "Single Tool",
+      "success": true,
+      "execution_time": 3.2451653480529785,
+      "steps_taken": 1,
+      "error": null,
+      "expected_tools": [
+        "MarketIndex_ls"
+      ],
+      "golden_action": [
+        {
+          "tool": "MarketIndex_ls",
+          "args": {
+            "jisu": "KOSDAQ"
+          }
+        }
+      ],
+      "minimum_steps": null,
+      "data_flow": [],
+      "error_injection": null,
+      "fallback_options": [],
+      "resp_schema": {
+        "type": "string"
+      },
+      "arg_schema": {
+        "jisu": {
+          "type": "string",
+          "enum": [
+            "KOSPI",
+            "KOSPI200",
+            "KRX100",
+            "KOSDAQ"
+          ],
+          "required": true
+        }
+      },
+      "repetitions": 1,
+      "repetition_results": [
+        true
+      ],
+      "token_usage": {
+        "prompt_tokens": 210,
+        "completion_tokens": 26,
+        "total_tokens": 236
+      },
+      "ttft_stats": {
+        "average": 3.244814976998896,
+        "min": 3.244814976998896,
+        "max": 3.244814976998896,
+        "count": 1
+      },
+      "tool_calls": [],
+      "final_response": "{\"tool_call\": {\"name\": \"MarketIndex_ls\", \"arguments\": {\"jisu\": \"KOSDAQ\"}}}",
+      "conversation_log": {
+        "total_messages": 2,
+        "messages": [
+          {
+            "role": "user",
+            "content": "LS증권에서 KOSDAQ 지수의 등락률(%)을 소수점 2자리까지만 알려줘."
+          },
+          {
+            "role": "assistant",
+            "content": "{\"tool_call\": {\"name\": \"MarketIndex_ls\", \"arguments\": {\"jisu\": \"KOSDAQ\"}}}"
+          }
+        ]
+      }
+    },
+    {
+      "task_id": "L1-005",
+      "instruction": "네이버에서 '전기차 충전 요금 인상' 검색해서 첫 번째 결과 제목만 알려줘.",
+      "level": 1,
+      "category": "Single Tool",
+      "success": true,
+      "execution_time": 4.77377724647522,
+      "steps_taken": 1,
+      "error": null,
+      "expected_tools": [
+        "WebSearch_naver"
+      ],
+      "golden_action": [
+        {
+          "tool": "WebSearch_naver",
+          "args": {
+            "query": "전기차 충전 요금 인상",
+            "display": 1,
+            "start": 1
+          }
+        }
+      ],
+      "minimum_steps": null,
+      "data_flow": [],
+      "error_injection": null,
+      "fallback_options": [],
+      "resp_schema": {
+        "type": "string"
+      },
+      "arg_schema": {
+        "query": {
+          "type": "string",
+          "required": true
+        },
+        "display": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100,
+          "default": 10
+        },
+        "start": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1000,
+          "default": 1
+        }
+      },
+      "repetitions": 1,
+      "repetition_results": [
+        true
+      ],
+      "token_usage": {
+        "prompt_tokens": 206,
+        "completion_tokens": 39,
+        "total_tokens": 245
+      },
+      "ttft_stats": {
+        "average": 4.77330144699954,
+        "min": 4.77330144699954,
+        "max": 4.77330144699954,
+        "count": 1
+      },
+      "tool_calls": [],
+      "final_response": "{\"tool_call\": {\"name\": \"WebSearch_naver\", \"arguments\": {\"query\": \"전기차 충전 요금 인상\", \"display\": 1, \"start\": 1}}}",
+      "conversation_log": {
+        "total_messages": 2,
+        "messages": [
+          {
+            "role": "user",
+            "content": "네이버에서 '전기차 충전 요금 인상' 검색해서 첫 번째 결과 제목만 알려줘."
+          },
+          {
+            "role": "assistant",
+            "content": "{\"tool_call\": {\"name\": \"WebSearch_naver\", \"arguments\": {\"query\": \"전기차 충전 요금 인상\", \"display\": 1, \"start\": 1}}}"
+          }
+        ]
+      }
+    },
+    {
+      "task_id": "L1-006",
+      "instruction": "네이버 블로그에서 '제주 가을 여행 코스 후기'로 검색해서 첫 번째 결과 글 제목만 알려줘.",
+      "level": 1,
+      "category": "Single Tool",
+      "success": true,
+      "execution_time": 5.611049652099609,
+      "steps_taken": 1,
+      "error": null,
+      "expected_tools": [
+        "BlogSearch_naver"
+      ],
+      "golden_action": [
+        {
+          "tool": "BlogSearch_naver",
+          "args": {
+            "query": "제주 가을 여행 코스 후기",
+            "display": 1,
+            "start": 1
+          }
+        }
+      ],
+      "minimum_steps": null,
+      "data_flow": [],
+      "error_injection": null,
+      "fallback_options": [],
+      "resp_schema": {
+        "type": "string"
+      },
+      "arg_schema": {
+        "query": {
+          "type": "string",
+          "required": true
+        },
+        "display": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100,
+          "default": 10
+        },
+        "start": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1000,
+          "default": 1
+        }
+      },
+      "repetitions": 1,
+      "repetition_results": [
+        true
+      ],
+      "token_usage": {
+        "prompt_tokens": 253,
+        "completion_tokens": 46,
+        "total_tokens": 299
+      },
+      "ttft_stats": {
+        "average": 5.610748163999233,
+        "min": 5.610748163999233,
+        "max": 5.610748163999233,
+        "count": 1
+      },
+      "tool_calls": [],
+      "final_response": "{\"tool_call\": {\"name\": \"BlogSearch_naver\", \"arguments\": {\"query\": \"제주 가을 여행 코스 후기\", \"display\": 1, \"start\": 1, \"sort\": \"sim\"}}}",
+      "conversation_log": {
+        "total_messages": 2,
+        "messages": [
+          {
+            "role": "user",
+            "content": "네이버 블로그에서 '제주 가을 여행 코스 후기'로 검색해서 첫 번째 결과 글 제목만 알려줘."
+          },
+          {
+            "role": "assistant",
+            "content": "{\"tool_call\": {\"name\": \"BlogSearch_naver\", \"arguments\": {\"query\": \"제주 가을 여행 코스 후기\", \"display\": 1, \"start\": 1, \"sort\": \"sim\"}}}"
+          }
+        ]
+      }
+    },
+    {
+      "task_id": "L1-007",
+      "instruction": "네이버 뉴스에서 '반도체 수출 전망'관련 기사 하나만 골라 제목을 알려줘.",
+      "level": 1,
+      "category": "Single Tool",
+      "success": true,
+      "execution_time": 5.48939323425293,
+      "steps_taken": 1,
+      "error": null,
+      "expected_tools": [
+        "NewsSearch_naver"
+      ],
+      "golden_action": [
+        {
+          "tool": "NewsSearch_naver",
+          "args": {
+            "query": "반도체 수출 전망",
+            "display": 1,
+            "start": 1
+          }
+        }
+      ],
+      "minimum_steps": null,
+      "data_flow": [],
+      "error_injection": null,
+      "fallback_options": [],
+      "resp_schema": {
+        "type": "string"
+      },
+      "arg_schema": {
+        "query": {
+          "type": "string",
+          "required": true
+        },
+        "display": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100,
+          "default": 10
+        },
+        "start": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1000,
+          "default": 1
+        }
+      },
+      "repetitions": 1,
+      "repetition_results": [
+        true
+      ],
+      "token_usage": {
+        "prompt_tokens": 251,
+        "completion_tokens": 45,
+        "total_tokens": 296
+      },
+      "ttft_stats": {
+        "average": 5.489171840999916,
+        "min": 5.489171840999916,
+        "max": 5.489171840999916,
+        "count": 1
+      },
+      "tool_calls": [],
+      "final_response": "{\"tool_call\": {\"name\": \"NewsSearch_naver\", \"arguments\": {\"query\": \"반도체 수출 전망\", \"display\": 1, \"start\": 1, \"sort\": \"date\"}}}",
+      "conversation_log": {
+        "total_messages": 2,
+        "messages": [
+          {
+            "role": "user",
+            "content": "네이버 뉴스에서 '반도체 수출 전망'관련 기사 하나만 골라 제목을 알려줘."
+          },
+          {
+            "role": "assistant",
+            "content": "{\"tool_call\": {\"name\": \"NewsSearch_naver\", \"arguments\": {\"query\": \"반도체 수출 전망\", \"display\": 1, \"start\": 1, \"sort\": \"date\"}}}"
+          }
+        ]
+      }
+    },
+    {
+      "task_id": "L1-008",
+      "instruction": "알라딘에서 히가시노 게이고 작품들 검색해서, 인기순으로 첫 번째 책 제목 알려줘.",
+      "level": 1,
+      "category": "Single Tool",
+      "success": true,
+      "execution_time": 6.801433801651001,
+      "steps_taken": 1,
+      "error": null,
+      "expected_tools": [
+        "ItemSearch_aladin"
+      ],
+      "golden_action": [
+        {
+          "tool": "ItemSearch_aladin",
+          "args": {
+            "query": "나미야 잡화점의 기적",
+            "query_type": "Keyword",
+            "search_target": "Book",
+            "start": 1,
+            "max_results": 1,
+            "sort": "Accuracy",
+            "cover": "Mid",
+            "output": "xml",
+            "outofStockFilter": 0,
+            "opt_result": ""
+          }
+        }
+      ],
+      "minimum_steps": null,
+      "data_flow": [],
+      "error_injection": null,
+      "fallback_options": [],
+      "resp_schema": {
+        "type": "string"
+      },
+      "arg_schema": {
+        "Query": {
+          "type": "string",
+          "required": true
+        },
+        "QueryType": {
+          "type": "string",
+          "enum": [
+            "Keyword",
+            "Title",
+            "Author",
+            "Publisher"
+          ],
+          "default": "Keyword"
+        },
+        "SearchTarget": {
+          "type": "string",
+          "enum": [
+            "Book",
+            "Foreign",
+            "Music",
+            "DVD",
+            "Used",
+            "eBook",
+            "All"
+          ],
+          "default": "Book"
+        },
+        "Start": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 1
+        },
+        "MaxResults": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100,
+          "default": 10
+        },
+        "Sort": {
+          "type": "string",
+          "enum": [
+            "Accuracy",
+            "PublishTime",
+            "SalesPoint",
+            "CustomerRating",
+            "MyReviewCount"
+          ],
+          "default": "Accuracy"
+        },
+        "Cover": {
+          "type": "string",
+          "enum": [
+            "Big",
+            "MidBig",
+            "Mid",
+            "Small",
+            "Mini",
+            "None"
+          ],
+          "default": "Mid"
+        },
+        "CategoryId": {
+          "type": "integer",
+          "default": 0
+        },
+        "Output": {
+          "type": "string",
+          "enum": [
+            "XML",
+            "JS"
+          ],
+          "default": "XML"
+        },
+        "outofStockFilter": {
+          "type": "integer",
+          "enum": [
+            0,
+            1
+          ],
+          "default": 0
+        },
+        "OptResult": {
+          "type": "string",
+          "default": ""
+        }
+      },
+      "repetitions": 1,
+      "repetition_results": [
+        true
+      ],
+      "token_usage": {
+        "prompt_tokens": 433,
+        "completion_tokens": 55,
+        "total_tokens": 488
+      },
+      "ttft_stats": {
+        "average": 6.801224798000476,
+        "min": 6.801224798000476,
+        "max": 6.801224798000476,
+        "count": 1
+      },
+      "tool_calls": [],
+      "final_response": "{\"tool_call\": {\"name\": \"ItemSearch_aladin\", \"arguments\": {\"query\": \"히가시노 게이고\", \"query_type\": \"Author\", \"sort\": \"SalesPoint\", \"max_results\": 1, \"cover\": \"Mid\"}}",
+      "conversation_log": {
+        "total_messages": 2,
+        "messages": [
+          {
+            "role": "user",
+            "content": "알라딘에서 히가시노 게이고 작품들 검색해서, 인기순으로 첫 번째 책 제목 알려줘."
+          },
+          {
+            "role": "assistant",
+            "content": "{\"tool_call\": {\"name\": \"ItemSearch_aladin\", \"arguments\": {\"query\": \"히가시노 게이고\", \"query_type\": \"Author\", \"sort\": \"SalesPoint\", \"max_results\": 1, \"cover\": \"Mid\"}}"
+          }
+        ]
+      }
+    },
+    {
+      "task_id": "L1-009",
+      "instruction": "다음 동영상에서 '손흥민 헤드트릭' 검색해서 첫 영상 제목 알려줘.",
+      "level": 1,
+      "category": "Single Tool",
+      "success": true,
+      "execution_time": 5.717135429382324,
+      "steps_taken": 1,
+      "error": null,
+      "expected_tools": [
+        "VideoSearch_daum"
+      ],
+      "golden_action": [
+        {
+          "tool": "VideoSearch_daum",
+          "args": {
+            "query": "손흥민 헤드트릭",
+            "sort": "accuracy",
+            "page": 1,
+            "size": 1
+          }
+        }
+      ],
+      "minimum_steps": null,
+      "data_flow": [],
+      "error_injection": null,
+      "fallback_options": [],
+      "resp_schema": {
+        "type": "string"
+      },
+      "arg_schema": {
+        "query": {
+          "type": "string",
+          "required": true
+        },
+        "sort": {
+          "type": "string",
+          "enum": [
+            "accuracy",
+            "recency"
+          ],
+          "default": "accuracy"
+        },
+        "page": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 15,
+          "default": 1
+        },
+        "size": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 30,
+          "default": 15
+        }
+      },
+      "repetitions": 1,
+      "repetition_results": [
+        true
+      ],
+      "token_usage": {
+        "prompt_tokens": 197,
+        "completion_tokens": 47,
+        "total_tokens": 244
+      },
+      "ttft_stats": {
+        "average": 5.716916771001706,
+        "min": 5.716916771001706,
+        "max": 5.716916771001706,
+        "count": 1
+      },
+      "tool_calls": [],
+      "final_response": "{\"tool_call\": {\"name\": \"VideoSearch_daum\", \"arguments\": {\"query\": \"손흥민 헤드트릭\", \"sort\": \"accuracy\", \"page\": 1, \"size\": 10}}}",
+      "conversation_log": {
+        "total_messages": 2,
+        "messages": [
+          {
+            "role": "user",
+            "content": "다음 동영상에서 '손흥민 헤드트릭' 검색해서 첫 영상 제목 알려줘."
+          },
+          {
+            "role": "assistant",
+            "content": "{\"tool_call\": {\"name\": \"VideoSearch_daum\", \"arguments\": {\"query\": \"손흥민 헤드트릭\", \"sort\": \"accuracy\", \"page\": 1, \"size\": 10}}}"
+          }
+        ]
+      }
+    },
+    {
+      "task_id": "L1-010",
+      "instruction": "카카오맵으로 강남역(127.02758, 37.4979) 근처에서 '파스타' 검색해서 첫 번째 가게 이름 알려줘.",
+      "level": 1,
+      "category": "Single Tool",
+      "success": true,
+      "execution_time": 7.785898208618164,
+      "steps_taken": 1,
+      "error": null,
+      "expected_tools": [
+        "PlaceSearch_kakao"
+      ],
+      "golden_action": [
+        {
+          "tool": "PlaceSearch_kakao",
+          "args": {
+            "keyword": "파스타",
+            "x": 127.02758,
+            "y": 37.49794,
+            "radius": 1000,
+            "sort": "distance",
+            "page": 1,
+            "size": 1
+          }
+        }
+      ],
+      "minimum_steps": null,
+      "data_flow": [],
+      "error_injection": null,
+      "fallback_options": [],
+      "resp_schema": {
+        "type": "string"
+      },
+      "arg_schema": {
+        "keyword": {
+          "type": "string",
+          "required": true
+        },
+        "x": {
+          "type": "number"
+        },
+        "y": {
+          "type": "number"
+        },
+        "radius": {
+          "type": "integer",
+          "maximum": 20000
+        },
+        "sort": {
+          "type": "string",
+          "enum": [
+            "accuracy",
+            "distance"
+          ],
+          "default": "accuracy"
+        },
+        "page": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 45,
+          "default": 1
+        },
+        "size": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 15,
+          "default": 15
+        }
+      },
+      "repetitions": 1,
+      "repetition_results": [
+        true
+      ],
+      "token_usage": {
+        "prompt_tokens": 274,
+        "completion_tokens": 64,
+        "total_tokens": 338
+      },
+      "ttft_stats": {
+        "average": 7.78550443900167,
+        "min": 7.78550443900167,
+        "max": 7.78550443900167,
+        "count": 1
+      },
+      "tool_calls": [],
+      "final_response": "{\"tool_call\": {\"name\": \"PlaceSearch_kakao\", \"arguments\": {\"keyword\": \"파스타\", \"x\": 127.02758, \"y\": 37.4979, \"size\": 1, \"sort\": \"distance\"}}}",
+      "conversation_log": {
+        "total_messages": 2,
+        "messages": [
+          {
+            "role": "user",
+            "content": "카카오맵으로 강남역(127.02758, 37.4979) 근처에서 '파스타' 검색해서 첫 번째 가게 이름 알려줘."
+          },
+          {
+            "role": "assistant",
+            "content": "{\"tool_call\": {\"name\": \"PlaceSearch_kakao\", \"arguments\": {\"keyword\": \"파스타\", \"x\": 127.02758, \"y\": 37.4979, \"size\": 1, \"sort\": \"distance\"}}}"
+          }
+        ]
+      }
+    },
+    {
+      "task_id": "L1-011",
+      "instruction": "홍대입구역(126.9237,37.5563) 기준 500m 안에 있는 카페 찾아서 하나만 상호명 알려줘.",
+      "level": 1,
+      "category": "Single Tool",
+      "success": true,
+      "execution_time": 7.735651016235352,
+      "steps_taken": 1,
+      "error": null,
+      "expected_tools": [
+        "CategorySearch_kakao"
+      ],
+      "golden_action": [
+        {
+          "tool": "CategorySearch_kakao",
+          "args": {
+            "category": "CE7",
+            "x": 126.9237,
+            "y": 37.5563,
+            "radius": 500,
+            "page": 1,
+            "size": 1
+          }
+        }
+      ],
+      "minimum_steps": null,
+      "data_flow": [],
+      "error_injection": null,
+      "fallback_options": [],
+      "resp_schema": {
+        "type": "string"
+      },
+      "arg_schema": {
+        "category": {
+          "type": "string",
+          "enum": [
+            "MT1",
+            "CS2",
+            "PS3",
+            "SC4",
+            "AC5",
+            "PK6",
+            "OL7",
+            "SW8",
+            "BK9",
+            "CT1",
+            "AG2",
+            "PO3",
+            "AT4",
+            "AD5",
+            "FD6",
+            "CE7",
+            "HP8",
+            "PM9"
+          ],
+          "required": true
+        },
+        "x": {
+          "type": "number"
+        },
+        "y": {
+          "type": "number"
+        },
+        "radius": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 20000,
+          "default": 1000
+        },
+        "page": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 1
+        },
+        "size": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 15,
+          "default": 15
+        }
+      },
+      "repetitions": 1,
+      "repetition_results": [
+        true
+      ],
+      "token_usage": {
+        "prompt_tokens": 278,
+        "completion_tokens": 64,
+        "total_tokens": 342
+      },
+      "ttft_stats": {
+        "average": 7.73524944500241,
+        "min": 7.73524944500241,
+        "max": 7.73524944500241,
+        "count": 1
+      },
+      "tool_calls": [],
+      "final_response": "{\"tool_call\": {\"name\": \"CategorySearch_kakao\", \"arguments\": {\"category\": \"CE7\", \"x\": 126.9237, \"y\": 37.5563, \"radius\": 500, \"size\": 1}}}",
+      "conversation_log": {
+        "total_messages": 2,
+        "messages": [
+          {
+            "role": "user",
+            "content": "홍대입구역(126.9237,37.5563) 기준 500m 안에 있는 카페 찾아서 하나만 상호명 알려줘."
+          },
+          {
+            "role": "assistant",
+            "content": "{\"tool_call\": {\"name\": \"CategorySearch_kakao\", \"arguments\": {\"category\": \"CE7\", \"x\": 126.9237, \"y\": 37.5563, \"radius\": 500, \"size\": 1}}}"
+          }
+        ]
+      }
+    }
+  ]
+}

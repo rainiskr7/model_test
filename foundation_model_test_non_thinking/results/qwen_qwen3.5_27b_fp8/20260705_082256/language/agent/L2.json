@@ -1,0 +1,896 @@
+{
+  "metadata": {
+    "timestamp": "2026-07-11T11:58:44.725970",
+    "model": "qwen_qwen3.5_27b_fp8",
+    "level": "L2",
+    "total_tasks": 15,
+    "successful_tasks": 15,
+    "failed_tasks": 0,
+    "success_rate": 100.0,
+    "total_execution_time": 88.08,
+    "average_execution_time": 5.87,
+    "total_steps": 15,
+    "average_steps": 1.0,
+    "total_tool_calls": 0,
+    "average_tool_calls": 0.0,
+    "total_tokens": 4228,
+    "average_tokens_per_task": 281.87,
+    "average_prompt_tokens": 233.67,
+    "average_completion_tokens": 48.2,
+    "average_tps": 48.0,
+    "ttft": {
+      "average": 5.8715,
+      "min": 3.2447,
+      "max": 9.0224,
+      "unit": "seconds"
+    }
+  },
+  "tool_usage_statistics": {},
+  "results": [
+    {
+      "task_id": "L2-001",
+      "instruction": "POSCO홀딩스(005490) 주식의 현재 호가창을 확인하고 싶어",
+      "level": 2,
+      "category": "Tool Retrieval & Selection",
+      "success": true,
+      "execution_time": 3.561859130859375,
+      "steps_taken": 1,
+      "error": null,
+      "expected_tools": [
+        "OrderBook_ls"
+      ],
+      "golden_action": [
+        {
+          "tool": "OrderBook_ls",
+          "args": {
+            "shcode": "005490",
+            "exchgubun": "K"
+          }
+        }
+      ],
+      "minimum_steps": null,
+      "data_flow": [],
+      "error_injection": null,
+      "fallback_options": [],
+      "resp_schema": {},
+      "arg_schema": {},
+      "repetitions": 1,
+      "repetition_results": [
+        true
+      ],
+      "token_usage": {
+        "prompt_tokens": 137,
+        "completion_tokens": 29,
+        "total_tokens": 166
+      },
+      "ttft_stats": {
+        "average": 3.561523347001639,
+        "min": 3.561523347001639,
+        "max": 3.561523347001639,
+        "count": 1
+      },
+      "tool_calls": [],
+      "final_response": "{\"tool_call\": {\"name\": \"OrderBook_ls\", \"arguments\": {\"shcode\": \"005490\"}}}",
+      "conversation_log": {
+        "total_messages": 2,
+        "messages": [
+          {
+            "role": "user",
+            "content": "POSCO홀딩스(005490) 주식의 현재 호가창을 확인하고 싶어"
+          },
+          {
+            "role": "assistant",
+            "content": "{\"tool_call\": {\"name\": \"OrderBook_ls\", \"arguments\": {\"shcode\": \"005490\"}}}"
+          }
+        ]
+      }
+    },
+    {
+      "task_id": "L2-002",
+      "instruction": "네이버 주식(035420)의 일봉 차트 데이터를 보여줘",
+      "level": 2,
+      "category": "Tool Retrieval & Selection",
+      "success": true,
+      "execution_time": 5.0118653774261475,
+      "steps_taken": 1,
+      "error": null,
+      "expected_tools": [
+        "StockChart_kis"
+      ],
+      "golden_action": [
+        {
+          "tool": "StockChart_kis",
+          "args": {
+            "symbol": "035420",
+            "period": "D",
+            "count": 30
+          }
+        }
+      ],
+      "minimum_steps": null,
+      "data_flow": [],
+      "error_injection": null,
+      "fallback_options": [],
+      "resp_schema": {},
+      "arg_schema": {},
+      "repetitions": 1,
+      "repetition_results": [
+        true
+      ],
+      "token_usage": {
+        "prompt_tokens": 211,
+        "completion_tokens": 41,
+        "total_tokens": 252
+      },
+      "ttft_stats": {
+        "average": 5.011645043006865,
+        "min": 5.011645043006865,
+        "max": 5.011645043006865,
+        "count": 1
+      },
+      "tool_calls": [],
+      "final_response": "{\"tool_call\": {\"name\": \"StockChart_kis\", \"arguments\": {\"symbol\": \"035420\", \"period\": \"D\", \"count\": 30}}}",
+      "conversation_log": {
+        "total_messages": 2,
+        "messages": [
+          {
+            "role": "user",
+            "content": "네이버 주식(035420)의 일봉 차트 데이터를 보여줘"
+          },
+          {
+            "role": "assistant",
+            "content": "{\"tool_call\": {\"name\": \"StockChart_kis\", \"arguments\": {\"symbol\": \"035420\", \"period\": \"D\", \"count\": 30}}}"
+          }
+        ]
+      }
+    },
+    {
+      "task_id": "L2-003",
+      "instruction": "서울특별시 강남구 테헤란로 152 주소를 좌표로 변환해줘",
+      "level": 2,
+      "category": "Tool Retrieval & Selection",
+      "success": true,
+      "execution_time": 4.526427268981934,
+      "steps_taken": 1,
+      "error": null,
+      "expected_tools": [
+        "AddressToCoord_kakao"
+      ],
+      "golden_action": [
+        {
+          "tool": "AddressToCoord_kakao",
+          "args": {
+            "address": "서울특별시 강남구 테헤란로 152"
+          }
+        }
+      ],
+      "minimum_steps": null,
+      "data_flow": [],
+      "error_injection": null,
+      "fallback_options": [],
+      "resp_schema": {},
+      "arg_schema": {},
+      "repetitions": 1,
+      "repetition_results": [
+        true
+      ],
+      "token_usage": {
+        "prompt_tokens": 129,
+        "completion_tokens": 37,
+        "total_tokens": 166
+      },
+      "ttft_stats": {
+        "average": 4.526217507002002,
+        "min": 4.526217507002002,
+        "max": 4.526217507002002,
+        "count": 1
+      },
+      "tool_calls": [],
+      "final_response": "{\"tool_call\": {\"name\": \"AddressToCoord_kakao\", \"arguments\": {\"address\": \"서울특별시 강남구 테헤란로 152\"}}}",
+      "conversation_log": {
+        "total_messages": 2,
+        "messages": [
+          {
+            "role": "user",
+            "content": "서울특별시 강남구 테헤란로 152 주소를 좌표로 변환해줘"
+          },
+          {
+            "role": "assistant",
+            "content": "{\"tool_call\": {\"name\": \"AddressToCoord_kakao\", \"arguments\": {\"address\": \"서울특별시 강남구 테헤란로 152\"}}}"
+          }
+        ]
+      }
+    },
+    {
+      "task_id": "L2-004",
+      "instruction": "테슬라(TSLA) 주가를 확인하고 싶어",
+      "level": 2,
+      "category": "Tool Retrieval & Selection",
+      "success": true,
+      "execution_time": 6.061888933181763,
+      "steps_taken": 1,
+      "error": null,
+      "expected_tools": [
+        "USStockPrice_kis"
+      ],
+      "golden_action": [
+        {
+          "tool": "USStockPrice_kis",
+          "args": {
+            "symbol": "TSLA",
+            "exchange": "NASDAQ"
+          }
+        }
+      ],
+      "minimum_steps": null,
+      "data_flow": [],
+      "error_injection": null,
+      "fallback_options": [],
+      "resp_schema": {},
+      "arg_schema": {},
+      "repetitions": 1,
+      "repetition_results": [
+        true
+      ],
+      "token_usage": {
+        "prompt_tokens": 179,
+        "completion_tokens": 50,
+        "total_tokens": 229
+      },
+      "ttft_stats": {
+        "average": 6.061684733998845,
+        "min": 6.061684733998845,
+        "max": 6.061684733998845,
+        "count": 1
+      },
+      "tool_calls": [],
+      "final_response": "테슬라(TSLA)의 현재 주가를 조회해 드리겠습니다.\n\n{\"tool_call\": {\"name\": \"USStockPrice_kis\", \"arguments\": {\"symbol\": \"TSLA\", \"exchange\": \"NASDAQ\"}}}",
+      "conversation_log": {
+        "total_messages": 2,
+        "messages": [
+          {
+            "role": "user",
+            "content": "테슬라(TSLA) 주가를 확인하고 싶어"
+          },
+          {
+            "role": "assistant",
+            "content": "테슬라(TSLA)의 현재 주가를 조회해 드리겠습니다.\n\n{\"tool_call\": {\"name\": \"USStockPrice_kis\", \"arguments\": {\"symbol\": \"TSLA\", \"exchange\": \"NASDAQ\"}}}"
+          }
+        ]
+      }
+    },
+    {
+      "task_id": "L2-005",
+      "instruction": "코스닥 지수 현재 상황을 알려줘",
+      "level": 2,
+      "category": "Tool Retrieval & Selection",
+      "success": true,
+      "execution_time": 3.24495792388916,
+      "steps_taken": 1,
+      "error": null,
+      "expected_tools": [
+        "MarketIndex_ls"
+      ],
+      "golden_action": [
+        {
+          "tool": "MarketIndex_ls",
+          "args": {
+            "jisu": "KOSDAQ"
+          }
+        }
+      ],
+      "minimum_steps": null,
+      "data_flow": [],
+      "error_injection": null,
+      "fallback_options": [],
+      "resp_schema": {},
+      "arg_schema": {},
+      "repetitions": 1,
+      "repetition_results": [
+        true
+      ],
+      "token_usage": {
+        "prompt_tokens": 193,
+        "completion_tokens": 26,
+        "total_tokens": 219
+      },
+      "ttft_stats": {
+        "average": 3.244717285997467,
+        "min": 3.244717285997467,
+        "max": 3.244717285997467,
+        "count": 1
+      },
+      "tool_calls": [],
+      "final_response": "{\"tool_call\": {\"name\": \"MarketIndex_ls\", \"arguments\": {\"jisu\": \"KOSDAQ\"}}}",
+      "conversation_log": {
+        "total_messages": 2,
+        "messages": [
+          {
+            "role": "user",
+            "content": "코스닥 지수 현재 상황을 알려줘"
+          },
+          {
+            "role": "assistant",
+            "content": "{\"tool_call\": {\"name\": \"MarketIndex_ls\", \"arguments\": {\"jisu\": \"KOSDAQ\"}}}"
+          }
+        ]
+      }
+    },
+    {
+      "task_id": "L2-006",
+      "instruction": "ISBN 9788936434267 책의 상세 정보를 알려줘",
+      "level": 2,
+      "category": "Tool Retrieval & Selection",
+      "success": true,
+      "execution_time": 8.71619462966919,
+      "steps_taken": 1,
+      "error": null,
+      "expected_tools": [
+        "ItemLookup_aladin"
+      ],
+      "golden_action": [
+        {
+          "tool": "ItemLookup_aladin",
+          "args": {
+            "item_id": "9788936434267",
+            "item_id_type": "ISBN13"
+          }
+        }
+      ],
+      "minimum_steps": null,
+      "data_flow": [],
+      "error_injection": null,
+      "fallback_options": [],
+      "resp_schema": {},
+      "arg_schema": {},
+      "repetitions": 1,
+      "repetition_results": [
+        true
+      ],
+      "token_usage": {
+        "prompt_tokens": 298,
+        "completion_tokens": 72,
+        "total_tokens": 370
+      },
+      "ttft_stats": {
+        "average": 8.715992237004684,
+        "min": 8.715992237004684,
+        "max": 8.715992237004684,
+        "count": 1
+      },
+      "tool_calls": [],
+      "final_response": "{\"tool_call\": {\"name\": \"ItemLookup_aladin\", \"arguments\": {\"item_id\": \"9788936434267\", \"item_id_type\": \"ISBN13\", \"cover\": \"Mid\", \"output\": \"js\", \"opt_result\": \"Toc,authors,reviewList\"}}}",
+      "conversation_log": {
+        "total_messages": 2,
+        "messages": [
+          {
+            "role": "user",
+            "content": "ISBN 9788936434267 책의 상세 정보를 알려줘"
+          },
+          {
+            "role": "assistant",
+            "content": "{\"tool_call\": {\"name\": \"ItemLookup_aladin\", \"arguments\": {\"item_id\": \"9788936434267\", \"item_id_type\": \"ISBN13\", \"cover\": \"Mid\", \"output\": \"js\", \"opt_result\": \"Toc,authors,reviewList\"}}}"
+          }
+        ]
+      }
+    },
+    {
+      "task_id": "L2-007",
+      "instruction": "빗썸에서 비트코인 현재가를 알려줘",
+      "level": 2,
+      "category": "Tool Retrieval & Selection",
+      "success": true,
+      "execution_time": 3.491624593734741,
+      "steps_taken": 1,
+      "error": null,
+      "expected_tools": [
+        "CryptoPrice_bithumb"
+      ],
+      "golden_action": [
+        {
+          "tool": "CryptoPrice_bithumb",
+          "args": {
+            "markets": "KRW-BTC"
+          }
+        }
+      ],
+      "minimum_steps": null,
+      "data_flow": [],
+      "error_injection": null,
+      "fallback_options": [],
+      "resp_schema": {},
+      "arg_schema": {},
+      "repetitions": 1,
+      "repetition_results": [
+        true
+      ],
+      "token_usage": {
+        "prompt_tokens": 198,
+        "completion_tokens": 28,
+        "total_tokens": 226
+      },
+      "ttft_stats": {
+        "average": 3.4913943779974943,
+        "min": 3.4913943779974943,
+        "max": 3.4913943779974943,
+        "count": 1
+      },
+      "tool_calls": [],
+      "final_response": "{\"tool_call\": {\"name\": \"CryptoPrice_bithumb\", \"arguments\": {\"markets\": \"KRW-BTC\"}}}",
+      "conversation_log": {
+        "total_messages": 2,
+        "messages": [
+          {
+            "role": "user",
+            "content": "빗썸에서 비트코인 현재가를 알려줘"
+          },
+          {
+            "role": "assistant",
+            "content": "{\"tool_call\": {\"name\": \"CryptoPrice_bithumb\", \"arguments\": {\"markets\": \"KRW-BTC\"}}}"
+          }
+        ]
+      }
+    },
+    {
+      "task_id": "L2-008",
+      "instruction": "강남역(127.027621, 37.498095) 주변 카페를 찾아줘",
+      "level": 2,
+      "category": "Tool Retrieval & Selection",
+      "success": true,
+      "execution_time": 8.453477382659912,
+      "steps_taken": 1,
+      "error": null,
+      "expected_tools": [
+        "CategorySearch_kakao"
+      ],
+      "golden_action": [
+        {
+          "tool": "CategorySearch_kakao",
+          "args": {
+            "category": "CE7",
+            "x": 127.027621,
+            "y": 37.498095,
+            "radius": 500
+          }
+        }
+      ],
+      "minimum_steps": null,
+      "data_flow": [],
+      "error_injection": null,
+      "fallback_options": [],
+      "resp_schema": {},
+      "arg_schema": {},
+      "repetitions": 1,
+      "repetition_results": [
+        true
+      ],
+      "token_usage": {
+        "prompt_tokens": 269,
+        "completion_tokens": 70,
+        "total_tokens": 339
+      },
+      "ttft_stats": {
+        "average": 8.453287339005328,
+        "min": 8.453287339005328,
+        "max": 8.453287339005328,
+        "count": 1
+      },
+      "tool_calls": [],
+      "final_response": "{\"tool_call\": {\"name\": \"CategorySearch_kakao\", \"arguments\": {\"category\": \"CE7\", \"x\": 127.027621, \"y\": 37.498095, \"radius\": 1000, \"size\": 15}}}",
+      "conversation_log": {
+        "total_messages": 2,
+        "messages": [
+          {
+            "role": "user",
+            "content": "강남역(127.027621, 37.498095) 주변 카페를 찾아줘"
+          },
+          {
+            "role": "assistant",
+            "content": "{\"tool_call\": {\"name\": \"CategorySearch_kakao\", \"arguments\": {\"category\": \"CE7\", \"x\": 127.027621, \"y\": 37.498095, \"radius\": 1000, \"size\": 15}}}"
+          }
+        ]
+      }
+    },
+    {
+      "task_id": "L2-009",
+      "instruction": "서울 마포구 상암동의 경위도 좌표를 T맵으로 알려줘",
+      "level": 2,
+      "category": "Tool Retrieval & Selection",
+      "success": true,
+      "execution_time": 5.4904656410217285,
+      "steps_taken": 1,
+      "error": null,
+      "expected_tools": [
+        "Geocoding_tmap"
+      ],
+      "golden_action": [
+        {
+          "tool": "Geocoding_tmap",
+          "args": {
+            "city_do": "서울특별시",
+            "gu_gun": "마포구",
+            "dong": "상암동"
+          }
+        }
+      ],
+      "minimum_steps": null,
+      "data_flow": [],
+      "error_injection": null,
+      "fallback_options": [],
+      "resp_schema": {},
+      "arg_schema": {},
+      "repetitions": 1,
+      "repetition_results": [
+        true
+      ],
+      "token_usage": {
+        "prompt_tokens": 242,
+        "completion_tokens": 45,
+        "total_tokens": 287
+      },
+      "ttft_stats": {
+        "average": 5.490237996003998,
+        "min": 5.490237996003998,
+        "max": 5.490237996003998,
+        "count": 1
+      },
+      "tool_calls": [],
+      "final_response": "{\"tool_call\": {\"name\": \"Geocoding_tmap\", \"arguments\": {\"city_do\": \"서울특별시\", \"gu_gun\": \"마포구\", \"dong\": \"상암동\"}}}",
+      "conversation_log": {
+        "total_messages": 2,
+        "messages": [
+          {
+            "role": "user",
+            "content": "서울 마포구 상암동의 경위도 좌표를 T맵으로 알려줘"
+          },
+          {
+            "role": "assistant",
+            "content": "{\"tool_call\": {\"name\": \"Geocoding_tmap\", \"arguments\": {\"city_do\": \"서울특별시\", \"gu_gun\": \"마포구\", \"dong\": \"상암동\"}}}"
+          }
+        ]
+      }
+    },
+    {
+      "task_id": "L2-010",
+      "instruction": "빗썸에서 이더리움 매수/매도 호가를 보여줘",
+      "level": 2,
+      "category": "Tool Retrieval & Selection",
+      "success": true,
+      "execution_time": 3.4803435802459717,
+      "steps_taken": 1,
+      "error": null,
+      "expected_tools": [
+        "OrderBook_bithumb"
+      ],
+      "golden_action": [
+        {
+          "tool": "OrderBook_bithumb",
+          "args": {
+            "markets": "KRW-ETH"
+          }
+        }
+      ],
+      "minimum_steps": null,
+      "data_flow": [],
+      "error_injection": null,
+      "fallback_options": [],
+      "resp_schema": {},
+      "arg_schema": {},
+      "repetitions": 1,
+      "repetition_results": [
+        true
+      ],
+      "token_usage": {
+        "prompt_tokens": 206,
+        "completion_tokens": 28,
+        "total_tokens": 234
+      },
+      "ttft_stats": {
+        "average": 3.480126360998838,
+        "min": 3.480126360998838,
+        "max": 3.480126360998838,
+        "count": 1
+      },
+      "tool_calls": [],
+      "final_response": "{\"tool_call\": {\"name\": \"OrderBook_bithumb\", \"arguments\": {\"markets\": \"KRW-ETH\"}}}",
+      "conversation_log": {
+        "total_messages": 2,
+        "messages": [
+          {
+            "role": "user",
+            "content": "빗썸에서 이더리움 매수/매도 호가를 보여줘"
+          },
+          {
+            "role": "assistant",
+            "content": "{\"tool_call\": {\"name\": \"OrderBook_bithumb\", \"arguments\": {\"markets\": \"KRW-ETH\"}}}"
+          }
+        ]
+      }
+    },
+    {
+      "task_id": "L2-011",
+      "instruction": "이번 주 경제경영 베스트셀러 목록을 보여줘",
+      "level": 2,
+      "category": "Tool Retrieval & Selection",
+      "success": true,
+      "execution_time": 7.51468563079834,
+      "steps_taken": 1,
+      "error": null,
+      "expected_tools": [
+        "ItemList_aladin"
+      ],
+      "golden_action": [
+        {
+          "tool": "ItemList_aladin",
+          "args": {
+            "query_type": "Bestseller",
+            "category_id": 170
+          }
+        }
+      ],
+      "minimum_steps": null,
+      "data_flow": [],
+      "error_injection": null,
+      "fallback_options": [],
+      "resp_schema": {},
+      "arg_schema": {},
+      "repetitions": 1,
+      "repetition_results": [
+        true
+      ],
+      "token_usage": {
+        "prompt_tokens": 640,
+        "completion_tokens": 61,
+        "total_tokens": 701
+      },
+      "ttft_stats": {
+        "average": 7.51447626400477,
+        "min": 7.51447626400477,
+        "max": 7.51447626400477,
+        "count": 1
+      },
+      "tool_calls": [],
+      "final_response": "{\"tool_call\": {\"name\": \"ItemList_aladin\", \"arguments\": {\"query_type\": \"Bestseller\", \"search_target\": \"Book\", \"category_id\": 170, \"week\": 1, \"max_results\": 10, \"cover\": \"Mid\"}}}",
+      "conversation_log": {
+        "total_messages": 2,
+        "messages": [
+          {
+            "role": "user",
+            "content": "이번 주 경제경영 베스트셀러 목록을 보여줘"
+          },
+          {
+            "role": "assistant",
+            "content": "{\"tool_call\": {\"name\": \"ItemList_aladin\", \"arguments\": {\"query_type\": \"Bestseller\", \"search_target\": \"Book\", \"category_id\": 170, \"week\": 1, \"max_results\": 10, \"cover\": \"Mid\"}}}"
+          }
+        ]
+      }
+    },
+    {
+      "task_id": "L2-012",
+      "instruction": "업비트에서 거래 가능한 암호화폐 목록 10개만 보여줘",
+      "level": 2,
+      "category": "Tool Retrieval & Selection",
+      "success": true,
+      "execution_time": 6.540933609008789,
+      "steps_taken": 1,
+      "error": null,
+      "expected_tools": [
+        "MarketList_upbit"
+      ],
+      "golden_action": [
+        {
+          "tool": "MarketList_upbit",
+          "args": {}
+        }
+      ],
+      "minimum_steps": null,
+      "data_flow": [],
+      "error_injection": null,
+      "fallback_options": [],
+      "resp_schema": {},
+      "arg_schema": {},
+      "repetitions": 1,
+      "repetition_results": [
+        true
+      ],
+      "token_usage": {
+        "prompt_tokens": 189,
+        "completion_tokens": 54,
+        "total_tokens": 243
+      },
+      "ttft_stats": {
+        "average": 6.54073275400151,
+        "min": 6.54073275400151,
+        "max": 6.54073275400151,
+        "count": 1
+      },
+      "tool_calls": [],
+      "final_response": "업비트에서 거래 가능한 암호화폐 목록을 조회하기 위해 `MarketList_upbit` 도구를 호출하겠습니다.\n\n{\"tool_call\": {\"name\": \"MarketList_upbit\", \"arguments\": {\"quote\": \"KRW\", \"include_event\": true}}}",
+      "conversation_log": {
+        "total_messages": 2,
+        "messages": [
+          {
+            "role": "user",
+            "content": "업비트에서 거래 가능한 암호화폐 목록 10개만 보여줘"
+          },
+          {
+            "role": "assistant",
+            "content": "업비트에서 거래 가능한 암호화폐 목록을 조회하기 위해 `MarketList_upbit` 도구를 호출하겠습니다.\n\n{\"tool_call\": {\"name\": \"MarketList_upbit\", \"arguments\": {\"quote\": \"KRW\", \"include_event\": true}}}"
+          }
+        ]
+      }
+    },
+    {
+      "task_id": "L2-013",
+      "instruction": "카카오(035720) 최근 체결 내역 보여줘",
+      "level": 2,
+      "category": "Tool Retrieval & Selection",
+      "success": true,
+      "execution_time": 4.769583463668823,
+      "steps_taken": 1,
+      "error": null,
+      "expected_tools": [
+        "StockTrades_ls"
+      ],
+      "golden_action": [
+        {
+          "tool": "StockTrades_ls",
+          "args": {
+            "shcode": "035720"
+          }
+        }
+      ],
+      "minimum_steps": null,
+      "data_flow": [],
+      "error_injection": null,
+      "fallback_options": [],
+      "resp_schema": {},
+      "arg_schema": {},
+      "repetitions": 1,
+      "repetition_results": [
+        true
+      ],
+      "token_usage": {
+        "prompt_tokens": 181,
+        "completion_tokens": 39,
+        "total_tokens": 220
+      },
+      "ttft_stats": {
+        "average": 4.769352071998583,
+        "min": 4.769352071998583,
+        "max": 4.769352071998583,
+        "count": 1
+      },
+      "tool_calls": [],
+      "final_response": "{\"tool_call\": {\"name\": \"StockTrades_ls\", \"arguments\": {\"shcode\": \"035720\", \"exchgubun\": \"K\"}}}",
+      "conversation_log": {
+        "total_messages": 2,
+        "messages": [
+          {
+            "role": "user",
+            "content": "카카오(035720) 최근 체결 내역 보여줘"
+          },
+          {
+            "role": "assistant",
+            "content": "{\"tool_call\": {\"name\": \"StockTrades_ls\", \"arguments\": {\"shcode\": \"035720\", \"exchgubun\": \"K\"}}}"
+          }
+        ]
+      }
+    },
+    {
+      "task_id": "L2-014",
+      "instruction": "아이폰 15 프로 실사용 후기 찾아줘",
+      "level": 2,
+      "category": "Tool Retrieval & Selection",
+      "success": true,
+      "execution_time": 9.022767066955566,
+      "steps_taken": 1,
+      "error": null,
+      "expected_tools": [
+        "BlogSearch_naver"
+      ],
+      "golden_action": [
+        {
+          "tool": "BlogSearch_naver",
+          "args": {
+            "query": "아이폰 15 프로 실사용 후기",
+            "sort": "sim"
+          }
+        }
+      ],
+      "minimum_steps": null,
+      "data_flow": [],
+      "error_injection": null,
+      "fallback_options": [],
+      "resp_schema": {},
+      "arg_schema": {},
+      "repetitions": 1,
+      "repetition_results": [
+        true
+      ],
+      "token_usage": {
+        "prompt_tokens": 241,
+        "completion_tokens": 75,
+        "total_tokens": 316
+      },
+      "ttft_stats": {
+        "average": 9.02242152600229,
+        "min": 9.02242152600229,
+        "max": 9.02242152600229,
+        "count": 1
+      },
+      "tool_calls": [],
+      "final_response": "네이버 블로그에서 '아이폰 15 프로 실사용 후기'에 대한 검색 결과를 찾아보겠습니다.\n\n{\"tool_call\": {\"name\": \"BlogSearch_naver\", \"arguments\": {\"query\": \"아이폰 15 프로 실사용 후기\", \"display\": 10, \"start\": 1, \"sort\": \"date\"}}}",
+      "conversation_log": {
+        "total_messages": 2,
+        "messages": [
+          {
+            "role": "user",
+            "content": "아이폰 15 프로 실사용 후기 찾아줘"
+          },
+          {
+            "role": "assistant",
+            "content": "네이버 블로그에서 '아이폰 15 프로 실사용 후기'에 대한 검색 결과를 찾아보겠습니다.\n\n{\"tool_call\": {\"name\": \"BlogSearch_naver\", \"arguments\": {\"query\": \"아이폰 15 프로 실사용 후기\", \"display\": 10, \"start\": 1, \"sort\": \"date\"}}}"
+          }
+        ]
+      }
+    },
+    {
+      "task_id": "L2-015",
+      "instruction": "2024년 개정된 부동산 세법 정보를 검색해줘",
+      "level": 2,
+      "category": "Tool Retrieval & Selection",
+      "success": true,
+      "execution_time": 8.189070224761963,
+      "steps_taken": 1,
+      "error": null,
+      "expected_tools": [
+        "WebSearch_daum"
+      ],
+      "golden_action": [
+        {
+          "tool": "WebSearch_daum",
+          "args": {
+            "query": "2024년 부동산 세법 개정"
+          }
+        }
+      ],
+      "minimum_steps": null,
+      "data_flow": [],
+      "error_injection": null,
+      "fallback_options": [],
+      "resp_schema": {},
+      "arg_schema": {},
+      "repetitions": 1,
+      "repetition_results": [
+        true
+      ],
+      "token_usage": {
+        "prompt_tokens": 192,
+        "completion_tokens": 68,
+        "total_tokens": 260
+      },
+      "ttft_stats": {
+        "average": 8.18869457099936,
+        "min": 8.18869457099936,
+        "max": 8.18869457099936,
+        "count": 1
+      },
+      "tool_calls": [],
+      "final_response": "2024년 개정된 부동산 세법 정보를 검색해 드리겠습니다.\n\n{\"tool_call\": {\"name\": \"WebSearch_daum\", \"arguments\": {\"query\": \"2024년 개정 부동산 세법\", \"sort\": \"recency\", \"page\": 1, \"size\": 10}}}",
+      "conversation_log": {
+        "total_messages": 2,
+        "messages": [
+          {
+            "role": "user",
+            "content": "2024년 개정된 부동산 세법 정보를 검색해줘"
+          },
+          {
+            "role": "assistant",
+            "content": "2024년 개정된 부동산 세법 정보를 검색해 드리겠습니다.\n\n{\"tool_call\": {\"name\": \"WebSearch_daum\", \"arguments\": {\"query\": \"2024년 개정 부동산 세법\", \"sort\": \"recency\", \"page\": 1, \"size\": 10}}}"
+          }
+        ]
+      }
+    }
+  ]
+}
