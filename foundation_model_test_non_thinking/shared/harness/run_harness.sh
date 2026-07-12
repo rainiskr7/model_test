@@ -127,8 +127,15 @@ if [ "$LM_EVAL_MODE" = "chat" ]; then
     echo "[harness] base_url 자동 보정 → $BASE_URL"
   fi
 else
+  # completions 모드: chat template 미적용(raw). thinking 모델의 template 오염 회피.
+  #   ⚠️ --num_fewshot 는 반드시 명시 — 미지정 시 KMMLU task 디폴트(0-shot)로 떨어져
+  #      5-shot 결과와 비교 불가. (완주 실측: chat=0.000 → completions+5shot=0.540)
   LM_MODEL="local-completions"
-  EXTRA_ARGS=()
+  EXTRA_ARGS=(--num_fewshot "$NUM_FEWSHOT")
+  if [[ "$BASE_URL" == */chat/completions ]]; then
+    BASE_URL="${BASE_URL%/chat/completions}/completions"
+    echo "[harness] base_url 자동 보정 → $BASE_URL"
+  fi
 fi
 echo "[harness] mode=$LM_EVAL_MODE model_type=$LM_MODEL fewshot=$NUM_FEWSHOT num_concurrent=$NUM_CONCURRENT"
 
