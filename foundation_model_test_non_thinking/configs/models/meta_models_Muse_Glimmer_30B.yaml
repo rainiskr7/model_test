@@ -1,0 +1,102 @@
+# 평가 모델 설정 — Muse Glimmer 30B (vsm)
+# HF: meta-models/Muse-Glimmer-30B (Meta Superintelligence Lab, 2026-08 release)
+# arch: MuseGlimmerForConditionalGeneration — dense causal LM 27.8B + ViT-G/14 퍼셉션 인코더 1.8B.
+#       text 52 layer (sliding 2048 ×3 + full ×1 반복), GQA 32/2, vocab 202,048, ctx 131,072.
+# ⚠️ model 필드는 gpustack --served-model-name 과 정확히 일치해야 함 (run_full_eval.sh:85 preflight).
+
+model: meta_models_Muse_Glimmer_30B
+tokenizer_path: /home/rainis/Desktop/workplace/models/meta_models_Muse_Glimmer_30B
+class: vsm
+
+# ⚠️ 게이트웨이 미경유 — vLLM 직결.
+#    2026-08-12 확인: gpustack 게이트웨이 18023 은 /v1/models 빈 배열 + .env 키로 401.
+#    18021 은 무응답. 직결 40074 만 정상.
+# ⚠️ 포트는 gpustack 이 재배포마다 새로 할당한다 (40097 → 40074 → 40123 → 40072 실측).
+#    재배포 후에는 `docker inspect <container> --format '{{json .Config.Entrypoint}}'` 로
+#    --port 를 확인해서 아래 두 줄을 갱신할 것.
+endpoint:
+  chat: http://192.168.0.7:40072/v1/chat/completions
+  v1: http://192.168.0.7:40072/v1
+
+# 평가 모드 override (load_model_config.py 가 env 로 export → run_full_eval.sh 자식 전파).
+#   lm_eval_mode: completions  ← 이 모델 chat template 은 채널 기반(<|start|>assistant to=X<|message|>)
+#                                이라 chat 모드(apply_chat_template + loglikelihood)면 보기 토큰이
+#                                채널 헤더 자리에 놓여 완전히 off-distribution. raw 5-shot 으로 채점.
+#                                (thinking MoE 122B 선례: chat 0.169 vs completions 0.68)
+#   kreta_setting: direct      ← GB10 단일 스트림 4.4 tok/s. default(4096토큰) 는 비현실적.
+#                                기존 12개 모델 전부 direct 로 평가돼 비교 위해서도 필수.
+lm_eval_mode: completions
+kreta_setting: direct
+
+tracks:
+  - harness
+  - multimodal
+  - nlu
+  - agent
+
+backend_reference:
+  engine: vllm
+  notes: |
+    ★ non-thinking 처리 — 이 모델은 추론 OFF 스위치가 없다.
+      chat_template.jinja 의 render_reasoning() 은 분기가 아니라 문자열 보간이다:
+        {%- set rs = reasoning_strength if ... else 'high' -%}
+        {{- 'Reasoning strength: ' + rs + '.' -}}
+      즉 Qwen 의 enable_thinking:false 같은 "블록 통째 스킵" 분기가 존재하지 않는다.
+      지원 레벨은 low / medium / high / xhigh 뿐이고 기본값은 high.
+      추론은 템플릿이 아니라 출력 채널 구조(to=self<|message|>...<|eom|>)로 나온다.
+
+      실측 (2026-08-12, "대한민국의 수도는?" 동일 질문 / temperature 0):
+        reasoning_strength=low, 프리필 없음 : 85 토큰 (추론함, 파서가 잘라내 content 는 깨끗)
+        to=user 채널 프리필                 : 11 토큰 (추론 0)
+      → 진짜 non-thinking 은 프리필뿐. 그래서 --chat-template 로 프리필을 강제한다.
+
+      /models/muse_glimmer_nonthinking.jinja = 원본 chat_template.jinja 에서 마지막 한 줄만 변경:
+        {%- if add_generation_prompt -%}{{- '<|start|>assistant' -}}{%- endif -%}
+        → {%- if add_generation_prompt -%}{{- '<|start|>assistant' -}}
+             {%- if not tools -%}{{- ' to=user<|message|>' -}}{%- endif -%}{%- endif -%}
+      tools 분기 이유: to=user 를 강제하면 모델이 tool 채널을 열 수 없어 agent 트랙의
+      tool call 이 전멸한다. tools 가 있으면 원본과 바이트 동일하게 렌더된다(검증 완료).
+      → nlu / multimodal = 추론 0 (진짜 non-thinking)
+        agent            = reasoning_strength=low 로만 억제 (tool call 보존 위한 불가피한 예외)
+        harness          = completions 모드라 chat template 미사용 → 무관
+
+      프리필과 --reasoning-parser muse_glimmer 는 충돌하지 않는다.
+      extract_reasoning() 은 생성문에 채널 헤더가 하나도 없으면
+      `content = model_output; reasoning = None` fallback 을 탄다
+      (muse_glimmer_reasoning_parser.py, _CONTENT_RE 매치 실패 → else 분기).
+
+    gpustack 에 vllm backend 로 등록 시 옵션 (2026-08-12 기동 확인):
+      --served-model-name meta_models_Muse_Glimmer_30B
+      --max-model-len 30000              # KRETA 비전 prefill 요구치 24576+ 충족
+      --gpu-memory-utilization 0.82
+      --max-num-batched-tokens 8192
+      --max-cudagraph-capture-size 256
+      --enable-auto-tool-choice
+      --tool-call-parser muse_glimmer    # ⚠️ qwen3_coder 아님 — 이 모델은 ATEM XML
+                                         #    (<atem:function_calls>/<atem:invoke>) 포맷
+      --reasoning-parser muse_glimmer    # ⚠️ qwen3 아님 — <think> 가 아니라 to=self 채널
+      --default-chat-template-kwargs '{"reasoning_strength": "low"}'
+      --chat-template /models/muse_glimmer_nonthinking.jinja
+      --limit-mm-per-prompt.image 4
+      --enable-prefix-caching
+      --async-scheduling
+
+    ❌ 초기 배포는 Qwen config 를 그대로 복사해 세 플래그가 전부 틀려 있었다 (2026-08-12 발견):
+         --tool-call-parser qwen3_coder                       → ATEM 미파싱
+         --reasoning-parser qwen3                             → to=self 채널 미인식
+         --default-chat-template-kwargs '{"enable_thinking": false}'
+                                                              → 템플릿에 해당 변수 없음, 완전 no-op
+       증상: content 에 추론이 raw 로 샜다 —
+         ' to=self2+2는 얼마인가?...Return 4.assistant to=user4'
+       이 상태로 돌리면 생성 기반 트랙 전부 오염된다.
+
+    vLLM 0.26.1rc1.dev608+g99a10304d (image v99a10304...-ubuntu2404) 에
+    muse_glimmer reasoning parser / tool parser 가 네이티브 포함되어 있다
+    (레지스트리 직접 조회로 확인).
+
+    기준선: 단일 스트림 약 4.4 tok/s (GB10 / BF16 dense ~60GB, 대역폭 바운드).
+    27B dense 선례와 동일한 수준 — harness 는 loglikelihood 라 prefix cache 가 안 먹어
+    특히 느리다.
+
+    ⚠️ transformers: 체크포인트는 5.15.0.dev0 로 저장됐고 .venv 는 5.12.1 이지만
+       토크나이저 로드·chat template 렌더는 정상 동작 확인 (모델 가중치는 vLLM 이 로드).

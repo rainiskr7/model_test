@@ -48,6 +48,19 @@ def emit_shell(cfg: dict) -> None:
     tracks = cfg.get("tracks", [])
     print(f"export TRACKS={q(' '.join(tracks))}")
 
+    # 모델별 평가 모드 override (선택적).
+    # yaml 에 있을 때만 export → 필드 없는 다른 모델 config 는 기존 기본값 유지.
+    #   lm_eval_mode : KMMLU harness 모드 (chat | completions).
+    #                  thinking 모델은 completions 필수 (chat 은 <think> 오염으로 점수 붕괴).
+    #   kreta_setting: KRETA 프롬프트 모드 (default | direct).
+    #                  느린 HW(GB10 등)는 direct 필수.
+    lm_eval_mode = cfg.get("lm_eval_mode")
+    if lm_eval_mode is not None:
+        print(f"export LM_EVAL_MODE={q(str(lm_eval_mode))}")
+    kreta_setting = cfg.get("kreta_setting")
+    if kreta_setting is not None:
+        print(f"export KRETA_SETTING={q(str(kreta_setting))}")
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
