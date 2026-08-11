@@ -8,15 +8,20 @@ model: meta_models_Muse_Glimmer_30B
 tokenizer_path: /home/rainis/Desktop/workplace/models/meta_models_Muse_Glimmer_30B
 class: vsm
 
-# ⚠️ 게이트웨이 미경유 — vLLM 직결.
-#    2026-08-12 확인: gpustack 게이트웨이 18023 은 /v1/models 빈 배열 + .env 키로 401.
-#    18021 은 무응답. 직결 40074 만 정상.
-# ⚠️ 포트는 gpustack 이 재배포마다 새로 할당한다 (40097 → 40074 → 40123 → 40072 실측).
-#    재배포 후에는 `docker inspect <container> --format '{{json .Config.Entrypoint}}'` 로
-#    --port 를 확인해서 아래 두 줄을 갱신할 것.
+# gpustack 게이트웨이 경유 (2026-08-12 전환). 포트 18023 고정.
+#   직결(192.168.0.7:<port>)은 gpustack 이 재배포마다 포트를 새로 할당해
+#   (40097 → 40074 → 40123 → 40072 실측) 매번 이 파일을 고쳐야 했다. 게이트웨이는 불변.
+#   .env 의 OPENAI_API_KEY 로 인증한다.
+# ⚠️ 게이트웨이 route 이름은 --served-model-name 을 바꿔도 자동 갱신되지 않는다.
+#    최초 배포 당시 이름(Muse_Glimmer_30B)으로 고정돼 있어서
+#    UI 의 Model Service → Routes 에서 meta_models_Muse_Glimmer_30B 로 직접 변경했다.
+#    이후 재배포로 이름을 또 바꾸면 route 도 같이 고칠 것 (안 하면 404 Model not found).
+# ⚠️ 게이트웨이는 요청 200초 컷이 있다 (README §3.3). multimodal 에서 큰 비전 prefill 이
+#    이를 넘기면 timeout → 오답으로 기록될 수 있다. 해당 트랙에서 timeout 이 관측되면
+#    그 트랙만 vLLM 직결 포트로 우회할 것.
 endpoint:
-  chat: http://192.168.0.7:40072/v1/chat/completions
-  v1: http://192.168.0.7:40072/v1
+  chat: http://127.0.0.1:18023/v1/chat/completions
+  v1: http://127.0.0.1:18023/v1
 
 # 평가 모드 override (load_model_config.py 가 env 로 export → run_full_eval.sh 자식 전파).
 #   lm_eval_mode: completions  ← 이 모델 chat template 은 채널 기반(<|start|>assistant to=X<|message|>)
