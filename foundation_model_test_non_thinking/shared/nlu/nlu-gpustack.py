@@ -18,6 +18,10 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 PROMPT_DIR = SCRIPT_DIR / "prompt"
 DEFAULT_ENDPOINT = "http://172.16.1.81:18090/v1/chat/completions"
 
+# shared/ 를 import path 에 추가 (vsm/nlu 는 shared/nlu 로의 symlink 라 resolve 필요)
+sys.path.insert(0, str(SCRIPT_DIR.parent))
+from serving.constraints import apply as apply_serving_constraints  # noqa: E402
+
 
 def get_base_dir() -> Path:
     """Resolve project root.
@@ -64,6 +68,21 @@ def get_response(prompt, model, endpoint: str, timeout: float = 600.0):
     timeout: 네트워크 hang 방지용 (default 600초 = 10분)
     큰 모델 (27B dense) + max_tokens 8192 조합에서 120초로는 부족했음.
     """
+    payload = {
+        "model": model,
+        "messages": [
+            {
+                "role": "user",
+                "content": prompt
+            }
+        ],
+        "temperature": 0.0,        # 평가 결정론적 (codex 권장)
+        "max_tokens": 8192,        # 긴 한국어 응답 안전 상한
+        "top_p": None
+    }
+    # 서빙 백엔드 제약 적용 (SERVING_* env 미설정 시 no-op)
+    apply_serving_constraints(payload)
+
     response = requests.post(
         url=endpoint,
         headers={
@@ -71,18 +90,7 @@ def get_response(prompt, model, endpoint: str, timeout: float = 600.0):
             "Content-Type": "application/json",
             "X-Title": "NLU Evaluation",
         },
-        data=json.dumps({
-            "model": model,
-            "messages": [
-                {
-                    "role": "user",
-                    "content": prompt
-                }
-            ],
-            "temperature": 0.0,        # 평가 결정론적 (codex 권장)
-            "max_tokens": 8192,        # 긴 한국어 응답 안전 상한
-            "top_p": None
-        }),
+        data=json.dumps(payload),
         timeout=timeout,
     )
 

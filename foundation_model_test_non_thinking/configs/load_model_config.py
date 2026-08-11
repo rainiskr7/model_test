@@ -23,7 +23,76 @@ def load(config_name: str) -> dict:
     if not path.exists():
         available = sorted(p.stem for p in config_dir.glob("*.yaml"))
         sys.exit(f"ERROR: config 없음 {path}\n사용 가능: {available}")
-    return yaml.safe_load(path.read_text())
+    cfg = yaml.safe_load(path.read_text()) or {}
+    return apply_serving_profile(cfg)
+
+
+def load_serving_profile(profile_name: str) -> dict:
+    """configs/serving_profiles/<name>.yaml 로드."""
+    profile_dir = Path(__file__).parent / "serving_profiles"
+    name = profile_name if profile_name.endswith(".yaml") else f"{profile_name}.yaml"
+    path = profile_dir / name
+    if not path.exists():
+        available = sorted(p.stem for p in profile_dir.glob("*.yaml"))
+        sys.exit(f"ERROR: serving_profile 없음 {path}\n사용 가능: {available}")
+    return yaml.safe_load(path.read_text()) or {}
+
+
+# skip_benches 에 쓸 수 있는 이름 = run_all.sh 에 실제로 skip 훅이 달린 벤치.
+# 훅 없는 이름을 적으면 조용히 무시되어 "제외했다고 생각했는데 돌아간" 상태가
+# 되므로, 여기서 즉시 실패시킨다. run_all.sh 에 훅을 추가하면 여기에도 추가할 것.
+SKIPPABLE_BENCHES = frozenset({"b4_latency_profile"})
+
+
+def apply_serving_profile(cfg: dict) -> dict:
+    """`serving_profile:` 참조를 해석해 cfg 에 병합.
+
+    프로파일은 vLLM diffusion 처럼 **서빙 프레임워크 수준의 공통 제약**을
+    한 곳에 모아두기 위한 것이다. 모델 yaml 이 같은 7줄을 복붙하면
+    한 모델만 항목을 빠뜨렸을 때 조용히 400 이 나므로 프로파일로 묶는다.
+
+    병합 규칙 (모델 yaml 이 항상 우선):
+      - serving: 키 단위로 모델 값이 프로파일 값을 덮는다
+      - skip_benches: 프로파일 ∪ 모델 (중복 제거, 순서 보존)
+    serving_profile 이 없으면 cfg 를 그대로 돌려준다 → 기존 모델 무영향.
+    """
+    cfg = dict(cfg)  # 호출자의 dict 를 in-place 로 바꾸지 않는다
+
+    profile_name = cfg.get("serving_profile")
+    if profile_name:
+        profile = load_serving_profile(profile_name)
+
+        merged_serving = dict(profile.get("serving") or {})
+        merged_serving.update(cfg.get("serving") or {})
+        if merged_serving:
+            cfg["serving"] = merged_serving
+
+        skip = list(profile.get("skip_benches") or [])
+        for bench in cfg.get("skip_benches") or []:
+            if bench not in skip:
+                skip.append(bench)
+        if skip:
+            cfg["skip_benches"] = skip
+
+    validate_skip_benches(cfg.get("skip_benches") or [])
+    return cfg
+
+
+def validate_skip_benches(skip_benches: list) -> None:
+    """skip 훅이 없는 이름이면 즉시 실패.
+
+    오타(b4_latency_profile → b4_latency)를 조용히 무시하면 제외했다고
+    믿은 벤치가 그대로 돌아 잘못 비교될 숫자를 만든다. 이 메커니즘의
+    목적이 그걸 막는 것이므로 실패를 크게 낸다.
+    """
+    unknown = [b for b in skip_benches if b not in SKIPPABLE_BENCHES]
+    if unknown:
+        sys.exit(
+            f"ERROR: skip_benches 에 알 수 없는 이름: {unknown}\n"
+            f"사용 가능: {sorted(SKIPPABLE_BENCHES)}\n"
+            "(run_all.sh 에 skip 훅이 있는 벤치만 지정 가능. "
+            "훅을 추가했다면 load_model_config.py 의 SKIPPABLE_BENCHES 에도 추가할 것.)"
+        )
 
 
 def emit_shell(cfg: dict) -> None:
@@ -35,6 +104,9 @@ def emit_shell(cfg: dict) -> None:
     - MODEL_CLASS: 평가 클래스 (llm/slm/vsm/vlm)
     - BASE_URL_{CHAT,V1}: gpustack endpoint
     - TRACKS: 평가 트랙 목록 (space-separated)
+    - SERVING_*: 서빙 백엔드 제약 (shared/serving/constraints.py 가 소비)
+    - SKIP_BENCHES: 건너뛸 벤치 목록 (multimodal/run_all.sh 가 소비)
+      serving/skip_benches 미지정 시 unset 을 출력해 config 간 격리를 보장한다.
 
     yaml 의 backend_reference 섹션은 사람용 메모라 export 안 함.
     """
@@ -60,6 +132,43 @@ def emit_shell(cfg: dict) -> None:
     kreta_setting = cfg.get("kreta_setting")
     if kreta_setting is not None:
         print(f"export KRETA_SETTING={q(str(kreta_setting))}")
+
+    emit_serving(cfg.get("serving") or {})
+
+    skip_benches = cfg.get("skip_benches") or []
+    if skip_benches:
+        print(f"export SKIP_BENCHES={q(' '.join(skip_benches))}")
+    else:
+        print("unset SKIP_BENCHES")
+
+
+def emit_serving(serving: dict) -> None:
+    """serving 섹션 → SERVING_* env.
+
+    ⚠️ 미지정 키는 export 를 생략하는 게 아니라 반드시 `unset` 을 출력한다.
+       같은 셸에서 diffusion config 를 source 한 뒤 기존 AR 모델 config 를
+       source 하면, 생략만 할 경우 이전 SERVING_* 가 그대로 남아 기존 모델
+       요청에서 temperature 가 제거되는 회귀가 발생한다. unset 으로 항상
+       초기화해 config 간 격리를 보장한다.
+    """
+    q = shlex.quote
+
+    unsupported = serving.get("unsupported_sampling_params") or []
+    if unsupported:
+        print(f"export SERVING_UNSUPPORTED_SAMPLING_PARAMS={q(','.join(unsupported))}")
+    else:
+        print("unset SERVING_UNSUPPORTED_SAMPLING_PARAMS")
+
+    if serving.get("max_output_tokens") is not None:
+        print(f"export SERVING_MAX_OUTPUT_TOKENS={q(str(serving['max_output_tokens']))}")
+    else:
+        print("unset SERVING_MAX_OUTPUT_TOKENS")
+
+    if serving.get("force_skip_special_tokens") is not None:
+        val = "false" if serving["force_skip_special_tokens"] is False else "true"
+        print(f"export SERVING_FORCE_SKIP_SPECIAL_TOKENS={val}")
+    else:
+        print("unset SERVING_FORCE_SKIP_SPECIAL_TOKENS")
 
 
 if __name__ == "__main__":

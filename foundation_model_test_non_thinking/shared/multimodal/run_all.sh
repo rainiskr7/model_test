@@ -25,6 +25,28 @@ fi
 echo "[run_all] EVAL_TIMESTAMP=$EVAL_TIMESTAMP"
 echo "[run_all] MODEL=$MODEL BASE_URL=$BASE_URL"
 
+# SKIP_BENCHES: 모델 config(또는 serving_profile)가 지정한 제외 벤치 목록.
+# 해당 모델에서 숫자가 의미를 갖지 못하는 벤치를 아예 안 돌려, 잘못 비교될
+# 결과가 생기지 않게 한다. 미설정 시 아무것도 건너뛰지 않는다(기존 동작).
+skip_bench() {
+  local name="$1" s
+  # set -f: unquoted 확장에서 벤치 이름에 '*' 같은 문자가 섞였을 때 glob 으로
+  # 번지는 것을 막는다. word splitting 은 그대로 필요하므로 quote 는 안 한다.
+  local had_noglob=1
+  case "$-" in *f*) ;; *) had_noglob=0; set -f ;; esac
+  for s in ${SKIP_BENCHES:-}; do
+    if [ "$s" = "$name" ]; then
+      [ "$had_noglob" -eq 0 ] && set +f
+      return 0
+    fi
+  done
+  [ "$had_noglob" -eq 0 ] && set +f
+  return 1
+}
+if [ -n "${SKIP_BENCHES:-}" ]; then
+  echo "[run_all] SKIP_BENCHES=$SKIP_BENCHES"
+fi
+
 # 가장 가벼운 것부터
 echo "=== K-DTCBench (240) ==="
 bash "$SCRIPT_DIR/run_k_dtcbench.sh" "$MODEL" "$BASE_URL" || echo "[run_all] K-DTCBench 실패 — 계속"
@@ -47,8 +69,14 @@ bash "$SCRIPT_DIR/run_kreta.sh" "$MODEL" "${KRETA_SETTING:-default}" "$BASE_URL"
 echo "=== KO-VLM-Benchmark (stub — skip) ==="
 bash "$SCRIPT_DIR/run_ko_vlm_benchmark.sh" 2>&1 | head -3 || true
 
-echo "=== B-4 Latency Profile (50 reps × 4 conditions) ==="
-bash "$SCRIPT_DIR/run_b4_latency_profile.sh" "$MODEL" "$BASE_URL" || echo "[run_all] B-4 실패 — 계속"
+if skip_bench b4_latency_profile; then
+  # diffusion 계열: canvas 단위 블록 확정이라 토큰이 버스트로 도착 →
+  # TTFT 는 유효하나 ITL/throughput 은 AR 모델과 같은 축에서 비교 불가.
+  echo "=== B-4 Latency Profile — SKIP (SKIP_BENCHES) ==="
+else
+  echo "=== B-4 Latency Profile (50 reps × 4 conditions) ==="
+  bash "$SCRIPT_DIR/run_b4_latency_profile.sh" "$MODEL" "$BASE_URL" || echo "[run_all] B-4 실패 — 계속"
+fi
 
 echo "=== B-3 Structured Output (data/structured_output/manifest.json 필요) ==="
 B3_MANIFEST="$SCRIPT_DIR/data/structured_output/manifest.json"

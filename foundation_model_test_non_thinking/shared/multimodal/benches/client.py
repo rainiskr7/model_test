@@ -6,14 +6,20 @@ common.py 가 re-export 하므로 기존 `from common import ...` 도 그대로 
 
 import io
 import os
+import sys
 import time
 import base64
+from pathlib import Path
 from typing import Optional, Any
 
 try:
     from openai import OpenAI
 except ImportError as e:
     raise SystemExit("openai 패키지 미설치 — `uv pip install openai pillow datasets`") from e
+
+# shared/ 를 import path 에 추가 (<class>/multimodal 는 shared/multimodal 로의 symlink)
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
+from serving.constraints import apply as apply_serving_constraints  # noqa: E402
 
 
 def make_client(base_url: str, api_key: Optional[str] = None) -> OpenAI:
@@ -99,6 +105,8 @@ def chat_with_image(
         kwargs["seed"] = seed
     if timeout is not None:
         kwargs["timeout"] = timeout
+    # 서빙 백엔드 제약 적용 (SERVING_* env 미설정 시 no-op)
+    apply_serving_constraints(kwargs, sdk=True)
 
     for attempt in range(retry_max):
         try:

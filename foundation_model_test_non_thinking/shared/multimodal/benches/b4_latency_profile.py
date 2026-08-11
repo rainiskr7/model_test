@@ -29,6 +29,8 @@ from common import (
     safe_model_name, get_base_dir, get_timestamp, get_results_dir,
     save_json, image_to_data_url, make_client, build_run_config,
 )
+# client.py 를 우회해 SDK 를 직접 호출하므로 여기서도 서빙 제약을 적용해야 한다.
+from client import apply_serving_constraints
 
 
 DEFAULT_PROMPT = """다음 한국어 문단을 한 문장으로 요약해 주세요.
@@ -67,6 +69,8 @@ def time_chat_stream(client, model, messages, max_tokens, temperature, seed=None
         kwargs["seed"] = seed
     if timeout is not None:
         kwargs["timeout"] = timeout
+    # 서빙 백엔드 제약 적용 (SERVING_* env 미설정 시 no-op)
+    apply_serving_constraints(kwargs, sdk=True)
     stream = client.chat.completions.create(**kwargs)
     ttft = None
     chunks = 0

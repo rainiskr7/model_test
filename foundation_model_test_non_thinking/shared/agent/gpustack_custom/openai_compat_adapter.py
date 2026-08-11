@@ -12,12 +12,54 @@ can reason about tools and respond with JSON tool-call blocks.
 import json
 import os
 import re
+import sys
 import uuid
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from openai import OpenAI
 from .base_adapter import BaseAdapter
 from ..observability import observe
+
+def _load_serving_constraints():
+    """shared/serving/constraints.apply 로드.
+
+    ⚠️ 이 파일은 run_gpustack_custom.sh 에 의해
+       data/Ko-AgentBench/bench/adapters/ 로 *복사되어* 실행된다.
+       따라서 __file__ 기준 상대경로로는 shared/ 를 절대 못 찾는다.
+       run_full_eval.sh 가 export 하는 MODEL_TEST_BASE 를 기준으로 찾는다.
+
+    못 찾으면 no-op 으로 폴백한다. MODEL_TEST_BASE 가 없다는 건 보통
+    load_model_config.py 를 안 거쳤다는 뜻이고, 그러면 SERVING_* env 도
+    없어서 제약 자체가 불필요하다. 다만 SERVING_* 는 설정됐는데 모듈만
+    못 찾는 경우는 조용히 넘어가면 안 되므로 stderr 로 경고한다.
+    """
+    base = os.environ.get("MODEL_TEST_BASE")
+    if base:
+        shared_dir = Path(base) / "shared"
+        if (shared_dir / "serving" / "constraints.py").is_file():
+            if str(shared_dir) not in sys.path:
+                sys.path.insert(0, str(shared_dir))
+            try:
+                from serving.constraints import apply
+                return apply
+            except Exception as exc:  # pragma: no cover
+                print(f"[adapter] serving.constraints import 실패: {exc}", file=sys.stderr)
+
+    if any(k.startswith("SERVING_") for k in os.environ):
+        print(
+            "[adapter] 경고: SERVING_* env 가 설정됐는데 shared/serving 을 못 찾음 "
+            f"(MODEL_TEST_BASE={base!r}). 서빙 제약이 적용되지 않는다.",
+            file=sys.stderr,
+        )
+
+    def _noop(payload, *, sdk=False):
+        return payload
+
+    return _noop
+
+
+apply_serving_constraints = _load_serving_constraints()
 
 _DEFAULT_BASE_URL = "http://172.16.1.81:18090/v1"
 
@@ -89,7 +131,8 @@ class OpenAICompatAdapter(BaseAdapter):
             }
             if self.seed is not None:
                 req["seed"] = self.seed
-            return req
+            # 서빙 백엔드 제약 적용 (SERVING_* env 미설정 시 no-op)
+            return apply_serving_constraints(req, sdk=True)
 
         if tools:
             messages = self._inject_tools_into_prompt(messages, tools)
@@ -103,7 +146,7 @@ class OpenAICompatAdapter(BaseAdapter):
         }
         if self.seed is not None:
             req["seed"] = self.seed
-        return req
+        return apply_serving_constraints(req, sdk=True)
 
     def convert_from_provider_format(self, response: Any) -> Dict[str, Any]:
         choice = response.choices[0]

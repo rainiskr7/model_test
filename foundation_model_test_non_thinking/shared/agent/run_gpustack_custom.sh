@@ -10,6 +10,9 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # vsm/agent/<this> → vsm/agent → vsm → model_test
 BASE_DIR="${MODEL_TEST_BASE:-$(cd "$SCRIPT_DIR/../.." && pwd)}"
+# adapter 는 Ko-AgentBench 로 복사되어 실행되므로 __file__ 로는 shared/ 를 못 찾는다.
+# MODEL_TEST_BASE 를 export 해 두어야 standalone 실행에서도 서빙 제약이 적용된다.
+export MODEL_TEST_BASE="$BASE_DIR"
 KOA_DIR="$BASE_DIR/data/Ko-AgentBench"
 
 MODEL="${1:?MODEL required: ./run_gpustack_custom.sh MODEL [BASE_URL] [LEVELS]}"

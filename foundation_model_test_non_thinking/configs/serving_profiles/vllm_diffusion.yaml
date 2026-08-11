@@ -1,0 +1,61 @@
+# 서빙 프로파일 — vLLM 으로 서빙되는 discrete diffusion(dLLM) 모델 공통 제약
+#
+# 모델 yaml 에서 `serving_profile: vllm_diffusion` 한 줄로 참조한다.
+# 모델별 예외는 그 yaml 의 `serving:` 섹션에 쓰면 이 프로파일 위에 덮인다.
+#
+# ── 왜 모델별이 아니라 프로파일인가 ──────────────────────────────────
+# 아래 제약은 특정 모델 특성이 아니라 **vLLM 의 diffusion 계약**이다.
+# vllm/config/model.py 의 판정이 모델 이름을 보지 않는다:
+#
+#     @cached_property
+#     def is_diffusion(self) -> bool:
+#         """Detect discrete diffusion (dLLM) models from HF config."""
+#         return getattr(self.hf_config, "canvas_length", None) is not None
+#
+# 즉 HF config 에 canvas_length 만 있으면 diffusion 으로 판정되고
+# vllm/sampling_params.py 의 _validate_diffusion 이 동일한 파라미터 집합을
+# 똑같이 거부한다. LLaDA2 / Dream / Seed Diffusion / 차기 Gemma diffusion 등
+# vLLM 으로 서빙되는 모든 dLLM 이 이 프로파일 하나를 재사용하면 된다.
+# (서빙 프레임워크를 dInfer 같은 dLLM 전용으로 바꾸면 계약이 통째로 달라지므로
+#  그때는 이 프로파일이 아니라 파이프라인 분리를 검토해야 한다.)
+
+serving:
+  # vllm/sampling_params.py _validate_diffusion 이 거부하는 파라미터.
+  # 서버 응답 원문:
+  #   "The temperature, min_p, seed, min_tokens, logit_bias, bad_words, and
+  #    allowed_token_ids sampling parameters are not yet supported with
+  #    diffusion models."
+  # 평가 코드는 결정론성 확보용으로 temperature=0 을 항상 보내므로
+  # 제거하지 않으면 단 한 건도 통과하지 못한다.
+  unsupported_sampling_params:
+    - temperature
+    - min_p
+    - seed
+    - min_tokens
+    - logit_bias
+    - bad_words
+    - allowed_token_ids
+
+  # Gemma4 계열 파서는 <|channel>/<|turn> 등 special token 경계를 보고
+  # reasoning 과 content 를 분리하는데, 비스트리밍 경로는 파서가
+  # *디토크나이즈된 문자열*을 받는다. skip_special_tokens=True(기본값)면
+  # 경계 토큰이 이미 지워진 뒤라 파서가 아무것도 못 찾고
+  # content=None, reasoning=None 을 반환한다 (토큰은 정상 생성됨).
+  force_skip_special_tokens: false
+
+# canvas 단위 블록 확정 때문에 토큰이 버스트로 도착한다.
+# 실측(DiffusionGemma-26B, canvas_length=256): 40 토큰이 청크 1 개로 도착,
+# time_per_output_token_ms=0.05, tokens_per_second=19500.
+# TTFT 는 유효하지만 ITL/throughput 은 AR 모델과 같은 축에서 비교 불가.
+# 잘못 비교될 숫자를 아예 만들지 않도록 이 벤치는 건너뛴다.
+skip_benches:
+  - b4_latency_profile
+
+# ── 참고: 이 리포에는 현재 해당 없는 제약 ────────────────────────────
+# vllm/sampling_params.py _validate_structured_outputs 는 diffusion 모델에서
+# structured outputs(response_format / structured_outputs)를 거부한다:
+#   "Diffusion LLMs denoise a whole canvas of tokens in parallel rather than
+#    sampling left-to-right, which the grammar FSM requires." (vLLM issue #45436)
+# b3_structured_output.py 는 response_format 을 쓰지 않고 프롬프트로 JSON 을
+# 지시한 뒤 파싱하는 방식이라 현재는 걸리지 않는다.
+# 향후 누가 response_format 을 도입하면 이 제약에 걸리므로 여기 기록해 둔다.
