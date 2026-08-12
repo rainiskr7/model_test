@@ -11,14 +11,13 @@ can reason about tools and respond with JSON tool-call blocks.
 
 import json
 import os
-import re
 import sys
-import uuid
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from openai import OpenAI
 from .base_adapter import BaseAdapter
+from .tool_call_parser import extract_tool_calls
 from ..observability import observe
 
 def _load_serving_constraints():
@@ -213,42 +212,13 @@ class OpenAICompatAdapter(BaseAdapter):
 
     # ── parse tool calls from plain-text model output ─────────────────
 
-    _TOOL_CALL_RE = re.compile(
-        r'\{\s*"tool_call"\s*:\s*\{.*?\}\s*\}',
-        re.DOTALL,
-    )
-
     @classmethod
     def _parse_tool_calls_from_text(cls, canonical: Dict[str, Any]) -> Dict[str, Any]:
         content = canonical.get("message", {}).get("content", "")
         if not content:
             return canonical
 
-        tool_calls: List[Dict[str, Any]] = []
-        for match in cls._TOOL_CALL_RE.finditer(content):
-            try:
-                parsed = json.loads(match.group())
-                tc = parsed.get("tool_call", {})
-                name = tc.get("name")
-                arguments = tc.get("arguments", {})
-                if name:
-                    tool_calls.append(
-                        {
-                            "id": f"call_{uuid.uuid4().hex[:24]}",
-                            "type": "function",
-                            "function": {
-                                "name": name,
-                                "arguments": (
-                                    json.dumps(arguments, ensure_ascii=False)
-                                    if isinstance(arguments, dict)
-                                    else str(arguments)
-                                ),
-                            },
-                        }
-                    )
-            except (json.JSONDecodeError, AttributeError):
-                continue
-
+        tool_calls = extract_tool_calls(content)
         if tool_calls:
             canonical["message"]["tool_calls"] = tool_calls
             canonical["finish_reason"] = "tool_calls"

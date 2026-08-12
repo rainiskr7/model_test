@@ -40,6 +40,10 @@ from configs.secrets import (
 )
 
 
+def _env_flag(name: str) -> bool:
+    return os.environ.get(name, "").strip().lower() in ("1", "true", "yes")
+
+
 
 def load_benchmark_datasets(data_dir: str = "bench/tasks") -> Dict[str, List[Dict]]:
     """Load all benchmark datasets from bench/tasks directory.
@@ -280,6 +284,7 @@ def save_detailed_results(
     output_dir: Optional[str] = None,
     run_timestamp: str = None,
     track_name: str = "agent",
+    native_tool_calling: bool = False,
 ) -> str:
     """Save detailed benchmark results including tool call information.
 
@@ -296,6 +301,7 @@ def save_detailed_results(
         output_dir: Override base output dir (default: <MODEL_TEST_BASE>/results)
         run_timestamp: Timestamp for the run (if None, uses EVAL_TIMESTAMP env or now)
         track_name: Subfolder under language/ (default 'agent')
+        native_tool_calling: Whether native OpenAI-compatible tool calling was enabled
 
     Returns:
         Path to saved JSON file
@@ -381,6 +387,7 @@ def save_detailed_results(
             "timestamp": datetime.now().isoformat(),
             "model": model_name,
             "level": level_name,
+            "native_tool_calling": native_tool_calling,
             "total_tasks": total_tasks,
             "successful_tasks": successful_tasks,
             "failed_tasks": total_tasks - successful_tasks,
@@ -511,6 +518,7 @@ def run_benchmark_on_dataset(
     # Always use OpenAICompatAdapter for OpenAI-compatible endpoint
     print(f"\n[API] Using OpenAICompatAdapter for OpenAI-compatible endpoint")
     adapter = OpenAICompatAdapter(model_name, **adapter_config)
+    native_tool_calling = bool(adapter_config.get("native_tool_calling", False))
     
     runner = BenchmarkRunner(
         adapter,
@@ -670,7 +678,15 @@ def run_benchmark_on_dataset(
     # Save results
     if save_logs and all_results:
         try:
-            filepath = save_detailed_results(all_results, model_name, level_name, log_dir, run_timestamp, track_name=track_name)
+            filepath = save_detailed_results(
+                all_results,
+                model_name,
+                level_name,
+                log_dir,
+                run_timestamp,
+                track_name=track_name,
+                native_tool_calling=native_tool_calling,
+            )
             print(f"\n{'='*80}")
             print(f"Results saved to: {filepath}")
             print(f"{'='*80}\n")
@@ -746,6 +762,12 @@ def main():
     parser.add_argument("--temperature", type=float, default=None,
                         help="모델 sampling temperature (default: None → adapter default 0.0). "
                              "pass@k 트랙은 0.3~0.7 권장.")
+    parser.add_argument("--native-tool-calling", action="store_true",
+                        default=_env_flag("AGENT_NATIVE_TOOL_CALLING"),
+                        help="서버의 OpenAI-compatible tools 파라미터를 직접 사용한다. "
+                             "서버가 --enable-auto-tool-choice 로 떠 있어야 함. "
+                             "미지원 서버에서 켜면 400 응답이 날 수 있음. "
+                             "기본값은 AGENT_NATIVE_TOOL_CALLING env (1/true/yes).")
 
     args = parser.parse_args()
     
@@ -904,6 +926,7 @@ def main():
     adapter_config['max_completion_tokens'] = args.max_completion_tokens
     if args.base_url:
         adapter_config["base_url"] = args.base_url
+    adapter_config['native_tool_calling'] = args.native_tool_calling
 
     # Agent 트랙: tool call + reasoning + multi-turn 고려해 max_tokens 16384 default
     # (openai_compat_adapter.py의 전역 default 8192를 override)

@@ -28,6 +28,8 @@ cp "$SCRIPT_DIR/gpustack_custom/run_ko-agentbench.sh" \
    "$KOA_DIR/run_ko-agentbench.sh"
 cp "$SCRIPT_DIR/gpustack_custom/openai_compat_adapter.py" \
    "$KOA_DIR/bench/adapters/openai_compat_adapter.py"
+cp "$SCRIPT_DIR/gpustack_custom/tool_call_parser.py" \
+   "$KOA_DIR/bench/adapters/tool_call_parser.py"
 # adapter 가 import 하는 reasoning 모듈도 함께 복사 (thinking 추론 분리 — 없으면 ModuleNotFoundError)
 cp "$SCRIPT_DIR/gpustack_custom/reasoning.py" \
    "$KOA_DIR/bench/adapters/reasoning.py"

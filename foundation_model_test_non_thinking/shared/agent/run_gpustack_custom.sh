@@ -31,6 +31,8 @@ cp "$SCRIPT_DIR/gpustack_custom/run_ko-agentbench.sh" \
    "$KOA_DIR/run_ko-agentbench.sh"
 cp "$SCRIPT_DIR/gpustack_custom/openai_compat_adapter.py" \
    "$KOA_DIR/bench/adapters/openai_compat_adapter.py"
+cp "$SCRIPT_DIR/gpustack_custom/tool_call_parser.py" \
+   "$KOA_DIR/bench/adapters/tool_call_parser.py"
 
 # 실행
 cd "$KOA_DIR"
