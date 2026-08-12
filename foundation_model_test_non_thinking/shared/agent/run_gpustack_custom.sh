@@ -37,3 +37,16 @@ cp "$SCRIPT_DIR/gpustack_custom/tool_call_parser.py" \
 # 실행
 cd "$KOA_DIR"
 bash run_ko-agentbench.sh "$MODEL" "$BASE_URL" "$LEVELS"
+
+SCORING_TS="${EVAL_TIMESTAMP:-}"
+if [ -z "$SCORING_TS" ] && [ -f "$BASE_DIR/.eval_session" ]; then
+  SCORING_TS="$(cat "$BASE_DIR/.eval_session")"
+fi
+SCORING_TRACK="${AGENT_TRACK_NAME:-agent}"
+PY="${PY:-$BASE_DIR/.venv/bin/python}"
+
+"$PY" "$SCRIPT_DIR/scoring/score_run.py" \
+  --model "$MODEL" \
+  --timestamp "$SCORING_TS" \
+  --track "$SCORING_TRACK" \
+  || echo "[agent-scoring] 실패 — 계속"
