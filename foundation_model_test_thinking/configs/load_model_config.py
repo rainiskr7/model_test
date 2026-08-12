@@ -35,6 +35,8 @@ def emit_shell(cfg: dict) -> None:
     - MODEL_CLASS: 평가 클래스 (llm/slm/vsm/vlm)
     - BASE_URL_{CHAT,V1}: gpustack endpoint
     - TRACKS: 평가 트랙 목록 (space-separated)
+    - AGENT_NATIVE_TOOL_CALLING: agent 트랙 tool calling 모드
+      agent 미지정 시 unset 을 출력해 config 간 격리를 보장한다.
 
     yaml 의 backend_reference 섹션은 사람용 메모라 export 안 함.
     """
@@ -48,6 +50,8 @@ def emit_shell(cfg: dict) -> None:
     tracks = cfg.get("tracks", [])
     print(f"export TRACKS={q(' '.join(tracks))}")
 
+    emit_agent(cfg.get("agent") or {})
+
     # thinking sampling (모델별 권장값). 모든 트랙(.py runner / lm_eval)이 THINK_* env 로 읽음.
     # yaml 에 sampling 블록이 없으면 Qwen thinking 기본값으로 fallback.
     sampling = cfg.get("sampling", {}) or {}
@@ -57,6 +61,24 @@ def emit_shell(cfg: dict) -> None:
     print(f"export THINK_MAX_TOKENS={q(str(sampling.get('max_tokens', 8192)))}")
     print(f"export THINK_SEED={q(str(sampling.get('seed', 42)))}")
     print(f"export THINK_TIMEOUT={q(str(sampling.get('timeout', 600)))}")
+
+
+def emit_agent(agent: dict) -> None:
+    """agent 섹션 → AGENT_* env.
+
+    ⚠️ 미지정 키는 export 를 생략하는 게 아니라 반드시 `unset` 을 출력한다.
+       같은 셸에서 native tool calling config 를 source 한 뒤 기존 agent config 를
+       source 하면, 생략만 할 경우 이전 AGENT_* 가 그대로 남아 agent 트랙
+       요청 모드가 바뀌는 회귀가 발생한다. unset 으로 항상 초기화해 config 간
+       격리를 보장한다.
+       이 변수는 SERVING_* 와 같은 unset 규칙을 따르며, LM_EVAL_MODE/KRETA_SETTING
+       과 달리 사용자 셸 override 를 보존하지 않는다. 모델별 지정은 yaml 의
+       `agent:` 섹션으로 한다.
+    """
+    if agent.get("native_tool_calling"):
+        print("export AGENT_NATIVE_TOOL_CALLING=1")
+    else:
+        print("unset AGENT_NATIVE_TOOL_CALLING")
 
 
 if __name__ == "__main__":

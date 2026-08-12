@@ -104,9 +104,10 @@ def emit_shell(cfg: dict) -> None:
     - MODEL_CLASS: 평가 클래스 (llm/slm/vsm/vlm)
     - BASE_URL_{CHAT,V1}: gpustack endpoint
     - TRACKS: 평가 트랙 목록 (space-separated)
+    - AGENT_NATIVE_TOOL_CALLING: agent 트랙 tool calling 모드
     - SERVING_*: 서빙 백엔드 제약 (shared/serving/constraints.py 가 소비)
     - SKIP_BENCHES: 건너뛸 벤치 목록 (multimodal/run_all.sh 가 소비)
-      serving/skip_benches 미지정 시 unset 을 출력해 config 간 격리를 보장한다.
+      agent/serving/skip_benches 미지정 시 unset 을 출력해 config 간 격리를 보장한다.
 
     yaml 의 backend_reference 섹션은 사람용 메모라 export 안 함.
     """
@@ -121,7 +122,12 @@ def emit_shell(cfg: dict) -> None:
     print(f"export TRACKS={q(' '.join(tracks))}")
 
     # 모델별 평가 모드 override (선택적).
-    # yaml 에 있을 때만 export → 필드 없는 다른 모델 config 는 기존 기본값 유지.
+    # 이 두 변수는 사용자 셸 override 계약을 가진다:
+    #   run_harness.sh 문서화: LM_EVAL_MODE=completions 로 logprob 모드 변경 가능.
+    #   run_all.sh 문서화: KRETA_SETTING=direct 로 KRETA 프롬프트 모드 변경 가능.
+    # 따라서 yaml 에 없을 때 unset 하지 않는다. 예:
+    #   KRETA_SETTING=direct ./run_full_eval.sh <model>
+    # 를 source 단계에서 죽이면 느린 HW(GB10 등)의 운영 override 가 깨진다.
     #   lm_eval_mode : KMMLU harness 모드 (chat | completions).
     #                  thinking 모델은 completions 필수 (chat 은 <think> 오염으로 점수 붕괴).
     #   kreta_setting: KRETA 프롬프트 모드 (default | direct).
@@ -133,6 +139,7 @@ def emit_shell(cfg: dict) -> None:
     if kreta_setting is not None:
         print(f"export KRETA_SETTING={q(str(kreta_setting))}")
 
+    emit_agent(cfg.get("agent") or {})
     emit_serving(cfg.get("serving") or {})
 
     skip_benches = cfg.get("skip_benches") or []
@@ -140,6 +147,24 @@ def emit_shell(cfg: dict) -> None:
         print(f"export SKIP_BENCHES={q(' '.join(skip_benches))}")
     else:
         print("unset SKIP_BENCHES")
+
+
+def emit_agent(agent: dict) -> None:
+    """agent 섹션 → AGENT_* env.
+
+    ⚠️ 미지정 키는 export 를 생략하는 게 아니라 반드시 `unset` 을 출력한다.
+       같은 셸에서 native tool calling config 를 source 한 뒤 기존 agent config 를
+       source 하면, 생략만 할 경우 이전 AGENT_* 가 그대로 남아 agent 트랙
+       요청 모드가 바뀌는 회귀가 발생한다. unset 으로 항상 초기화해 config 간
+       격리를 보장한다.
+       이 변수는 SERVING_* 와 같은 unset 규칙을 따르며, LM_EVAL_MODE/KRETA_SETTING
+       과 달리 사용자 셸 override 를 보존하지 않는다. 모델별 지정은 yaml 의
+       `agent:` 섹션으로 한다.
+    """
+    if agent.get("native_tool_calling"):
+        print("export AGENT_NATIVE_TOOL_CALLING=1")
+    else:
+        print("unset AGENT_NATIVE_TOOL_CALLING")
 
 
 def emit_serving(serving: dict) -> None:
