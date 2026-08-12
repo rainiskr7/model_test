@@ -1,0 +1,81 @@
+{
+  "benchmark": "Ko-AgentBench (deterministic scoring)",
+  "model": "google_diffusiongemma_26B_A4B_it",
+  "track": "agent_smoke",
+  "scoring_version": "agent_det_v1",
+  "native_tool_calling": null,
+  "agent_score": 0.08080808080808081,
+  "by_level": {
+    "L1": {
+      "total": 11,
+      "score": 0.08080808080808081,
+      "metrics": {
+        "ToolAcc": {
+          "score": 0.18181818181818182,
+          "status": "ok",
+          "in_score": true
+        },
+        "CallEM": {
+          "score": 0.0,
+          "status": "ok",
+          "in_score": true
+        },
+        "ArgF1_det": {
+          "score": 0.0606060606060606,
+          "status": "ok",
+          "in_score": true
+        },
+        "SR": {
+          "score": null,
+          "status": "judge_missing",
+          "in_score": false
+        },
+        "ArgAcc": {
+          "score": null,
+          "status": "judge_missing",
+          "in_score": false
+        },
+        "EffScore": {
+          "score": null,
+          "status": "judge_missing",
+          "in_score": false
+        },
+        "ContextRetention": {
+          "score": null,
+          "status": "judge_missing",
+          "in_score": false
+        },
+        "RefRecall": {
+          "score": null,
+          "status": "judge_missing",
+          "in_score": false
+        },
+        "pass@k": {
+          "score": null,
+          "status": "not_applicable",
+          "in_score": false,
+          "reason": "repetition_results length < 2"
+        },
+        "RespOK": {
+          "score": null,
+          "status": "not_applicable",
+          "in_score": false,
+          "reason": "resp_schema.type == string"
+        }
+      }
+    }
+  },
+  "runner_survival_rate": {
+    "L1": 100.0,
+    "note": "기존 metadata.success_rate. 정답률이 아니라 'final_response 반환 + step>=1' 생존신호다 (run.py:232-235). 비교용으로 쓰지 말 것."
+  },
+  "levels_missing": [
+    "L2",
+    "L3",
+    "L4",
+    "L5",
+    "L6",
+    "L7"
+  ],
+  "levels_unscorable": []
+}
