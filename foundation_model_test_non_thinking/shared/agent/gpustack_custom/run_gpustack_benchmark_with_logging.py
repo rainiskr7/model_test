@@ -207,6 +207,8 @@ def simplify_result(result: Dict[str, Any]) -> Dict[str, Any]:
             "count": 0
         }),
     }
+    if result.get("repetition_records"):
+        simplified["repetition_records"] = result.get("repetition_records", [])
     
     # Extract tool calls in a simplified format with results
     tool_calls = []
@@ -275,6 +277,30 @@ def simplify_result(result: Dict[str, Any]) -> Dict[str, Any]:
         simplified["conversation_log_error"] = str(e)
     
     return simplified
+
+
+_REPETITION_DYNAMIC_FIELDS = (
+    "success",
+    "steps_taken",
+    "execution_time",
+    "error",
+    "tool_calls",
+    "final_response",
+    "conversation_log",
+    "token_usage",
+    "ttft_stats",
+)
+
+
+def _repetition_record(result: Dict[str, Any], rep_index: int, seed=None) -> Dict[str, Any]:
+    simplified = simplify_result(result)
+    record = {"rep_index": rep_index}
+    for key in _REPETITION_DYNAMIC_FIELDS:
+        if key in simplified:
+            record[key] = simplified[key]
+    if seed is not None:
+        record["seed"] = seed
+    return record
 
 
 def save_detailed_results(
@@ -562,23 +588,29 @@ def run_benchmark_on_dataset(
         
         print(f"{'─'*80}")
         
+        repetition_results = []
+        repetition_records = []
+
         try:
             # Run task with repetitions
-            repetition_results = []
             main_result = None
             
             for rep in range(repetitions):
+                seed_used = getattr(adapter, "seed", None) if hasattr(adapter, "seed") else None
                 if repetitions > 1:
                     print(f"\n[Repetition {rep + 1}/{repetitions}]")
                     # 매 반복마다 seed 변동 (temp>0 일 때 진짜 다양성 보장)
                     # vLLM/서빙 설정에 따라 같은 seed 면 동일 응답 가능 → seed=rep 로 강제 변동
                     if hasattr(adapter, "seed") and getattr(adapter, "temperature", 0.0) > 0:
                         adapter.seed = 1000 + rep
+                        seed_used = adapter.seed
 
                 result = runner.run_task(task)
 
                 # Store repetition success status
                 repetition_results.append(result.get('success', False))
+                if repetitions > 1:
+                    repetition_records.append(_repetition_record(result, rep, seed_used))
 
                 # Use first run as main result
                 if rep == 0:
@@ -597,6 +629,8 @@ def run_benchmark_on_dataset(
             # Add repetition results for pass@k metric
             result['repetitions'] = repetitions
             result['repetition_results'] = repetition_results
+            if repetitions > 1:
+                result['repetition_records'] = repetition_records
             # Include dataset guidance fields for analysis
             if 'minimum_steps' in task:
                 result['minimum_steps'] = task.get('minimum_steps')
@@ -657,6 +691,36 @@ def run_benchmark_on_dataset(
                 
         except Exception as e:
             print(f"\n[ERROR] Execution failed: {e}")
+            if repetitions > 1:
+                existing = len(repetition_records)
+                for rep in range(existing, repetitions):
+                    seed_used = None
+                    if hasattr(adapter, "seed") and getattr(adapter, "temperature", 0.0) > 0:
+                        seed_used = 1000 + rep
+                    failure_record = {
+                        "rep_index": rep,
+                        "success": False,
+                        "steps_taken": 0,
+                        "execution_time": 0,
+                        "error": str(e),
+                        "tool_calls": [],
+                        "final_response": None,
+                        "conversation_log": {"total_messages": 0, "messages": []},
+                        "token_usage": {
+                            "prompt_tokens": 0,
+                            "completion_tokens": 0,
+                            "total_tokens": 0,
+                        },
+                        "ttft_stats": {
+                            "average": 0,
+                            "min": 0,
+                            "max": 0,
+                            "count": 0,
+                        },
+                    }
+                    if seed_used is not None:
+                        failure_record["seed"] = seed_used
+                    repetition_records.append(failure_record)
             all_results.append({
                 "task_id": task.get('id', 'unknown'),
                 "instruction": task.get('description', ''),
@@ -667,12 +731,14 @@ def run_benchmark_on_dataset(
                 "minimum_steps": task.get('minimum_steps'),
                 "data_flow": task.get('data_flow', []),
                 "repetitions": repetitions,
-                "repetition_results": [False] * repetitions,
+                "repetition_results": repetition_results + [False] * (repetitions - len(repetition_results)),
+                **({"repetition_records": repetition_records} if repetitions > 1 else {}),
                 "success": False,
                 "error": str(e),
                 "execution_time": 0,
                 "steps_taken": 0,
-                "tool_invocations": []
+                "tool_invocations": [],
+                "tool_calls": []
             })
     
     # Save results
