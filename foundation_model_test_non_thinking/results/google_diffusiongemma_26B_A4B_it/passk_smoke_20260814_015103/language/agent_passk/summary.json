@@ -1,0 +1,139 @@
+{
+  "benchmark": "Ko-AgentBench (deterministic scoring)",
+  "model": "google_diffusiongemma_26B_A4B_it",
+  "track": "agent_passk",
+  "scoring_version": "agent_det_v2",
+  "native_tool_calling": true,
+  "agent_score": 0.25,
+  "by_level": {
+    "L6": {
+      "total": 15,
+      "score": 0.25,
+      "metrics": {
+        "RedundantCallRate": {
+          "score": 1.0,
+          "status": "ok",
+          "in_score": true,
+          "repeated": true,
+          "n_repetitions": 2,
+          "std": 0.0,
+          "per_repetition": [
+            1.0,
+            1.0
+          ]
+        },
+        "ToolAcc": {
+          "score": 0.0,
+          "status": "ok",
+          "in_score": true,
+          "repeated": true,
+          "n_repetitions": 2,
+          "std": 0.0,
+          "per_repetition": [
+            0.0,
+            0.0
+          ]
+        },
+        "Coverage": {
+          "score": 0.0,
+          "status": "ok",
+          "in_score": true,
+          "repeated": true,
+          "n_repetitions": 2,
+          "std": 0.0,
+          "per_repetition": [
+            0.0,
+            0.0
+          ]
+        },
+        "CallEff_det": {
+          "score": 0.0,
+          "status": "ok",
+          "in_score": true,
+          "repeated": true,
+          "n_repetitions": 2,
+          "std": 0.0,
+          "per_repetition": [
+            0.0,
+            0.0
+          ]
+        },
+        "SR": {
+          "score": null,
+          "status": "judge_missing",
+          "in_score": false
+        },
+        "ArgAcc": {
+          "score": null,
+          "status": "judge_missing",
+          "in_score": false
+        },
+        "EffScore": {
+          "score": null,
+          "status": "judge_missing",
+          "in_score": false
+        },
+        "ContextRetention": {
+          "score": null,
+          "status": "judge_missing",
+          "in_score": false
+        },
+        "RefRecall": {
+          "score": null,
+          "status": "judge_missing",
+          "in_score": false
+        },
+        "pass@k": {
+          "score": 1.0,
+          "status": "ok",
+          "in_score": false,
+          "repeated": true,
+          "n_repetitions": 2,
+          "std": 0.0,
+          "per_repetition": [
+            1.0,
+            1.0
+          ],
+          "note": "runner survival signal, not correctness - see PassK_det"
+        },
+        "RespOK": {
+          "score": 1.0,
+          "status": "ok",
+          "in_score": false,
+          "repeated": true,
+          "n_repetitions": 2,
+          "std": 0.0,
+          "per_repetition": [
+            1.0,
+            1.0
+          ]
+        },
+        "PassK_det": {
+          "score": 0.0,
+          "status": "ok",
+          "in_score": false,
+          "primary_metric": "Coverage",
+          "k": 2
+        }
+      }
+    }
+  },
+  "bench_pin": {
+    "tasks_sha256": {
+      "L6": "bf16c3d679563c60318b15832ddc9ad126f416477b66466052273c46eecc18e2"
+    }
+  },
+  "runner_survival_rate": {
+    "L6": 100.0,
+    "note": "기존 metadata.success_rate. 정답률이 아니라 'final_response 반환 + step>=1' 생존신호다 (run.py:232-235). 비교용으로 쓰지 말 것."
+  },
+  "levels_missing": [
+    "L1",
+    "L2",
+    "L3",
+    "L4",
+    "L5",
+    "L7"
+  ],
+  "levels_unscorable": []
+}
