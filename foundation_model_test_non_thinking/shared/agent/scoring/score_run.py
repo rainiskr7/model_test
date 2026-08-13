@@ -2,6 +2,7 @@
 
 import argparse
 import json
+import math
 import os
 import sys
 from pathlib import Path
@@ -9,27 +10,31 @@ from typing import Any, Dict, Iterable, List, Optional
 
 if __package__:
     from . import SCORING_VERSION
-    from .context import build_eval_context
+    from .context import BenchDriftError, build_eval_context
     from .level_spec import (
         COMMON_RECORD_ONLY,
         JUDGE_METRICS,
         LEVEL_SPECS,
+        PASSK_PRIMARY_METRICS,
         MetricSpec,
         level_score,
         mean_or_none,
     )
+    from .task_source import bench_pin, load_bench_tasks
 else:
     sys.path.insert(0, str(Path(__file__).resolve().parent))
     from __init__ import SCORING_VERSION
-    from context import build_eval_context
+    from context import BenchDriftError, build_eval_context
     from level_spec import (
         COMMON_RECORD_ONLY,
         JUDGE_METRICS,
         LEVEL_SPECS,
+        PASSK_PRIMARY_METRICS,
         MetricSpec,
         level_score,
         mean_or_none,
     )
+    from task_source import bench_pin, load_bench_tasks
 
 
 PREFIX = "[agent-scoring]"
@@ -77,12 +82,65 @@ def _tasks(data: Dict[str, Any]) -> List[Dict[str, Any]]:
     return []
 
 
-def _average_metric(tasks: List[Dict[str, Any]], spec: MetricSpec) -> Dict[str, Any]:
+def _has_repetition_records(task: Dict[str, Any]) -> bool:
+    records = task.get("repetition_records")
+    return isinstance(records, list) and bool(records)
+
+
+def _merged_repetition_record(task: Dict[str, Any], record: Dict[str, Any]) -> Dict[str, Any]:
+    merged = dict(task)
+    merged.pop("repetition_records", None)
+    merged.update(record)
+    return merged
+
+
+def _population_std(values: List[float]) -> Optional[float]:
+    if not values:
+        return None
+    mean = sum(values) / len(values)
+    return math.sqrt(sum((value - mean) ** 2 for value in values) / len(values))
+
+
+def _average_metric(
+    tasks: List[Dict[str, Any]],
+    spec: MetricSpec,
+    bench_tasks: Optional[Dict[str, dict]] = None,
+) -> Dict[str, Any]:
     scores = []
+    errors = []
+    repeated_by_index: List[List[float]] = []
+    repeated_seen = False
     for task in tasks:
         try:
-            ctx = build_eval_context(task)
+            bench_task = None
+            if bench_tasks is not None:
+                task_id = task.get("task_id")
+                bench_task = bench_tasks.get(str(task_id))
+                if bench_task is None:
+                    raise RuntimeError(f"bench task not found for task_id={task_id}")
+            if _has_repetition_records(task):
+                repeated_seen = True
+                repeated_scores = []
+                for index, record in enumerate(task["repetition_records"]):
+                    ctx = build_eval_context(_merged_repetition_record(task, record), bench_task)
+                    score = spec.producer(ctx)
+                    if score is not None:
+                        value = float(score)
+                        repeated_scores.append(value)
+                        while len(repeated_by_index) <= index:
+                            repeated_by_index.append([])
+                        repeated_by_index[index].append(value)
+                score = mean_or_none(repeated_scores)
+                if score is not None:
+                    scores.append(float(score))
+                    continue
+                continue
+
+            ctx = build_eval_context(task, bench_task)
             score = spec.producer(ctx)
+        except BenchDriftError as exc:
+            errors.append(f"{task.get('task_id')}: {type(exc).__name__}: {exc}")
+            continue
         except Exception as exc:
             return {
                 "score": None,
@@ -93,29 +151,138 @@ def _average_metric(tasks: List[Dict[str, Any]], spec: MetricSpec) -> Dict[str, 
         if score is not None:
             scores.append(float(score))
 
-    return {
+    if errors:
+        return {
+            "score": None,
+            "status": "error",
+            "in_score": spec.in_score,
+            "error": "; ".join(errors),
+        }
+
+    entry = {
         "score": mean_or_none(scores),
         "status": "ok" if scores else "not_applicable",
         "in_score": spec.in_score,
     }
+    if repeated_seen:
+        per_repetition = [
+            mean_or_none(values)
+            for values in repeated_by_index
+            if mean_or_none(values) is not None
+        ]
+        entry.update({
+            "repeated": True,
+            "n_repetitions": len(per_repetition),
+            "std": _population_std(per_repetition),
+            "per_repetition": per_repetition,
+        })
+    return entry
 
 
 def _judge_entry() -> Dict[str, Any]:
     return {"score": None, "status": "judge_missing", "in_score": False}
 
 
-def _pass_at_k_entry(tasks: List[Dict[str, Any]]) -> Dict[str, Any]:
+def _pass_at_k_entry(
+    tasks: List[Dict[str, Any]], bench_tasks: Optional[Dict[str, dict]] = None
+) -> Dict[str, Any]:
     if not any(len(task.get("repetition_results", []) or []) >= 2 for task in tasks):
         return {
             "score": None,
             "status": "not_applicable",
             "in_score": False,
             "reason": "repetition_results length < 2",
+            "note": "runner survival signal, not correctness - see PassK_det",
         }
-    return _average_metric(tasks, MetricSpec("pass@k", _vendored("pass@k"), False))
+    entry = _average_metric(tasks, MetricSpec("pass@k", _vendored("pass@k"), False), bench_tasks)
+    entry["note"] = "runner survival signal, not correctness - see PassK_det"
+    return entry
 
 
-def _resp_ok_entry(tasks: List[Dict[str, Any]]) -> Dict[str, Any]:
+def _passk_det_entry(
+    level: str,
+    tasks: List[Dict[str, Any]],
+    bench_tasks: Optional[Dict[str, dict]] = None,
+) -> Dict[str, Any]:
+    primary_name = PASSK_PRIMARY_METRICS[level]
+    primary_spec = next((spec for spec in LEVEL_SPECS[level] if spec.name == primary_name), None)
+    if primary_spec is None:
+        return {
+            "score": None,
+            "status": "error",
+            "in_score": False,
+            "error": f"primary metric not configured: {primary_name}",
+        }
+
+    repeated_tasks = [task for task in tasks if _has_repetition_records(task)]
+    if not repeated_tasks:
+        return {
+            "score": None,
+            "status": "not_applicable",
+            "in_score": False,
+            "reason": "repetition_records missing",
+            "primary_metric": primary_name,
+        }
+
+    passed = 0
+    evaluated = 0
+    k = 0
+    for task in repeated_tasks:
+        task_id = task.get("task_id")
+        bench_task = bench_tasks.get(str(task_id)) if bench_tasks is not None else None
+        if bench_tasks is not None and bench_task is None:
+            return {
+                "score": None,
+                "status": "error",
+                "in_score": False,
+                "error": f"bench task not found for task_id={task_id}",
+                "primary_metric": primary_name,
+            }
+
+        task_scores = []
+        for record in task["repetition_records"]:
+            try:
+                ctx = build_eval_context(_merged_repetition_record(task, record), bench_task)
+                score = primary_spec.producer(ctx)
+            except Exception as exc:
+                return {
+                    "score": None,
+                    "status": "error",
+                    "in_score": False,
+                    "error": f"{type(exc).__name__}: {exc}",
+                    "primary_metric": primary_name,
+                }
+            if score is not None:
+                task_scores.append(float(score))
+
+        if not task_scores:
+            continue
+        evaluated += 1
+        k = max(k, len(task_scores))
+        if any(score == 1.0 for score in task_scores):
+            passed += 1
+
+    if evaluated == 0:
+        return {
+            "score": None,
+            "status": "not_applicable",
+            "in_score": False,
+            "reason": "no scorable repetition_records",
+            "primary_metric": primary_name,
+        }
+
+    return {
+        "score": passed / evaluated,
+        "status": "ok",
+        "in_score": False,
+        "primary_metric": primary_name,
+        "k": k,
+    }
+
+
+def _resp_ok_entry(
+    tasks: List[Dict[str, Any]], bench_tasks: Optional[Dict[str, dict]] = None
+) -> Dict[str, Any]:
     if all((task.get("resp_schema") or {}).get("type") == "string" for task in tasks):
         return {
             "score": None,
@@ -123,7 +290,7 @@ def _resp_ok_entry(tasks: List[Dict[str, Any]]) -> Dict[str, Any]:
             "in_score": False,
             "reason": "resp_schema.type == string",
         }
-    return _average_metric(tasks, MetricSpec("RespOK", _vendored("RespOK"), False))
+    return _average_metric(tasks, MetricSpec("RespOK", _vendored("RespOK"), False), bench_tasks)
 
 
 def _vendored(name: str):
@@ -138,21 +305,29 @@ def _vendored(name: str):
     return _evaluate
 
 
-def score_level(level: str, data: Dict[str, Any]) -> Dict[str, Any]:
+def score_level(
+    level: str,
+    data: Dict[str, Any],
+    bench_tasks: Optional[Dict[str, dict]] = None,
+) -> Dict[str, Any]:
     tasks = _tasks(data)
     entries: Dict[str, Dict[str, Any]] = {}
+    if bench_tasks is None and tasks:
+        bench_tasks = load_bench_tasks(level)
 
     for spec in LEVEL_SPECS[level]:
-        entries[spec.name] = _average_metric(tasks, spec)
+        entries[spec.name] = _average_metric(tasks, spec, bench_tasks)
 
     for metric_name in JUDGE_METRICS:
         entries[metric_name] = _judge_entry()
 
     for metric_name in COMMON_RECORD_ONLY:
         if metric_name == "pass@k":
-            entries[metric_name] = _pass_at_k_entry(tasks)
+            entries[metric_name] = _pass_at_k_entry(tasks, bench_tasks)
         elif metric_name == "RespOK":
-            entries[metric_name] = _resp_ok_entry(tasks)
+            entries[metric_name] = _resp_ok_entry(tasks, bench_tasks)
+
+    entries["PassK_det"] = _passk_det_entry(level, tasks, bench_tasks)
 
     return {
         "total": len(tasks),
@@ -181,13 +356,28 @@ def _model_name(results_dir: Path, level_data: Iterable[Dict[str, Any]]) -> str:
 
 
 def build_summary_from_loaded_for_test(
-    loaded: Dict[str, Dict[str, Any]], results_dir: Path
+    loaded: Dict[str, Dict[str, Any]],
+    results_dir: Path,
+    bench_task_maps: Optional[Dict[str, Dict[str, dict]]] = None,
+    bench_pin_value: Optional[dict] = None,
 ) -> Dict[str, Any]:
-    by_level = {level: score_level(level, data) for level, data in loaded.items()}
+    if bench_task_maps is None:
+        bench_task_maps = {
+            level: load_bench_tasks(level)
+            for level, data in loaded.items()
+            if _tasks(data)
+        }
+    by_level = {
+        level: score_level(level, data, bench_task_maps.get(level))
+        for level, data in loaded.items()
+    }
     levels_missing = [level for level in ALL_LEVELS if level not in loaded]
     levels_unscorable = [
         level for level, result in by_level.items()
-        if level == "L7" and result.get("score") is None
+        if not any(
+            entry.get("in_score") and entry.get("score") is not None
+            for entry in result.get("metrics", {}).values()
+        )
     ]
 
     level_scores = [
@@ -215,6 +405,11 @@ def build_summary_from_loaded_for_test(
         "native_tool_calling": _native_tool_calling(level_values),
         "agent_score": mean_or_none(level_scores),
         "by_level": by_level,
+        "bench_pin": (
+            bench_pin_value
+            if bench_pin_value is not None
+            else bench_pin(loaded.keys()) if loaded else {"tasks_sha256": {}}
+        ),
         "runner_survival_rate": runner_survival_rate,
         "levels_missing": levels_missing,
         "levels_unscorable": levels_unscorable,
@@ -243,7 +438,7 @@ def print_table(summary: Dict[str, Any], skipped_count: int) -> None:
         metrics = " ".join(
             f"{name}={_fmt(entry.get('score'))}/{entry.get('status')}"
             for name, entry in result["metrics"].items()
-            if entry.get("in_score") or name == "FSM_prefix"
+            if entry.get("in_score") or entry.get("score") is not None
         )
         print(f"{PREFIX} {level} total={result['total']} score={_fmt(result['score'])} {metrics}")
     print(f"{PREFIX} agent_score={_fmt(summary['agent_score'])}")

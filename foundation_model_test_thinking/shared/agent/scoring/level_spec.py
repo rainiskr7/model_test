@@ -4,13 +4,24 @@ from dataclasses import dataclass
 from typing import Callable, Iterable, List, Optional, Sequence
 
 try:
-    from .extra_metrics import arg_f1_det, fsm_prefix
+    from .extra_metrics import arg_f1_det, call_eff_det, fsm_prefix
 except ImportError:  # direct file loading in tests
-    from extra_metrics import arg_f1_det, fsm_prefix
+    from extra_metrics import arg_f1_det, call_eff_det, fsm_prefix
 
 
 JUDGE_METRICS = ("SR", "ArgAcc", "EffScore", "ContextRetention", "RefRecall")
 COMMON_RECORD_ONLY = ("pass@k", "RespOK")
+PASSK_PRIMARY_METRICS = {
+    "L1": "CallEM",
+    "L2": "SelectAcc",
+    "L3": "FSM_strict",
+    "L4": "Coverage",
+    "L5": "FallbackSR",
+    # RedundantCallRate gives 1.0 even when the model makes no tool calls, so
+    # using it as pass@k primary would preserve the survival-signal bug.
+    "L6": "Coverage",
+    "L7": "ToolAcc",
+}
 
 
 @dataclass(frozen=True)
@@ -55,8 +66,17 @@ LEVEL_SPECS = {
         MetricSpec("AdaptiveRoutingScore", vendored_metric("AdaptiveRoutingScore"), True),
         MetricSpec("EPR_CVR", vendored_metric("EPR_CVR"), True),
     ),
-    "L6": (MetricSpec("RedundantCallRate", vendored_metric("RedundantCallRate"), True),),
-    "L7": (),
+    "L6": (
+        MetricSpec("RedundantCallRate", vendored_metric("RedundantCallRate"), True),
+        MetricSpec("ToolAcc", vendored_metric("ToolAcc"), True),
+        MetricSpec("Coverage", vendored_metric("Coverage"), True),
+        MetricSpec("CallEff_det", call_eff_det, True),
+    ),
+    "L7": (
+        MetricSpec("ToolAcc", vendored_metric("ToolAcc"), True),
+        MetricSpec("CallEM", vendored_metric("CallEM"), True),
+        MetricSpec("ArgF1_det", arg_f1_det, True),
+    ),
 }
 
 
