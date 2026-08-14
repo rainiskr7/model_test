@@ -2,10 +2,10 @@
   "benchmark": "Ko-AgentBench (deterministic scoring)",
   "model": "gemma_4_26b_a4b_it",
   "track": "agent_passk",
-  "scoring_version": "agent_det_v3",
+  "scoring_version": "agent_det_v4",
   "native_tool_calling": null,
-  "agent_score": 0.0,
-  "agent_score_equal_level": 0.0,
+  "agent_score": 0.056089743589743585,
+  "agent_score_equal_level": 0.048611111111111105,
   "weighting": {
     "scheme": "task_count",
     "weights": {
@@ -52,7 +52,10 @@
       "L6": {
         "tasks": 15,
         "tasks_with_tool_calls": 0,
-        "tool_calls": 0
+        "tool_calls": 0,
+        "seeded_echo_tasks": 0,
+        "unresolved_field_tasks": 3,
+        "scored_tasks": 12
       },
       "L7": {
         "tasks": 10,
@@ -376,10 +379,10 @@
     },
     "L6": {
       "total": 15,
-      "score": 0.0,
+      "score": 0.34027777777777773,
       "metrics": {
-        "RedundantCallRate_det": {
-          "score": 0.0,
+        "GoldenFieldRecall_det": {
+          "score": 0.34027777777777773,
           "status": "ok",
           "in_score": true
         },
@@ -391,17 +394,17 @@
         "ToolAcc": {
           "score": 0.0,
           "status": "ok",
-          "in_score": true
+          "in_score": false
         },
         "Coverage": {
           "score": 0.0,
           "status": "ok",
-          "in_score": true
+          "in_score": false
         },
         "CallEff_det": {
           "score": 0.0,
           "status": "ok",
-          "in_score": true
+          "in_score": false
         },
         "SR": {
           "score": null,
@@ -444,7 +447,7 @@
           "status": "not_applicable",
           "in_score": false,
           "reason": "repetition_records missing",
-          "primary_metric": "Coverage"
+          "primary_metric": "GoldenFieldRecall_det"
         }
       }
     },
