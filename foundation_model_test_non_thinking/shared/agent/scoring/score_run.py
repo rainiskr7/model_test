@@ -20,6 +20,7 @@ if __package__:
         level_score,
         mean_or_none,
     )
+    from .extra_metrics import l6_golden_field_diagnostics
     from .task_source import bench_pin, load_bench_tasks
 else:
     sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -34,6 +35,7 @@ else:
         level_score,
         mean_or_none,
     )
+    from extra_metrics import l6_golden_field_diagnostics
     from task_source import bench_pin, load_bench_tasks
 
 
@@ -362,6 +364,36 @@ def _native_tool_calling(level_data: Iterable[Dict[str, Any]]):
     return None
 
 
+def _l6_data_health(tasks: List[Dict[str, Any]], bench_tasks: Optional[Dict[str, dict]]) -> Dict[str, int]:
+    if bench_tasks is None and tasks:
+        bench_tasks = load_bench_tasks("L6")
+
+    seeded_echo_tasks = 0
+    unresolved_field_tasks = 0
+    scored_tasks = 0
+    for task in tasks:
+        try:
+            bench_task = None
+            if bench_tasks is not None:
+                bench_task = bench_tasks.get(str(task.get("task_id")))
+            ctx = build_eval_context(task, bench_task)
+            diagnostics = l6_golden_field_diagnostics(ctx)
+        except Exception:
+            continue
+        if diagnostics.get("seeded_echo"):
+            seeded_echo_tasks += 1
+        if diagnostics.get("unresolved_fields", 0) > 0:
+            unresolved_field_tasks += 1
+        if diagnostics.get("scorable_values"):
+            scored_tasks += 1
+
+    return {
+        "seeded_echo_tasks": seeded_echo_tasks,
+        "unresolved_field_tasks": unresolved_field_tasks,
+        "scored_tasks": scored_tasks,
+    }
+
+
 def _model_name(results_dir: Path, level_data: Iterable[Dict[str, Any]]) -> str:
     for data in level_data:
         metadata = data.get("metadata") or {}
@@ -439,6 +471,10 @@ def build_summary_from_loaded_for_test(
             "tasks_with_tool_calls": level_tasks_with_tool_calls,
             "tool_calls": level_tool_calls,
         }
+        if level == "L6":
+            data_health_by_level[level].update(
+                _l6_data_health(tasks, bench_task_maps.get("L6"))
+            )
         total_tasks += len(tasks)
         tasks_with_tool_calls += level_tasks_with_tool_calls
         total_tool_calls += level_tool_calls

@@ -46,6 +46,43 @@ class DummyContext:
         self.action_trace = action_trace
 
 
+class MetricContext:
+    def __init__(self, task_schema, final_response):
+        self.task_schema = task_schema
+        self.logs = {"final_response": final_response}
+
+
+def _l6_schema(tool="ToolA", fields=None, result=None, final_seed_content="seeded answer"):
+    fields = fields if fields is not None else ["item.title", "item.author"]
+    result = result if result is not None else {"item": {"title": "책 제목", "author": "홍길동"}}
+    return {
+        "task_id": "L6-field",
+        "task_level": 6,
+        "golden_fields": [{"tool": tool, "fields": fields}],
+        "conversation_tracking": {
+            "turns": [
+                {"turn_number": 1, "role": "user", "content": "찾아줘"},
+                {
+                    "turn_number": 2,
+                    "role": "assistant",
+                    "content": final_seed_content,
+                    "action": {"tool": tool, "args": {}, "result": result},
+                },
+                {"turn_number": 3, "role": "user", "content": "아까 것 다시 알려줘"},
+            ]
+        },
+    }
+
+
+def _l6_metric(fields=None, result=None, final_response="", final_seed_content="seeded answer"):
+    return extra_metrics.golden_field_recall_det(
+        MetricContext(
+            _l6_schema(fields=fields, result=result, final_seed_content=final_seed_content),
+            final_response,
+        )
+    )
+
+
 def _assert(condition, message):
     if not condition:
         raise AssertionError(message)
@@ -148,6 +185,7 @@ def test_l6_empty_tool_calls_not_full_score():
     task = {
         "task_id": "L6-x",
         "level": 6,
+        "final_response": "책 제목은 책 제목이고 저자는 홍길동입니다.",
         "golden_action": [
             {"tool": "A", "args": {"q": "x"}},
             {"action": "context_used"},
@@ -159,16 +197,25 @@ def test_l6_empty_tool_calls_not_full_score():
         "task_id": "L6-x",
         "golden_action": task["golden_action"],
         "minimum_calls": 2,
+        "golden_fields": [{"tool": "ToolA", "fields": ["item.title", "item.author"]}],
+        "conversation_tracking": _l6_schema()["conversation_tracking"],
     }
     ctx = context.build_eval_context(task, bench_task)
     _assert_close(extra_metrics.call_eff_det(ctx), 0.0, "empty calls call_eff_det")
 
     summary = score_run.score_level("L6", {"results": [task]}, {"L6-x": bench_task})
+    _assert_close(
+        summary["metrics"]["GoldenFieldRecall_det"]["score"],
+        1.0,
+        "L6 GoldenFieldRecall_det",
+    )
     _assert_close(summary["metrics"]["CallEff_det"]["score"], 0.0, "L6 CallEff_det")
     _assert_close(summary["metrics"]["ToolAcc"]["score"], 0.0, "L6 ToolAcc")
     _assert_close(summary["metrics"]["Coverage"]["score"], 0.0, "L6 Coverage")
-    _assert(summary["score"] != 1.0, "L6 representative score must not be full")
-    _assert_close(summary["score"], 0.0, "L6 representative score")
+    _assert(summary["metrics"]["CallEff_det"]["in_score"] is False, "CallEff_det record-only")
+    _assert(summary["metrics"]["ToolAcc"]["in_score"] is False, "ToolAcc record-only")
+    _assert(summary["metrics"]["Coverage"]["in_score"] is False, "Coverage record-only")
+    _assert_close(summary["score"], 1.0, "L6 representative score")
 
 
 def _l7_bench_task(context_tests):
@@ -347,74 +394,135 @@ def test_passk_det_not_in_representative_score():
     _assert_close(summary["score"], 0.2, "PassK_det excluded from representative score")
 
 
-def test_l6_passk_primary_is_coverage():
-    _assert(
-        level_spec.PASSK_PRIMARY_METRICS["L6"] == "Coverage",
-        "L6 PassK_det primary must be Coverage",
-    )
-
-
-def test_redundant_call_rate_det_empty_trace_zero():
-    ctx = DummyContext([{"action": "context_used"}], [])
-    _assert_close(extra_metrics.redundant_call_rate_det(ctx), 0.0, "empty trace")
-
-
-def test_redundant_call_rate_det_no_success_zero():
-    ctx = DummyContext(
-        [{"action": "context_used"}],
-        [
-            {"tool": "A", "args": {}, "success": False},
-            {"tool": "A", "args": {}, "success": None},
-        ],
-    )
-    _assert_close(extra_metrics.redundant_call_rate_det(ctx), 0.0, "no successful calls")
-
-
-def test_redundant_call_rate_det_success_pass_through():
-    ctx = DummyContext(
-        [{"action": "context_used"}],
-        [
-            {"tool": "A", "args": {"q": "x"}, "success": True},
-            {"tool": "A", "args": {"q": "x"}, "success": True},
-        ],
-    )
-    expected = context.load_metrics_module().METRICS["RedundantCallRate"].evaluate(ctx).score
+def test_golden_field_recall_happy_path():
     _assert_close(
-        extra_metrics.redundant_call_rate_det(ctx),
-        expected,
-        "successful calls pass through",
-    )
-
-
-def test_redundant_call_rate_det_gate_does_not_fire_on_success():
-    """중복 호출 케이스는 vendored 값이 0.0 이라 게이트 오작동과 구분되지 않는다.
-
-    고유 호출만 하면 vendored 가 1.0 을 주므로, 여기서 0.0 이 나오면
-    게이트가 성공 호출에도 발동했다는 뜻이다.
-    """
-    ctx = DummyContext(
-        [{"action": "context_used"}],
-        [
-            {"tool": "A", "args": {"q": "x"}, "success": True},
-            {"tool": "B", "args": {"q": "y"}, "success": True},
-        ],
-    )
-    _assert_close(
-        extra_metrics.redundant_call_rate_det(ctx),
+        _l6_metric(final_response="책 제목 / 홍길동 정보를 다시 알려드립니다."),
         1.0,
-        "gate must not fire when calls succeeded",
+        "two golden fields matched",
     )
 
 
-def test_l6_spec_redundant_call_rate_shape():
-    specs = level_spec.LEVEL_SPECS["L6"]
-    by_name = {spec.name: spec for spec in specs}
-    _assert(specs[0].name == "RedundantCallRate_det", "L6 first metric")
-    _assert(by_name["RedundantCallRate_det"].in_score is True, "det in_score")
-    _assert(by_name["RedundantCallRate"].in_score is False, "raw record-only")
+def test_golden_field_recall_partial():
+    _assert_close(
+        _l6_metric(final_response="책 제목만 다시 알려드립니다."),
+        0.5,
+        "one of two golden fields matched",
+    )
+
+
+def test_golden_field_recall_seeded_echo_zero():
+    seed = "책 제목은 책 제목이고 저자는 홍길동입니다."
+    _assert_close(
+        _l6_metric(final_response=seed, final_seed_content=seed),
+        0.0,
+        "seeded echo guard",
+    )
+
+
+def test_golden_field_recall_html_tags_expected_and_response():
+    _assert_close(
+        _l6_metric(
+            fields=["item.title"],
+            result={"item": {"title": "<b>겨울</b> 제주도"}},
+            final_response="겨울 제주도 추천입니다.",
+        ),
+        1.0,
+        "expected HTML tags stripped",
+    )
+    _assert_close(
+        _l6_metric(
+            fields=["item.title"],
+            result={"item": {"title": "겨울 제주도"}},
+            final_response="<b>겨울</b> 제주도 추천입니다.",
+        ),
+        1.0,
+        "response HTML tags stripped",
+    )
+
+
+def test_golden_field_recall_category_arrows_preserved():
+    _assert_close(
+        _l6_metric(
+            fields=["item.category"],
+            result={"item": {"category": "음식점 > 중식 > 중국요리"}},
+            final_response="분류는 음식점 > 중식 > 중국요리입니다.",
+        ),
+        1.0,
+        "category arrows must not be stripped",
+    )
+
+
+def test_golden_field_recall_numeric_comma_match():
+    _assert_close(
+        _l6_metric(
+            fields=["item.priceSales"],
+            result={"item": {"priceSales": 34200}},
+            final_response="가격은 34,200원입니다.",
+        ),
+        1.0,
+        "numeric comma normalization",
+    )
+
+
+def test_golden_field_recall_description_contents_filtered():
+    score = _l6_metric(
+        fields=["item.description", "item.contents"],
+        result={"item": {"description": "설명", "contents": "본문"}},
+        final_response="설명 본문",
+    )
+    _assert(score is None, "description/contents only should be not applicable")
+
+
+def test_golden_field_recall_unresolved_excluded_from_denominator():
+    _assert_close(
+        _l6_metric(
+            fields=["item.missing", "item.title"],
+            result={"item": {"title": "책 제목"}},
+            final_response="책 제목입니다.",
+        ),
+        1.0,
+        "unresolved fields excluded",
+    )
+
+
+def test_golden_field_recall_evaluation_turn_boundary():
+    schema = {
+        "golden_fields": [{"tool": "ToolA", "fields": ["item.title"]}],
+        "conversation_tracking": {
+            "evaluation_context": {"context_tests": [{"turn": 1}]},
+            "turns": [
+                {"turn_number": 1, "role": "user", "content": "평가 질문"},
+                {
+                    "turn_number": 2,
+                    "role": "assistant",
+                    "content": "평가 뒤 답변",
+                    "action": {
+                        "tool": "ToolA",
+                        "args": {},
+                        "result": {"item": {"title": "나중 제목"}},
+                    },
+                },
+            ],
+        },
+    }
+    score = extra_metrics.golden_field_recall_det(MetricContext(schema, "나중 제목"))
+    _assert(score is None, "post-evaluation tool result must not be seeded")
+
+
+def test_l6_spec_shape_and_passk_primary():
     _assert(
-        sum(1 for spec in specs if spec.in_score) == 4,
-        "L6 must have four representative metrics",
+        level_spec.PASSK_PRIMARY_METRICS["L6"] == "GoldenFieldRecall_det",
+        "L6 PassK_det primary must be GoldenFieldRecall_det",
+    )
+    specs = level_spec.LEVEL_SPECS["L6"]
+    in_score = [spec for spec in specs if spec.in_score]
+    _assert(specs[0].name == "GoldenFieldRecall_det", "L6 first metric")
+    _assert(len(in_score) == 1, "L6 must have one representative metric")
+    _assert(in_score[0].name == "GoldenFieldRecall_det", "L6 representative metric")
+    _assert(
+        [spec.name for spec in specs]
+        == ["GoldenFieldRecall_det", "RedundantCallRate", "ToolAcc", "Coverage", "CallEff_det"],
+        "L6 metric order",
     )
 
 
@@ -431,22 +539,32 @@ def _l6_no_call_task(task_id):
     return {
         "task_id": task_id,
         "level": 6,
+        "final_response": "",
         "golden_action": [
             {"tool": "A", "args": {}},
             {"action": "context_used"},
         ],
+        "golden_fields": [{"tool": "ToolA", "fields": ["item.title"]}],
+        "conversation_tracking": _l6_schema(
+            fields=["item.title"],
+            result={"item": {"title": "seeded title"}},
+        )["conversation_tracking"],
         "tool_calls": [],
     }
 
 
 def _bench_map(tasks):
-    return {
-        task["task_id"]: {
+    mapped = {}
+    for task in tasks:
+        bench_task = {
             "task_id": task["task_id"],
             "golden_action": task["golden_action"],
         }
-        for task in tasks
-    }
+        for key in ("golden_fields", "conversation_tracking", "minimum_calls"):
+            if key in task:
+                bench_task[key] = task[key]
+        mapped[task["task_id"]] = bench_task
+    return mapped
 
 
 def test_agent_score_task_count_weighting_differs_from_equal_mean():
@@ -602,9 +720,67 @@ def test_data_health_by_level_counts_loaded_levels():
         "L2 data_health counts",
     )
     _assert(
-        by_level["L6"] == {"tasks": 2, "tasks_with_tool_calls": 0, "tool_calls": 0},
+        by_level["L6"] == {
+            "tasks": 2,
+            "tasks_with_tool_calls": 0,
+            "tool_calls": 0,
+            "seeded_echo_tasks": 0,
+            "unresolved_field_tasks": 0,
+            "scored_tasks": 2,
+        },
         "L6 data_health counts",
     )
+
+
+def test_l6_data_health_field_diagnostics_and_non_l6_shape():
+    echo_text = "책 제목과 홍길동"
+    echo_task = {
+        "task_id": "L6-health-echo",
+        "level": 6,
+        "final_response": echo_text,
+        "golden_action": [{"action": "context_used"}],
+        "golden_fields": [{"tool": "ToolA", "fields": ["item.title", "item.author"]}],
+        "conversation_tracking": _l6_schema(final_seed_content=echo_text)["conversation_tracking"],
+        "tool_calls": [],
+    }
+    unresolved_task = {
+        "task_id": "L6-health-unresolved",
+        "level": 6,
+        "final_response": "책 제목",
+        "golden_action": [{"action": "context_used"}],
+        "golden_fields": [{"tool": "ToolA", "fields": ["item.missing", "item.title"]}],
+        "conversation_tracking": _l6_schema(
+            fields=["item.missing", "item.title"],
+            result={"item": {"title": "책 제목"}},
+        )["conversation_tracking"],
+        "tool_calls": [],
+    }
+    filtered_task = {
+        "task_id": "L6-health-filtered",
+        "level": 6,
+        "final_response": "설명",
+        "golden_action": [{"action": "context_used"}],
+        "golden_fields": [{"tool": "ToolA", "fields": ["item.description"]}],
+        "conversation_tracking": _l6_schema(
+            fields=["item.description"],
+            result={"item": {"description": "설명"}},
+        )["conversation_tracking"],
+        "tool_calls": [],
+    }
+    l2_tasks = [_l2_task("L2-health-shape", "A")]
+    l6_tasks = [echo_task, unresolved_task, filtered_task]
+    summary = score_run.build_summary_from_loaded_for_test(
+        {"L6": {"results": l6_tasks}, "L2": {"results": l2_tasks}},
+        Path("/tmp/results/x/t/language/agent"),
+        bench_task_maps={"L6": _bench_map(l6_tasks), "L2": _bench_map(l2_tasks)},
+        bench_pin_value={"tasks_sha256": {}},
+    )
+    by_level = summary["data_health"]["by_level"]
+    _assert(by_level["L6"]["seeded_echo_tasks"] == 1, "L6 seeded echo count")
+    _assert(by_level["L6"]["unresolved_field_tasks"] == 1, "L6 unresolved count")
+    _assert(by_level["L6"]["scored_tasks"] == 2, "L6 scored count")
+    for key in ("seeded_echo_tasks", "unresolved_field_tasks", "scored_tasks"):
+        _assert(key not in by_level["L2"], f"non-L6 must not include {key}")
 
 
 def test_data_health_empty_run_not_parser_warning():
@@ -640,12 +816,16 @@ TESTS = [
     test_no_repetition_records_keeps_metric_entry_shape,
     test_passk_det_passes_if_one_repetition_primary_is_full,
     test_passk_det_not_in_representative_score,
-    test_l6_passk_primary_is_coverage,
-    test_redundant_call_rate_det_empty_trace_zero,
-    test_redundant_call_rate_det_no_success_zero,
-    test_redundant_call_rate_det_success_pass_through,
-    test_redundant_call_rate_det_gate_does_not_fire_on_success,
-    test_l6_spec_redundant_call_rate_shape,
+    test_golden_field_recall_happy_path,
+    test_golden_field_recall_partial,
+    test_golden_field_recall_seeded_echo_zero,
+    test_golden_field_recall_html_tags_expected_and_response,
+    test_golden_field_recall_category_arrows_preserved,
+    test_golden_field_recall_numeric_comma_match,
+    test_golden_field_recall_description_contents_filtered,
+    test_golden_field_recall_unresolved_excluded_from_denominator,
+    test_golden_field_recall_evaluation_turn_boundary,
+    test_l6_spec_shape_and_passk_primary,
     test_agent_score_task_count_weighting_differs_from_equal_mean,
     test_agent_score_excludes_none_score_from_weighting,
     test_agent_score_no_scores_has_empty_weights,
@@ -654,6 +834,7 @@ TESTS = [
     test_data_health_counts_repetition_record_tool_calls,
     test_data_health_empty_repetition_records_falls_back_to_parent,
     test_data_health_by_level_counts_loaded_levels,
+    test_l6_data_health_field_diagnostics_and_non_l6_shape,
     test_data_health_empty_run_not_parser_warning,
 ]
 

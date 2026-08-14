@@ -4,9 +4,9 @@ from dataclasses import dataclass
 from typing import Callable, Iterable, List, Optional, Sequence
 
 try:
-    from .extra_metrics import arg_f1_det, call_eff_det, fsm_prefix, redundant_call_rate_det
+    from .extra_metrics import arg_f1_det, call_eff_det, fsm_prefix, golden_field_recall_det
 except ImportError:  # direct file loading in tests
-    from extra_metrics import arg_f1_det, call_eff_det, fsm_prefix, redundant_call_rate_det
+    from extra_metrics import arg_f1_det, call_eff_det, fsm_prefix, golden_field_recall_det
 
 
 JUDGE_METRICS = ("SR", "ArgAcc", "EffScore", "ContextRetention", "RefRecall")
@@ -17,9 +17,9 @@ PASSK_PRIMARY_METRICS = {
     "L3": "FSM_strict",
     "L4": "Coverage",
     "L5": "FallbackSR",
-    # RedundantCallRate gives 1.0 even when the model makes no tool calls, so
-    # using it as pass@k primary would preserve the survival-signal bug.
-    "L6": "Coverage",
+    # In L6 seed_replay, the correct behavior is zero new tool calls; call-based
+    # metrics cannot be the pass@k primary.
+    "L6": "GoldenFieldRecall_det",
     "L7": "ToolAcc",
 }
 
@@ -67,11 +67,11 @@ LEVEL_SPECS = {
         MetricSpec("EPR_CVR", vendored_metric("EPR_CVR"), True),
     ),
     "L6": (
-        MetricSpec("RedundantCallRate_det", redundant_call_rate_det, True),
+        MetricSpec("GoldenFieldRecall_det", golden_field_recall_det, True),
         MetricSpec("RedundantCallRate", vendored_metric("RedundantCallRate"), False),
-        MetricSpec("ToolAcc", vendored_metric("ToolAcc"), True),
-        MetricSpec("Coverage", vendored_metric("Coverage"), True),
-        MetricSpec("CallEff_det", call_eff_det, True),
+        MetricSpec("ToolAcc", vendored_metric("ToolAcc"), False),
+        MetricSpec("Coverage", vendored_metric("Coverage"), False),
+        MetricSpec("CallEff_det", call_eff_det, False),
     ),
     "L7": (
         MetricSpec("ToolAcc", vendored_metric("ToolAcc"), True),
