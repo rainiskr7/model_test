@@ -2,10 +2,10 @@
   "benchmark": "Ko-AgentBench (deterministic scoring)",
   "model": "google_diffusiongemma_26B_A4B_it",
   "track": "agent_smoke_native",
-  "scoring_version": "agent_det_v4",
+  "scoring_version": "agent_det_v5",
   "native_tool_calling": true,
-  "agent_score": 0.3771839774557165,
-  "agent_score_equal_level": 0.38006102693602695,
+  "agent_score": 0.39391103059581317,
+  "agent_score_equal_level": 0.399297138047138,
   "weighting": {
     "scheme": "task_count",
     "weights": {
@@ -115,12 +115,17 @@
     },
     "L3": {
       "total": 10,
-      "score": 0.5222222222222223,
+      "score": 0.5991666666666666,
       "metrics": {
+        "FSM_prefix": {
+          "score": 0.8,
+          "status": "ok",
+          "in_score": true
+        },
         "FSM_strict": {
           "score": 0.4,
           "status": "ok",
-          "in_score": true
+          "in_score": false
         },
         "PSM": {
           "score": 0.8666666666666666,
@@ -132,10 +137,10 @@
           "status": "ok",
           "in_score": true
         },
-        "FSM_prefix": {
-          "score": 0.8,
+        "ArgF1_det": {
+          "score": 0.43,
           "status": "ok",
-          "in_score": false
+          "in_score": true
         },
         "SR": {
           "score": null,
@@ -179,7 +184,7 @@
           "status": "not_applicable",
           "in_score": false,
           "reason": "repetition_records missing",
-          "primary_metric": "FSM_strict"
+          "primary_metric": "FSM_prefix"
         }
       }
     },

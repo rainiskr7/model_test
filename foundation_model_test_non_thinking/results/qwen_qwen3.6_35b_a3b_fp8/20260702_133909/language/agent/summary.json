@@ -2,7 +2,7 @@
   "benchmark": "Ko-AgentBench (deterministic scoring)",
   "model": "qwen_qwen3.6_35b_a3b_fp8",
   "track": "agent",
-  "scoring_version": "agent_det_v4",
+  "scoring_version": "agent_det_v5",
   "native_tool_calling": null,
   "agent_score": 0.09065934065934064,
   "agent_score_equal_level": 0.07857142857142856,
@@ -191,10 +191,15 @@
       "total": 10,
       "score": 0.0,
       "metrics": {
-        "FSM_strict": {
+        "FSM_prefix": {
           "score": 0.0,
           "status": "ok",
           "in_score": true
+        },
+        "FSM_strict": {
+          "score": 0.0,
+          "status": "ok",
+          "in_score": false
         },
         "PSM": {
           "score": 0.0,
@@ -206,10 +211,10 @@
           "status": "ok",
           "in_score": true
         },
-        "FSM_prefix": {
+        "ArgF1_det": {
           "score": 0.0,
           "status": "ok",
-          "in_score": false
+          "in_score": true
         },
         "SR": {
           "score": null,
@@ -253,7 +258,7 @@
           "status": "not_applicable",
           "in_score": false,
           "reason": "repetition_records missing",
-          "primary_metric": "FSM_strict"
+          "primary_metric": "FSM_prefix"
         }
       }
     },
