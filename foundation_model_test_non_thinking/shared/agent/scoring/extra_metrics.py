@@ -30,6 +30,14 @@ def arg_f1_det(ctx) -> Optional[float]:
     return prf.get("f1")
 
 
+def redundant_call_rate_det(ctx) -> float:
+    """Close the no successful call -> 1.0 hole; 0.0, not None, keeps no-call tasks averaged."""
+    successful_calls = sum(1 for a in ctx.action_trace if a.get("success"))
+    if successful_calls == 0:
+        return 0.0
+    return load_metrics_module().METRICS["RedundantCallRate"].evaluate(ctx).score
+
+
 def call_eff_det(ctx) -> Optional[float]:
     actual_calls = len(ctx.action_trace)
     minimum_calls = ctx.task_schema.get("minimum_calls")

@@ -168,7 +168,7 @@ def test_l6_empty_tool_calls_not_full_score():
     _assert_close(summary["metrics"]["ToolAcc"]["score"], 0.0, "L6 ToolAcc")
     _assert_close(summary["metrics"]["Coverage"]["score"], 0.0, "L6 Coverage")
     _assert(summary["score"] != 1.0, "L6 representative score must not be full")
-    _assert_close(summary["score"], 0.25, "L6 representative score")
+    _assert_close(summary["score"], 0.0, "L6 representative score")
 
 
 def _l7_bench_task(context_tests):
@@ -354,6 +354,271 @@ def test_l6_passk_primary_is_coverage():
     )
 
 
+def test_redundant_call_rate_det_empty_trace_zero():
+    ctx = DummyContext([{"action": "context_used"}], [])
+    _assert_close(extra_metrics.redundant_call_rate_det(ctx), 0.0, "empty trace")
+
+
+def test_redundant_call_rate_det_no_success_zero():
+    ctx = DummyContext(
+        [{"action": "context_used"}],
+        [
+            {"tool": "A", "args": {}, "success": False},
+            {"tool": "A", "args": {}, "success": None},
+        ],
+    )
+    _assert_close(extra_metrics.redundant_call_rate_det(ctx), 0.0, "no successful calls")
+
+
+def test_redundant_call_rate_det_success_pass_through():
+    ctx = DummyContext(
+        [{"action": "context_used"}],
+        [
+            {"tool": "A", "args": {"q": "x"}, "success": True},
+            {"tool": "A", "args": {"q": "x"}, "success": True},
+        ],
+    )
+    expected = context.load_metrics_module().METRICS["RedundantCallRate"].evaluate(ctx).score
+    _assert_close(
+        extra_metrics.redundant_call_rate_det(ctx),
+        expected,
+        "successful calls pass through",
+    )
+
+
+def test_redundant_call_rate_det_gate_does_not_fire_on_success():
+    """중복 호출 케이스는 vendored 값이 0.0 이라 게이트 오작동과 구분되지 않는다.
+
+    고유 호출만 하면 vendored 가 1.0 을 주므로, 여기서 0.0 이 나오면
+    게이트가 성공 호출에도 발동했다는 뜻이다.
+    """
+    ctx = DummyContext(
+        [{"action": "context_used"}],
+        [
+            {"tool": "A", "args": {"q": "x"}, "success": True},
+            {"tool": "B", "args": {"q": "y"}, "success": True},
+        ],
+    )
+    _assert_close(
+        extra_metrics.redundant_call_rate_det(ctx),
+        1.0,
+        "gate must not fire when calls succeeded",
+    )
+
+
+def test_l6_spec_redundant_call_rate_shape():
+    specs = level_spec.LEVEL_SPECS["L6"]
+    by_name = {spec.name: spec for spec in specs}
+    _assert(specs[0].name == "RedundantCallRate_det", "L6 first metric")
+    _assert(by_name["RedundantCallRate_det"].in_score is True, "det in_score")
+    _assert(by_name["RedundantCallRate"].in_score is False, "raw record-only")
+    _assert(
+        sum(1 for spec in specs if spec.in_score) == 4,
+        "L6 must have four representative metrics",
+    )
+
+
+def _l2_task(task_id, tool_name):
+    return {
+        "task_id": task_id,
+        "level": 2,
+        "golden_action": [{"tool": "A", "args": {}}],
+        "tool_calls": [{"tool_name": tool_name, "arguments": {}, "success": True}],
+    }
+
+
+def _l6_no_call_task(task_id):
+    return {
+        "task_id": task_id,
+        "level": 6,
+        "golden_action": [
+            {"tool": "A", "args": {}},
+            {"action": "context_used"},
+        ],
+        "tool_calls": [],
+    }
+
+
+def _bench_map(tasks):
+    return {
+        task["task_id"]: {
+            "task_id": task["task_id"],
+            "golden_action": task["golden_action"],
+        }
+        for task in tasks
+    }
+
+
+def test_agent_score_task_count_weighting_differs_from_equal_mean():
+    l2_tasks = [_l2_task("L2-weight-1", "A")]
+    l6_tasks = [
+        _l6_no_call_task("L6-weight-1"),
+        _l6_no_call_task("L6-weight-2"),
+        _l6_no_call_task("L6-weight-3"),
+    ]
+    summary = score_run.build_summary_from_loaded_for_test(
+        {"L2": {"results": l2_tasks}, "L6": {"results": l6_tasks}},
+        Path("/tmp/results/x/t/language/agent"),
+        bench_task_maps={"L2": _bench_map(l2_tasks), "L6": _bench_map(l6_tasks)},
+        bench_pin_value={"tasks_sha256": {}},
+    )
+    _assert_close(summary["by_level"]["L2"]["score"], 1.0, "L2 score")
+    _assert_close(summary["by_level"]["L6"]["score"], 0.0, "L6 score")
+    _assert_close(summary["agent_score"], 0.25, "weighted agent score")
+    _assert_close(summary["agent_score_equal_level"], 0.5, "equal-level agent score")
+    _assert(summary["agent_score"] != summary["agent_score_equal_level"], "scores should differ")
+    _assert(summary["weighting"]["weights"] == {"L2": 1, "L6": 3}, "weights")
+
+
+def test_agent_score_excludes_none_score_from_weighting():
+    l2_tasks = [_l2_task("L2-weight-none", "A")]
+    summary = score_run.build_summary_from_loaded_for_test(
+        {"L2": {"results": l2_tasks}, "L7": {"results": []}},
+        Path("/tmp/results/x/t/language/agent"),
+        bench_task_maps={"L2": _bench_map(l2_tasks), "L7": {}},
+        bench_pin_value={"tasks_sha256": {}},
+    )
+    _assert(summary["by_level"]["L7"]["score"] is None, "L7 should be unscorable")
+    _assert_close(summary["agent_score"], 1.0, "weighted with None excluded")
+    _assert(summary["weighting"]["weights"] == {"L2": 1}, "None score excluded")
+
+
+def test_agent_score_no_scores_has_empty_weights():
+    summary = score_run.build_summary_from_loaded_for_test(
+        {"L7": {"results": []}},
+        Path("/tmp/results/x/t/language/agent"),
+        bench_task_maps={"L7": {}},
+        bench_pin_value={"tasks_sha256": {}},
+    )
+    _assert(summary["agent_score"] is None, "no scores weighted score")
+    _assert(summary["agent_score_equal_level"] is None, "no scores equal-level score")
+    _assert(summary["weighting"]["weights"] == {}, "empty weights")
+
+
+def test_data_health_no_tool_calls_warns():
+    l6_tasks = [
+        _l6_no_call_task("L6-health-empty-1"),
+        _l6_no_call_task("L6-health-empty-2"),
+    ]
+    summary = score_run.build_summary_from_loaded_for_test(
+        {"L6": {"results": l6_tasks}},
+        Path("/tmp/results/x/t/language/agent"),
+        bench_task_maps={"L6": _bench_map(l6_tasks)},
+        bench_pin_value={"tasks_sha256": {}},
+    )
+    health = summary["data_health"]
+    _assert(health["no_tool_calls_recorded"] is True, "empty tool calls should warn")
+    _assert(health["total_tool_calls"] == 0, "empty total tool calls")
+    _assert(health["tasks_with_tool_calls"] == 0, "empty tasks with tool calls")
+    _assert("warning" in health, "warning key should be present")
+
+
+def test_data_health_tool_calls_no_warning():
+    l2_tasks = [_l2_task("L2-health-call", "A")]
+    summary = score_run.build_summary_from_loaded_for_test(
+        {"L2": {"results": l2_tasks}},
+        Path("/tmp/results/x/t/language/agent"),
+        bench_task_maps={"L2": _bench_map(l2_tasks)},
+        bench_pin_value={"tasks_sha256": {}},
+    )
+    health = summary["data_health"]
+    _assert(health["no_tool_calls_recorded"] is False, "tool calls should not warn")
+    _assert(health["total_tool_calls"] == 1, "one total tool call")
+    _assert("warning" not in health, "warning key should be absent")
+
+
+def test_data_health_counts_repetition_record_tool_calls():
+    task = {
+        "task_id": "L2-health-repeat",
+        "level": 2,
+        "golden_action": [{"tool": "A", "args": {}}],
+        "tool_calls": [],
+        "repetitions": 2,
+        "repetition_results": [True, True],
+        "repetition_records": [
+            {
+                "rep_index": 0,
+                "success": True,
+                "tool_calls": [{"tool_name": "A", "arguments": {}, "success": True}],
+            },
+            {
+                "rep_index": 1,
+                "success": True,
+                "tool_calls": [{"tool_name": "B", "arguments": {}, "success": True}],
+            },
+        ],
+    }
+    summary = score_run.build_summary_from_loaded_for_test(
+        {"L2": {"results": [task]}},
+        Path("/tmp/results/x/t/language/agent"),
+        bench_task_maps={"L2": _bench_map([task])},
+        bench_pin_value={"tasks_sha256": {}},
+    )
+    health = summary["data_health"]
+    _assert(health["total_tool_calls"] == 2, "repetition tool calls counted")
+    _assert(health["no_tool_calls_recorded"] is False, "repetition calls should not warn")
+
+
+def test_data_health_empty_repetition_records_falls_back_to_parent():
+    """빈 repetition_records 는 부모 tool_calls 로 폴백한다.
+
+    _has_repetition_records 가 빈 리스트를 인정하지 않으므로 채점은 부모 tool_calls 로
+    이뤄진다. data_health 가 다른 규칙을 쓰면 0 으로 잡혀 잘못된 경고가 뜬다.
+    """
+    task = {
+        "task_id": "L2-health-empty-records",
+        "level": 2,
+        "golden_action": [{"tool": "A", "args": {}}],
+        "tool_calls": [{"tool_name": "A", "arguments": {}, "success": True}],
+        "repetition_records": [],
+    }
+    summary = score_run.build_summary_from_loaded_for_test(
+        {"L2": {"results": [task]}},
+        Path("/tmp/results/x/t/language/agent"),
+        bench_task_maps={"L2": _bench_map([task])},
+        bench_pin_value={"tasks_sha256": {}},
+    )
+    health = summary["data_health"]
+    _assert(health["total_tool_calls"] == 1, "parent tool_calls counted on empty records")
+    _assert(health["no_tool_calls_recorded"] is False, "must not warn when parent has calls")
+
+
+def test_data_health_by_level_counts_loaded_levels():
+    l2_tasks = [_l2_task("L2-health-level", "A")]
+    l6_tasks = [
+        _l6_no_call_task("L6-health-level-1"),
+        _l6_no_call_task("L6-health-level-2"),
+    ]
+    summary = score_run.build_summary_from_loaded_for_test(
+        {"L2": {"results": l2_tasks}, "L6": {"results": l6_tasks}},
+        Path("/tmp/results/x/t/language/agent"),
+        bench_task_maps={"L2": _bench_map(l2_tasks), "L6": _bench_map(l6_tasks)},
+        bench_pin_value={"tasks_sha256": {}},
+    )
+    by_level = summary["data_health"]["by_level"]
+    _assert(set(by_level) == {"L2", "L6"}, "data_health levels")
+    _assert(
+        by_level["L2"] == {"tasks": 1, "tasks_with_tool_calls": 1, "tool_calls": 1},
+        "L2 data_health counts",
+    )
+    _assert(
+        by_level["L6"] == {"tasks": 2, "tasks_with_tool_calls": 0, "tool_calls": 0},
+        "L6 data_health counts",
+    )
+
+
+def test_data_health_empty_run_not_parser_warning():
+    summary = score_run.build_summary_from_loaded_for_test(
+        {"L7": {"results": []}},
+        Path("/tmp/results/x/t/language/agent"),
+        bench_task_maps={"L7": {}},
+        bench_pin_value={"tasks_sha256": {}},
+    )
+    health = summary["data_health"]
+    _assert(health["total_tasks"] == 0, "empty run total tasks")
+    _assert(health["no_tool_calls_recorded"] is False, "empty run should not warn")
+
+
 TESTS = [
     test_fsm_prefix_exact_match,
     test_fsm_prefix_with_extra_calls,
@@ -376,6 +641,20 @@ TESTS = [
     test_passk_det_passes_if_one_repetition_primary_is_full,
     test_passk_det_not_in_representative_score,
     test_l6_passk_primary_is_coverage,
+    test_redundant_call_rate_det_empty_trace_zero,
+    test_redundant_call_rate_det_no_success_zero,
+    test_redundant_call_rate_det_success_pass_through,
+    test_redundant_call_rate_det_gate_does_not_fire_on_success,
+    test_l6_spec_redundant_call_rate_shape,
+    test_agent_score_task_count_weighting_differs_from_equal_mean,
+    test_agent_score_excludes_none_score_from_weighting,
+    test_agent_score_no_scores_has_empty_weights,
+    test_data_health_no_tool_calls_warns,
+    test_data_health_tool_calls_no_warning,
+    test_data_health_counts_repetition_record_tool_calls,
+    test_data_health_empty_repetition_records_falls_back_to_parent,
+    test_data_health_by_level_counts_loaded_levels,
+    test_data_health_empty_run_not_parser_warning,
 ]
 
 
