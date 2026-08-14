@@ -1,35 +1,53 @@
 {
   "benchmark": "Ko-AgentBench (deterministic scoring)",
-  "model": "google_diffusiongemma_26B_A4B_it",
-  "track": "agent_smoke_native",
+  "model": "Qwen3.5_122B_A10B_GPTQ_Int4",
+  "track": "agent",
   "scoring_version": "agent_det_v3",
-  "native_tool_calling": true,
-  "agent_score": 0.2752818035426731,
-  "agent_score_equal_level": 0.30193602693602695,
+  "native_tool_calling": null,
+  "agent_score": 0.0,
+  "agent_score_equal_level": 0.0,
   "weighting": {
     "scheme": "task_count",
     "weights": {
       "L1": 11,
+      "L2": 15,
       "L3": 10,
+      "L4": 10,
+      "L5": 20,
       "L6": 15,
       "L7": 10
     }
   },
   "data_health": {
-    "total_tasks": 46,
-    "tasks_with_tool_calls": 20,
-    "total_tool_calls": 39,
-    "no_tool_calls_recorded": false,
+    "total_tasks": 91,
+    "tasks_with_tool_calls": 0,
+    "total_tool_calls": 0,
+    "no_tool_calls_recorded": true,
     "by_level": {
       "L1": {
         "tasks": 11,
-        "tasks_with_tool_calls": 10,
-        "tool_calls": 10
+        "tasks_with_tool_calls": 0,
+        "tool_calls": 0
+      },
+      "L2": {
+        "tasks": 15,
+        "tasks_with_tool_calls": 0,
+        "tool_calls": 0
       },
       "L3": {
         "tasks": 10,
-        "tasks_with_tool_calls": 9,
-        "tool_calls": 28
+        "tasks_with_tool_calls": 0,
+        "tool_calls": 0
+      },
+      "L4": {
+        "tasks": 10,
+        "tasks_with_tool_calls": 0,
+        "tool_calls": 0
+      },
+      "L5": {
+        "tasks": 20,
+        "tasks_with_tool_calls": 0,
+        "tool_calls": 0
       },
       "L6": {
         "tasks": 15,
@@ -38,28 +56,29 @@
       },
       "L7": {
         "tasks": 10,
-        "tasks_with_tool_calls": 1,
-        "tool_calls": 1
+        "tasks_with_tool_calls": 0,
+        "tool_calls": 0
       }
-    }
+    },
+    "warning": "저장된 결과에 tool_call 기록이 하나도 없다. 모든 결정론 지표가 구조적으로 0 이 되므로 이 점수는 모델 성능이 아니라 러너/파서 산출물 문제일 수 있다 (tool_call 파서 수정 이전 런일 가능성)."
   },
   "by_level": {
     "L1": {
       "total": 11,
-      "score": 0.5855218855218854,
+      "score": 0.0,
       "metrics": {
         "ToolAcc": {
-          "score": 0.9090909090909091,
+          "score": 0.0,
           "status": "ok",
           "in_score": true
         },
         "CallEM": {
-          "score": 0.2727272727272727,
+          "score": 0.0,
           "status": "ok",
           "in_score": true
         },
         "ArgF1_det": {
-          "score": 0.5747474747474747,
+          "score": 0.0,
           "status": "ok",
           "in_score": true
         },
@@ -110,27 +129,82 @@
         }
       }
     },
+    "L2": {
+      "total": 15,
+      "score": 0.0,
+      "metrics": {
+        "SelectAcc": {
+          "score": 0.0,
+          "status": "ok",
+          "in_score": true
+        },
+        "SR": {
+          "score": null,
+          "status": "judge_missing",
+          "in_score": false
+        },
+        "ArgAcc": {
+          "score": null,
+          "status": "judge_missing",
+          "in_score": false
+        },
+        "EffScore": {
+          "score": null,
+          "status": "judge_missing",
+          "in_score": false
+        },
+        "ContextRetention": {
+          "score": null,
+          "status": "judge_missing",
+          "in_score": false
+        },
+        "RefRecall": {
+          "score": null,
+          "status": "judge_missing",
+          "in_score": false
+        },
+        "pass@k": {
+          "score": null,
+          "status": "not_applicable",
+          "in_score": false,
+          "reason": "repetition_results length < 2",
+          "note": "runner survival signal, not correctness - see PassK_det"
+        },
+        "RespOK": {
+          "score": 1.0,
+          "status": "ok",
+          "in_score": false
+        },
+        "PassK_det": {
+          "score": null,
+          "status": "not_applicable",
+          "in_score": false,
+          "reason": "repetition_records missing",
+          "primary_metric": "SelectAcc"
+        }
+      }
+    },
     "L3": {
       "total": 10,
-      "score": 0.5222222222222223,
+      "score": 0.0,
       "metrics": {
         "FSM_strict": {
-          "score": 0.4,
+          "score": 0.0,
           "status": "ok",
           "in_score": true
         },
         "PSM": {
-          "score": 0.8666666666666666,
+          "score": 0.0,
           "status": "ok",
           "in_score": true
         },
         "ΔSteps_norm": {
-          "score": 0.3,
+          "score": 0.0,
           "status": "ok",
           "in_score": true
         },
         "FSM_prefix": {
-          "score": 0.8,
+          "score": 0.0,
           "status": "ok",
           "in_score": false
         },
@@ -167,7 +241,7 @@
           "note": "runner survival signal, not correctness - see PassK_det"
         },
         "RespOK": {
-          "score": 0.9,
+          "score": 1.0,
           "status": "ok",
           "in_score": false
         },
@@ -177,6 +251,131 @@
           "in_score": false,
           "reason": "repetition_records missing",
           "primary_metric": "FSM_strict"
+        }
+      }
+    },
+    "L4": {
+      "total": 10,
+      "score": 0.0,
+      "metrics": {
+        "Coverage": {
+          "score": 0.0,
+          "status": "ok",
+          "in_score": true
+        },
+        "SourceEPR": {
+          "score": 0.0,
+          "status": "ok",
+          "in_score": true
+        },
+        "SR": {
+          "score": null,
+          "status": "judge_missing",
+          "in_score": false
+        },
+        "ArgAcc": {
+          "score": null,
+          "status": "judge_missing",
+          "in_score": false
+        },
+        "EffScore": {
+          "score": null,
+          "status": "judge_missing",
+          "in_score": false
+        },
+        "ContextRetention": {
+          "score": null,
+          "status": "judge_missing",
+          "in_score": false
+        },
+        "RefRecall": {
+          "score": null,
+          "status": "judge_missing",
+          "in_score": false
+        },
+        "pass@k": {
+          "score": null,
+          "status": "not_applicable",
+          "in_score": false,
+          "reason": "repetition_results length < 2",
+          "note": "runner survival signal, not correctness - see PassK_det"
+        },
+        "RespOK": {
+          "score": 1.0,
+          "status": "ok",
+          "in_score": false
+        },
+        "PassK_det": {
+          "score": null,
+          "status": "not_applicable",
+          "in_score": false,
+          "reason": "repetition_records missing",
+          "primary_metric": "Coverage"
+        }
+      }
+    },
+    "L5": {
+      "total": 20,
+      "score": 0.0,
+      "metrics": {
+        "FallbackSR": {
+          "score": 0.0,
+          "status": "ok",
+          "in_score": true
+        },
+        "AdaptiveRoutingScore": {
+          "score": 0.0,
+          "status": "ok",
+          "in_score": true
+        },
+        "EPR_CVR": {
+          "score": 0.0,
+          "status": "ok",
+          "in_score": true
+        },
+        "SR": {
+          "score": null,
+          "status": "judge_missing",
+          "in_score": false
+        },
+        "ArgAcc": {
+          "score": null,
+          "status": "judge_missing",
+          "in_score": false
+        },
+        "EffScore": {
+          "score": null,
+          "status": "judge_missing",
+          "in_score": false
+        },
+        "ContextRetention": {
+          "score": null,
+          "status": "judge_missing",
+          "in_score": false
+        },
+        "RefRecall": {
+          "score": null,
+          "status": "judge_missing",
+          "in_score": false
+        },
+        "pass@k": {
+          "score": null,
+          "status": "not_applicable",
+          "in_score": false,
+          "reason": "repetition_results length < 2",
+          "note": "runner survival signal, not correctness - see PassK_det"
+        },
+        "RespOK": {
+          "score": 1.0,
+          "status": "ok",
+          "in_score": false
+        },
+        "PassK_det": {
+          "score": null,
+          "status": "not_applicable",
+          "in_score": false,
+          "reason": "repetition_records missing",
+          "primary_metric": "FallbackSR"
         }
       }
     },
@@ -257,20 +456,20 @@
     },
     "L7": {
       "total": 10,
-      "score": 0.10000000000000002,
+      "score": 0.0,
       "metrics": {
         "ToolAcc": {
-          "score": 0.1,
+          "score": 0.0,
           "status": "ok",
           "in_score": true
         },
         "CallEM": {
-          "score": 0.1,
+          "score": 0.0,
           "status": "ok",
           "in_score": true
         },
         "ArgF1_det": {
-          "score": 0.1,
+          "score": 0.0,
           "status": "ok",
           "in_score": true
         },
@@ -324,22 +523,24 @@
   "bench_pin": {
     "tasks_sha256": {
       "L1": "0bbb7a18290b643347680acab5b222a3891ffbb5667f78e70ec54a1907fabffc",
+      "L2": "d23d783294f0917cc0ab5d8c960894a30c7c1c44601b4267ec517c5155ff5843",
       "L3": "dd904f56e9cb3ee35803b50a99c233901f6df9909334b94d2c3824e731d892d6",
+      "L4": "c1c8575dcc986117044e4096a5ad00403a7b3f5d327e5ad5e5049722810b7aaf",
+      "L5": "bdc14645ce28c5ed47d3537483db26331a897ae1ee1455990ead84c05d89b9b2",
       "L6": "bf16c3d679563c60318b15832ddc9ad126f416477b66466052273c46eecc18e2",
       "L7": "60baef9a0fa4788af11e76d03e0f94106db241d386e951d55b0a133102d20bd5"
     }
   },
   "runner_survival_rate": {
     "L1": 100.0,
-    "L3": 90.0,
+    "L2": 100.0,
+    "L3": 100.0,
+    "L4": 100.0,
+    "L5": 100.0,
     "L6": 100.0,
-    "L7": 100.0,
+    "L7": 90.0,
     "note": "기존 metadata.success_rate. 정답률이 아니라 'final_response 반환 + step>=1' 생존신호다 (run.py:232-235). 비교용으로 쓰지 말 것."
   },
-  "levels_missing": [
-    "L2",
-    "L4",
-    "L5"
-  ],
+  "levels_missing": [],
   "levels_unscorable": []
 }

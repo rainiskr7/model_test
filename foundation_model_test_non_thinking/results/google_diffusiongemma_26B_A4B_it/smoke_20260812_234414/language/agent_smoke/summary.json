@@ -2,9 +2,29 @@
   "benchmark": "Ko-AgentBench (deterministic scoring)",
   "model": "google_diffusiongemma_26B_A4B_it",
   "track": "agent_smoke",
-  "scoring_version": "agent_det_v1",
+  "scoring_version": "agent_det_v3",
   "native_tool_calling": null,
   "agent_score": 0.08080808080808081,
+  "agent_score_equal_level": 0.08080808080808081,
+  "weighting": {
+    "scheme": "task_count",
+    "weights": {
+      "L1": 11
+    }
+  },
+  "data_health": {
+    "total_tasks": 11,
+    "tasks_with_tool_calls": 2,
+    "total_tool_calls": 3,
+    "no_tool_calls_recorded": false,
+    "by_level": {
+      "L1": {
+        "tasks": 11,
+        "tasks_with_tool_calls": 2,
+        "tool_calls": 3
+      }
+    }
+  },
   "by_level": {
     "L1": {
       "total": 11,
@@ -54,15 +74,28 @@
           "score": null,
           "status": "not_applicable",
           "in_score": false,
-          "reason": "repetition_results length < 2"
+          "reason": "repetition_results length < 2",
+          "note": "runner survival signal, not correctness - see PassK_det"
         },
         "RespOK": {
           "score": null,
           "status": "not_applicable",
           "in_score": false,
           "reason": "resp_schema.type == string"
+        },
+        "PassK_det": {
+          "score": null,
+          "status": "not_applicable",
+          "in_score": false,
+          "reason": "repetition_records missing",
+          "primary_metric": "CallEM"
         }
       }
+    }
+  },
+  "bench_pin": {
+    "tasks_sha256": {
+      "L1": "0bbb7a18290b643347680acab5b222a3891ffbb5667f78e70ec54a1907fabffc"
     }
   },
   "runner_survival_rate": {

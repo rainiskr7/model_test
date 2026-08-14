@@ -2,18 +2,51 @@
   "benchmark": "Ko-AgentBench (deterministic scoring)",
   "model": "google_diffusiongemma_26B_A4B_it",
   "track": "agent_passk",
-  "scoring_version": "agent_det_v2",
+  "scoring_version": "agent_det_v3",
   "native_tool_calling": true,
-  "agent_score": 0.25,
+  "agent_score": 0.0,
+  "agent_score_equal_level": 0.0,
+  "weighting": {
+    "scheme": "task_count",
+    "weights": {
+      "L6": 15
+    }
+  },
+  "data_health": {
+    "total_tasks": 15,
+    "tasks_with_tool_calls": 0,
+    "total_tool_calls": 0,
+    "no_tool_calls_recorded": true,
+    "by_level": {
+      "L6": {
+        "tasks": 15,
+        "tasks_with_tool_calls": 0,
+        "tool_calls": 0
+      }
+    },
+    "warning": "저장된 결과에 tool_call 기록이 하나도 없다. 모든 결정론 지표가 구조적으로 0 이 되므로 이 점수는 모델 성능이 아니라 러너/파서 산출물 문제일 수 있다 (tool_call 파서 수정 이전 런일 가능성)."
+  },
   "by_level": {
     "L6": {
       "total": 15,
-      "score": 0.25,
+      "score": 0.0,
       "metrics": {
+        "RedundantCallRate_det": {
+          "score": 0.0,
+          "status": "ok",
+          "in_score": true,
+          "repeated": true,
+          "n_repetitions": 2,
+          "std": 0.0,
+          "per_repetition": [
+            0.0,
+            0.0
+          ]
+        },
         "RedundantCallRate": {
           "score": 1.0,
           "status": "ok",
-          "in_score": true,
+          "in_score": false,
           "repeated": true,
           "n_repetitions": 2,
           "std": 0.0,
