@@ -14,7 +14,8 @@ COMMON_RECORD_ONLY = ("pass@k", "RespOK")
 PASSK_PRIMARY_METRICS = {
     "L1": "CallEM",
     "L2": "SelectAcc",
-    "L3": "FSM_strict",
+    # FSM_strict is count-based and near-duplicate of ΔSteps_norm; FSM_prefix is the sequence primary.
+    "L3": "FSM_prefix",
     "L4": "Coverage",
     "L5": "FallbackSR",
     # In L6 seed_replay, the correct behavior is zero new tool calls; call-based
@@ -52,10 +53,11 @@ LEVEL_SPECS = {
     ),
     "L2": (MetricSpec("SelectAcc", vendored_metric("SelectAcc"), True),),
     "L3": (
-        MetricSpec("FSM_strict", vendored_metric("FSM"), True),
+        MetricSpec("FSM_prefix", fsm_prefix, True),
+        MetricSpec("FSM_strict", vendored_metric("FSM"), False),
         MetricSpec("PSM", vendored_metric("PSM"), True),
         MetricSpec("ΔSteps_norm", vendored_metric("ΔSteps_norm"), True),
-        MetricSpec("FSM_prefix", fsm_prefix, False),
+        MetricSpec("ArgF1_det", arg_f1_det, True),
     ),
     "L4": (
         MetricSpec("Coverage", vendored_metric("Coverage"), True),
