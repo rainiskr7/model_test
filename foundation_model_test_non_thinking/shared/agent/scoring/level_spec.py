@@ -10,6 +10,7 @@ try:
         coverage_det,
         fsm_prefix,
         golden_field_recall_det,
+        no_refetch_det,
         source_epr_det,
     )
 except ImportError:  # direct file loading in tests
@@ -19,6 +20,7 @@ except ImportError:  # direct file loading in tests
         coverage_det,
         fsm_prefix,
         golden_field_recall_det,
+        no_refetch_det,
         source_epr_det,
     )
 
@@ -91,6 +93,7 @@ LEVEL_SPECS = {
     ),
     "L6": (
         MetricSpec("GoldenFieldRecall_det", golden_field_recall_det, True),
+        MetricSpec("NoRefetch_det", no_refetch_det, True),
         MetricSpec("RedundantCallRate", vendored_metric("RedundantCallRate"), False),
         MetricSpec("ToolAcc", vendored_metric("ToolAcc"), False),
         MetricSpec("Coverage", vendored_metric("Coverage"), False),

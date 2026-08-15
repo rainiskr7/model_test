@@ -578,6 +578,73 @@ def test_golden_field_recall_evaluation_turn_boundary():
     _assert(score is None, "post-evaluation tool result must not be seeded")
 
 
+def test_no_refetch_det_empty_action_trace():
+    _assert_close(extra_metrics.no_refetch_det(DummyContext([], [])), 1.0, "empty action trace")
+
+
+def test_no_refetch_det_any_call_including_failed():
+    _assert_close(
+        extra_metrics.no_refetch_det(DummyContext([], [{"tool": "A", "success": True}])),
+        0.0,
+        "one call",
+    )
+    _assert_close(
+        extra_metrics.no_refetch_det(
+            DummyContext([], [{"tool": "A", "success": False, "error": "failed"}])
+        ),
+        0.0,
+        "failed call still refetch",
+    )
+
+
+def test_l6_refetch_with_correct_answer_not_full_score():
+    task = {
+        "task_id": "L6-refetch-correct",
+        "level": 6,
+        "final_response": "책 제목과 홍길동 정보를 다시 알려드립니다.",
+        "golden_action": [{"action": "context_used"}],
+        "tool_calls": [{"tool_name": "ToolA", "arguments": {}, "success": True}],
+    }
+    bench_task = {
+        "task_id": "L6-refetch-correct",
+        "golden_action": task["golden_action"],
+        "golden_fields": [{"tool": "ToolA", "fields": ["item.title", "item.author"]}],
+        "conversation_tracking": _l6_schema()["conversation_tracking"],
+    }
+    summary = score_run.score_level("L6", {"results": [task]}, {"L6-refetch-correct": bench_task})
+    _assert_close(
+        summary["metrics"]["GoldenFieldRecall_det"]["score"],
+        1.0,
+        "correct seeded field answer",
+    )
+    _assert_close(summary["metrics"]["NoRefetch_det"]["score"], 0.0, "refetch penalty")
+    _assert(summary["score"] < 1.0, "L6 level score must penalize refetch")
+
+
+def test_l6_no_refetch_with_correct_answer_full_score():
+    task = {
+        "task_id": "L6-no-refetch-correct",
+        "level": 6,
+        "final_response": "책 제목과 홍길동 정보를 다시 알려드립니다.",
+        "golden_action": [{"action": "context_used"}],
+        "tool_calls": [],
+    }
+    bench_task = {
+        "task_id": "L6-no-refetch-correct",
+        "golden_action": task["golden_action"],
+        "golden_fields": [{"tool": "ToolA", "fields": ["item.title", "item.author"]}],
+        "conversation_tracking": _l6_schema()["conversation_tracking"],
+    }
+    summary = score_run.score_level("L6", {"results": [task]}, {"L6-no-refetch-correct": bench_task})
+    _assert_close(
+        summary["metrics"]["GoldenFieldRecall_det"]["score"],
+        1.0,
+        "correct seeded field answer",
+    )
+    _assert_close(summary["metrics"]["NoRefetch_det"]["score"], 1.0, "no refetch")
+    _assert_close(summary["score"], 1.0, "L6 no-refetch correct answer full score")
+
+
 def test_l4_meaningful_result_predicate():
     _assert(extra_metrics.l4_has_meaningful_result(["x"]) is True, "non-empty list")
     _assert(extra_metrics.l4_has_meaningful_result([]) is False, "empty list")
@@ -668,12 +735,12 @@ def test_l4_spec_shape_and_passk_primary():
 
 def test_l4_change_leaves_l6_and_l3_shapes_unchanged():
     _assert(
-        len([spec for spec in level_spec.LEVEL_SPECS["L6"] if spec.in_score]) == 1,
+        len([spec for spec in level_spec.LEVEL_SPECS["L6"] if spec.in_score]) == 2,
         "L6 representative metric count",
     )
     _assert(
         [spec.name for spec in level_spec.LEVEL_SPECS["L6"] if spec.in_score]
-        == ["GoldenFieldRecall_det"],
+        == ["GoldenFieldRecall_det", "NoRefetch_det"],
         "L6 representative metric name",
     )
     _assert(
@@ -694,13 +761,26 @@ def test_l6_spec_shape_and_passk_primary():
     specs = level_spec.LEVEL_SPECS["L6"]
     in_score = [spec for spec in specs if spec.in_score]
     _assert(specs[0].name == "GoldenFieldRecall_det", "L6 first metric")
-    _assert(len(in_score) == 1, "L6 must have one representative metric")
-    _assert(in_score[0].name == "GoldenFieldRecall_det", "L6 representative metric")
+    _assert(
+        [spec.name for spec in in_score] == ["GoldenFieldRecall_det", "NoRefetch_det"],
+        "L6 representative metrics",
+    )
     _assert(
         [spec.name for spec in specs]
-        == ["GoldenFieldRecall_det", "RedundantCallRate", "ToolAcc", "Coverage", "CallEff_det"],
+        == [
+            "GoldenFieldRecall_det",
+            "NoRefetch_det",
+            "RedundantCallRate",
+            "ToolAcc",
+            "Coverage",
+            "CallEff_det",
+        ],
         "L6 metric order",
     )
+    _assert(level_spec.LEVEL_SPECS["L6"][2].in_score is False, "RedundantCallRate record-only")
+    _assert(level_spec.LEVEL_SPECS["L6"][3].in_score is False, "ToolAcc record-only")
+    _assert(level_spec.LEVEL_SPECS["L6"][4].in_score is False, "Coverage record-only")
+    _assert(level_spec.LEVEL_SPECS["L6"][5].in_score is False, "CallEff_det record-only")
 
 
 def test_l3_spec_shape():
@@ -815,12 +895,20 @@ def test_other_level_shapes_unchanged():
         "L1 representative metric count",
     )
     _assert(
+        len([spec for spec in level_spec.LEVEL_SPECS["L2"] if spec.in_score]) == 3,
+        "L2 representative metric count",
+    )
+    _assert(
+        len([spec for spec in level_spec.LEVEL_SPECS["L3"] if spec.in_score]) == 4,
+        "L3 representative metric count",
+    )
+    _assert(
         len([spec for spec in level_spec.LEVEL_SPECS["L4"] if spec.in_score]) == 2,
         "L4 representative metric count",
     )
     _assert(
-        len([spec for spec in level_spec.LEVEL_SPECS["L6"] if spec.in_score]) == 1,
-        "L6 representative metric count",
+        len([spec for spec in level_spec.LEVEL_SPECS["L7"] if spec.in_score]) == 3,
+        "L7 representative metric count",
     )
     _assert(level_spec.PASSK_PRIMARY_METRICS["L1"] == "CallEM", "L1 PassK_det primary")
 
@@ -880,9 +968,9 @@ def test_agent_score_scored_task_count_weighting_differs_from_equal_mean():
         bench_pin_value={"tasks_sha256": {}},
     )
     _assert_close(summary["by_level"]["L2"]["score"], 1.0, "L2 score")
-    _assert_close(summary["by_level"]["L6"]["score"], 0.0, "L6 score")
-    _assert_close(summary["agent_score"], 0.25, "weighted agent score")
-    _assert_close(summary["agent_score_equal_level"], 0.5, "equal-level agent score")
+    _assert_close(summary["by_level"]["L6"]["score"], 0.5, "L6 score")
+    _assert_close(summary["agent_score"], 0.625, "weighted agent score")
+    _assert_close(summary["agent_score_equal_level"], 0.75, "equal-level agent score")
     _assert(summary["agent_score"] != summary["agent_score_equal_level"], "scores should differ")
     _assert(summary["weighting"]["weights"] == {"L2": 1, "L6": 3}, "weights")
 
@@ -1595,6 +1683,10 @@ TESTS = [
     test_l6_resolve_field_with_fallback_scalar_suffix,
     test_l6_golden_field_diagnostics_counts_fallback_fields,
     test_golden_field_recall_evaluation_turn_boundary,
+    test_no_refetch_det_empty_action_trace,
+    test_no_refetch_det_any_call_including_failed,
+    test_l6_refetch_with_correct_answer_not_full_score,
+    test_l6_no_refetch_with_correct_answer_full_score,
     test_l4_meaningful_result_predicate,
     test_l4_stock_trades_empty_payload_not_meaningful,
     test_l4_stock_quote_shape_meaningful,

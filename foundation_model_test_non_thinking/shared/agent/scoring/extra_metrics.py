@@ -323,6 +323,11 @@ def golden_field_recall_det(ctx) -> Optional[float]:
     return hits / len(scorable_values)
 
 
+def no_refetch_det(ctx) -> float:
+    """At L6, zero new tool calls is correct because seed_replay already seeds prior tool results; this axis is deliberately separate from answer correctness."""
+    return 1.0 if len(ctx.action_trace) == 0 else 0.0
+
+
 def call_eff_det(ctx) -> Optional[float]:
     actual_calls = len(ctx.action_trace)
     minimum_calls = ctx.task_schema.get("minimum_calls")
