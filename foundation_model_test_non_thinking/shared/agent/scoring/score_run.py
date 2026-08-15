@@ -453,6 +453,32 @@ def build_summary(results_dir: Path) -> Dict[str, Any]:
     return build_summary_from_loaded(loaded, results_dir)
 
 
+def _bench_pin_drift_keys(old_pin: Optional[dict], new_pin: Optional[dict]) -> List[str]:
+    if not isinstance(old_pin, dict) or not isinstance(new_pin, dict):
+        return []
+    drifted = []
+    for key, old_value in old_pin.items():
+        if old_value is None or key not in new_pin or new_pin[key] is None:
+            continue
+        if old_value != new_pin[key]:
+            drifted.append(str(key))
+    return drifted
+
+
+def _warn_bench_pin_drift(results_dir: Path, summary: Dict[str, Any]) -> None:
+    summary_path = results_dir / "summary.json"
+    if not summary_path.is_file():
+        return
+    with summary_path.open("r", encoding="utf-8") as f:
+        previous = json.load(f)
+    drifted = _bench_pin_drift_keys(previous.get("bench_pin"), summary.get("bench_pin"))
+    if drifted:
+        print(
+            f"{PREFIX} WARNING: bench_pin drift detected for keys: {', '.join(drifted)}",
+            file=sys.stderr,
+        )
+
+
 def print_table(summary: Dict[str, Any], skipped_count: int) -> None:
     print(f"{PREFIX} model={summary['model']} track={summary['track']}")
     for level in ALL_LEVELS:
@@ -494,6 +520,7 @@ def main(argv=None) -> int:
         print_table(summary, skipped)
         if not args.dry_run:
             out = results_dir / "summary.json"
+            _warn_bench_pin_drift(results_dir, summary)
             with out.open("w", encoding="utf-8") as f:
                 json.dump(summary, f, indent=2, ensure_ascii=False)
             print(f"{PREFIX} wrote {out}")

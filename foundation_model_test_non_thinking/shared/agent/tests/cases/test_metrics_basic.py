@@ -1,4 +1,8 @@
 from _harness import *
+import hashlib
+
+
+task_source = _load_module("task_source")
 
 def test_fsm_prefix_exact_match():
     ctx = DummyContext([{"tool": "A"}, {"tool": "B"}], [{"tool": "A"}, {"tool": "B"}])
@@ -214,7 +218,6 @@ def test_no_repetition_records_keeps_metric_entry_shape():
     _assert_close(entry["score"], 1.0, "single CallEM")
     for key in ("repeated", "n_repetitions", "std", "per_repetition"):
         _assert(key not in entry, f"{key} must not appear without repetition_records")
-
 
 
 TESTS = [

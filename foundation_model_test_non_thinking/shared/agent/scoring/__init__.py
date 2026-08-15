@@ -1,3 +1,3 @@
 """Deterministic scoring helpers for Ko-AgentBench agent results."""
 
-SCORING_VERSION = "agent_det_v11"
+SCORING_VERSION = "agent_det_v12"
