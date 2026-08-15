@@ -2,10 +2,10 @@
   "benchmark": "Ko-AgentBench (deterministic scoring)",
   "model": "qwen_qwen3.5_35b_a3b_fp8",
   "track": "agent_smoke_native",
-  "scoring_version": "agent_det_v5",
+  "scoring_version": "agent_det_v6",
   "native_tool_calling": true,
-  "agent_score": 0.4815722128908942,
-  "agent_score_equal_level": 0.48369686590465816,
+  "agent_score": 0.48047331179199315,
+  "agent_score_equal_level": 0.4827444849522772,
   "weighting": {
     "scheme": "task_count",
     "weights": {
@@ -37,7 +37,8 @@
       "L3": {
         "tasks": 10,
         "tasks_with_tool_calls": 10,
-        "tool_calls": 89
+        "tool_calls": 89,
+        "prefix_only_tasks": 3
       },
       "L4": {
         "tasks": 10,
@@ -54,8 +55,9 @@
         "tasks_with_tool_calls": 11,
         "tool_calls": 11,
         "seeded_echo_tasks": 0,
-        "unresolved_field_tasks": 3,
-        "scored_tasks": 12
+        "unresolved_field_tasks": 0,
+        "scored_tasks": 15,
+        "fallback_resolved_fields": 11
       },
       "L7": {
         "tasks": 10,
@@ -388,10 +390,10 @@
     },
     "L6": {
       "total": 15,
-      "score": 0.25555555555555554,
+      "score": 0.24888888888888888,
       "metrics": {
         "GoldenFieldRecall_det": {
-          "score": 0.25555555555555554,
+          "score": 0.24888888888888888,
           "status": "ok",
           "in_score": true
         },
