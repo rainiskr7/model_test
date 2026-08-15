@@ -1,4 +1,34 @@
 from _harness import *
+from pathlib import Path
+
+def test_repetition_record_shape_helper_rules():
+    parent = {
+        "task_id": "shape-parent",
+        "tool_calls": [{"tool_name": "A"}],
+    }
+    _assert(
+        score_run._has_repetition_records({**parent, "repetition_records": [{"rep_index": 0}]})
+        is True,
+        "non-empty repetition_records list is recognized",
+    )
+    for records, message in (
+        ([], "empty repetition_records falls back to parent"),
+        (None, "missing repetition_records falls back to parent"),
+        ("not-a-list", "non-list repetition_records falls back to parent"),
+    ):
+        task = dict(parent)
+        if records is not None:
+            task["repetition_records"] = records
+        _assert(score_run._has_repetition_records(task) is False, message)
+        _assert(data_health._tool_call_count(task) == 1, message)
+
+
+
+def test_score_run_and_data_health_share_repetition_record_helper():
+    _assert(
+        score_run._has_repetition_records is data_health._has_repetition_records,
+        "score_run and data_health must import the identical helper",
+    )
 
 def test_data_health_no_tool_calls_warns():
     l6_tasks = [
@@ -524,6 +554,8 @@ def test_data_health_repetition_records_zero_step_and_empty_response():
 
 
 TESTS = [
+    test_repetition_record_shape_helper_rules,
+    test_score_run_and_data_health_share_repetition_record_helper,
     test_data_health_no_tool_calls_warns,
     test_data_health_tool_calls_no_warning,
     test_data_health_counts_repetition_record_tool_calls,

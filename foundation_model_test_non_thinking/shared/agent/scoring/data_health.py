@@ -8,18 +8,15 @@ if __package__:
     from . import extra_metrics
     from .context import build_eval_context
     from .l6_context import l6_golden_field_diagnostics
+    from .result_shape import has_repetition_records as _has_repetition_records
     from .task_source import load_bench_tasks
 else:
     sys.path.insert(0, str(Path(__file__).resolve().parent))
     import extra_metrics
     from context import build_eval_context
     from l6_context import l6_golden_field_diagnostics
+    from result_shape import has_repetition_records as _has_repetition_records
     from task_source import load_bench_tasks
-
-
-def _has_repetition_records(task: Dict[str, Any]) -> bool:
-    records = task.get("repetition_records")
-    return isinstance(records, list) and bool(records)
 
 
 def _tool_call_count(task: Dict[str, Any]) -> int:

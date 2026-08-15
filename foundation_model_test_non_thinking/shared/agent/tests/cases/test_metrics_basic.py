@@ -1,5 +1,7 @@
 from _harness import *
 import hashlib
+import os
+from pathlib import Path
 
 
 task_source = _load_module("task_source")

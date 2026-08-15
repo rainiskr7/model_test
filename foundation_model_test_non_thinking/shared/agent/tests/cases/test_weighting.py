@@ -1,4 +1,5 @@
 from _harness import *
+from pathlib import Path
 
 def test_agent_score_scored_task_count_weighting_differs_from_equal_mean():
     l2_tasks = [_l2_task("L2-weight-1", "A")]

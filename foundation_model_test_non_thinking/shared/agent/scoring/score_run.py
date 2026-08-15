@@ -12,7 +12,7 @@ if __package__:
     from . import SCORING_VERSION
     from .context import BenchDriftError, build_eval_context
     from . import extra_metrics
-    from .data_health import build_data_health, _has_repetition_records
+    from .data_health import build_data_health
     from .level_spec import (
         COMMON_RECORD_ONLY,
         JUDGE_METRICS,
@@ -22,12 +22,13 @@ if __package__:
         level_score,
         mean_or_none,
     )
+    from .result_shape import has_repetition_records as _has_repetition_records
     from .task_source import bench_pin, load_bench_tasks
 else:
     sys.path.insert(0, str(Path(__file__).resolve().parent))
     from __init__ import SCORING_VERSION
     import extra_metrics
-    from data_health import build_data_health, _has_repetition_records
+    from data_health import build_data_health
     from context import BenchDriftError, build_eval_context
     from level_spec import (
         COMMON_RECORD_ONLY,
@@ -38,6 +39,7 @@ else:
         level_score,
         mean_or_none,
     )
+    from result_shape import has_repetition_records as _has_repetition_records
     from task_source import bench_pin, load_bench_tasks
 
 
@@ -469,8 +471,13 @@ def _warn_bench_pin_drift(results_dir: Path, summary: Dict[str, Any]) -> None:
     summary_path = results_dir / "summary.json"
     if not summary_path.is_file():
         return
-    with summary_path.open("r", encoding="utf-8") as f:
-        previous = json.load(f)
+    try:
+        with summary_path.open("r", encoding="utf-8") as f:
+            previous = json.load(f)
+    except Exception:
+        return
+    if not isinstance(previous, dict):
+        return
     drifted = _bench_pin_drift_keys(previous.get("bench_pin"), summary.get("bench_pin"))
     if drifted:
         print(
@@ -518,9 +525,9 @@ def main(argv=None) -> int:
         summary = build_summary(results_dir)
         skipped = len(summary["levels_missing"])
         print_table(summary, skipped)
+        _warn_bench_pin_drift(results_dir, summary)
         if not args.dry_run:
             out = results_dir / "summary.json"
-            _warn_bench_pin_drift(results_dir, summary)
             with out.open("w", encoding="utf-8") as f:
                 json.dump(summary, f, indent=2, ensure_ascii=False)
             print(f"{PREFIX} wrote {out}")

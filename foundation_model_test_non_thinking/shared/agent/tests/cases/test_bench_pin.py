@@ -1,5 +1,7 @@
 from _harness import *
 import hashlib
+import os
+from pathlib import Path
 
 
 task_source = _load_module("task_source")
@@ -88,6 +90,18 @@ def test_bench_pin_drift_key_comparison_ignores_unknown_and_reports_present_diff
     _assert(
         score_run._bench_pin_drift_keys(old_without_new_keys, new_with_new_keys) == [],
         "missing old digest keys are unknown, not drift",
+    )
+    null_old_key = dict(new_with_new_keys)
+    null_old_key["metrics_sha256"] = None
+    _assert(
+        score_run._bench_pin_drift_keys(null_old_key, new_with_new_keys) == [],
+        "null old digest keys are unknown, not drift",
+    )
+    null_new_key = dict(new_with_new_keys)
+    null_new_key["metrics_sha256"] = None
+    _assert(
+        score_run._bench_pin_drift_keys(new_with_new_keys, null_new_key) == [],
+        "null new digest keys are unknown, not drift",
     )
     _assert(
         score_run._bench_pin_drift_keys(new_with_new_keys, dict(new_with_new_keys)) == [],
