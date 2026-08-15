@@ -10,6 +10,19 @@ except ImportError:  # direct file loading in tests
     from context import load_metrics_module
 
 
+def l4_has_meaningful_result(result: Any) -> bool:
+    if isinstance(result, list):
+        return bool(result)
+    if isinstance(result, dict):
+        if not result:
+            return False
+        list_values = [value for value in result.values() if isinstance(value, list)]
+        if list_values:
+            return any(bool(value) for value in list_values)
+        return True
+    return result is not None and result != ""
+
+
 def fsm_prefix(ctx) -> float:
     golden_action = ctx.task_schema.get("golden_action", [])
     if isinstance(golden_action, dict):
@@ -29,6 +42,69 @@ def arg_f1_det(ctx) -> Optional[float]:
     if not prf.get("ok"):
         return None
     return prf.get("f1")
+
+
+def coverage_det(ctx) -> float:
+    golden_action = ctx.task_schema.get("golden_action", [])
+    required_tools = [action.get("tool") for action in golden_action if action.get("tool")]
+
+    if not required_tools:
+        return 1.0
+
+    action_trace = ctx.action_trace
+    successful_tools = set()
+
+    for action in action_trace:
+        tool_name = action.get("tool")
+        success = action.get("success", False)
+
+        if success and tool_name:
+            result = action.get("result")
+            if l4_has_meaningful_result(result):
+                successful_tools.add(tool_name)
+
+    covered_tools = [tool for tool in required_tools if tool in successful_tools]
+
+    unique_required = list(set(required_tools))
+    unique_covered = list(set(covered_tools))
+
+    return len(unique_covered) / len(unique_required) if unique_required else 0.0
+
+
+def source_epr_det(ctx) -> float:
+    golden_action = ctx.task_schema.get("golden_action", [])
+    required_tools = [action.get("tool") for action in golden_action if action.get("tool")]
+
+    if not required_tools:
+        return 1.0
+
+    unique_tools = list(set(required_tools))
+    action_trace = ctx.action_trace
+
+    all_epr_values = []
+
+    for tool_name in unique_tools:
+        tool_calls = [
+            action for action in action_trace
+            if action.get("tool") == tool_name
+        ]
+
+        if not tool_calls:
+            all_epr_values.append(0.0)
+            continue
+
+        valid_calls = 0
+        for call in tool_calls:
+            success = call.get("success", False)
+            error = call.get("error")
+
+            if success and not error and l4_has_meaningful_result(call.get("result")):
+                valid_calls += 1
+
+        epr = valid_calls / len(tool_calls)
+        all_epr_values.append(epr)
+
+    return sum(all_epr_values) / len(all_epr_values) if all_epr_values else 0.0
 
 
 def _int_or_none(value) -> Optional[int]:
