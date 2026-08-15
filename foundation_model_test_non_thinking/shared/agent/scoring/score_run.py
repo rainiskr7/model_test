@@ -11,6 +11,7 @@ from typing import Any, Dict, Iterable, List, Optional
 if __package__:
     from . import SCORING_VERSION
     from .context import BenchDriftError, build_eval_context
+    from . import extra_metrics
     from .level_spec import (
         COMMON_RECORD_ONLY,
         JUDGE_METRICS,
@@ -25,6 +26,7 @@ if __package__:
 else:
     sys.path.insert(0, str(Path(__file__).resolve().parent))
     from __init__ import SCORING_VERSION
+    import extra_metrics
     from context import BenchDriftError, build_eval_context
     from level_spec import (
         COMMON_RECORD_ONLY,
@@ -366,11 +368,15 @@ def _native_tool_calling(level_data: Iterable[Dict[str, Any]]):
 
 def _l6_data_health(tasks: List[Dict[str, Any]], bench_tasks: Optional[Dict[str, dict]]) -> Dict[str, int]:
     if bench_tasks is None and tasks:
-        bench_tasks = load_bench_tasks("L6")
+        try:
+            bench_tasks = load_bench_tasks("L6")
+        except Exception:
+            bench_tasks = None
 
     seeded_echo_tasks = 0
     unresolved_field_tasks = 0
     scored_tasks = 0
+    fallback_resolved_fields = 0
     for task in tasks:
         try:
             bench_task = None
@@ -386,11 +392,40 @@ def _l6_data_health(tasks: List[Dict[str, Any]], bench_tasks: Optional[Dict[str,
             unresolved_field_tasks += 1
         if diagnostics.get("scorable_values"):
             scored_tasks += 1
+        fallback_resolved_fields += int(diagnostics.get("fallback_fields", 0))
 
     return {
         "seeded_echo_tasks": seeded_echo_tasks,
         "unresolved_field_tasks": unresolved_field_tasks,
         "scored_tasks": scored_tasks,
+        "fallback_resolved_fields": fallback_resolved_fields,
+    }
+
+
+def _l3_data_health(tasks: List[Dict[str, Any]], bench_tasks: Optional[Dict[str, dict]]) -> Dict[str, int]:
+    if bench_tasks is None and tasks:
+        try:
+            bench_tasks = load_bench_tasks("L3")
+        except Exception:
+            bench_tasks = None
+
+    prefix_only_tasks = 0
+    fsm_strict = _vendored("FSM")
+    for task in tasks:
+        try:
+            bench_task = None
+            if bench_tasks is not None:
+                bench_task = bench_tasks.get(str(task.get("task_id")))
+            ctx = build_eval_context(task, bench_task)
+            prefix_score = extra_metrics.fsm_prefix(ctx)
+            strict_score = fsm_strict(ctx)
+        except Exception:
+            continue
+        if prefix_score == 1.0 and strict_score == 0.0:
+            prefix_only_tasks += 1
+
+    return {
+        "prefix_only_tasks": prefix_only_tasks,
     }
 
 
@@ -474,6 +509,10 @@ def build_summary_from_loaded_for_test(
         if level == "L6":
             data_health_by_level[level].update(
                 _l6_data_health(tasks, bench_task_maps.get("L6"))
+            )
+        elif level == "L3":
+            data_health_by_level[level].update(
+                _l3_data_health(tasks, bench_task_maps.get("L3"))
             )
         total_tasks += len(tasks)
         tasks_with_tool_calls += level_tasks_with_tool_calls
