@@ -862,7 +862,13 @@ def test_data_health_by_level_counts_loaded_levels():
     by_level = summary["data_health"]["by_level"]
     _assert(set(by_level) == {"L2", "L6"}, "data_health levels")
     _assert(
-        by_level["L2"] == {"tasks": 1, "tasks_with_tool_calls": 1, "tool_calls": 1},
+        by_level["L2"] == {
+            "tasks": 1,
+            "tasks_with_tool_calls": 1,
+            "tool_calls": 1,
+            "zero_step_tasks": 1,
+            "empty_response_tasks": 1,
+        },
         "L2 data_health counts",
     )
     _assert(
@@ -870,6 +876,8 @@ def test_data_health_by_level_counts_loaded_levels():
             "tasks": 2,
             "tasks_with_tool_calls": 0,
             "tool_calls": 0,
+            "zero_step_tasks": 2,
+            "empty_response_tasks": 2,
             "seeded_echo_tasks": 0,
             "unresolved_field_tasks": 0,
             "scored_tasks": 2,
@@ -1036,6 +1044,226 @@ def test_data_health_empty_run_not_parser_warning():
     health = summary["data_health"]
     _assert(health["total_tasks"] == 0, "empty run total tasks")
     _assert(health["no_tool_calls_recorded"] is False, "empty run should not warn")
+
+
+def test_data_health_counts_zero_step_tasks():
+    tasks = [
+        {
+            "task_id": "L1-zero-step",
+            "level": 1,
+            "golden_action": [],
+            "tool_calls": [],
+            "steps_taken": 0,
+            "final_response": "done",
+        },
+        {
+            "task_id": "L1-positive-step",
+            "level": 1,
+            "golden_action": [],
+            "tool_calls": [],
+            "steps_taken": 1,
+            "final_response": "done",
+        },
+    ]
+    summary = score_run.build_summary_from_loaded_for_test(
+        {"L1": {"results": tasks}},
+        Path("/tmp/results/x/t/language/agent"),
+        bench_task_maps={"L1": _bench_map(tasks)},
+        bench_pin_value={"tasks_sha256": {}},
+    )
+    health = summary["data_health"]
+    _assert(health["by_level"]["L1"]["zero_step_tasks"] == 1, "one zero-step task")
+    _assert(health["zero_step_tasks"] == 1, "zero-step rollup")
+
+
+def test_data_health_missing_steps_taken_counts_zero():
+    task = {
+        "task_id": "L1-missing-step",
+        "level": 1,
+        "golden_action": [],
+        "tool_calls": [],
+        "final_response": "done",
+    }
+    summary = score_run.build_summary_from_loaded_for_test(
+        {"L1": {"results": [task]}},
+        Path("/tmp/results/x/t/language/agent"),
+        bench_task_maps={"L1": _bench_map([task])},
+        bench_pin_value={"tasks_sha256": {}},
+    )
+    _assert(
+        summary["data_health"]["by_level"]["L1"]["zero_step_tasks"] == 1,
+        "missing steps_taken counts as zero",
+    )
+
+
+def test_data_health_counts_empty_response_tasks():
+    tasks = [
+        {
+            "task_id": "L1-response-none",
+            "level": 1,
+            "golden_action": [],
+            "tool_calls": [],
+            "steps_taken": 1,
+            "final_response": None,
+        },
+        {
+            "task_id": "L1-response-missing",
+            "level": 1,
+            "golden_action": [],
+            "tool_calls": [],
+            "steps_taken": 1,
+        },
+        {
+            "task_id": "L1-response-empty",
+            "level": 1,
+            "golden_action": [],
+            "tool_calls": [],
+            "steps_taken": 1,
+            "final_response": "",
+        },
+        {
+            "task_id": "L1-response-space",
+            "level": 1,
+            "golden_action": [],
+            "tool_calls": [],
+            "steps_taken": 1,
+            "final_response": "   ",
+        },
+        {
+            "task_id": "L1-response-text",
+            "level": 1,
+            "golden_action": [],
+            "tool_calls": [],
+            "steps_taken": 1,
+            "final_response": "done",
+        },
+    ]
+    summary = score_run.build_summary_from_loaded_for_test(
+        {"L1": {"results": tasks}},
+        Path("/tmp/results/x/t/language/agent"),
+        bench_task_maps={"L1": _bench_map(tasks)},
+        bench_pin_value={"tasks_sha256": {}},
+    )
+    health = summary["data_health"]
+    _assert(health["by_level"]["L1"]["empty_response_tasks"] == 4, "four empty responses")
+    _assert(health["empty_response_tasks"] == 4, "empty-response rollup")
+
+
+def test_data_health_new_keys_on_non_special_level_and_score_unchanged():
+    tasks = [_l2_task("L2-additive-score", "A")]
+    tasks[0]["steps_taken"] = 1
+    tasks[0]["final_response"] = "selected A"
+    summary = score_run.build_summary_from_loaded_for_test(
+        {"L2": {"results": tasks}},
+        Path("/tmp/results/x/t/language/agent"),
+        bench_task_maps={"L2": _bench_map(tasks)},
+        bench_pin_value={"tasks_sha256": {}},
+    )
+    health = summary["data_health"]
+    _assert("zero_step_tasks" in health["by_level"]["L2"], "L2 zero_step_tasks key")
+    _assert("empty_response_tasks" in health["by_level"]["L2"], "L2 empty_response_tasks key")
+    _assert(health["by_level"]["L2"]["zero_step_tasks"] == 0, "L2 zero-step count")
+    _assert(health["by_level"]["L2"]["empty_response_tasks"] == 0, "L2 empty-response count")
+    _assert_close(summary["agent_score"], 1.0, "agent score unchanged")
+    _assert(summary["weighting"] == {"scheme": "scored_task_count", "weights": {"L2": 1}}, "weighting")
+    _assert_close(summary["by_level"]["L2"]["score"], 1.0, "L2 score unchanged")
+
+
+def test_data_health_rollup_sums_levels():
+    l1_tasks = [
+        {
+            "task_id": "L1-rollup-zero",
+            "level": 1,
+            "golden_action": [],
+            "tool_calls": [],
+            "steps_taken": 0,
+            "final_response": "",
+        }
+    ]
+    l2_tasks = [
+        {
+            "task_id": "L2-rollup-ok",
+            "level": 2,
+            "golden_action": [{"tool": "A", "args": {}}],
+            "tool_calls": [{"tool_name": "A", "arguments": {}, "success": True}],
+            "steps_taken": 1,
+            "final_response": "done",
+        },
+        {
+            "task_id": "L2-rollup-empty",
+            "level": 2,
+            "golden_action": [{"tool": "A", "args": {}}],
+            "tool_calls": [],
+            "steps_taken": 1,
+            "final_response": None,
+        },
+    ]
+    summary = score_run.build_summary_from_loaded_for_test(
+        {"L1": {"results": l1_tasks}, "L2": {"results": l2_tasks}},
+        Path("/tmp/results/x/t/language/agent"),
+        bench_task_maps={"L1": _bench_map(l1_tasks), "L2": _bench_map(l2_tasks)},
+        bench_pin_value={"tasks_sha256": {}},
+    )
+    by_level = summary["data_health"]["by_level"]
+    _assert(
+        summary["data_health"]["zero_step_tasks"]
+        == by_level["L1"]["zero_step_tasks"] + by_level["L2"]["zero_step_tasks"],
+        "zero-step rollup sums levels",
+    )
+    _assert(
+        summary["data_health"]["empty_response_tasks"]
+        == by_level["L1"]["empty_response_tasks"] + by_level["L2"]["empty_response_tasks"],
+        "empty-response rollup sums levels",
+    )
+
+
+def test_data_health_repetition_records_zero_step_and_empty_response():
+    mixed_steps = {
+        "task_id": "L1-repeat-mixed-steps",
+        "level": 1,
+        "golden_action": [],
+        "tool_calls": [],
+        "steps_taken": 0,
+        "final_response": "",
+        "repetition_records": [
+            {"steps_taken": 0, "final_response": ""},
+            {"steps_taken": 1, "final_response": ""},
+        ],
+    }
+    all_zero_steps = {
+        "task_id": "L1-repeat-all-zero",
+        "level": 1,
+        "golden_action": [],
+        "tool_calls": [],
+        "steps_taken": 0,
+        "final_response": "parent ignored",
+        "repetition_records": [
+            {"steps_taken": 0, "final_response": ""},
+            {"final_response": "   "},
+        ],
+    }
+    one_nonempty_response = {
+        "task_id": "L1-repeat-nonempty-response",
+        "level": 1,
+        "golden_action": [],
+        "tool_calls": [],
+        "steps_taken": 0,
+        "final_response": "",
+        "repetition_records": [
+            {"steps_taken": 0, "final_response": ""},
+            {"steps_taken": 0, "final_response": "done"},
+        ],
+    }
+    tasks = [mixed_steps, all_zero_steps, one_nonempty_response]
+    summary = score_run.build_summary_from_loaded_for_test(
+        {"L1": {"results": tasks}},
+        Path("/tmp/results/x/t/language/agent"),
+        bench_task_maps={"L1": _bench_map(tasks)},
+        bench_pin_value={"tasks_sha256": {}},
+    )
+    health = summary["data_health"]["by_level"]["L1"]
+    _assert(health["zero_step_tasks"] == 2, "two repetition tasks all zero-step")
+    _assert(health["empty_response_tasks"] == 2, "two repetition tasks all empty-response")
 
 
 def _task_id_producer(scored_ids, value=1.0):
@@ -1232,6 +1460,12 @@ TESTS = [
     test_l6_data_health_load_guard,
     test_l6_data_health_field_diagnostics_and_non_l6_shape,
     test_data_health_empty_run_not_parser_warning,
+    test_data_health_counts_zero_step_tasks,
+    test_data_health_missing_steps_taken_counts_zero,
+    test_data_health_counts_empty_response_tasks,
+    test_data_health_new_keys_on_non_special_level_and_score_unchanged,
+    test_data_health_rollup_sums_levels,
+    test_data_health_repetition_records_zero_step_and_empty_response,
     test_average_metric_records_n_tasks_for_scored_values,
     test_score_level_scored_tasks_matches_total_when_all_metrics_score_all_tasks,
     test_score_level_scored_tasks_uses_union_across_in_score_metrics,

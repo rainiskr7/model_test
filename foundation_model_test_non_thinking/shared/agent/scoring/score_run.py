@@ -109,6 +109,37 @@ def _tool_call_count(task: Dict[str, Any]) -> int:
     return len(tool_calls) if isinstance(tool_calls, list) else 0
 
 
+def _steps_taken_is_zero(record: Dict[str, Any]) -> bool:
+    steps_taken = record.get("steps_taken")
+    return not (isinstance(steps_taken, int) and not isinstance(steps_taken, bool) and steps_taken > 0)
+
+
+def _zero_step_task(task: Dict[str, Any]) -> bool:
+    if not _steps_taken_is_zero(task):
+        return False
+    if _has_repetition_records(task):
+        return all(
+            not isinstance(record, dict) or _steps_taken_is_zero(record)
+            for record in task["repetition_records"]
+        )
+    return True
+
+
+def _final_response_is_empty(record: Dict[str, Any]) -> bool:
+    if "final_response" not in record or record.get("final_response") is None:
+        return True
+    return str(record.get("final_response")).strip() == ""
+
+
+def _empty_response_task(task: Dict[str, Any]) -> bool:
+    if _has_repetition_records(task):
+        return all(
+            not isinstance(record, dict) or _final_response_is_empty(record)
+            for record in task["repetition_records"]
+        )
+    return _final_response_is_empty(task)
+
+
 def _merged_repetition_record(task: Dict[str, Any], record: Dict[str, Any]) -> Dict[str, Any]:
     merged = dict(task)
     merged.pop("repetition_records", None)
@@ -505,14 +536,20 @@ def build_summary_from_loaded_for_test(
     total_tasks = 0
     tasks_with_tool_calls = 0
     total_tool_calls = 0
+    total_zero_step_tasks = 0
+    total_empty_response_tasks = 0
     for level, data in loaded.items():
         tasks = _tasks(data)
         level_tool_calls = sum(_tool_call_count(task) for task in tasks)
         level_tasks_with_tool_calls = sum(1 for task in tasks if _tool_call_count(task) > 0)
+        level_zero_step_tasks = sum(1 for task in tasks if _zero_step_task(task))
+        level_empty_response_tasks = sum(1 for task in tasks if _empty_response_task(task))
         data_health_by_level[level] = {
             "tasks": len(tasks),
             "tasks_with_tool_calls": level_tasks_with_tool_calls,
             "tool_calls": level_tool_calls,
+            "zero_step_tasks": level_zero_step_tasks,
+            "empty_response_tasks": level_empty_response_tasks,
         }
         if level == "L6":
             data_health_by_level[level].update(
@@ -525,12 +562,16 @@ def build_summary_from_loaded_for_test(
         total_tasks += len(tasks)
         tasks_with_tool_calls += level_tasks_with_tool_calls
         total_tool_calls += level_tool_calls
+        total_zero_step_tasks += level_zero_step_tasks
+        total_empty_response_tasks += level_empty_response_tasks
 
     data_health = {
         "total_tasks": total_tasks,
         "tasks_with_tool_calls": tasks_with_tool_calls,
         "total_tool_calls": total_tool_calls,
         "no_tool_calls_recorded": total_tasks > 0 and total_tool_calls == 0,
+        "zero_step_tasks": total_zero_step_tasks,
+        "empty_response_tasks": total_empty_response_tasks,
         "by_level": data_health_by_level,
     }
     if data_health["no_tool_calls_recorded"]:
