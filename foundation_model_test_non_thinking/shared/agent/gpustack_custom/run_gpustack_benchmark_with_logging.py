@@ -994,9 +994,14 @@ def main():
         adapter_config["base_url"] = args.base_url
     adapter_config['native_tool_calling'] = args.native_tool_calling
 
-    # Agent 트랙: tool call + reasoning + multi-turn 고려해 max_tokens 16384 default
-    # (openai_compat_adapter.py의 전역 default 8192를 override)
-    adapter_config.setdefault('max_tokens', 16384)
+    # Agent 트랙 max_tokens. 크게 잡으면 안전해 보이지만 반대다 — 서버는
+    # max-model-len 에서 max_tokens 를 먼저 떼고 입력 여유를 계산하므로, 상한이 크면
+    # 입력이 조금만 길어도 400 이 난다.
+    # 실측(qwen3.5-35b-a3b-fp8, max-model-len 30000): 16384 이면 입력 상한이 13616 토큰뿐이라
+    # 46태스크 중 5개가 첫 호출부터 400 으로 죽었다(L3 멀티스텝 누적에서 특히).
+    # 같은 런의 단일 응답 최대는 910 토큰이라 2048 이면 2배 이상 여유이고,
+    # 입력 여유는 28K 로 늘어난다. 모델별 조정은 AGENT_MAX_TOKENS env 로.
+    adapter_config.setdefault('max_tokens', int(os.getenv('AGENT_MAX_TOKENS', '2048')))
     # temperature: 메인 평가는 0.0 (결정론적), pass@k 보조 트랙은 --temperature 0.7 등으로 override
     if args.temperature is not None:
         adapter_config['temperature'] = args.temperature
