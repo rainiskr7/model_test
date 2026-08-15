@@ -391,7 +391,11 @@ def test_passk_det_not_in_representative_score():
     _assert_close(summary["metrics"]["SelectAcc"]["score"], 0.2, "SelectAcc repeated average")
     _assert_close(summary["metrics"]["PassK_det"]["score"], 1.0, "PassK_det score")
     _assert(summary["metrics"]["PassK_det"]["in_score"] is False, "PassK_det in_score")
-    _assert_close(summary["score"], 0.2, "PassK_det excluded from representative score")
+    _assert_close(
+        summary["score"],
+        0.13333333333333333,
+        "PassK_det excluded from representative score",
+    )
 
 
 def test_golden_field_recall_happy_path():
@@ -768,14 +772,55 @@ def test_l3_representative_score_excludes_fsm_strict():
     _assert(summary["score"] > 0.0, "L3 score unaffected by zero FSM_strict")
 
 
+def test_l2_spec_shape():
+    in_score = [spec for spec in level_spec.LEVEL_SPECS["L2"] if spec.in_score]
+    _assert(
+        [spec.name for spec in in_score] == ["SelectAcc", "CallEM", "ArgF1_det"],
+        "L2 representative metrics",
+    )
+
+
+def test_l2_passk_primary_resolves_to_spec():
+    primary = level_spec.PASSK_PRIMARY_METRICS["L2"]
+    _assert(primary == "SelectAcc", "L2 PassK_det primary")
+    spec = next((spec for spec in level_spec.LEVEL_SPECS["L2"] if spec.name == primary), None)
+    _assert(spec is not None, "L2 PassK_det primary must resolve")
+
+
+def test_l2_correct_tool_wrong_args_not_full_score():
+    task = {
+        "task_id": "L2-wrong-args",
+        "level": 2,
+        "golden_action": [{"tool": "A", "args": {"q": "gold", "count": 30}}],
+        "tool_calls": [
+            {
+                "tool_name": "A",
+                "arguments": {"q": "actual"},
+                "success": True,
+            }
+        ],
+    }
+    bench_task = {"task_id": "L2-wrong-args", "golden_action": task["golden_action"]}
+    summary = score_run.score_level("L2", {"results": [task]}, {"L2-wrong-args": bench_task})
+    metrics = summary["metrics"]
+    _assert_close(metrics["SelectAcc"]["score"], 1.0, "L2 SelectAcc ignores args")
+    _assert(metrics["CallEM"]["score"] < 1.0, "L2 CallEM catches wrong args")
+    _assert(metrics["ArgF1_det"]["score"] < 1.0, "L2 ArgF1_det catches wrong args")
+    _assert(summary["score"] < 1.0, "L2 representative score must not be full")
+
+
 def test_other_level_shapes_unchanged():
     _assert(
         len([spec for spec in level_spec.LEVEL_SPECS["L1"] if spec.in_score]) == 3,
         "L1 representative metric count",
     )
     _assert(
-        len([spec for spec in level_spec.LEVEL_SPECS["L7"] if spec.in_score]) == 3,
-        "L7 representative metric count",
+        len([spec for spec in level_spec.LEVEL_SPECS["L4"] if spec.in_score]) == 2,
+        "L4 representative metric count",
+    )
+    _assert(
+        len([spec for spec in level_spec.LEVEL_SPECS["L6"] if spec.in_score]) == 1,
+        "L6 representative metric count",
     )
     _assert(level_spec.PASSK_PRIMARY_METRICS["L1"] == "CallEM", "L1 PassK_det primary")
 
@@ -784,8 +829,8 @@ def _l2_task(task_id, tool_name):
     return {
         "task_id": task_id,
         "level": 2,
-        "golden_action": [{"tool": "A", "args": {}}],
-        "tool_calls": [{"tool_name": tool_name, "arguments": {}, "success": True}],
+        "golden_action": [{"tool": "A", "args": {"q": "x"}}],
+        "tool_calls": [{"tool_name": tool_name, "arguments": {"q": "x"}, "success": True}],
     }
 
 
@@ -1561,6 +1606,9 @@ TESTS = [
     test_l3_spec_shape,
     test_l3_passk_primary_resolves_to_spec,
     test_l3_representative_score_excludes_fsm_strict,
+    test_l2_spec_shape,
+    test_l2_passk_primary_resolves_to_spec,
+    test_l2_correct_tool_wrong_args_not_full_score,
     test_other_level_shapes_unchanged,
     test_agent_score_scored_task_count_weighting_differs_from_equal_mean,
     test_agent_score_excludes_none_score_from_weighting,

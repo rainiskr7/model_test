@@ -66,7 +66,11 @@ LEVEL_SPECS = {
         MetricSpec("CallEM", vendored_metric("CallEM"), True),
         MetricSpec("ArgF1_det", arg_f1_det, True),
     ),
-    "L2": (MetricSpec("SelectAcc", vendored_metric("SelectAcc"), True),),
+    "L2": (
+        MetricSpec("SelectAcc", vendored_metric("SelectAcc"), True),
+        MetricSpec("CallEM", vendored_metric("CallEM"), True),
+        MetricSpec("ArgF1_det", arg_f1_det, True),
+    ),
     "L3": (
         MetricSpec("FSM_prefix", fsm_prefix, True),
         MetricSpec("FSM_strict", vendored_metric("FSM"), False),
