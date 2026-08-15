@@ -40,8 +40,19 @@ def tasks_digest(level: str) -> str:
     return hashlib.sha256(_task_file(level).read_bytes()).hexdigest()
 
 
+def _bench_code_digest(*parts: str):
+    path = ensure_bench_path().joinpath(*parts)
+    if not path.is_file():
+        return None
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
 def bench_pin(levels: Iterable[str]) -> dict:
-    pin = {"tasks_sha256": {level: tasks_digest(level) for level in levels}}
+    pin = {
+        "tasks_sha256": {level: tasks_digest(level) for level in levels},
+        "metrics_sha256": _bench_code_digest("bench", "runner", "metrics.py"),
+        "runner_sha256": _bench_code_digest("bench", "runner", "run.py"),
+    }
     bench_sha = os.environ.get("KO_AGENTBENCH_SHA")
     if bench_sha:
         pin["ko_agentbench_sha"] = bench_sha

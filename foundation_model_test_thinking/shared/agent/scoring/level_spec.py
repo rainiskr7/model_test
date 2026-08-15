@@ -4,9 +4,25 @@ from dataclasses import dataclass
 from typing import Callable, Iterable, List, Optional, Sequence
 
 try:
-    from .extra_metrics import arg_f1_det, call_eff_det, fsm_prefix, golden_field_recall_det
+    from .extra_metrics import (
+        arg_f1_det,
+        call_eff_det,
+        coverage_det,
+        fsm_prefix,
+        golden_field_recall_det,
+        no_refetch_det,
+        source_epr_det,
+    )
 except ImportError:  # direct file loading in tests
-    from extra_metrics import arg_f1_det, call_eff_det, fsm_prefix, golden_field_recall_det
+    from extra_metrics import (
+        arg_f1_det,
+        call_eff_det,
+        coverage_det,
+        fsm_prefix,
+        golden_field_recall_det,
+        no_refetch_det,
+        source_epr_det,
+    )
 
 
 JUDGE_METRICS = ("SR", "ArgAcc", "EffScore", "ContextRetention", "RefRecall")
@@ -16,7 +32,8 @@ PASSK_PRIMARY_METRICS = {
     "L2": "SelectAcc",
     # FSM_strict is count-based and near-duplicate of ΔSteps_norm; FSM_prefix is the sequence primary.
     "L3": "FSM_prefix",
-    "L4": "Coverage",
+    # Vendored Coverage only recognizes search-shaped responses, so L4 pass@k uses the deterministic predicate.
+    "L4": "Coverage_det",
     "L5": "FallbackSR",
     # In L6 seed_replay, the correct behavior is zero new tool calls; call-based
     # metrics cannot be the pass@k primary.
@@ -51,7 +68,11 @@ LEVEL_SPECS = {
         MetricSpec("CallEM", vendored_metric("CallEM"), True),
         MetricSpec("ArgF1_det", arg_f1_det, True),
     ),
-    "L2": (MetricSpec("SelectAcc", vendored_metric("SelectAcc"), True),),
+    "L2": (
+        MetricSpec("SelectAcc", vendored_metric("SelectAcc"), True),
+        MetricSpec("CallEM", vendored_metric("CallEM"), True),
+        MetricSpec("ArgF1_det", arg_f1_det, True),
+    ),
     "L3": (
         MetricSpec("FSM_prefix", fsm_prefix, True),
         MetricSpec("FSM_strict", vendored_metric("FSM"), False),
@@ -60,8 +81,10 @@ LEVEL_SPECS = {
         MetricSpec("ArgF1_det", arg_f1_det, True),
     ),
     "L4": (
-        MetricSpec("Coverage", vendored_metric("Coverage"), True),
-        MetricSpec("SourceEPR", vendored_metric("SourceEPR"), True),
+        MetricSpec("Coverage_det", coverage_det, True),
+        MetricSpec("SourceEPR_det", source_epr_det, True),
+        MetricSpec("Coverage", vendored_metric("Coverage"), False),
+        MetricSpec("SourceEPR", vendored_metric("SourceEPR"), False),
     ),
     "L5": (
         MetricSpec("FallbackSR", vendored_metric("FallbackSR"), True),
@@ -70,6 +93,7 @@ LEVEL_SPECS = {
     ),
     "L6": (
         MetricSpec("GoldenFieldRecall_det", golden_field_recall_det, True),
+        MetricSpec("NoRefetch_det", no_refetch_det, True),
         MetricSpec("RedundantCallRate", vendored_metric("RedundantCallRate"), False),
         MetricSpec("ToolAcc", vendored_metric("ToolAcc"), False),
         MetricSpec("Coverage", vendored_metric("Coverage"), False),
