@@ -485,6 +485,71 @@ def test_golden_field_recall_unresolved_excluded_from_denominator():
     )
 
 
+def test_l6_resolve_field_with_fallback_exact_wins():
+    result = {
+        "data": [{"date": "exact"}],
+        "chart_data": [{"date": "fallback"}],
+    }
+    resolved, value, used_fallback = extra_metrics.l6_resolve_field_with_fallback(
+        result, "data[0].date"
+    )
+    _assert(resolved is True, "exact path should resolve")
+    _assert(value == "exact", "exact value should win")
+    _assert(used_fallback is False, "exact resolution must not mark fallback")
+
+
+def test_l6_resolve_field_with_fallback_unique_list_leaf():
+    result = {"chart_data": [{"date": "20250926"}]}
+    resolved, value, used_fallback = extra_metrics.l6_resolve_field_with_fallback(
+        result, "data[0].date"
+    )
+    _assert(resolved is True, "unique fallback should resolve")
+    _assert(value == "20250926", "unique fallback value")
+    _assert(used_fallback is True, "unique fallback should be marked")
+
+
+def test_l6_resolve_field_with_fallback_ambiguous_unresolved():
+    result = {
+        "chart_data": [{"date": "20250926"}],
+        "other_data": [{"date": "20250927"}],
+    }
+    resolved, value, used_fallback = extra_metrics.l6_resolve_field_with_fallback(
+        result, "data[0].date"
+    )
+    _assert(resolved is False, "ambiguous fallback should stay unresolved")
+    _assert(value is None, "ambiguous fallback must not pick a value")
+    _assert(used_fallback is False, "ambiguous fallback must not be marked")
+
+
+def test_l6_resolve_field_with_fallback_scalar_suffix():
+    resolved, value, used_fallback = extra_metrics.l6_resolve_field_with_fallback(
+        {"market_count": 120}, "count"
+    )
+    _assert(resolved is True, "scalar suffix fallback should resolve")
+    _assert(value == 120, "scalar suffix fallback value")
+    _assert(used_fallback is True, "scalar suffix fallback should be marked")
+
+    resolved, value, used_fallback = extra_metrics.l6_resolve_field_with_fallback(
+        {"count": 5}, "count"
+    )
+    _assert(resolved is True, "exact scalar key should resolve")
+    _assert(value == 5, "exact scalar key value")
+    _assert(used_fallback is False, "exact scalar key must not use fallback")
+
+
+def test_l6_golden_field_diagnostics_counts_fallback_fields():
+    schema = _l6_schema(
+        fields=["data[0].date", "data[0].missing"],
+        result={"chart_data": [{"date": "20250926"}]},
+    )
+    diagnostics = extra_metrics.l6_golden_field_diagnostics(
+        MetricContext(schema, "20250926")
+    )
+    _assert(diagnostics["fallback_fields"] == 1, "fallback field count")
+    _assert(diagnostics["unresolved_fields"] == 1, "only unresolved field remains unresolved")
+    _assert(diagnostics["scorable_values"] == ["20250926"], "fallback value is scorable")
+
+
 def test_golden_field_recall_evaluation_turn_boundary():
     schema = {
         "golden_fields": [{"tool": "ToolA", "fields": ["item.title"]}],
@@ -808,9 +873,99 @@ def test_data_health_by_level_counts_loaded_levels():
             "seeded_echo_tasks": 0,
             "unresolved_field_tasks": 0,
             "scored_tasks": 2,
+            "fallback_resolved_fields": 0,
         },
         "L6 data_health counts",
     )
+
+
+def test_data_health_l6_fallback_key_and_non_l6_l3_absent():
+    l6_task = _l6_no_call_task("L6-health-fallback")
+    l6_task["golden_fields"] = [{"tool": "ToolA", "fields": ["data[0].date"]}]
+    l6_task["conversation_tracking"] = _l6_schema(
+        fields=["data[0].date"],
+        result={"chart_data": [{"date": "20250926"}]},
+    )["conversation_tracking"]
+    l2_tasks = [_l2_task("L2-health-no-fallback-key", "A")]
+    summary = score_run.build_summary_from_loaded_for_test(
+        {"L6": {"results": [l6_task]}, "L2": {"results": l2_tasks}},
+        Path("/tmp/results/x/t/language/agent"),
+        bench_task_maps={"L6": _bench_map([l6_task]), "L2": _bench_map(l2_tasks)},
+        bench_pin_value={"tasks_sha256": {}},
+    )
+    by_level = summary["data_health"]["by_level"]
+    _assert(
+        by_level["L6"]["fallback_resolved_fields"] == 1,
+        "L6 fallback_resolved_fields",
+    )
+    _assert(
+        "fallback_resolved_fields" not in by_level["L2"],
+        "non-L6/L3 must not include fallback_resolved_fields",
+    )
+
+
+def test_data_health_l3_prefix_only_tasks():
+    prefix_task = {
+        "task_id": "L3-health-prefix",
+        "level": 3,
+        "golden_action": [
+            {"tool": "Search", "args": {"q": "alpha"}},
+            {"tool": "Read", "args": {"id": "doc-1"}},
+        ],
+        "minimum_steps": 2,
+        "arg_schema": {},
+        "tool_calls": [
+            {"tool_name": "Search", "arguments": {"q": "alpha"}, "success": True},
+            {"tool_name": "Read", "arguments": {"id": "doc-1"}, "success": True},
+            {"tool_name": "Search", "arguments": {"q": "extra"}, "success": True},
+        ],
+    }
+    exact_task = {
+        "task_id": "L3-health-exact",
+        "level": 3,
+        "golden_action": [
+            {"tool": "Search", "args": {"q": "beta"}},
+            {"tool": "Read", "args": {"id": "doc-2"}},
+        ],
+        "minimum_steps": 2,
+        "arg_schema": {},
+        "tool_calls": [
+            {"tool_name": "Search", "arguments": {"q": "beta"}, "success": True},
+            {"tool_name": "Read", "arguments": {"id": "doc-2"}, "success": True},
+        ],
+    }
+    summary = score_run.build_summary_from_loaded_for_test(
+        {"L3": {"results": [prefix_task, exact_task]}},
+        Path("/tmp/results/x/t/language/agent"),
+        bench_task_maps={"L3": _bench_map([prefix_task, exact_task])},
+        bench_pin_value={"tasks_sha256": {}},
+    )
+    by_level = summary["data_health"]["by_level"]
+    _assert(by_level["L3"]["prefix_only_tasks"] == 1, "one prefix-only L3 task")
+    _assert(
+        score_run._l3_data_health([exact_task], _bench_map([exact_task]))["prefix_only_tasks"] == 0,
+        "exact L3 task is not prefix-only",
+    )
+    _assert(
+        "fallback_resolved_fields" not in by_level["L3"],
+        "L3 must not include L6 fallback key",
+    )
+
+
+def test_l6_data_health_load_guard():
+    task = _l6_no_call_task("L6-health-load-guard")
+    original = score_run.load_bench_tasks
+
+    def _raise_load(_level):
+        raise RuntimeError("boom")
+
+    score_run.load_bench_tasks = _raise_load
+    try:
+        health = score_run._l6_data_health([task], None)
+    finally:
+        score_run.load_bench_tasks = original
+
+    _assert(isinstance(health, dict), "load failure should return health dict")
 
 
 def test_l6_data_health_field_diagnostics_and_non_l6_shape():
@@ -860,7 +1015,14 @@ def test_l6_data_health_field_diagnostics_and_non_l6_shape():
     _assert(by_level["L6"]["seeded_echo_tasks"] == 1, "L6 seeded echo count")
     _assert(by_level["L6"]["unresolved_field_tasks"] == 1, "L6 unresolved count")
     _assert(by_level["L6"]["scored_tasks"] == 2, "L6 scored count")
-    for key in ("seeded_echo_tasks", "unresolved_field_tasks", "scored_tasks"):
+    _assert(by_level["L6"]["fallback_resolved_fields"] == 0, "L6 fallback count")
+    for key in (
+        "seeded_echo_tasks",
+        "unresolved_field_tasks",
+        "scored_tasks",
+        "fallback_resolved_fields",
+        "prefix_only_tasks",
+    ):
         _assert(key not in by_level["L2"], f"non-L6 must not include {key}")
 
 
@@ -905,6 +1067,11 @@ TESTS = [
     test_golden_field_recall_numeric_comma_match,
     test_golden_field_recall_description_contents_filtered,
     test_golden_field_recall_unresolved_excluded_from_denominator,
+    test_l6_resolve_field_with_fallback_exact_wins,
+    test_l6_resolve_field_with_fallback_unique_list_leaf,
+    test_l6_resolve_field_with_fallback_ambiguous_unresolved,
+    test_l6_resolve_field_with_fallback_scalar_suffix,
+    test_l6_golden_field_diagnostics_counts_fallback_fields,
     test_golden_field_recall_evaluation_turn_boundary,
     test_l6_spec_shape_and_passk_primary,
     test_l3_spec_shape,
@@ -919,6 +1086,9 @@ TESTS = [
     test_data_health_counts_repetition_record_tool_calls,
     test_data_health_empty_repetition_records_falls_back_to_parent,
     test_data_health_by_level_counts_loaded_levels,
+    test_data_health_l6_fallback_key_and_non_l6_l3_absent,
+    test_data_health_l3_prefix_only_tasks,
+    test_l6_data_health_load_guard,
     test_l6_data_health_field_diagnostics_and_non_l6_shape,
     test_data_health_empty_run_not_parser_warning,
 ]

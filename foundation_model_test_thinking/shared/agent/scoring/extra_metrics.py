@@ -128,6 +128,49 @@ def l6_resolve_field(result: Any, path: str) -> Tuple[bool, Any]:
     return True, current
 
 
+def l6_resolve_field_with_fallback(result: Any, path: str) -> Tuple[bool, Any, bool]:
+    resolved, value = l6_resolve_field(result, path)
+    if resolved:
+        return True, value, False
+    if not isinstance(result, dict):
+        return False, None, False
+
+    segments = str(path).split(".")
+    last_match = _PATH_SEGMENT_RE.match(segments[-1]) if segments else None
+    if not last_match:
+        return False, None, False
+    leaf, leaf_index = last_match.groups()
+
+    parent_index = None
+    if len(segments) >= 2:
+        parent_match = _PATH_SEGMENT_RE.match(segments[-2])
+        if parent_match and parent_match.group(2) is not None:
+            parent_index = int(parent_match.group(2))
+
+    idx = parent_index
+    if idx is None:
+        idx = int(leaf_index) if leaf_index is not None else 0
+
+    candidates = []
+    for key, candidate in result.items():
+        if (
+            isinstance(candidate, list)
+            and candidate
+            and isinstance(candidate[0], dict)
+            and leaf in candidate[0]
+        ):
+            if idx < len(candidate) and isinstance(candidate[idx], dict):
+                candidates.append(candidate[idx].get(leaf))
+        elif isinstance(candidate, dict) and leaf in candidate:
+            candidates.append(candidate[leaf])
+        elif not isinstance(candidate, (list, dict)) and key.endswith(leaf) and key != leaf:
+            candidates.append(candidate)
+
+    if len(candidates) == 1 and candidates[0] is not None:
+        return True, candidates[0], True
+    return False, None, False
+
+
 def l6_is_filtered_field(path: str) -> bool:
     last_segment = str(path).split(".")[-1]
     field_name = re.sub(r"\[\d+\]$", "", last_segment)
@@ -150,6 +193,7 @@ def l6_golden_field_diagnostics(ctx) -> Dict[str, Any]:
 
     scorable_values = []
     unresolved_fields = 0
+    fallback_fields = 0
     golden_fields = task_schema.get("golden_fields") or []
     if isinstance(golden_fields, list):
         for entry in golden_fields:
@@ -164,16 +208,19 @@ def l6_golden_field_diagnostics(ctx) -> Dict[str, Any]:
                 unresolved_fields += len(fields)
                 continue
             for field in fields:
-                resolved, value = l6_resolve_field(result, field)
+                resolved, value, used_fallback = l6_resolve_field_with_fallback(result, field)
                 if not resolved:
                     unresolved_fields += 1
                     continue
+                if used_fallback:
+                    fallback_fields += 1
                 if not l6_is_filtered_field(field):
                     scorable_values.append(value)
 
     return {
         "seeded_echo": bool(response_text) and response_text in seeded_texts,
         "unresolved_fields": unresolved_fields,
+        "fallback_fields": fallback_fields,
         "scorable_values": scorable_values,
     }
 
