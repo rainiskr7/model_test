@@ -6,7 +6,7 @@ import math
 import os
 import sys
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional
+from typing import Any, Dict, Iterable, List, Optional, Set
 
 if __package__:
     from . import SCORING_VERSION
@@ -127,6 +127,7 @@ def _average_metric(
     tasks: List[Dict[str, Any]],
     spec: MetricSpec,
     bench_tasks: Optional[Dict[str, dict]] = None,
+    scored_ids: Optional[Set[str]] = None,
 ) -> Dict[str, Any]:
     scores = []
     errors = []
@@ -155,6 +156,8 @@ def _average_metric(
                 score = mean_or_none(repeated_scores)
                 if score is not None:
                     scores.append(float(score))
+                    if scored_ids is not None and spec.in_score:
+                        scored_ids.add(str(task.get("task_id")))
                     continue
                 continue
 
@@ -172,6 +175,8 @@ def _average_metric(
             }
         if score is not None:
             scores.append(float(score))
+            if scored_ids is not None and spec.in_score:
+                scored_ids.add(str(task.get("task_id")))
 
     if errors:
         return {
@@ -185,6 +190,7 @@ def _average_metric(
         "score": mean_or_none(scores),
         "status": "ok" if scores else "not_applicable",
         "in_score": spec.in_score,
+        "n_tasks": len(scores),
     }
     if repeated_seen:
         per_repetition = [
@@ -337,8 +343,9 @@ def score_level(
     if bench_tasks is None and tasks:
         bench_tasks = load_bench_tasks(level)
 
+    scored_ids: Set[str] = set()
     for spec in LEVEL_SPECS[level]:
-        entries[spec.name] = _average_metric(tasks, spec, bench_tasks)
+        entries[spec.name] = _average_metric(tasks, spec, bench_tasks, scored_ids=scored_ids)
 
     for metric_name in JUDGE_METRICS:
         entries[metric_name] = _judge_entry()
@@ -353,6 +360,7 @@ def score_level(
 
     return {
         "total": len(tasks),
+        "scored_tasks": len(scored_ids),
         "score": level_score(entries),
         "metrics": entries,
     }
@@ -471,11 +479,11 @@ def build_summary_from_loaded_for_test(
         if result.get("score") is not None
     ]
     weighted_scores = {
-        level: int(result["total"])
+        level: int(result["scored_tasks"])
         for level, result in by_level.items()
         if result.get("score") is not None
-        and isinstance(result.get("total"), int)
-        and result.get("total") > 0
+        and isinstance(result.get("scored_tasks"), int)
+        and result.get("scored_tasks") > 0
     }
     weighted_total = sum(weighted_scores.values())
     agent_score = (
@@ -541,7 +549,7 @@ def build_summary_from_loaded_for_test(
         "native_tool_calling": _native_tool_calling(level_values),
         "agent_score": agent_score,
         "agent_score_equal_level": mean_or_none(level_scores),
-        "weighting": {"scheme": "task_count", "weights": weighted_scores},
+        "weighting": {"scheme": "scored_task_count", "weights": weighted_scores},
         "data_health": data_health,
         "by_level": by_level,
         "bench_pin": (

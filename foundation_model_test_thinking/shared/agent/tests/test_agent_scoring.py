@@ -713,7 +713,7 @@ def _bench_map(tasks):
     return mapped
 
 
-def test_agent_score_task_count_weighting_differs_from_equal_mean():
+def test_agent_score_scored_task_count_weighting_differs_from_equal_mean():
     l2_tasks = [_l2_task("L2-weight-1", "A")]
     l6_tasks = [
         _l6_no_call_task("L6-weight-1"),
@@ -1038,6 +1038,147 @@ def test_data_health_empty_run_not_parser_warning():
     _assert(health["no_tool_calls_recorded"] is False, "empty run should not warn")
 
 
+def _task_id_producer(scored_ids, value=1.0):
+    def _score(ctx):
+        return value if ctx.task_schema.get("task_id") in scored_ids else None
+
+    return _score
+
+
+def _toy_task(task_id):
+    return {
+        "task_id": task_id,
+        "level": 1,
+        "golden_action": [],
+        "tool_calls": [],
+    }
+
+
+def _with_level_specs(level, specs, callback):
+    original = score_run.LEVEL_SPECS[level]
+    score_run.LEVEL_SPECS[level] = specs
+    try:
+        return callback()
+    finally:
+        score_run.LEVEL_SPECS[level] = original
+
+
+def test_average_metric_records_n_tasks_for_scored_values():
+    tasks = [_toy_task("score-me"), _toy_task("skip-me")]
+    spec = score_run.MetricSpec("Toy", _task_id_producer({"score-me"}), True)
+    entry = score_run._average_metric(tasks, spec)
+    _assert_close(entry["score"], 1.0, "toy metric score")
+    _assert(entry["n_tasks"] == 1, "n_tasks counts scored tasks")
+
+
+def test_score_level_scored_tasks_matches_total_when_all_metrics_score_all_tasks():
+    tasks = [_l2_task("L2-scored-all-1", "A"), _l2_task("L2-scored-all-2", "A")]
+    summary = score_run.score_level("L2", {"results": tasks}, _bench_map(tasks))
+    _assert(summary["scored_tasks"] == summary["total"], "scored_tasks should match total")
+
+
+def test_score_level_scored_tasks_uses_union_across_in_score_metrics():
+    tasks = [_toy_task("task-1"), _toy_task("task-2"), _toy_task("task-3")]
+    specs = (
+        score_run.MetricSpec("ToyA", _task_id_producer({"task-1", "task-2"}), True),
+        score_run.MetricSpec("ToyB", _task_id_producer({"task-2", "task-3"}), True),
+    )
+
+    def _run():
+        return score_run.score_level("L1", {"results": tasks}, _bench_map(tasks))
+
+    summary = _with_level_specs("L1", specs, _run)
+    _assert(summary["metrics"]["ToyA"]["n_tasks"] == 2, "ToyA individual count")
+    _assert(summary["metrics"]["ToyB"]["n_tasks"] == 2, "ToyB individual count")
+    _assert(summary["scored_tasks"] == 3, "scored_tasks must be union count")
+
+
+def test_agent_score_weights_by_scored_tasks_not_total():
+    l1_tasks = [_toy_task("L1-score-1"), _toy_task("L1-score-2"), _toy_task("L1-skip-3")]
+    l2_tasks = [_toy_task("L2-score-1")]
+    specs_l1 = (score_run.MetricSpec("ToyL1", _task_id_producer({"L1-score-1", "L1-score-2"}), True),)
+    specs_l2 = (score_run.MetricSpec("ToyL2", _task_id_producer({"L2-score-1"}, 0.0), True),)
+    original_l1 = score_run.LEVEL_SPECS["L1"]
+    original_l2 = score_run.LEVEL_SPECS["L2"]
+    score_run.LEVEL_SPECS["L1"] = specs_l1
+    score_run.LEVEL_SPECS["L2"] = specs_l2
+    try:
+        summary = score_run.build_summary_from_loaded_for_test(
+            {"L1": {"results": l1_tasks}, "L2": {"results": l2_tasks}},
+            Path("/tmp/results/x/t/language/agent"),
+            bench_task_maps={"L1": _bench_map(l1_tasks), "L2": _bench_map(l2_tasks)},
+            bench_pin_value={"tasks_sha256": {}},
+        )
+    finally:
+        score_run.LEVEL_SPECS["L1"] = original_l1
+        score_run.LEVEL_SPECS["L2"] = original_l2
+
+    scored_weighted = (1.0 * 2 + 0.0 * 1) / 3
+    total_weighted = (1.0 * 3 + 0.0 * 1) / 4
+    _assert(summary["by_level"]["L1"]["total"] == 3, "L1 total")
+    _assert(summary["by_level"]["L1"]["scored_tasks"] == 2, "L1 scored_tasks")
+    _assert_close(summary["agent_score"], scored_weighted, "scored task weighted score")
+    _assert(summary["agent_score"] != total_weighted, "must differ from total weighting")
+
+
+def test_weighting_excludes_level_with_zero_scored_tasks():
+    l1_tasks = [_toy_task("L1-unscored-1"), _toy_task("L1-unscored-2")]
+    l2_tasks = [_toy_task("L2-scored-1")]
+    specs_l1 = (score_run.MetricSpec("ToyL1", _task_id_producer(set()), True),)
+    specs_l2 = (score_run.MetricSpec("ToyL2", _task_id_producer({"L2-scored-1"}), True),)
+    original_l1 = score_run.LEVEL_SPECS["L1"]
+    original_l2 = score_run.LEVEL_SPECS["L2"]
+    score_run.LEVEL_SPECS["L1"] = specs_l1
+    score_run.LEVEL_SPECS["L2"] = specs_l2
+    try:
+        summary = score_run.build_summary_from_loaded_for_test(
+            {"L1": {"results": l1_tasks}, "L2": {"results": l2_tasks}},
+            Path("/tmp/results/x/t/language/agent"),
+            bench_task_maps={"L1": _bench_map(l1_tasks), "L2": _bench_map(l2_tasks)},
+            bench_pin_value={"tasks_sha256": {}},
+        )
+    finally:
+        score_run.LEVEL_SPECS["L1"] = original_l1
+        score_run.LEVEL_SPECS["L2"] = original_l2
+
+    _assert(summary["by_level"]["L1"]["total"] == 2, "L1 total remains task count")
+    _assert(summary["by_level"]["L1"]["scored_tasks"] == 0, "L1 scored_tasks zero")
+    _assert("L1" not in summary["weighting"]["weights"], "zero-scored level excluded")
+    _assert(summary["weighting"]["weights"] == {"L2": 1}, "only scored level weighted")
+
+
+def test_weighting_scheme_is_scored_task_count():
+    tasks = [_toy_task("L1-scheme")]
+    specs = (score_run.MetricSpec("Toy", _task_id_producer({"L1-scheme"}), True),)
+
+    def _run():
+        return score_run.build_summary_from_loaded_for_test(
+            {"L1": {"results": tasks}},
+            Path("/tmp/results/x/t/language/agent"),
+            bench_task_maps={"L1": _bench_map(tasks)},
+            bench_pin_value={"tasks_sha256": {}},
+        )
+
+    summary = _with_level_specs("L1", specs, _run)
+    _assert(summary["weighting"]["scheme"] == "scored_task_count", "weighting scheme")
+
+
+def test_record_only_metrics_do_not_contribute_to_scored_tasks():
+    tasks = [_toy_task("task-1"), _toy_task("task-2"), _toy_task("task-3")]
+    specs = (
+        score_run.MetricSpec("ToyInScore", _task_id_producer({"task-1"}), True),
+        score_run.MetricSpec("ToyRecordOnly", _task_id_producer({"task-1", "task-2", "task-3"}), False),
+    )
+
+    def _run():
+        return score_run.score_level("L1", {"results": tasks}, _bench_map(tasks))
+
+    summary = _with_level_specs("L1", specs, _run)
+    _assert(summary["metrics"]["ToyInScore"]["n_tasks"] == 1, "in_score n_tasks")
+    _assert(summary["metrics"]["ToyRecordOnly"]["n_tasks"] == 3, "record-only n_tasks")
+    _assert(summary["scored_tasks"] == 1, "record-only must not affect scored_tasks")
+
+
 TESTS = [
     test_fsm_prefix_exact_match,
     test_fsm_prefix_with_extra_calls,
@@ -1078,7 +1219,7 @@ TESTS = [
     test_l3_passk_primary_resolves_to_spec,
     test_l3_representative_score_excludes_fsm_strict,
     test_other_level_shapes_unchanged,
-    test_agent_score_task_count_weighting_differs_from_equal_mean,
+    test_agent_score_scored_task_count_weighting_differs_from_equal_mean,
     test_agent_score_excludes_none_score_from_weighting,
     test_agent_score_no_scores_has_empty_weights,
     test_data_health_no_tool_calls_warns,
@@ -1091,6 +1232,13 @@ TESTS = [
     test_l6_data_health_load_guard,
     test_l6_data_health_field_diagnostics_and_non_l6_shape,
     test_data_health_empty_run_not_parser_warning,
+    test_average_metric_records_n_tasks_for_scored_values,
+    test_score_level_scored_tasks_matches_total_when_all_metrics_score_all_tasks,
+    test_score_level_scored_tasks_uses_union_across_in_score_metrics,
+    test_agent_score_weights_by_scored_tasks_not_total,
+    test_weighting_excludes_level_with_zero_scored_tasks,
+    test_weighting_scheme_is_scored_task_count,
+    test_record_only_metrics_do_not_contribute_to_scored_tasks,
 ]
 
 
