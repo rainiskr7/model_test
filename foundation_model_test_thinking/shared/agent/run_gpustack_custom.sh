@@ -37,6 +37,12 @@ cp "$SCRIPT_DIR/gpustack_custom/tool_call_parser.py" \
 cp "$SCRIPT_DIR/gpustack_custom/reasoning.py" \
    "$KOA_DIR/bench/adapters/reasoning.py"
 
+# 트랙 이름은 러너 출력 경로와 채점 대상 경로가 반드시 같아야 한다.
+# 하나로 정해 export 해서 두 곳이 갈라지지 않게 한다 (갈라지면 채점기가 러너가
+# 쓰지도 않은 폴더를 뒤지다 조용히 실패하고 summary 가 안 생긴다).
+SCORING_TRACK="${AGENT_TRACK_NAME:-agent}"
+export AGENT_TRACK_NAME="$SCORING_TRACK"
+
 # 실행
 cd "$KOA_DIR"
 bash run_ko-agentbench.sh "$MODEL" "$BASE_URL" "$LEVELS"
@@ -45,7 +51,6 @@ SCORING_TS="${EVAL_TIMESTAMP:-}"
 if [ -z "$SCORING_TS" ] && [ -f "$BASE_DIR/.eval_session" ]; then
   SCORING_TS="$(cat "$BASE_DIR/.eval_session")"
 fi
-SCORING_TRACK="${AGENT_TRACK_NAME:-agent}"
 PY="${PY:-$BASE_DIR/.venv/bin/python}"
 
 "$PY" "$SCRIPT_DIR/scoring/score_run.py" \

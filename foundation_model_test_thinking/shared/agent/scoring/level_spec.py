@@ -4,9 +4,9 @@ from dataclasses import dataclass
 from typing import Callable, Iterable, List, Optional, Sequence
 
 try:
-    from .extra_metrics import arg_f1_det, call_eff_det, fsm_prefix
+    from .extra_metrics import arg_f1_det, call_eff_det, fsm_prefix, golden_field_recall_det
 except ImportError:  # direct file loading in tests
-    from extra_metrics import arg_f1_det, call_eff_det, fsm_prefix
+    from extra_metrics import arg_f1_det, call_eff_det, fsm_prefix, golden_field_recall_det
 
 
 JUDGE_METRICS = ("SR", "ArgAcc", "EffScore", "ContextRetention", "RefRecall")
@@ -14,12 +14,13 @@ COMMON_RECORD_ONLY = ("pass@k", "RespOK")
 PASSK_PRIMARY_METRICS = {
     "L1": "CallEM",
     "L2": "SelectAcc",
-    "L3": "FSM_strict",
+    # FSM_strict is count-based and near-duplicate of ΔSteps_norm; FSM_prefix is the sequence primary.
+    "L3": "FSM_prefix",
     "L4": "Coverage",
     "L5": "FallbackSR",
-    # RedundantCallRate gives 1.0 even when the model makes no tool calls, so
-    # using it as pass@k primary would preserve the survival-signal bug.
-    "L6": "Coverage",
+    # In L6 seed_replay, the correct behavior is zero new tool calls; call-based
+    # metrics cannot be the pass@k primary.
+    "L6": "GoldenFieldRecall_det",
     "L7": "ToolAcc",
 }
 
@@ -52,10 +53,11 @@ LEVEL_SPECS = {
     ),
     "L2": (MetricSpec("SelectAcc", vendored_metric("SelectAcc"), True),),
     "L3": (
-        MetricSpec("FSM_strict", vendored_metric("FSM"), True),
+        MetricSpec("FSM_prefix", fsm_prefix, True),
+        MetricSpec("FSM_strict", vendored_metric("FSM"), False),
         MetricSpec("PSM", vendored_metric("PSM"), True),
         MetricSpec("ΔSteps_norm", vendored_metric("ΔSteps_norm"), True),
-        MetricSpec("FSM_prefix", fsm_prefix, False),
+        MetricSpec("ArgF1_det", arg_f1_det, True),
     ),
     "L4": (
         MetricSpec("Coverage", vendored_metric("Coverage"), True),
@@ -67,10 +69,11 @@ LEVEL_SPECS = {
         MetricSpec("EPR_CVR", vendored_metric("EPR_CVR"), True),
     ),
     "L6": (
-        MetricSpec("RedundantCallRate", vendored_metric("RedundantCallRate"), True),
-        MetricSpec("ToolAcc", vendored_metric("ToolAcc"), True),
-        MetricSpec("Coverage", vendored_metric("Coverage"), True),
-        MetricSpec("CallEff_det", call_eff_det, True),
+        MetricSpec("GoldenFieldRecall_det", golden_field_recall_det, True),
+        MetricSpec("RedundantCallRate", vendored_metric("RedundantCallRate"), False),
+        MetricSpec("ToolAcc", vendored_metric("ToolAcc"), False),
+        MetricSpec("Coverage", vendored_metric("Coverage"), False),
+        MetricSpec("CallEff_det", call_eff_det, False),
     ),
     "L7": (
         MetricSpec("ToolAcc", vendored_metric("ToolAcc"), True),
