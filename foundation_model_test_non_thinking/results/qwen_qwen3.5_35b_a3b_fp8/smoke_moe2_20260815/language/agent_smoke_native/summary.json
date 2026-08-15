@@ -2,10 +2,10 @@
   "benchmark": "Ko-AgentBench (deterministic scoring)",
   "model": "qwen_qwen3.5_35b_a3b_fp8",
   "track": "agent_smoke_native",
-  "scoring_version": "agent_det_v8",
+  "scoring_version": "agent_det_v9",
   "native_tool_calling": true,
-  "agent_score": 0.48047331179199315,
-  "agent_score_equal_level": 0.4827444849522772,
+  "agent_score": 0.5024513337700152,
+  "agent_score_equal_level": 0.5113159135237058,
   "weighting": {
     "scheme": "scored_task_count",
     "weights": {
@@ -296,18 +296,30 @@
     "L4": {
       "total": 10,
       "scored_tasks": 10,
-      "score": 0.23333333333333334,
+      "score": 0.4333333333333333,
       "metrics": {
+        "Coverage_det": {
+          "score": 0.4333333333333333,
+          "status": "ok",
+          "in_score": true,
+          "n_tasks": 10
+        },
+        "SourceEPR_det": {
+          "score": 0.4333333333333333,
+          "status": "ok",
+          "in_score": true,
+          "n_tasks": 10
+        },
         "Coverage": {
           "score": 0.23333333333333334,
           "status": "ok",
-          "in_score": true,
+          "in_score": false,
           "n_tasks": 10
         },
         "SourceEPR": {
           "score": 0.23333333333333334,
           "status": "ok",
-          "in_score": true,
+          "in_score": false,
           "n_tasks": 10
         },
         "SR": {
@@ -353,7 +365,7 @@
           "status": "not_applicable",
           "in_score": false,
           "reason": "repetition_records missing",
-          "primary_metric": "Coverage"
+          "primary_metric": "Coverage_det"
         }
       }
     },
