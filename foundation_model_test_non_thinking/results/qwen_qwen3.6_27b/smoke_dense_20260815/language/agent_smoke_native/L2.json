@@ -1,0 +1,1451 @@
+{
+  "metadata": {
+    "timestamp": "2026-08-15T22:17:33.473948",
+    "model": "qwen_qwen3.6_27b",
+    "level": "L2",
+    "native_tool_calling": true,
+    "total_tasks": 15,
+    "successful_tasks": 6,
+    "failed_tasks": 9,
+    "success_rate": 40.0,
+    "total_execution_time": 4882.16,
+    "average_execution_time": 325.48,
+    "total_steps": 12,
+    "average_steps": 0.8,
+    "total_tool_calls": 6,
+    "average_tool_calls": 0.4,
+    "total_tokens": 8236,
+    "average_tokens_per_task": 549.07,
+    "average_prompt_tokens": 486.67,
+    "average_completion_tokens": 62.4,
+    "average_tps": 1.69,
+    "ttft": {
+      "average": 15.8138,
+      "min": 9.8791,
+      "max": 23.7459,
+      "unit": "seconds"
+    }
+  },
+  "tool_usage_statistics": {
+    "AddressToCoord_kakao": {
+      "count": 1,
+      "success": 1,
+      "failure": 0
+    },
+    "USStockPrice_kis": {
+      "count": 1,
+      "success": 1,
+      "failure": 0
+    },
+    "MarketIndex_ls": {
+      "count": 1,
+      "success": 1,
+      "failure": 0
+    },
+    "CryptoPrice_bithumb": {
+      "count": 1,
+      "success": 1,
+      "failure": 0
+    },
+    "Geocoding_tmap": {
+      "count": 1,
+      "success": 1,
+      "failure": 0
+    },
+    "MarketList_upbit": {
+      "count": 1,
+      "success": 1,
+      "failure": 0
+    }
+  },
+  "results": [
+    {
+      "task_id": "L2-001",
+      "instruction": "POSCO홀딩스(005490) 주식의 현재 호가창을 확인하고 싶어",
+      "level": 2,
+      "category": "Tool Retrieval & Selection",
+      "success": false,
+      "execution_time": 554.402932882309,
+      "steps_taken": 0,
+      "error": "LLM call failed after 3 attempts: Request timed out.",
+      "expected_tools": [
+        "OrderBook_ls"
+      ],
+      "golden_action": [
+        {
+          "tool": "OrderBook_ls",
+          "args": {
+            "shcode": "005490",
+            "exchgubun": "K"
+          }
+        }
+      ],
+      "minimum_steps": null,
+      "data_flow": [],
+      "error_injection": null,
+      "fallback_options": [],
+      "resp_schema": {},
+      "arg_schema": {},
+      "repetitions": 1,
+      "repetition_results": [
+        false
+      ],
+      "token_usage": {
+        "prompt_tokens": 0,
+        "completion_tokens": 0,
+        "total_tokens": 0
+      },
+      "ttft_stats": {
+        "average": 0,
+        "min": 0,
+        "max": 0,
+        "count": 0
+      },
+      "tool_calls": [],
+      "final_response": null,
+      "conversation_log": {
+        "total_messages": 0,
+        "messages": []
+      }
+    },
+    {
+      "task_id": "L2-002",
+      "instruction": "네이버 주식(035420)의 일봉 차트 데이터를 보여줘",
+      "level": 2,
+      "category": "Tool Retrieval & Selection",
+      "success": false,
+      "execution_time": 558.466598033905,
+      "steps_taken": 0,
+      "error": "LLM call failed after 3 attempts: Request timed out.",
+      "expected_tools": [
+        "StockChart_kis"
+      ],
+      "golden_action": [
+        {
+          "tool": "StockChart_kis",
+          "args": {
+            "symbol": "035420",
+            "period": "D",
+            "count": 30
+          }
+        }
+      ],
+      "minimum_steps": null,
+      "data_flow": [],
+      "error_injection": null,
+      "fallback_options": [],
+      "resp_schema": {},
+      "arg_schema": {},
+      "repetitions": 1,
+      "repetition_results": [
+        false
+      ],
+      "token_usage": {
+        "prompt_tokens": 0,
+        "completion_tokens": 0,
+        "total_tokens": 0
+      },
+      "ttft_stats": {
+        "average": 0,
+        "min": 0,
+        "max": 0,
+        "count": 0
+      },
+      "tool_calls": [],
+      "final_response": null,
+      "conversation_log": {
+        "total_messages": 0,
+        "messages": []
+      }
+    },
+    {
+      "task_id": "L2-003",
+      "instruction": "서울특별시 강남구 테헤란로 152 주소를 좌표로 변환해줘",
+      "level": 2,
+      "category": "Tool Retrieval & Selection",
+      "success": true,
+      "execution_time": 22.94045925140381,
+      "steps_taken": 2,
+      "error": null,
+      "expected_tools": [
+        "AddressToCoord_kakao"
+      ],
+      "golden_action": [
+        {
+          "tool": "AddressToCoord_kakao",
+          "args": {
+            "address": "서울특별시 강남구 테헤란로 152"
+          }
+        }
+      ],
+      "minimum_steps": null,
+      "data_flow": [],
+      "error_injection": null,
+      "fallback_options": [],
+      "resp_schema": {},
+      "arg_schema": {},
+      "repetitions": 1,
+      "repetition_results": [
+        true
+      ],
+      "token_usage": {
+        "prompt_tokens": 822,
+        "completion_tokens": 112,
+        "total_tokens": 934
+      },
+      "ttft_stats": {
+        "average": 11.469323160003114,
+        "min": 8.609195200013346,
+        "max": 14.329451119992882,
+        "count": 2
+      },
+      "tool_calls": [
+        {
+          "step": 1,
+          "tool_name": "AddressToCoord_kakao",
+          "arguments": {
+            "address": "서울특별시 강남구 테헤란로 152"
+          },
+          "success": true,
+          "error": null,
+          "result": {
+            "address": "서울특별시 강남구 테헤란로 152",
+            "latitude": 37.5000242405515,
+            "longitude": 127.036508620542,
+            "address_name": "서울 강남구 테헤란로 152"
+          }
+        }
+      ],
+      "final_response": "서울특별시 강남구 테헤란로 152의 좌표는 다음과 같습니다:\n\n- **위도 (Latitude):** 37.5000242405515  \n- **경도 (Longitude):** 127.036508620542",
+      "conversation_log": {
+        "total_messages": 4,
+        "messages": [
+          {
+            "role": "user",
+            "content": "서울특별시 강남구 테헤란로 152 주소를 좌표로 변환해줘"
+          },
+          {
+            "role": "assistant",
+            "content": ""
+          },
+          {
+            "role": "tool",
+            "tool_call_id": "chatcmpl-tool-a61da57cd65af704",
+            "content": {
+              "address": "서울특별시 강남구 테헤란로 152",
+              "latitude": 37.5000242405515,
+              "longitude": 127.036508620542,
+              "address_name": "서울 강남구 테헤란로 152"
+            }
+          },
+          {
+            "role": "assistant",
+            "content": "서울특별시 강남구 테헤란로 152의 좌표는 다음과 같습니다:\n\n- **위도 (Latitude):** 37.5000242405515  \n- **경도 (Longitude):** 127.036508620542"
+          }
+        ]
+      }
+    },
+    {
+      "task_id": "L2-004",
+      "instruction": "테슬라(TSLA) 주가를 확인하고 싶어",
+      "level": 2,
+      "category": "Tool Retrieval & Selection",
+      "success": true,
+      "execution_time": 19.76006269454956,
+      "steps_taken": 2,
+      "error": null,
+      "expected_tools": [
+        "USStockPrice_kis"
+      ],
+      "golden_action": [
+        {
+          "tool": "USStockPrice_kis",
+          "args": {
+            "symbol": "TSLA",
+            "exchange": "NASDAQ"
+          }
+        }
+      ],
+      "minimum_steps": null,
+      "data_flow": [],
+      "error_injection": null,
+      "fallback_options": [],
+      "resp_schema": {},
+      "arg_schema": {},
+      "repetitions": 1,
+      "repetition_results": [
+        true
+      ],
+      "token_usage": {
+        "prompt_tokens": 816,
+        "completion_tokens": 94,
+        "total_tokens": 910
+      },
+      "ttft_stats": {
+        "average": 9.879058200000145,
+        "min": 9.594415088009555,
+        "max": 10.163701311990735,
+        "count": 2
+      },
+      "tool_calls": [
+        {
+          "step": 1,
+          "tool_name": "USStockPrice_kis",
+          "arguments": {
+            "symbol": "TSLA",
+            "exchange": "NASDAQ"
+          },
+          "success": true,
+          "error": null,
+          "result": {
+            "symbol": "TSLA",
+            "exchange": "NASDAQ",
+            "current_price": 483.37,
+            "change_rate": 3.45,
+            "volume": 95168446
+          }
+        }
+      ],
+      "final_response": "테슬라(TSLA)의 현재 주가는 483.37달러이며, 전일 대비 3.45% 상승했습니다. 거래량은 95,168,446주입니다.",
+      "conversation_log": {
+        "total_messages": 4,
+        "messages": [
+          {
+            "role": "user",
+            "content": "테슬라(TSLA) 주가를 확인하고 싶어"
+          },
+          {
+            "role": "assistant",
+            "content": ""
+          },
+          {
+            "role": "tool",
+            "tool_call_id": "chatcmpl-tool-8c2eda4f24d576a5",
+            "content": {
+              "symbol": "TSLA",
+              "exchange": "NASDAQ",
+              "current_price": 483.37,
+              "change_rate": 3.45,
+              "volume": 95168446
+            }
+          },
+          {
+            "role": "assistant",
+            "content": "테슬라(TSLA)의 현재 주가는 483.37달러이며, 전일 대비 3.45% 상승했습니다. 거래량은 95,168,446주입니다."
+          }
+        ]
+      }
+    },
+    {
+      "task_id": "L2-005",
+      "instruction": "코스닥 지수 현재 상황을 알려줘",
+      "level": 2,
+      "category": "Tool Retrieval & Selection",
+      "success": true,
+      "execution_time": 44.617368936538696,
+      "steps_taken": 2,
+      "error": null,
+      "expected_tools": [
+        "MarketIndex_ls"
+      ],
+      "golden_action": [
+        {
+          "tool": "MarketIndex_ls",
+          "args": {
+            "jisu": "KOSDAQ"
+          }
+        }
+      ],
+      "minimum_steps": null,
+      "data_flow": [],
+      "error_injection": null,
+      "fallback_options": [],
+      "resp_schema": {},
+      "arg_schema": {},
+      "repetitions": 1,
+      "repetition_results": [
+        true
+      ],
+      "token_usage": {
+        "prompt_tokens": 1666,
+        "completion_tokens": 217,
+        "total_tokens": 1883
+      },
+      "ttft_stats": {
+        "average": 22.308345191995613,
+        "min": 7.047452528000576,
+        "max": 37.56923785599065,
+        "count": 2
+      },
+      "tool_calls": [
+        {
+          "step": 1,
+          "tool_name": "MarketIndex_ls",
+          "arguments": {
+            "jisu": "KOSDAQ"
+          },
+          "success": true,
+          "error": null,
+          "result": {
+            "t1511OutBlock": {
+              "gubun": "2",
+              "hname": "코스닥 종합",
+              "pricejisu": "915.27",
+              "jniljisu": "901.33",
+              "sign": "2",
+              "change": "13.94",
+              "diffjisu": "1.55",
+              "jnilvolume": 900507,
+              "volume": 963856,
+              "volumechange": 63349,
+              "volumerate": "107.03",
+              "jnilvalue": 10091584,
+              "value": 11401736,
+              "valuechange": 1310152,
+              "valuerate": "112.98",
+              "openjisu": "909.70",
+              "opendiff": "0.93",
+              "opentime": "090030",
+              "highjisu": "922.10",
+              "highdiff": "2.30",
+              "hightime": "140030",
+              "lowjisu": "899.25",
+              "lowdiff": "-0.23",
+              "lowtime": "095030",
+              "whjisu": "943.19",
+              "whchange": "-2.96",
+              "whjday": "20251211",
+              "wljisu": "637.55",
+              "wlchange": "43.56",
+              "wljday": "20250409",
+              "yhjisu": "943.19",
+              "yhchange": "-2.96",
+              "yhjday": "20251211",
+              "yljisu": "637.55",
+              "ylchange": "43.56",
+              "yljday": "20250409",
+              "firstjcode": "301",
+              "firstjname": "코스닥 종합",
+              "firstjisu": "915.27",
+              "firsign": "2",
+              "firchange": "13.94",
+              "firdiff": "0.15",
+              "secondjcode": "339",
+              "secondjname": "KOSDAQ100",
+              "secondjisu": "2239.24",
+              "secsign": "2",
+              "secchange": "32.21",
+              "secdiff": "1.46",
+              "thirdjcode": "405",
+              "thirdjname": "KOSDAQ 150",
+              "thirdjisu": "1533.99",
+              "thrsign": "2",
+              "thrchange": "22.81",
+              "thrdiff": "1.51",
+              "fourthjcode": "324",
+              "fourthjname": "전 기/전 자",
+              "fourthjisu": "1443.26",
+              "forsign": "2",
+              "forchange": "18.36",
+              "fordiff": "1.29",
+              "highjo": 1145,
+              "upjo": 4,
+              "unchgjo": 167,
+              "lowjo": 508,
+              "downjo": 1
+            },
+            "rsp_cd": "00000",
+            "rsp_msg": "정상적으로 조회가 완료되었습니다."
+          }
+        }
+      ],
+      "final_response": "현재 코스닥 지수(KOSDAQ)는 **915.27**로, 전일 대비 **13.94(+1.55%)** 상승하고 있습니다.\n\n주요 현황은 다음과 같습니다:\n*   **시가**: 909.70\n*   **고가**: 922.10 (14:00 기준)\n*   **저가**: 899.25 (09:50 기준)\n*   **거래량**: 963,856 (전일 대비 107.03%)\n*   **거래대금**: 11,401,736 (전일 대비 112.98%)\n\n전반적으로 상승세를 보이고 있으며, 거래량과 거래대금 모두 전일 대비 증가한 상태입니다.",
+      "conversation_log": {
+        "total_messages": 4,
+        "messages": [
+          {
+            "role": "user",
+            "content": "코스닥 지수 현재 상황을 알려줘"
+          },
+          {
+            "role": "assistant",
+            "content": ""
+          },
+          {
+            "role": "tool",
+            "tool_call_id": "chatcmpl-tool-872bee450e5cbe14",
+            "content": {
+              "t1511OutBlock": {
+                "gubun": "2",
+                "hname": "코스닥 종합",
+                "pricejisu": "915.27",
+                "jniljisu": "901.33",
+                "sign": "2",
+                "change": "13.94",
+                "diffjisu": "1.55",
+                "jnilvolume": 900507,
+                "volume": 963856,
+                "volumechange": 63349,
+                "volumerate": "107.03",
+                "jnilvalue": 10091584,
+                "value": 11401736,
+                "valuechange": 1310152,
+                "valuerate": "112.98",
+                "openjisu": "909.70",
+                "opendiff": "0.93",
+                "opentime": "090030",
+                "highjisu": "922.10",
+                "highdiff": "2.30",
+                "hightime": "140030",
+                "lowjisu": "899.25",
+                "lowdiff": "-0.23",
+                "lowtime": "095030",
+                "whjisu": "943.19",
+                "whchange": "-2.96",
+                "whjday": "20251211",
+                "wljisu": "637.55",
+                "wlchange": "43.56",
+                "wljday": "20250409",
+                "yhjisu": "943.19",
+                "yhchange": "-2.96",
+                "yhjday": "20251211",
+                "yljisu": "637.55",
+                "ylchange": "43.56",
+                "yljday": "20250409",
+                "firstjcode": "301",
+                "firstjname": "코스닥 종합",
+                "firstjisu": "915.27",
+                "firsign": "2",
+                "firchange": "13.94",
+                "firdiff": "0.15",
+                "secondjcode": "339",
+                "secondjname": "KOSDAQ100",
+                "secondjisu": "2239.24",
+                "secsign": "2",
+                "secchange": "32.21",
+                "secdiff": "1.46",
+                "thirdjcode": "405",
+                "thirdjname": "KOSDAQ 150",
+                "thirdjisu": "1533.99",
+                "thrsign": "2",
+                "thrchange": "22.81",
+                "thrdiff": "1.51",
+                "fourthjcode": "324",
+                "fourthjname": "전 기/전 자",
+                "fourthjisu": "1443.26",
+                "forsign": "2",
+                "forchange": "18.36",
+                "fordiff": "1.29",
+                "highjo": 1145,
+                "upjo": 4,
+                "unchgjo": 167,
+                "lowjo": 508,
+                "downjo": 1
+              },
+              "rsp_cd": "00000",
+              "rsp_msg": "정상적으로 조회가 완료되었습니다."
+            }
+          },
+          {
+            "role": "assistant",
+            "content": "현재 코스닥 지수(KOSDAQ)는 **915.27**로, 전일 대비 **13.94(+1.55%)** 상승하고 있습니다.\n\n주요 현황은 다음과 같습니다:\n*   **시가**: 909.70\n*   **고가**: 922.10 (14:00 기준)\n*   **저가**: 899.25 (09:50 기준)\n*   **거래량**: 963,856 (전일 대비 107.03%)\n*   **거래대금**: 11,401,736 (전일 대비 112.98%)\n\n전반적으로 상승세를 보이고 있으며, 거래량과 거래대금 모두 전일 대비 증가한 상태입니다."
+          }
+        ]
+      }
+    },
+    {
+      "task_id": "L2-006",
+      "instruction": "ISBN 9788936434267 책의 상세 정보를 알려줘",
+      "level": 2,
+      "category": "Tool Retrieval & Selection",
+      "success": false,
+      "execution_time": 558.8512494564056,
+      "steps_taken": 0,
+      "error": "LLM call failed after 3 attempts: Request timed out.",
+      "expected_tools": [
+        "ItemLookup_aladin"
+      ],
+      "golden_action": [
+        {
+          "tool": "ItemLookup_aladin",
+          "args": {
+            "item_id": "9788936434267",
+            "item_id_type": "ISBN13"
+          }
+        }
+      ],
+      "minimum_steps": null,
+      "data_flow": [],
+      "error_injection": null,
+      "fallback_options": [],
+      "resp_schema": {},
+      "arg_schema": {},
+      "repetitions": 1,
+      "repetition_results": [
+        false
+      ],
+      "token_usage": {
+        "prompt_tokens": 0,
+        "completion_tokens": 0,
+        "total_tokens": 0
+      },
+      "ttft_stats": {
+        "average": 0,
+        "min": 0,
+        "max": 0,
+        "count": 0
+      },
+      "tool_calls": [],
+      "final_response": null,
+      "conversation_log": {
+        "total_messages": 0,
+        "messages": []
+      }
+    },
+    {
+      "task_id": "L2-007",
+      "instruction": "빗썸에서 비트코인 현재가를 알려줘",
+      "level": 2,
+      "category": "Tool Retrieval & Selection",
+      "success": true,
+      "execution_time": 29.219226837158203,
+      "steps_taken": 2,
+      "error": null,
+      "expected_tools": [
+        "CryptoPrice_bithumb"
+      ],
+      "golden_action": [
+        {
+          "tool": "CryptoPrice_bithumb",
+          "args": {
+            "markets": "KRW-BTC"
+          }
+        }
+      ],
+      "minimum_steps": null,
+      "data_flow": [],
+      "error_injection": null,
+      "fallback_options": [],
+      "resp_schema": {},
+      "arg_schema": {},
+      "repetitions": 1,
+      "repetition_results": [
+        true
+      ],
+      "token_usage": {
+        "prompt_tokens": 1221,
+        "completion_tokens": 147,
+        "total_tokens": 1368
+      },
+      "ttft_stats": {
+        "average": 14.609122704001493,
+        "min": 6.405817727994872,
+        "max": 22.812427680008113,
+        "count": 2
+      },
+      "tool_calls": [
+        {
+          "step": 1,
+          "tool_name": "CryptoPrice_bithumb",
+          "arguments": {
+            "markets": "KRW-BTC"
+          },
+          "success": true,
+          "error": null,
+          "result": [
+            {
+              "market": "KRW-BTC",
+              "trade_date": "20251219",
+              "trade_time": "065759",
+              "trade_date_kst": "20251219",
+              "trade_time_kst": "155759",
+              "trade_timestamp": 1766159879603,
+              "opening_price": 131284000,
+              "high_price": 132570000,
+              "low_price": 126200000,
+              "trade_price": 130000000,
+              "prev_closing_price": 131285000,
+              "change": "FALL",
+              "change_price": 1285000,
+              "change_rate": 0.0098,
+              "signed_change_price": -1285000,
+              "signed_change_rate": -0.0098,
+              "trade_volume": 0.00153846,
+              "acc_trade_price": 111751980952.1034,
+              "acc_trade_price_24h": 169250698319.99957,
+              "acc_trade_volume": 869.75715093,
+              "acc_trade_volume_24h": 1309.71581845,
+              "highest_52_week_price": 179734000,
+              "highest_52_week_date": "2025-10-10",
+              "lowest_52_week_price": 111850000,
+              "lowest_52_week_date": "2025-04-08",
+              "timestamp": 1766159879603
+            }
+          ]
+        }
+      ],
+      "final_response": "빗썸에서 비트코인(BTC)의 현재가는 **130,000,000원**입니다.\n\n*   **전일 대비**: -1,285,000원 (하락)\n*   **등락률**: -0.98%\n*   **거래량**: 1309.71 BTC (24시간 기준)\n\n참고로, 이 데이터는 2025년 12월 19일 기준입니다.",
+      "conversation_log": {
+        "total_messages": 4,
+        "messages": [
+          {
+            "role": "user",
+            "content": "빗썸에서 비트코인 현재가를 알려줘"
+          },
+          {
+            "role": "assistant",
+            "content": ""
+          },
+          {
+            "role": "tool",
+            "tool_call_id": "chatcmpl-tool-866943f8e973bea6",
+            "content": [
+              {
+                "market": "KRW-BTC",
+                "trade_date": "20251219",
+                "trade_time": "065759",
+                "trade_date_kst": "20251219",
+                "trade_time_kst": "155759",
+                "trade_timestamp": 1766159879603,
+                "opening_price": 131284000,
+                "high_price": 132570000,
+                "low_price": 126200000,
+                "trade_price": 130000000,
+                "prev_closing_price": 131285000,
+                "change": "FALL",
+                "change_price": 1285000,
+                "change_rate": 0.0098,
+                "signed_change_price": -1285000,
+                "signed_change_rate": -0.0098,
+                "trade_volume": 0.00153846,
+                "acc_trade_price": 111751980952.1034,
+                "acc_trade_price_24h": 169250698319.99957,
+                "acc_trade_volume": 869.75715093,
+                "acc_trade_volume_24h": 1309.71581845,
+                "highest_52_week_price": 179734000,
+                "highest_52_week_date": "2025-10-10",
+                "lowest_52_week_price": 111850000,
+                "lowest_52_week_date": "2025-04-08",
+                "timestamp": 1766159879603
+              }
+            ]
+          },
+          {
+            "role": "assistant",
+            "content": "빗썸에서 비트코인(BTC)의 현재가는 **130,000,000원**입니다.\n\n*   **전일 대비**: -1,285,000원 (하락)\n*   **등락률**: -0.98%\n*   **거래량**: 1309.71 BTC (24시간 기준)\n\n참고로, 이 데이터는 2025년 12월 19일 기준입니다."
+          }
+        ]
+      }
+    },
+    {
+      "task_id": "L2-008",
+      "instruction": "강남역(127.027621, 37.498095) 주변 카페를 찾아줘",
+      "level": 2,
+      "category": "Tool Retrieval & Selection",
+      "success": false,
+      "execution_time": 560.7251403331757,
+      "steps_taken": 0,
+      "error": "LLM call failed after 3 attempts: Request timed out.",
+      "expected_tools": [
+        "CategorySearch_kakao"
+      ],
+      "golden_action": [
+        {
+          "tool": "CategorySearch_kakao",
+          "args": {
+            "category": "CE7",
+            "x": 127.027621,
+            "y": 37.498095,
+            "radius": 500
+          }
+        }
+      ],
+      "minimum_steps": null,
+      "data_flow": [],
+      "error_injection": null,
+      "fallback_options": [],
+      "resp_schema": {},
+      "arg_schema": {},
+      "repetitions": 1,
+      "repetition_results": [
+        false
+      ],
+      "token_usage": {
+        "prompt_tokens": 0,
+        "completion_tokens": 0,
+        "total_tokens": 0
+      },
+      "ttft_stats": {
+        "average": 0,
+        "min": 0,
+        "max": 0,
+        "count": 0
+      },
+      "tool_calls": [],
+      "final_response": null,
+      "conversation_log": {
+        "total_messages": 0,
+        "messages": []
+      }
+    },
+    {
+      "task_id": "L2-009",
+      "instruction": "서울 마포구 상암동의 경위도 좌표를 T맵으로 알려줘",
+      "level": 2,
+      "category": "Tool Retrieval & Selection",
+      "success": true,
+      "execution_time": 25.76311683654785,
+      "steps_taken": 2,
+      "error": null,
+      "expected_tools": [
+        "Geocoding_tmap"
+      ],
+      "golden_action": [
+        {
+          "tool": "Geocoding_tmap",
+          "args": {
+            "city_do": "서울특별시",
+            "gu_gun": "마포구",
+            "dong": "상암동"
+          }
+        }
+      ],
+      "minimum_steps": null,
+      "data_flow": [],
+      "error_injection": null,
+      "fallback_options": [],
+      "resp_schema": {},
+      "arg_schema": {},
+      "repetitions": 1,
+      "repetition_results": [
+        true
+      ],
+      "token_usage": {
+        "prompt_tokens": 1147,
+        "completion_tokens": 130,
+        "total_tokens": 1277
+      },
+      "ttft_stats": {
+        "average": 12.87116755200259,
+        "min": 12.07387911999831,
+        "max": 13.668455984006869,
+        "count": 2
+      },
+      "tool_calls": [
+        {
+          "step": 1,
+          "tool_name": "Geocoding_tmap",
+          "arguments": {
+            "city_do": "서울특별시",
+            "gu_gun": "마포구",
+            "dong": "상암동"
+          },
+          "success": true,
+          "error": null,
+          "result": {
+            "coordinateInfo": {
+              "coordType": "WGS84GEO",
+              "addressFlag": "F01",
+              "matchFlag": "M33",
+              "lat": "37.578599",
+              "lon": "126.894768",
+              "city_do": "서울",
+              "gu_gun": "마포구",
+              "eup_myun": "",
+              "legalDong": "상암동",
+              "legalDongCode": "1144012700",
+              "adminDong": "상암동",
+              "adminDongCode": "1144074000",
+              "ri": "",
+              "bunji": "0",
+              "newMatchFlag": "",
+              "newLat": "",
+              "newLon": "",
+              "newRoadName": "",
+              "newBuildingIndex": "",
+              "newBuildingName": "",
+              "newBuildingCateName": "",
+              "remainder": ""
+            }
+          }
+        }
+      ],
+      "final_response": "서울특별시 마포구 상암동의 경위도 좌표는 다음과 같습니다:\n\n*   **위도 (Latitude):** 37.578599\n*   **경도 (Longitude):** 126.894768\n\n(좌표 체계: WGS84)",
+      "conversation_log": {
+        "total_messages": 4,
+        "messages": [
+          {
+            "role": "user",
+            "content": "서울 마포구 상암동의 경위도 좌표를 T맵으로 알려줘"
+          },
+          {
+            "role": "assistant",
+            "content": ""
+          },
+          {
+            "role": "tool",
+            "tool_call_id": "chatcmpl-tool-ac348915e7208a24",
+            "content": {
+              "coordinateInfo": {
+                "coordType": "WGS84GEO",
+                "addressFlag": "F01",
+                "matchFlag": "M33",
+                "lat": "37.578599",
+                "lon": "126.894768",
+                "city_do": "서울",
+                "gu_gun": "마포구",
+                "eup_myun": "",
+                "legalDong": "상암동",
+                "legalDongCode": "1144012700",
+                "adminDong": "상암동",
+                "adminDongCode": "1144074000",
+                "ri": "",
+                "bunji": "0",
+                "newMatchFlag": "",
+                "newLat": "",
+                "newLon": "",
+                "newRoadName": "",
+                "newBuildingIndex": "",
+                "newBuildingName": "",
+                "newBuildingCateName": "",
+                "remainder": ""
+              }
+            }
+          },
+          {
+            "role": "assistant",
+            "content": "서울특별시 마포구 상암동의 경위도 좌표는 다음과 같습니다:\n\n*   **위도 (Latitude):** 37.578599\n*   **경도 (Longitude):** 126.894768\n\n(좌표 체계: WGS84)"
+          }
+        ]
+      }
+    },
+    {
+      "task_id": "L2-010",
+      "instruction": "빗썸에서 이더리움 매수/매도 호가를 보여줘",
+      "level": 2,
+      "category": "Tool Retrieval & Selection",
+      "success": false,
+      "execution_time": 554.0778188705444,
+      "steps_taken": 0,
+      "error": "LLM call failed after 3 attempts: Request timed out.",
+      "expected_tools": [
+        "OrderBook_bithumb"
+      ],
+      "golden_action": [
+        {
+          "tool": "OrderBook_bithumb",
+          "args": {
+            "markets": "KRW-ETH"
+          }
+        }
+      ],
+      "minimum_steps": null,
+      "data_flow": [],
+      "error_injection": null,
+      "fallback_options": [],
+      "resp_schema": {},
+      "arg_schema": {},
+      "repetitions": 1,
+      "repetition_results": [
+        false
+      ],
+      "token_usage": {
+        "prompt_tokens": 0,
+        "completion_tokens": 0,
+        "total_tokens": 0
+      },
+      "ttft_stats": {
+        "average": 0,
+        "min": 0,
+        "max": 0,
+        "count": 0
+      },
+      "tool_calls": [],
+      "final_response": null,
+      "conversation_log": {
+        "total_messages": 0,
+        "messages": []
+      }
+    },
+    {
+      "task_id": "L2-011",
+      "instruction": "이번 주 경제경영 베스트셀러 목록을 보여줘",
+      "level": 2,
+      "category": "Tool Retrieval & Selection",
+      "success": false,
+      "execution_time": 562.707989692688,
+      "steps_taken": 0,
+      "error": "LLM call failed after 3 attempts: Request timed out.",
+      "expected_tools": [
+        "ItemList_aladin"
+      ],
+      "golden_action": [
+        {
+          "tool": "ItemList_aladin",
+          "args": {
+            "query_type": "Bestseller",
+            "category_id": 170
+          }
+        }
+      ],
+      "minimum_steps": null,
+      "data_flow": [],
+      "error_injection": null,
+      "fallback_options": [],
+      "resp_schema": {},
+      "arg_schema": {},
+      "repetitions": 1,
+      "repetition_results": [
+        false
+      ],
+      "token_usage": {
+        "prompt_tokens": 0,
+        "completion_tokens": 0,
+        "total_tokens": 0
+      },
+      "ttft_stats": {
+        "average": 0,
+        "min": 0,
+        "max": 0,
+        "count": 0
+      },
+      "tool_calls": [],
+      "final_response": null,
+      "conversation_log": {
+        "total_messages": 0,
+        "messages": []
+      }
+    },
+    {
+      "task_id": "L2-012",
+      "instruction": "업비트에서 거래 가능한 암호화폐 목록 10개만 보여줘",
+      "level": 2,
+      "category": "Tool Retrieval & Selection",
+      "success": true,
+      "execution_time": 47.49464535713196,
+      "steps_taken": 2,
+      "error": null,
+      "expected_tools": [
+        "MarketList_upbit"
+      ],
+      "golden_action": [
+        {
+          "tool": "MarketList_upbit",
+          "args": {}
+        }
+      ],
+      "minimum_steps": null,
+      "data_flow": [],
+      "error_injection": null,
+      "fallback_options": [],
+      "resp_schema": {},
+      "arg_schema": {},
+      "repetitions": 1,
+      "repetition_results": [
+        true
+      ],
+      "token_usage": {
+        "prompt_tokens": 1628,
+        "completion_tokens": 236,
+        "total_tokens": 1864
+      },
+      "ttft_stats": {
+        "average": 23.745921448004083,
+        "min": 9.159800384004484,
+        "max": 38.33204251200368,
+        "count": 2
+      },
+      "tool_calls": [
+        {
+          "step": 1,
+          "tool_name": "MarketList_upbit",
+          "arguments": {
+            "quote": "KRW",
+            "include_event": true
+          },
+          "success": true,
+          "error": null,
+          "result": {
+            "quote": "KRW",
+            "markets": [
+              {
+                "market": "KRW-WAXP",
+                "korean_name": "왁스",
+                "english_name": "WAX"
+              },
+              {
+                "market": "KRW-CARV",
+                "korean_name": "카브",
+                "english_name": "CARV"
+              },
+              {
+                "market": "KRW-LSK",
+                "korean_name": "리스크",
+                "english_name": "Lisk"
+              },
+              {
+                "market": "KRW-0G",
+                "korean_name": "제로지",
+                "english_name": "0G"
+              },
+              {
+                "market": "KRW-BORA",
+                "korean_name": "보라",
+                "english_name": "BORA"
+              },
+              {
+                "market": "KRW-PUNDIX",
+                "korean_name": "펀디엑스",
+                "english_name": "Pundi X"
+              },
+              {
+                "market": "KRW-USD1",
+                "korean_name": "월드리버티파이낸셜유에스디",
+                "english_name": "World Liberty Financial USD"
+              },
+              {
+                "market": "KRW-BAT",
+                "korean_name": "베이직어텐션토큰",
+                "english_name": "Basic Attention Token"
+              },
+              {
+                "market": "KRW-HUNT",
+                "korean_name": "헌트",
+                "english_name": "HUNT"
+              },
+              {
+                "market": "KRW-PENGU",
+                "korean_name": "펏지펭귄",
+                "english_name": "Pudgy Penguins"
+              },
+              {
+                "market": "KRW-FIL",
+                "korean_name": "파일코인",
+                "english_name": "Filecoin"
+              },
+              {
+                "market": "KRW-BEAM",
+                "korean_name": "빔",
+                "english_name": "Beam"
+              },
+              {
+                "market": "KRW-DOOD",
+                "korean_name": "두들즈",
+                "english_name": "Doodles"
+              },
+              {
+                "market": "KRW-WAVES",
+                "korean_name": "웨이브",
+                "english_name": "Waves"
+              },
+              {
+                "market": "KRW-USDC",
+                "korean_name": "유에스디코인",
+                "english_name": "USD Coin"
+              },
+              {
+                "market": "KRW-MOVE",
+                "korean_name": "무브먼트",
+                "english_name": "Movement"
+              },
+              {
+                "market": "KRW-TREE",
+                "korean_name": "트리하우스",
+                "english_name": "Treehouse"
+              },
+              {
+                "market": "KRW-AERGO",
+                "korean_name": "아르고",
+                "english_name": "Aergo"
+              },
+              {
+                "market": "KRW-WET",
+                "korean_name": "휴미디파이",
+                "english_name": "HumidiFi"
+              },
+              {
+                "market": "KRW-USDT",
+                "korean_name": "테더",
+                "english_name": "Tether"
+              }
+            ],
+            "count": 230
+          }
+        }
+      ],
+      "final_response": "업비트에서 거래 가능한 암호화폐 목록 중 상위 10개는 다음과 같습니다:\n\n1. **WAXP (WAX)** - 왁스\n2. **CARV (CARV)** - 카브\n3. **LSK (Lisk)** - 리스크\n4. **0G (0G)** - 제로지\n5. **BORA (BORA)** - 보라\n6. **PUNDIX (Pundi X)** - 펀디엑스\n7. **USD1 (World Liberty Financial USD)** - 월드리버티파이낸셜유에스디\n8. **BAT (Basic Attention Token)** - 베이직어텐션토큰\n9. **HUNT (HUNT)** - 헌트\n10. **PENGU (Pudgy Penguins)** - 퍼지펭귄\n\n더 많은 암호화폐 목록이 필요하시면 말씀해 주세요!",
+      "conversation_log": {
+        "total_messages": 4,
+        "messages": [
+          {
+            "role": "user",
+            "content": "업비트에서 거래 가능한 암호화폐 목록 10개만 보여줘"
+          },
+          {
+            "role": "assistant",
+            "content": ""
+          },
+          {
+            "role": "tool",
+            "tool_call_id": "chatcmpl-tool-90238b5023d60bee",
+            "content": {
+              "quote": "KRW",
+              "markets": [
+                {
+                  "market": "KRW-WAXP",
+                  "korean_name": "왁스",
+                  "english_name": "WAX"
+                },
+                {
+                  "market": "KRW-CARV",
+                  "korean_name": "카브",
+                  "english_name": "CARV"
+                },
+                {
+                  "market": "KRW-LSK",
+                  "korean_name": "리스크",
+                  "english_name": "Lisk"
+                },
+                {
+                  "market": "KRW-0G",
+                  "korean_name": "제로지",
+                  "english_name": "0G"
+                },
+                {
+                  "market": "KRW-BORA",
+                  "korean_name": "보라",
+                  "english_name": "BORA"
+                },
+                {
+                  "market": "KRW-PUNDIX",
+                  "korean_name": "펀디엑스",
+                  "english_name": "Pundi X"
+                },
+                {
+                  "market": "KRW-USD1",
+                  "korean_name": "월드리버티파이낸셜유에스디",
+                  "english_name": "World Liberty Financial USD"
+                },
+                {
+                  "market": "KRW-BAT",
+                  "korean_name": "베이직어텐션토큰",
+                  "english_name": "Basic Attention Token"
+                },
+                {
+                  "market": "KRW-HUNT",
+                  "korean_name": "헌트",
+                  "english_name": "HUNT"
+                },
+                {
+                  "market": "KRW-PENGU",
+                  "korean_name": "펏지펭귄",
+                  "english_name": "Pudgy Penguins"
+                },
+                {
+                  "market": "KRW-FIL",
+                  "korean_name": "파일코인",
+                  "english_name": "Filecoin"
+                },
+                {
+                  "market": "KRW-BEAM",
+                  "korean_name": "빔",
+                  "english_name": "Beam"
+                },
+                {
+                  "market": "KRW-DOOD",
+                  "korean_name": "두들즈",
+                  "english_name": "Doodles"
+                },
+                {
+                  "market": "KRW-WAVES",
+                  "korean_name": "웨이브",
+                  "english_name": "Waves"
+                },
+                {
+                  "market": "KRW-USDC",
+                  "korean_name": "유에스디코인",
+                  "english_name": "USD Coin"
+                },
+                {
+                  "market": "KRW-MOVE",
+                  "korean_name": "무브먼트",
+                  "english_name": "Movement"
+                },
+                {
+                  "market": "KRW-TREE",
+                  "korean_name": "트리하우스",
+                  "english_name": "Treehouse"
+                },
+                {
+                  "market": "KRW-AERGO",
+                  "korean_name": "아르고",
+                  "english_name": "Aergo"
+                },
+                {
+                  "market": "KRW-WET",
+                  "korean_name": "휴미디파이",
+                  "english_name": "HumidiFi"
+                },
+                {
+                  "market": "KRW-USDT",
+                  "korean_name": "테더",
+                  "english_name": "Tether"
+                }
+              ],
+              "count": 230
+            }
+          },
+          {
+            "role": "assistant",
+            "content": "업비트에서 거래 가능한 암호화폐 목록 중 상위 10개는 다음과 같습니다:\n\n1. **WAXP (WAX)** - 왁스\n2. **CARV (CARV)** - 카브\n3. **LSK (Lisk)** - 리스크\n4. **0G (0G)** - 제로지\n5. **BORA (BORA)** - 보라\n6. **PUNDIX (Pundi X)** - 펀디엑스\n7. **USD1 (World Liberty Financial USD)** - 월드리버티파이낸셜유에스디\n8. **BAT (Basic Attention Token)** - 베이직어텐션토큰\n9. **HUNT (HUNT)** - 헌트\n10. **PENGU (Pudgy Penguins)** - 퍼지펭귄\n\n더 많은 암호화폐 목록이 필요하시면 말씀해 주세요!"
+          }
+        ]
+      }
+    },
+    {
+      "task_id": "L2-013",
+      "instruction": "카카오(035720) 최근 체결 내역 보여줘",
+      "level": 2,
+      "category": "Tool Retrieval & Selection",
+      "success": false,
+      "execution_time": 557.5823078155518,
+      "steps_taken": 0,
+      "error": "LLM call failed after 3 attempts: Request timed out.",
+      "expected_tools": [
+        "StockTrades_ls"
+      ],
+      "golden_action": [
+        {
+          "tool": "StockTrades_ls",
+          "args": {
+            "shcode": "035720"
+          }
+        }
+      ],
+      "minimum_steps": null,
+      "data_flow": [],
+      "error_injection": null,
+      "fallback_options": [],
+      "resp_schema": {},
+      "arg_schema": {},
+      "repetitions": 1,
+      "repetition_results": [
+        false
+      ],
+      "token_usage": {
+        "prompt_tokens": 0,
+        "completion_tokens": 0,
+        "total_tokens": 0
+      },
+      "ttft_stats": {
+        "average": 0,
+        "min": 0,
+        "max": 0,
+        "count": 0
+      },
+      "tool_calls": [],
+      "final_response": null,
+      "conversation_log": {
+        "total_messages": 0,
+        "messages": []
+      }
+    },
+    {
+      "task_id": "L2-014",
+      "instruction": "아이폰 15 프로 실사용 후기 찾아줘",
+      "level": 2,
+      "category": "Tool Retrieval & Selection",
+      "success": false,
+      "execution_time": 561.1541457176208,
+      "steps_taken": 0,
+      "error": "LLM call failed after 3 attempts: Request timed out.",
+      "expected_tools": [
+        "BlogSearch_naver"
+      ],
+      "golden_action": [
+        {
+          "tool": "BlogSearch_naver",
+          "args": {
+            "query": "아이폰 15 프로 실사용 후기",
+            "sort": "sim"
+          }
+        }
+      ],
+      "minimum_steps": null,
+      "data_flow": [],
+      "error_injection": null,
+      "fallback_options": [],
+      "resp_schema": {},
+      "arg_schema": {},
+      "repetitions": 1,
+      "repetition_results": [
+        false
+      ],
+      "token_usage": {
+        "prompt_tokens": 0,
+        "completion_tokens": 0,
+        "total_tokens": 0
+      },
+      "ttft_stats": {
+        "average": 0,
+        "min": 0,
+        "max": 0,
+        "count": 0
+      },
+      "tool_calls": [],
+      "final_response": null,
+      "conversation_log": {
+        "total_messages": 0,
+        "messages": []
+      }
+    },
+    {
+      "task_id": "L2-015",
+      "instruction": "2024년 개정된 부동산 세법 정보를 검색해줘",
+      "level": 2,
+      "category": "Tool Retrieval & Selection",
+      "success": false,
+      "execution_time": 224.39890503883362,
+      "steps_taken": 0,
+      "error": "Task exceeded timeout of 60 seconds",
+      "expected_tools": [
+        "WebSearch_daum"
+      ],
+      "golden_action": [
+        {
+          "tool": "WebSearch_daum",
+          "args": {
+            "query": "2024년 부동산 세법 개정"
+          }
+        }
+      ],
+      "minimum_steps": null,
+      "data_flow": [],
+      "error_injection": null,
+      "fallback_options": [],
+      "resp_schema": {},
+      "arg_schema": {},
+      "repetitions": 1,
+      "repetition_results": [
+        false
+      ],
+      "token_usage": {
+        "prompt_tokens": 0,
+        "completion_tokens": 0,
+        "total_tokens": 0
+      },
+      "ttft_stats": {
+        "average": 0,
+        "min": 0,
+        "max": 0,
+        "count": 0
+      },
+      "tool_calls": [],
+      "final_response": null,
+      "conversation_log": {
+        "total_messages": 0,
+        "messages": []
+      }
+    }
+  ]
+}
