@@ -11,6 +11,7 @@ can reason about tools and respond with JSON tool-call blocks.
 
 import json
 import os
+import sys
 from typing import Any, Dict, List, Optional
 
 from openai import OpenAI
@@ -20,6 +21,36 @@ from .tool_call_parser import extract_tool_calls
 from ..observability import observe
 
 _DEFAULT_BASE_URL = "http://172.16.1.81:18090/v1"
+
+
+def _env_float(name: str, default: float) -> float:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    try:
+        value = float(raw)
+    except ValueError:
+        print(f"[adapter] warning: {name}={raw!r} is not a positive number; using {default}", file=sys.stderr)
+        return default
+    if value <= 0:
+        print(f"[adapter] warning: {name}={raw!r} is not positive; using {default}", file=sys.stderr)
+        return default
+    return value
+
+
+def _env_int(name: str, default: int) -> int:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    try:
+        value = int(raw)
+    except ValueError:
+        print(f"[adapter] warning: {name}={raw!r} is not a positive integer; using {default}", file=sys.stderr)
+        return default
+    if value <= 0:
+        print(f"[adapter] warning: {name}={raw!r} is not positive; using {default}", file=sys.stderr)
+        return default
+    return value
 
 
 class OpenAICompatAdapter(BaseAdapter):
@@ -35,23 +66,25 @@ class OpenAICompatAdapter(BaseAdapter):
 
         # Explicit config wins; else OPENAI_API_KEY from environment (.env via load_dotenv).
         api_key = config.get("api_key") or os.getenv("OPENAI_API_KEY") or "EMPTY"
-        self.client = OpenAI(base_url=self.base_url, api_key=api_key)
+        # max_retries=0: SDK 기본 재시도와 러너 재시도(run.py max_retries=3)가
+        # 곱해져 실패 1건당 timeout 의 9배를 태우기 때문이다. 재시도는 러너 쪽 하나로 충분하다.
+        self.client = OpenAI(base_url=self.base_url, api_key=api_key, max_retries=0)
 
         # thinking 모델 default: 권장 sampling (THINK_* env). greedy 는 thinking 에서
         # 반복·퇴화를 유발하므로 temp 0.6 / top_p 0.95 / top_k 20 기본.
         # pass@k 보조 트랙은 호출 시 temperature 등 override.
         self.temperature = config.get("temperature",
-                                      float(os.environ.get("THINK_TEMPERATURE", "0.6")))
-        self.top_p = config.get("top_p", float(os.environ.get("THINK_TOP_P", "0.95")))
-        self.top_k = config.get("top_k", int(os.environ.get("THINK_TOP_K", "20")))
+                                      _env_float("THINK_TEMPERATURE", 0.6))
+        self.top_p = config.get("top_p", _env_float("THINK_TOP_P", 0.95))
+        self.top_k = config.get("top_k", _env_int("THINK_TOP_K", 20))
         # tool call + 추론(<think>) + multi-turn 고려해 크게. thinking 은 추론 토큰이
         # 더해지므로 16384 기본 (THINK_MAX_TOKENS env override).
         self.max_tokens = config.get("max_tokens",
-                                     int(os.environ.get("THINK_MAX_TOKENS", "16384")))
+                                     _env_int("THINK_MAX_TOKENS", 16384))
         # thinking 은 느려서 timeout 큼 (기존 60 → THINK_TIMEOUT 600).
-        self.timeout = config.get("timeout", float(os.environ.get("THINK_TIMEOUT", "600")))
+        self.timeout = config.get("timeout", _env_float("THINK_TIMEOUT", 600.0))
         # seed: 재현성. pass@k 보조 트랙은 매 반복마다 다른 seed 로 override.
-        self.seed = config.get("seed", int(os.environ.get("THINK_SEED", "42")))
+        self.seed = config.get("seed", _env_int("THINK_SEED", 42))
 
         self.native_tool_calling = config.get("native_tool_calling", False)
 

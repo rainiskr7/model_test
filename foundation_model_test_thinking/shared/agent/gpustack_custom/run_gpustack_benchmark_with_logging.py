@@ -10,6 +10,7 @@ import argparse
 import json
 import glob
 import logging
+import sys
 from datetime import datetime
 from pathlib import Path
 from typing import Any, List, Optional, Type, Dict
@@ -42,6 +43,46 @@ from configs.secrets import (
 
 def _env_flag(name: str) -> bool:
     return os.environ.get(name, "").strip().lower() in ("1", "true", "yes")
+
+
+def _env_int(name: str, default: int) -> int:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    try:
+        value = int(raw)
+    except ValueError:
+        print(f"[runner] warning: {name}={raw!r} is not a positive integer; using {default}", file=sys.stderr)
+        return default
+    if value <= 0:
+        print(f"[runner] warning: {name}={raw!r} is not positive; using {default}", file=sys.stderr)
+        return default
+    return value
+
+
+def _env_float(name: str, default: float) -> float:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    try:
+        value = float(raw)
+    except ValueError:
+        print(f"[runner] warning: {name}={raw!r} is not a positive number; using {default}", file=sys.stderr)
+        return default
+    if value <= 0:
+        print(f"[runner] warning: {name}={raw!r} is not positive; using {default}", file=sys.stderr)
+        return default
+    return value
+
+
+def _warn_if_task_timeout_too_small(task_timeout: int, call_timeout: float) -> None:
+    if task_timeout <= call_timeout:
+        print(
+            "[runner] warning: per-task timeout "
+            f"{task_timeout}s (AGENT_TASK_TIMEOUT / --timeout) is not greater than "
+            f"per-call timeout {call_timeout}s (THINK_TIMEOUT).",
+            file=sys.stderr,
+        )
 
 
 
@@ -770,8 +811,9 @@ def main():
     # removed --limit: always run full level
     parser.add_argument("--max-steps", type=int, default=10,
                         help="Maximum steps per task")
-    parser.add_argument("--timeout", type=int, default=60,
-                        help="Timeout (seconds) per task")
+    parser.add_argument("--timeout", type=int, default=_env_int("AGENT_TASK_TIMEOUT", 1800),
+                        help="Per-task timeout budget in seconds (AGENT_TASK_TIMEOUT). "
+                             "Distinct from the adapter per-call timeout (THINK_TIMEOUT).")
     parser.add_argument(
         "--full-rollout",
         action="store_true",
@@ -1007,6 +1049,9 @@ def main():
     # pass@k 보조 트랙은 --temperature 0.7 등으로 override.
     if args.temperature is not None:
         adapter_config['temperature'] = args.temperature
+
+    per_call_timeout = adapter_config.get('timeout', _env_float("THINK_TIMEOUT", 600.0))
+    _warn_if_task_timeout_too_small(args.timeout, per_call_timeout)
     
     # Run benchmarks on each level
     all_level_results = {}

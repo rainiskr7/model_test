@@ -63,6 +63,21 @@ apply_serving_constraints = _load_serving_constraints()
 _DEFAULT_BASE_URL = "http://172.16.1.81:18090/v1"
 
 
+def _env_float(name: str, default: float) -> float:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    try:
+        value = float(raw)
+    except ValueError:
+        print(f"[adapter] warning: {name}={raw!r} is not a positive number; using {default}", file=sys.stderr)
+        return default
+    if value <= 0:
+        print(f"[adapter] warning: {name}={raw!r} is not positive; using {default}", file=sys.stderr)
+        return default
+    return value
+
+
 class OpenAICompatAdapter(BaseAdapter):
     """Adapter for any OpenAI-compatible endpoint (GPUStack, OpenRouter, vLLM, Ollama, Together, OpenAI 등)."""
 
@@ -76,7 +91,10 @@ class OpenAICompatAdapter(BaseAdapter):
 
         # Explicit config wins; else OPENAI_API_KEY from environment (.env via load_dotenv).
         api_key = config.get("api_key") or os.getenv("OPENAI_API_KEY") or "EMPTY"
-        self.client = OpenAI(base_url=self.base_url, api_key=api_key)
+        # max_retries=0: SDK 기본 재시도(3회)와 러너 재시도(run.py max_retries=3)가
+        # 곱해져 실패 1건당 timeout 의 9배를 태우기 때문이다. 실측(dense 27B, timeout 60):
+        # 재시도 간격 183초 = 60×3, 태스크당 ~9분 소모. 재시도는 러너 쪽 하나로 충분하다.
+        self.client = OpenAI(base_url=self.base_url, api_key=api_key, max_retries=0)
 
         # 평가 default: 결정론적 (codex 권장 — temp=0.0 메인, 분산 제거 비교 기준선)
         # agent pass@k 보조 트랙은 호출 시 temperature=0.3~0.7로 override
@@ -84,7 +102,13 @@ class OpenAICompatAdapter(BaseAdapter):
         # 트랙별 합리 상한: agent는 tool call + reasoning + multi-turn 고려해 16384
         # (전역 default는 8192, 호출 시 override 가능)
         self.max_tokens = config.get("max_tokens", 8192)
-        self.timeout = config.get("timeout", 60)
+        # 60초는 dense 모델에서 구조적으로 맞을 수 없다. GB10 에서 dense 27B 는
+        # 대역폭 바운드로 ~4.3 tok/s 이므로 max_tokens 2048 을 다 쓰면 476초가 필요하다.
+        # 실측: dense 런 36태스크 만에 타임아웃 43건, L2 는 15개 중 9개가 steps=0 으로
+        # 통째로 유실됐다(SelectAcc 0.400 — 실력이 아니라 시도조차 못 한 것).
+        # MoE 는 호출당 ~3초라 91태스크 완주에도 0건이었다 — dense 로만 드러나는 함정이다.
+        # KRETA 의 timeout 60 함정과 같은 계열이고 thinking 은 이미 THINK_TIMEOUT 600 이다.
+        self.timeout = config.get("timeout", _env_float("AGENT_TIMEOUT", 600.0))
         # seed: pass@k 보조 트랙에서 매 반복마다 다른 seed 로 진짜 다양성 보장
         # (temp>0 + 같은 seed 면 vLLM/서빙 설정에 따라 동일 응답 가능)
         self.seed = config.get("seed", None)
