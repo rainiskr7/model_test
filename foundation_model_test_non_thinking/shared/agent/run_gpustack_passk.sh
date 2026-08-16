@@ -32,6 +32,8 @@ cp -u "$SCRIPT_DIR/gpustack_custom/run_gpustack_benchmark_with_logging.py" \
       "$KOA_DIR/run_gpustack_benchmark_with_logging.py"
 cp -u "$SCRIPT_DIR/gpustack_custom/openai_compat_adapter.py" \
       "$KOA_DIR/bench/adapters/openai_compat_adapter.py"
+cp "$SCRIPT_DIR/gpustack_custom/tool_call_parser.py" \
+   "$KOA_DIR/bench/adapters/tool_call_parser.py"
 cp "$SCRIPT_DIR/gpustack_custom/run_ko-agentbench-passk.sh" \
    "$KOA_DIR/run_ko-agentbench-passk.sh"
 
