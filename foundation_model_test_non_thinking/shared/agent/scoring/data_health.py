@@ -6,14 +6,14 @@ from typing import Any, Callable, Dict, List, Optional
 
 if __package__:
     from . import extra_metrics
-    from .context import build_eval_context
+    from .context import build_eval_context, load_vendored_metric
     from .l6_context import l6_golden_field_diagnostics
     from .result_shape import has_repetition_records as _has_repetition_records
     from .task_source import load_bench_tasks
 else:
     sys.path.insert(0, str(Path(__file__).resolve().parent))
     import extra_metrics
-    from context import build_eval_context
+    from context import build_eval_context, load_vendored_metric
     from l6_context import l6_golden_field_diagnostics
     from result_shape import has_repetition_records as _has_repetition_records
     from task_source import load_bench_tasks
@@ -70,12 +70,7 @@ def _empty_response_task(task: Dict[str, Any]) -> bool:
 
 def _vendored(name: str):
     def _evaluate(ctx):
-        try:
-            from .context import load_metrics_module
-        except ImportError:
-            from context import load_metrics_module
-
-        return load_metrics_module().METRICS[name].evaluate(ctx).score
+        return load_vendored_metric(name).evaluate(ctx).score
 
     return _evaluate
 

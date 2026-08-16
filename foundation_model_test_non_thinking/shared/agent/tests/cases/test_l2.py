@@ -1,4 +1,4 @@
-from _harness import *
+from _harness import _assert, _assert_close, level_spec, score_run
 
 def test_l2_spec_shape():
     in_score = [spec for spec in level_spec.LEVEL_SPECS["L2"] if spec.in_score]

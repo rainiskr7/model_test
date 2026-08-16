@@ -1,4 +1,4 @@
-from _harness import *
+from _harness import DummyContext, _assert, _assert_close, extra_metrics, level_spec
 
 def test_l4_meaningful_result_predicate():
     _assert(extra_metrics.l4_has_meaningful_result(["x"]) is True, "non-empty list")

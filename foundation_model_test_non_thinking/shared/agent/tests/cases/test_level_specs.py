@@ -1,4 +1,4 @@
-from _harness import *
+from _harness import _assert, level_spec
 
 def test_other_level_shapes_unchanged():
     _assert(

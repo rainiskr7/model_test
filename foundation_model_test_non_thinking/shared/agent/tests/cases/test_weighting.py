@@ -1,4 +1,14 @@
-from _harness import *
+from _harness import (
+    _assert,
+    _assert_close,
+    _bench_map,
+    _l2_task,
+    _l6_no_call_task,
+    _task_id_producer,
+    _toy_task,
+    _with_level_specs,
+    score_run,
+)
 from pathlib import Path
 
 def test_agent_score_scored_task_count_weighting_differs_from_equal_mean():

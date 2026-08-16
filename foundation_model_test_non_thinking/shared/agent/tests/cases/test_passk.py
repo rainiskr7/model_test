@@ -1,4 +1,4 @@
-from _harness import *
+from _harness import _assert, _assert_close, score_run
 
 def test_passk_det_passes_if_one_repetition_primary_is_full():
     records = []

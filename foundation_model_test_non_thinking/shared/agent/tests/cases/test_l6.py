@@ -1,4 +1,16 @@
-from _harness import *
+from _harness import (
+    DummyContext,
+    MetricContext,
+    _assert,
+    _assert_close,
+    _l6_metric,
+    _l6_schema,
+    context,
+    extra_metrics,
+    l6_context,
+    level_spec,
+    score_run,
+)
 
 def test_l6_empty_tool_calls_not_full_score():
     task = {
@@ -142,7 +154,7 @@ def test_l6_resolve_field_with_fallback_exact_wins():
         "data": [{"date": "exact"}],
         "chart_data": [{"date": "fallback"}],
     }
-    resolved, value, used_fallback = extra_metrics.l6_resolve_field_with_fallback(
+    resolved, value, used_fallback = l6_context.l6_resolve_field_with_fallback(
         result, "data[0].date"
     )
     _assert(resolved is True, "exact path should resolve")
@@ -153,7 +165,7 @@ def test_l6_resolve_field_with_fallback_exact_wins():
 
 def test_l6_resolve_field_with_fallback_unique_list_leaf():
     result = {"chart_data": [{"date": "20250926"}]}
-    resolved, value, used_fallback = extra_metrics.l6_resolve_field_with_fallback(
+    resolved, value, used_fallback = l6_context.l6_resolve_field_with_fallback(
         result, "data[0].date"
     )
     _assert(resolved is True, "unique fallback should resolve")
@@ -167,7 +179,7 @@ def test_l6_resolve_field_with_fallback_ambiguous_unresolved():
         "chart_data": [{"date": "20250926"}],
         "other_data": [{"date": "20250927"}],
     }
-    resolved, value, used_fallback = extra_metrics.l6_resolve_field_with_fallback(
+    resolved, value, used_fallback = l6_context.l6_resolve_field_with_fallback(
         result, "data[0].date"
     )
     _assert(resolved is False, "ambiguous fallback should stay unresolved")
@@ -177,14 +189,14 @@ def test_l6_resolve_field_with_fallback_ambiguous_unresolved():
 
 
 def test_l6_resolve_field_with_fallback_scalar_suffix():
-    resolved, value, used_fallback = extra_metrics.l6_resolve_field_with_fallback(
+    resolved, value, used_fallback = l6_context.l6_resolve_field_with_fallback(
         {"market_count": 120}, "count"
     )
     _assert(resolved is True, "scalar suffix fallback should resolve")
     _assert(value == 120, "scalar suffix fallback value")
     _assert(used_fallback is True, "scalar suffix fallback should be marked")
 
-    resolved, value, used_fallback = extra_metrics.l6_resolve_field_with_fallback(
+    resolved, value, used_fallback = l6_context.l6_resolve_field_with_fallback(
         {"count": 5}, "count"
     )
     _assert(resolved is True, "exact scalar key should resolve")
@@ -198,7 +210,7 @@ def test_l6_golden_field_diagnostics_counts_fallback_fields():
         fields=["data[0].date", "data[0].missing"],
         result={"chart_data": [{"date": "20250926"}]},
     )
-    diagnostics = extra_metrics.l6_golden_field_diagnostics(
+    diagnostics = l6_context.l6_golden_field_diagnostics(
         MetricContext(schema, "20250926")
     )
     _assert(diagnostics["fallback_fields"] == 1, "fallback field count")

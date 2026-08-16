@@ -1,4 +1,4 @@
-from _harness import *
+from _harness import _assert, _assert_close, level_spec, score_run
 
 def test_l3_spec_shape():
     specs = level_spec.LEVEL_SPECS["L3"]

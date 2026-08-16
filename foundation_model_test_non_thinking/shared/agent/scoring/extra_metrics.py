@@ -6,24 +6,14 @@ from typing import Any, Optional
 try:
     from .context import load_metrics_module
     from .l6_context import (
-        _normalize_field_value,
-        l6_evaluation_turn,
         l6_golden_field_diagnostics,
-        l6_is_filtered_field,
-        l6_resolve_field,
-        l6_resolve_field_with_fallback,
-        l6_seeded_context,
+        normalize_field_value,
     )
 except ImportError:  # direct file loading in tests
     from context import load_metrics_module
     from l6_context import (
-        _normalize_field_value,
-        l6_evaluation_turn,
         l6_golden_field_diagnostics,
-        l6_is_filtered_field,
-        l6_resolve_field,
-        l6_resolve_field_with_fallback,
-        l6_seeded_context,
+        normalize_field_value,
     )
 
 
@@ -137,11 +127,11 @@ def golden_field_recall_det(ctx) -> Optional[float]:
     response = ctx.logs.get("final_response")
     if response is None:
         response = ""
-    normalized_response = _normalize_field_value(response)
+    normalized_response = normalize_field_value(response)
     hits = sum(
         1
         for value in scorable_values
-        if _normalize_field_value(value) and _normalize_field_value(value) in normalized_response
+        if normalize_field_value(value) and normalize_field_value(value) in normalized_response
     )
     return hits / len(scorable_values)
 

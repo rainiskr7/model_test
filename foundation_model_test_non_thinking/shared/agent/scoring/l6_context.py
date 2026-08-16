@@ -150,7 +150,7 @@ def l6_is_filtered_field(path: str) -> bool:
     return field_name in {"description", "contents"}
 
 
-def _normalize_field_value(value: Any) -> str:
+def normalize_field_value(value: Any) -> str:
     text = re.sub(r"<[^>]{1,10}>", "", str(value))
     text = re.sub(r"[\s,]+", "", text)
     return text.lower()
@@ -196,4 +196,3 @@ def l6_golden_field_diagnostics(ctx) -> Dict[str, Any]:
         "fallback_fields": fallback_fields,
         "scorable_values": scorable_values,
     }
-

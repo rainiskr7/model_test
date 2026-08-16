@@ -15,6 +15,10 @@ def load_metrics_module():
     return metrics
 
 
+def load_vendored_metric(name: str):
+    return load_metrics_module().METRICS[name]
+
+
 class BenchDriftError(RuntimeError):
     """Raised when saved result facts disagree with the bench task source."""
 

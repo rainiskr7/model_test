@@ -1,4 +1,4 @@
-from _harness import *
+from _harness import _assert, _load_module, score_run
 import hashlib
 import os
 from pathlib import Path

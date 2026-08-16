@@ -10,7 +10,7 @@ from typing import Any, Dict, Iterable, List, Optional, Set
 
 if __package__:
     from . import SCORING_VERSION
-    from .context import BenchDriftError, build_eval_context
+    from .context import BenchDriftError, build_eval_context, load_vendored_metric
     from . import extra_metrics
     from .data_health import build_data_health
     from .level_spec import (
@@ -29,7 +29,7 @@ else:
     from __init__ import SCORING_VERSION
     import extra_metrics
     from data_health import build_data_health
-    from context import BenchDriftError, build_eval_context
+    from context import BenchDriftError, build_eval_context, load_vendored_metric
     from level_spec import (
         COMMON_RECORD_ONLY,
         JUDGE_METRICS,
@@ -302,12 +302,7 @@ def _resp_ok_entry(
 
 def _vendored(name: str):
     def _evaluate(ctx):
-        try:
-            from .context import load_metrics_module
-        except ImportError:
-            from context import load_metrics_module
-
-        return load_metrics_module().METRICS[name].evaluate(ctx).score
+        return load_vendored_metric(name).evaluate(ctx).score
 
     return _evaluate
 

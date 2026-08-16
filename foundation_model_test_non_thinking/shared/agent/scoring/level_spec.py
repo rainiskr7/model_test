@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from typing import Callable, Iterable, List, Optional, Sequence
 
 try:
+    from .context import load_vendored_metric
     from .extra_metrics import (
         arg_f1_det,
         call_eff_det,
@@ -14,6 +15,7 @@ try:
         source_epr_det,
     )
 except ImportError:  # direct file loading in tests
+    from context import load_vendored_metric
     from extra_metrics import (
         arg_f1_det,
         call_eff_det,
@@ -51,13 +53,7 @@ class MetricSpec:
 
 def vendored_metric(metric_name: str):
     def _evaluate(ctx):
-        try:
-            from .context import load_metrics_module
-        except ImportError:
-            from context import load_metrics_module
-
-        metric = load_metrics_module().METRICS[metric_name]
-        return metric.evaluate(ctx).score
+        return load_vendored_metric(metric_name).evaluate(ctx).score
 
     return _evaluate
 
