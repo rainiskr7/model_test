@@ -30,6 +30,7 @@ else:
 
 PREFIX = "[agent-validate]"
 NO_SCORE_STATUSES = {"not_applicable", "error", "judge_missing"}
+CACHE_MISS_WARNING_THRESHOLD = 0.20
 EXIT_CODE_HELP = """exit codes:
   0  results valid (warnings allowed)
   1  results invalid -- validation errors found
@@ -236,6 +237,27 @@ def validate_results_dir(results_dir: Path) -> Tuple[List[str], List[str]]:
             warnings.append(f"{level} is at ceiling: all scored tasks are perfect")
         if result.get("score") == 0.0 and _all_scored_tasks_are(result, "n_zero"):
             warnings.append(f"{level} is at floor: all scored tasks are zero")
+
+    cache_by_level = (
+        (summary.get("cache_miss_diagnostics") or {}).get("by_level") or {}
+    )
+    if isinstance(cache_by_level, dict):
+        for level in SCORABLE_LEVELS:
+            result = by_level.get(level)
+            diagnostic = cache_by_level.get(level)
+            if not isinstance(result, dict) or not _is_finite_score(result.get("score")):
+                continue
+            if not isinstance(diagnostic, dict):
+                continue
+            miss_rate = diagnostic.get("miss_rate")
+            if _is_number(miss_rate) and miss_rate > CACHE_MISS_WARNING_THRESHOLD:
+                warnings.append(
+                    f"{level} cache miss rate {miss_rate:.1%} exceeds warning threshold "
+                    f"{CACHE_MISS_WARNING_THRESHOLD:.0%} "
+                    f"({diagnostic.get('cache_misses', 0)}/"
+                    f"{diagnostic.get('total_calls', 0)} executed tool calls); "
+                    "diagnostic only, score unchanged"
+                )
 
     if "L7" in by_level and isinstance(by_level["L7"], dict):
         l7 = by_level["L7"]

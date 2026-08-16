@@ -223,9 +223,11 @@ results/<safe_model_name>/<timestamp>/
 | 레벨 | 알려진 결함 |
 |---|---|
 | L2 | runner의 task 변환이 원본 `available_tools`를 누락해 정답 tool만 노출한다. 4/4 모델이 1.000으로, 선택 정확도가 자명하다. |
-| L3/L4 | fixture cache miss가 레벨·모델별 25~71%, 모델 전체로도 31~43%로 다르다. 전 모델을 같은 폭으로 이동시키는 문제가 아니므로 순위를 바꿀 수 있다. |
+| L3/L4 | 4개 완주 런의 L3는 202 call 중 130 miss(64.4%: presentation sibling 0, semantic mismatch 83, query absent 47), L4는 78 call 중 30 miss(38.5%: presentation sibling 0, semantic mismatch 7, query absent 23)였다. 전 모델을 같은 폭으로 이동시키는 문제가 아니므로 순위를 바꿀 수 있다. |
 | L6 | v3에서 수정됐다. v2 L6는 방향이 뒤집힌 known-invalid 점수이므로 v2의 6레벨 평균을 순위에 쓰지 않는다. |
 
+- **cache miss는 annotate-only:** 저장 결과의 모든 실행 call을 `exact`/`presentation_sibling`/`semantic_mismatch`/`query_absent`/`signature_mismatch`/`tool_absent`/`unclassified`의 ordered partition으로 분류해 summary와 scorer 표에 표시하지만 relaxed fixture를 응답으로 주지 않는다. 결과 수·페이지·정렬은 반환 entity나 cardinality를 바꿀 수 있어 semantic이며, presentation으로 남은 것은 Aladin의 `cover`(표지 이미지 크기), `output`(XML/JSON 인코딩), `opt_result`(동일 상품의 부가 응답 필드)뿐이다. 수정된 4개 완주 런의 miss 177건은 presentation sibling 0건(0%), semantic mismatch 97건, query absent 80건이었다. 따라서 이전의 복구 가능 추정 69건(39.0%)은 0건으로 붕괴한다. 이 진단은 점수와 version을 바꾸지 않는다.
+- **fixture schema drift 위험(별도):** pinned catalog에 있는 fixture 4,543개 중 828개가 현재 signature hash와 달라 도달 불가다. `StockPrice_kis`는 6개 전부 도달 불가(0/6)다. 이는 miss 분류와 별개의 fixture 유지보수 위험이다.
 - **동일 가중 동결:** L2 포화를 근거로 현재 코호트에서 가중치를 역산하지 않는다. 이후 약한 모델은 여전히 L2에 실패할 수 있다. 레벨 동일 가중은 의도적으로 동결된 점수 정의이며 변경에는 version bump가 필요하다. L2의 실제 결함인 `available_tools` 누락은 별도 수정 사항이다.
 - **L7 승격 보류:** 결정 당시 `ResultFieldCoverage_det`는 모델별 10 task 중 2~3개에만 적용됐다. 2/10인 모델 4개는 8/10인 모델 3개보다 강한 근거가 아니다. seed-only 분모 수정만으로 자동 승격하지 않으며, 두 L7 지표가 모델 전반의 대부분 task에 적용되고 tool-call rate도 coverage가 성공 조건부가 아닐 만큼 높을 때 재검토한다.
 
@@ -240,7 +242,7 @@ MODEL_TEST_BASE="$PWD" .venv/bin/python shared/agent/scoring/validate_run.py \
   --results-dir results/<model>/<timestamp>/language/<agent-track>
 ```
 
-validator는 scoring version·요약 구조·점수 범위, judge/L7의 기록 전용 계약, raw/summary의 native-tool 모드 일치, 6개 레벨 완전성·평균 불변식을 검사하고 포화/바닥·생존 신호 차이는 경고한다. 종료 코드는 `0`=유효(경고 허용), `1`=검증 실패, `2`=호출·설정·입력 읽기·내부 오류다. `run_full_eval.sh`에서는 agent 트랙이 성공하면 validator가 자동 실행된다.
+validator는 scoring version·요약 구조·점수 범위, judge/L7의 기록 전용 계약, raw/summary의 native-tool 모드 일치, 6개 레벨 완전성·평균 불변식을 검사하고 포화/바닥·생존 신호 차이는 경고한다. 채점된 레벨의 cache miss rate가 20%를 넘으면 실행 call 5개 중 1개보다 많은 도구 증거가 빠진 것으로 보고 임계값과 실측 분수를 명시한 경고를 내되 실패시키지 않는다. 종료 코드는 `0`=유효(경고 허용), `1`=검증 실패, `2`=호출·설정·입력 읽기·내부 오류다. `run_full_eval.sh`에서는 agent 트랙이 성공하면 validator가 자동 실행된다.
 
 변형 런은 `AGENT_TRACK_NAME=<variant>`로 별도 폴더에 기록한다. 변형 결과와 canonical `agent` 트랙 결과를 한 트랙에 섞지 않는다.
 

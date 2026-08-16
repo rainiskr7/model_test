@@ -42,6 +42,7 @@ def _load_module(name):
 
 
 extra_metrics = _load_module("extra_metrics")
+cache_diagnostics = _load_module("cache_diagnostics")
 level_spec = _load_module("level_spec")
 aggregate = _load_module("aggregate")
 score_run = _load_module("score_run")
@@ -358,6 +359,357 @@ def _validate_fixture(summary, native_overrides=None):
         results_dir = Path(temp_dir)
         _write_validation_fixture(results_dir, summary, native_overrides)
         return validate_run.validate_results_dir(results_dir)
+
+
+def _cache_miss_call(tool_name, arguments):
+    return {
+        "tool_name": tool_name,
+        "arguments": arguments,
+        "success": False,
+        "error": (
+            f"Pseudo-API(read): cache miss for {tool_name} with key=missing. "
+            "Seed the cache first."
+        ),
+    }
+
+
+def _write_cache_record(cache_dir, tool_name, args, spec, signature=None):
+    signature = signature or spec["signature"]
+    key = cache_diagnostics.build_cache_key(tool_name, args, signature)
+    path = cache_dir / tool_name / key[:2] / f"{key}.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps(
+            {
+                "key": key,
+                "tool": tool_name,
+                "input_params": args,
+                "raw_args": args,
+                "data": {"fixture": key},
+            }
+        ),
+        encoding="utf-8",
+    )
+    return key
+
+
+def _search_spec():
+    return cache_diagnostics.make_catalog_entry(
+        "POI search",
+        {
+            "type": "object",
+            "properties": {
+                "searchKeyword": {"type": "string"},
+                "count": {"type": "integer", "default": 10},
+                "centerLon": {"type": "number"},
+                "centerLat": {"type": "number"},
+                "page": {"type": "integer", "default": 1},
+            },
+            "required": ["searchKeyword"],
+        },
+    )
+
+
+def test_cache_classifier_produces_every_bucket_from_hand_built_pairs():
+    search_tool = "POISearch_tmap"
+    search_spec = _search_spec()
+    presentation_tool = "ItemLookup_aladin"
+    presentation_spec = cache_diagnostics.make_catalog_entry(
+        "item details",
+        {
+            "type": "object",
+            "properties": {
+                "item_id": {"type": "string"},
+                "item_id_type": {"type": "string", "default": "ISBN13"},
+                "cover": {"type": "string", "default": "Mid"},
+                "output": {"type": "string", "default": "js"},
+                "opt_result": {"type": "string", "default": ""},
+            },
+        },
+    )
+    stale_tool = "BlogSearch_naver"
+    stale_spec = cache_diagnostics.make_catalog_entry(
+        "current blog search",
+        {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string"},
+                "display": {"type": "integer", "default": 10},
+            },
+        },
+    )
+    no_identity_tool = "SyntheticNoIdentity"
+    no_identity_spec = cache_diagnostics.make_catalog_entry(
+        "synthetic no-identity tool",
+        {"type": "object", "properties": {"mode": {"type": "string"}}},
+    )
+    absent_tool = "AddressToCoord_kakao"
+    absent_spec = cache_diagnostics.make_catalog_entry(
+        "address lookup",
+        {"type": "object", "properties": {"address": {"type": "string"}}},
+    )
+    catalog = {
+        search_tool: search_spec,
+        presentation_tool: presentation_spec,
+        stale_tool: stale_spec,
+        no_identity_tool: no_identity_spec,
+        absent_tool: absent_spec,
+    }
+    with tempfile.TemporaryDirectory() as temp_dir:
+        cache_dir = Path(temp_dir)
+        exact_args = {"searchKeyword": "exact", "count": 10, "page": 1}
+        _write_cache_record(cache_dir, search_tool, exact_args, search_spec)
+        _write_cache_record(
+            cache_dir,
+            search_tool,
+            {
+                "searchKeyword": "semantic",
+                "count": 10,
+                "centerLon": 127.0,
+                "centerLat": 37.0,
+                "page": 1,
+            },
+            search_spec,
+        )
+        _write_cache_record(
+            cache_dir,
+            presentation_tool,
+            {
+                "item_id": "9780000000001",
+                "item_id_type": "ISBN13",
+                "cover": "Mid",
+                "output": "js",
+                "opt_result": "",
+            },
+            presentation_spec,
+        )
+        stale_signature = cache_diagnostics.tool_signature(
+            "stale blog search", stale_spec["parameters_schema"]
+        )
+        _write_cache_record(
+            cache_dir,
+            stale_tool,
+            {"query": "stale", "display": 10},
+            stale_spec,
+            stale_signature,
+        )
+        _write_cache_record(cache_dir, no_identity_tool, {"mode": "a"}, no_identity_spec)
+        index = cache_diagnostics.load_fixture_index(cache_dir, catalog)
+
+        exact = cache_diagnostics.classify_call(
+            {"tool_name": search_tool, "arguments": exact_args}, catalog, index
+        )
+        presentation = cache_diagnostics.classify_call(
+            _cache_miss_call(
+                presentation_tool,
+                {
+                    "item_id": "9780000000001",
+                    "cover": "Big",
+                    "output": "xml",
+                    "opt_result": "Toc,authors",
+                },
+            ),
+            catalog,
+            index,
+        )
+        semantic = cache_diagnostics.classify_call(
+            _cache_miss_call(
+                search_tool,
+                {
+                    "searchKeyword": "semantic",
+                    "count": 20,
+                    "centerLon": 127.0,
+                    "centerLat": 37.0,
+                    "page": 1,
+                },
+            ),
+            catalog,
+            index,
+        )
+        absent = cache_diagnostics.classify_call(
+            _cache_miss_call(search_tool, {"searchKeyword": "absent", "count": 10}),
+            catalog,
+            index,
+        )
+        signature = cache_diagnostics.classify_call(
+            _cache_miss_call(stale_tool, {"query": "stale", "display": 20}),
+            catalog,
+            index,
+        )
+        tool_absent = cache_diagnostics.classify_call(
+            _cache_miss_call(absent_tool, {"address": "서울시청"}), catalog, index
+        )
+        unclassified = cache_diagnostics.classify_call(
+            _cache_miss_call(no_identity_tool, {"mode": "b"}), catalog, index
+        )
+
+    classified = [
+        exact,
+        presentation,
+        semantic,
+        absent,
+        signature,
+        tool_absent,
+        unclassified,
+    ]
+    expected = list(cache_diagnostics.BUCKETS)
+    actual = [entry["bucket"] for entry in classified]
+    _assert(actual == expected, f"ordered partition mismatch: {actual}")
+    counts = cache_diagnostics._summarize_classifications(classified)["counts"]
+    miss_counts = cache_diagnostics._summarize_classifications(classified)["miss_counts"]
+    _assert(sum(counts.values()) == len(classified), "bucket counts lost a call")
+    _assert(sum(miss_counts.values()) == len(classified) - 1, "miss partition lost a call")
+    _assert(all(counts[bucket] == 1 for bucket in expected), "partition is not total")
+    _assert(absent["bucket"] != tool_absent["bucket"], "tool/query absence collapsed")
+
+
+def test_cache_classifier_size_and_count_are_semantic():
+    search_spec = _search_spec()
+    size_spec = cache_diagnostics.make_catalog_entry(
+        "web search",
+        {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string"},
+                "sort": {"type": "string", "default": "accuracy"},
+                "page": {"type": "integer", "default": 1},
+                "size": {"type": "integer", "default": 10},
+            },
+        },
+    )
+    catalog = {"POISearch_tmap": search_spec, "WebSearch_daum": size_spec}
+    with tempfile.TemporaryDirectory() as temp_dir:
+        cache_dir = Path(temp_dir)
+        _write_cache_record(
+            cache_dir,
+            "POISearch_tmap",
+            {"searchKeyword": "cafe", "count": 10, "page": 1},
+            search_spec,
+        )
+        _write_cache_record(
+            cache_dir,
+            "WebSearch_daum",
+            {"query": "cache", "sort": "accuracy", "page": 1, "size": 10},
+            size_spec,
+        )
+        index = cache_diagnostics.load_fixture_index(cache_dir, catalog)
+        search = cache_diagnostics.classify_call(
+            _cache_miss_call(
+                "POISearch_tmap", {"searchKeyword": "cafe", "count": 20}
+            ),
+            catalog,
+            index,
+        )
+        sized = cache_diagnostics.classify_call(
+            _cache_miss_call("WebSearch_daum", {"query": "cache", "size": 20}),
+            catalog,
+            index,
+        )
+    _assert(search["bucket"] == "semantic_mismatch", "search count stayed presentation")
+    _assert(sized["bucket"] == "semantic_mismatch", "search size stayed presentation")
+
+
+def test_cache_classifier_presentation_fields_are_contract_pinned():
+    # Pinned catalog contract: cover only selects image size, output only selects
+    # XML/JSON encoding, and opt_result only adds response fields. None can alter
+    # entity membership or cardinality.
+    _assert(
+        cache_diagnostics.PRESENTATION_FIELDS
+        == {
+            "ItemSearch_aladin": frozenset({"cover", "output", "opt_result"}),
+            "ItemList_aladin": frozenset({"cover", "output"}),
+            "ItemLookup_aladin": frozenset({"cover", "output", "opt_result"}),
+        },
+        "presentation map widened without contract review",
+    )
+
+
+def test_cache_classifier_non_text_identity_is_semantic_not_unclassified():
+    tool = "StockChart_kis"
+    spec = cache_diagnostics.make_catalog_entry(
+        "stock chart",
+        {
+            "type": "object",
+            "properties": {
+                "symbol": {"type": "string"},
+                "period": {"type": "string", "default": "D"},
+                "count": {"type": "integer", "default": 30},
+            },
+        },
+    )
+    catalog = {tool: spec}
+    with tempfile.TemporaryDirectory() as temp_dir:
+        cache_dir = Path(temp_dir)
+        _write_cache_record(
+            cache_dir, tool, {"symbol": "005930", "period": "D", "count": 30}, spec
+        )
+        index = cache_diagnostics.load_fixture_index(cache_dir, catalog)
+        result = cache_diagnostics.classify_call(
+            _cache_miss_call(tool, {"symbol": "005930", "count": 60}),
+            catalog,
+            index,
+        )
+    _assert(result["bucket"] == "semantic_mismatch", "ID identity was unclassified")
+
+
+def test_cache_classifier_collision_tie_break_is_deterministic():
+    tool = "POISearch_tmap"
+    spec = _search_spec()
+    catalog = {tool: spec}
+    with tempfile.TemporaryDirectory() as temp_dir:
+        cache_dir = Path(temp_dir)
+        keys = [
+            _write_cache_record(
+                cache_dir,
+                tool,
+                {"searchKeyword": "collision", "count": count, "page": 1},
+                spec,
+            )
+            for count in (5, 10)
+        ]
+        index = cache_diagnostics.load_fixture_index(cache_dir, catalog)
+        call = _cache_miss_call(tool, {"searchKeyword": "collision", "count": 20})
+        selected = [
+            cache_diagnostics.classify_call(call, catalog, index)["fixture_key"]
+            for _ in range(20)
+        ]
+    _assert(selected == [min(keys)] * 20, "fixture collision did not use lowest key")
+
+
+def test_cache_diagnostic_does_not_change_v2_or_v3_headline_bytes():
+    summary = _validation_summary_with_v3()
+    before = json.dumps(
+        {
+            "v2": summary["agent_score"],
+            "v3": summary["scoring_v3"]["agent_score"],
+        },
+        separators=(",", ":"),
+    ).encode()
+    summary["cache_miss_diagnostics"] = cache_diagnostics.build_cache_diagnostics(
+        {}, Path("/benchmark-not-present"), catalog={}, fixture_index={}
+    )
+    after = json.dumps(
+        {
+            "v2": summary["agent_score"],
+            "v3": summary["scoring_v3"]["agent_score"],
+        },
+        separators=(",", ":"),
+    ).encode()
+    _assert(before == after, "diagnostic block changed a v2/v3 headline byte")
+
+
+def test_validator_warns_above_cache_threshold_without_failing():
+    summary = _validation_summary_with_v3()
+    summary["cache_miss_diagnostics"] = {
+        "by_level": {
+            "L3": {"total_calls": 10, "cache_misses": 3, "miss_rate": 0.3}
+        }
+    }
+    failures, warnings = _validate_fixture(summary)
+    _assert(not failures, f"cache warning unexpectedly failed validation: {failures}")
+    matching = [warning for warning in warnings if "cache miss rate" in warning]
+    _assert(matching, "high cache miss rate did not warn")
+    _assert("20%" in matching[0] and "3/10" in matching[0], "warning hides threshold/counts")
 
 
 def _validator_exit(argv):
@@ -1966,6 +2318,13 @@ def test_adapter_config_keys_do_not_collide_with_call_site():
 
 
 TESTS = [
+    test_cache_classifier_produces_every_bucket_from_hand_built_pairs,
+    test_cache_classifier_size_and_count_are_semantic,
+    test_cache_classifier_presentation_fields_are_contract_pinned,
+    test_cache_classifier_non_text_identity_is_semantic_not_unclassified,
+    test_cache_classifier_collision_tie_break_is_deterministic,
+    test_cache_diagnostic_does_not_change_v2_or_v3_headline_bytes,
+    test_validator_warns_above_cache_threshold_without_failing,
     test_runner_request_timeout_parse_default_and_override,
     test_runner_max_retries_parse_default_and_override,
     test_runner_adapter_config_contains_request_timeout,

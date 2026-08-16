@@ -6,6 +6,7 @@ from typing import Any, Dict, Iterable, List
 
 if __package__:
     from . import SCORING_VERSION, SCORING_VERSION_V3
+    from .cache_diagnostics import build_cache_diagnostics
     from .context import build_eval_context
     from .level_spec import (
         COMMON_RECORD_ONLY,
@@ -21,6 +22,7 @@ if __package__:
 else:
     sys.path.insert(0, str(Path(__file__).resolve().parent))
     from __init__ import SCORING_VERSION, SCORING_VERSION_V3
+    from cache_diagnostics import build_cache_diagnostics
     from context import build_eval_context
     from level_spec import (
         COMMON_RECORD_ONLY,
@@ -302,4 +304,9 @@ def build_summary_from_loaded(
         "levels_unscorable": v3_levels_unscorable,
         "task_data": task_data_provenance,
     }
+    # Additive and score-neutral: classification only observes saved calls and
+    # fixtures after both frozen scoring contracts have been computed.
+    summary["cache_miss_diagnostics"] = build_cache_diagnostics(
+        loaded, results_dir
+    )
     return summary

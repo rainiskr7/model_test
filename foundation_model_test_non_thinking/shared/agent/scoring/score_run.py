@@ -38,6 +38,27 @@ def _metric_token(name: str, entry: Dict[str, Any]) -> str:
     return token
 
 
+def _cache_token(entry: Dict[str, Any]) -> str:
+    names = (
+        "exact",
+        "presentation_sibling",
+        "semantic_mismatch",
+        "query_absent",
+        "signature_mismatch",
+        "tool_absent",
+        "unclassified",
+    )
+    counts = entry.get("counts") or {}
+    miss_counts = entry.get("miss_counts") or {}
+    compact = "/".join(str(counts.get(name, 0)) for name in names)
+    miss_compact = "/".join(str(miss_counts.get(name, 0)) for name in names)
+    return (
+        f"cache_miss={entry.get('cache_misses', 0)}/{entry.get('total_calls', 0)}"
+        f"({_fmt(entry.get('miss_rate'))}) buckets=e/ps/sm/qa/sig/ta/u:{compact}"
+        f" miss_buckets=e/ps/sm/qa/sig/ta/u:{miss_compact}"
+    )
+
+
 def _result_dir_from_args(args) -> Path:
     if args.results_dir:
         return Path(args.results_dir).resolve()
@@ -76,6 +97,9 @@ def build_summary(results_dir: Path) -> Dict[str, Any]:
 
 def print_table(summary: Dict[str, Any], skipped_count: int) -> None:
     print(f"{PREFIX} model={summary['model']} track={summary['track']}")
+    cache_by_level = (
+        (summary.get("cache_miss_diagnostics") or {}).get("by_level") or {}
+    )
     for level in ALL_LEVELS:
         result = summary["by_level"].get(level)
         if not result:
@@ -96,6 +120,11 @@ def print_table(summary: Dict[str, Any], skipped_count: int) -> None:
         print(
             f"{PREFIX} {level} total={result['total']} "
             f"score={_fmt(result.get('score'))}{unscorable}{applied_token} {metrics}"
+            + (
+                f" {_cache_token(cache_by_level[level])}"
+                if isinstance(cache_by_level.get(level), dict)
+                else ""
+            )
         )
     scored_levels = summary.get(
         "scored_levels",
@@ -128,6 +157,11 @@ def print_table(summary: Dict[str, Any], skipped_count: int) -> None:
             f"status={v3.get('agent_score_status', 'unknown')} "
             f"scored_levels={v3.get('scored_levels')}/{v3.get('required_levels')}"
         )
+    cache_overall = (
+        (summary.get("cache_miss_diagnostics") or {}).get("overall") or {}
+    )
+    if isinstance(cache_overall, dict):
+        print(f"{PREFIX} cache overall {_cache_token(cache_overall)}")
     print(f"{PREFIX} skipped_missing_levels={skipped_count}")
 
 
