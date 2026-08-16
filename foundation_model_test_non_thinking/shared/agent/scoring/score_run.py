@@ -9,16 +9,19 @@ from typing import Any, Dict, Optional
 
 if __package__:
     from .aggregate import ALL_LEVELS, build_summary_from_loaded, safe_model_name
-    from .level_spec import LEVEL_SPECS
+    from .level_spec import LEVEL_SPECS, LEVEL_SPECS_V3
 else:
     sys.path.insert(0, str(Path(__file__).resolve().parent))
     from aggregate import ALL_LEVELS, build_summary_from_loaded, safe_model_name
-    from level_spec import LEVEL_SPECS
+    from level_spec import LEVEL_SPECS, LEVEL_SPECS_V3
 
 
 PREFIX = "[agent-scoring]"
 DETERMINISTIC_METRICS = {
-    spec.name for specs in LEVEL_SPECS.values() for spec in specs
+    spec.name
+    for level_specs in (LEVEL_SPECS, LEVEL_SPECS_V3)
+    for specs in level_specs.values()
+    for spec in specs
 }
 
 
@@ -107,6 +110,24 @@ def print_table(summary: Dict[str, Any], skipped_count: int) -> None:
         f"status={summary.get('agent_score_status', 'unknown')} "
         f"scored_levels={scored_levels}/{required_levels}"
     )
+    v3 = summary.get("scoring_v3")
+    if isinstance(v3, dict):
+        l6 = (v3.get("by_level") or {}).get("L6")
+        if isinstance(l6, dict):
+            metrics = " ".join(
+                _metric_token(name, entry)
+                for name, entry in l6.get("metrics", {}).items()
+                if entry.get("in_score") or name in DETERMINISTIC_METRICS
+            )
+            print(
+                f"{PREFIX} v3 L6 total={l6['total']} "
+                f"score={_fmt(l6.get('score'))} {metrics}"
+            )
+        print(
+            f"{PREFIX} v3 agent_score={_fmt(v3.get('agent_score'))} "
+            f"status={v3.get('agent_score_status', 'unknown')} "
+            f"scored_levels={v3.get('scored_levels')}/{v3.get('required_levels')}"
+        )
     print(f"{PREFIX} skipped_missing_levels={skipped_count}")
 
 

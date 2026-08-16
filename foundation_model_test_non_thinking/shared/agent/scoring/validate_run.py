@@ -18,14 +18,14 @@ from pathlib import Path
 from typing import Any, Dict, List, Tuple
 
 if __package__:
-    from . import SCORING_VERSION
+    from . import SCORING_VERSION, SCORING_VERSION_V3
     from .aggregate import ALL_LEVELS, SCORABLE_LEVELS, safe_model_name
-    from .level_spec import JUDGE_METRICS, LEVEL_SPECS
+    from .level_spec import JUDGE_METRICS, LEVEL_SPECS, LEVEL_SPECS_V3
 else:
     sys.path.insert(0, str(Path(__file__).resolve().parent))
-    from __init__ import SCORING_VERSION
+    from __init__ import SCORING_VERSION, SCORING_VERSION_V3
     from aggregate import ALL_LEVELS, SCORABLE_LEVELS, safe_model_name
-    from level_spec import JUDGE_METRICS, LEVEL_SPECS
+    from level_spec import JUDGE_METRICS, LEVEL_SPECS, LEVEL_SPECS_V3
 
 
 PREFIX = "[agent-validate]"
@@ -321,6 +321,112 @@ def validate_results_dir(results_dir: Path) -> Tuple[List[str], List[str]]:
                 failures.append(
                     f"agent_score mean invariant failed: got {headline!r}, expected {reconstructed!r}"
                 )
+
+    # V2-only summaries remain a supported historical input. When the additive
+    # v3 block is present, protect its six-level mean and metric contract too.
+    v3 = summary.get("scoring_v3")
+    if v3 is not None:
+        if not isinstance(v3, dict):
+            failures.append("scoring_v3 must be an object")
+        else:
+            if v3.get("scoring_version") != SCORING_VERSION_V3:
+                failures.append(
+                    f"scoring_v3.scoring_version mismatch: expected {SCORING_VERSION_V3!r}, "
+                    f"got {v3.get('scoring_version')!r}"
+                )
+            v3_by_level = v3.get("by_level")
+            if not isinstance(v3_by_level, dict):
+                failures.append("scoring_v3.by_level must be an object")
+                v3_by_level = {}
+            for level, result in v3_by_level.items():
+                if level not in ALL_LEVELS or not isinstance(result, dict):
+                    failures.append(f"scoring_v3 invalid level entry: {level!r}")
+                    continue
+                _check_score(
+                    result.get("score"), f"scoring_v3.{level}.score", failures
+                )
+                metrics = result.get("metrics")
+                if not isinstance(metrics, dict):
+                    failures.append(f"scoring_v3.{level}.metrics must be an object")
+                    continue
+                expected_in_score = {
+                    spec.name for spec in LEVEL_SPECS_V3[level] if spec.in_score
+                }
+                actual_in_score = {
+                    name
+                    for name, entry in metrics.items()
+                    if isinstance(entry, dict) and entry.get("in_score") is True
+                }
+                if actual_in_score != expected_in_score:
+                    failures.append(
+                        f"scoring_v3.{level} in_score metric set mismatch: "
+                        f"expected {sorted(expected_in_score)}, got {sorted(actual_in_score)}"
+                    )
+                for spec in LEVEL_SPECS_V3[level]:
+                    entry = metrics.get(spec.name)
+                    if not isinstance(entry, dict):
+                        failures.append(
+                            f"scoring_v3.{level}.{spec.name} metric is missing"
+                        )
+                        continue
+                    if entry.get("in_score") is not spec.in_score:
+                        failures.append(
+                            f"scoring_v3.{level}.{spec.name}.in_score mismatch"
+                        )
+                    _check_score(
+                        entry.get("score"),
+                        f"scoring_v3.{level}.{spec.name}.score",
+                        failures,
+                    )
+                    _check_task_spread(
+                        f"scoring_v3.{level}", spec.name, entry, failures
+                    )
+
+            v3_headline = v3.get("agent_score")
+            _check_score(v3_headline, "scoring_v3.agent_score", failures)
+            v3_status = v3.get("agent_score_status")
+            if v3_status not in {"complete", "incomplete"}:
+                failures.append(
+                    "scoring_v3.agent_score_status must be 'complete' or 'incomplete'"
+                )
+            v3_complete = v3_status == "complete"
+            v3_scores = [
+                (v3_by_level.get(level) or {}).get("score")
+                if isinstance(v3_by_level.get(level), dict)
+                else None
+                for level in SCORABLE_LEVELS
+            ]
+            v3_all_six = all(_is_finite_score(score) for score in v3_scores)
+            if _is_finite_score(v3_headline) != v3_complete:
+                failures.append(
+                    "scoring_v3.agent_score must be finite if and only if status is complete"
+                )
+            if v3_complete != v3_all_six:
+                failures.append(
+                    "scoring_v3 status is complete if and only if all six scorable levels have scores"
+                )
+            if v3_complete:
+                if v3.get("scored_levels") != 6 or v3.get("required_levels") != 6:
+                    failures.append(
+                        "complete scoring_v3 run must have scored_levels == required_levels == 6"
+                    )
+                if _is_finite_score(v3_headline) and v3_all_six:
+                    reconstructed_v3 = sum(v3_scores) / len(v3_scores)
+                    if abs(v3_headline - reconstructed_v3) >= 1e-9:
+                        failures.append(
+                            "scoring_v3.agent_score mean invariant failed: "
+                            f"got {v3_headline!r}, expected {reconstructed_v3!r}"
+                        )
+
+            task_data = v3.get("task_data")
+            if not isinstance(task_data, dict):
+                failures.append("scoring_v3.task_data must be an object")
+            elif task_data.get("join_needed") is True:
+                for name in ("benchmark_sha", "task_file", "task_file_sha256"):
+                    if not task_data.get(name):
+                        failures.append(
+                            f"scoring_v3.task_data.{name} required when join_needed is true"
+                        )
 
     return failures, warnings
 

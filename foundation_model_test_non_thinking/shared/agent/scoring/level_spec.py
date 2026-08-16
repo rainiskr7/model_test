@@ -9,8 +9,11 @@ try:
         context_retention_det,
         fsm_prefix,
         redundant_call_rate_det,
+        refetch_avoidance_det,
         result_field_coverage_det,
         result_field_coverage_diagnostics,
+        seeded_field_recall_det,
+        seeded_field_recall_diagnostics,
     )
 except ImportError:  # direct file loading in tests
     from extra_metrics import (
@@ -18,8 +21,11 @@ except ImportError:  # direct file loading in tests
         context_retention_det,
         fsm_prefix,
         redundant_call_rate_det,
+        refetch_avoidance_det,
         result_field_coverage_det,
         result_field_coverage_diagnostics,
+        seeded_field_recall_det,
+        seeded_field_recall_diagnostics,
     )
 
 
@@ -88,6 +94,21 @@ LEVEL_SPECS = {
         ),
     ),
 }
+
+
+# Frozen published v2 remains ``LEVEL_SPECS``. V3 is a separate contract: all
+# levels are identical except L6, whose golden action is context reuse rather
+# than another tool invocation.
+LEVEL_SPECS_V3 = dict(LEVEL_SPECS)
+LEVEL_SPECS_V3["L6"] = (
+    MetricSpec("RefetchAvoidance_det", refetch_avoidance_det, True),
+    MetricSpec(
+        "SeededFieldRecall_det",
+        seeded_field_recall_det,
+        True,
+        seeded_field_recall_diagnostics,
+    ),
+)
 
 
 def mean_or_none(values: Iterable[Optional[float]]) -> Optional[float]:

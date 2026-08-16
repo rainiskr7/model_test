@@ -34,6 +34,8 @@ def task_to_schema_and_logs(task_result: Dict[str, Any]):
         "resp_schema": task_result.get("resp_schema"),
         "arg_schema": task_result.get("arg_schema"),
         "repetitions": task_result.get("repetitions", 1),
+        "freshness_threshold": task_result.get("freshness_threshold"),
+        "minimum_calls": task_result.get("minimum_calls"),
     }
 
     logs = {
@@ -44,6 +46,7 @@ def task_to_schema_and_logs(task_result: Dict[str, Any]):
         "final_response": task_result.get("final_response", ""),
         "conversation_log": task_result.get("conversation_log", {}),
         "repetition_results": task_result.get("repetition_results", []),
+        "_new_call_trace_present": "tool_calls" in task_result,
     }
     return task_schema, logs
 

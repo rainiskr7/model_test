@@ -4,6 +4,7 @@
 """
 
 import contextlib
+import copy
 import importlib.util
 import io
 import json
@@ -14,6 +15,7 @@ from pathlib import Path
 
 
 SCORING_DIR = Path(__file__).resolve().parents[1] / "scoring"
+TREE_ROOT = Path(__file__).resolve().parents[3]
 CUSTOM_DIR = Path(__file__).resolve().parents[1] / "gpustack_custom"
 TIMEOUT_CONFIG_PATH = (
     CUSTOM_DIR / "runner_timeout_config.py"
@@ -42,6 +44,7 @@ aggregate = _load_module("aggregate")
 score_run = _load_module("score_run")
 validate_run = _load_module("validate_run")
 scoring_context = _load_module("context")
+task_data = _load_module("task_data")
 
 _timeout_spec = importlib.util.spec_from_file_location(
     "runner_timeout_config_under_test", TIMEOUT_CONFIG_PATH
@@ -221,6 +224,43 @@ def _validation_summary():
     }
 
 
+def _validation_summary_with_v3():
+    summary = _validation_summary()
+    v3_by_level = copy.deepcopy(summary["by_level"])
+    l6_metrics = v3_by_level["L6"]["metrics"]
+    for name in ("ToolAcc", "RedundantCallRate"):
+        del l6_metrics[name]
+    for name in ("RefetchAvoidance_det", "SeededFieldRecall_det"):
+        l6_metrics[name] = {
+            "score": 0.6,
+            "status": "ok",
+            "in_score": True,
+            "n_tasks": 1,
+            "n_scored": 1,
+            "n_errors": 0,
+            "task_spread": _task_spread(0.6),
+        }
+    summary["scoring_v3"] = {
+        "scoring_version": aggregate.SCORING_VERSION_V3,
+        "agent_score": 0.35,
+        "scored_levels": 6,
+        "required_levels": 6,
+        "agent_score_status": "complete",
+        "by_level": v3_by_level,
+        "levels_missing": [],
+        "levels_unscorable": ["L7"],
+        "task_data": {
+            "golden_fields_source": "artifact",
+            "join_needed": False,
+            "benchmark_sha": "1174fedd9fa1c7177baa0cbff039a765c9b14d02",
+            "task_file": None,
+            "task_file_sha256": None,
+            "tasks_joined": 0,
+        },
+    }
+    return summary
+
+
 def _write_validation_fixture(results_dir, summary, native_overrides=None):
     native_overrides = native_overrides or {}
     (results_dir / "summary.json").write_text(json.dumps(summary), encoding="utf-8")
@@ -309,6 +349,31 @@ def test_context_exposes_l7_ground_truth_with_empty_defaults():
         _assert(empty_schema[key] == [], f"{key} default must be []")
 
 
+def test_v3_task_data_prefers_persisted_fields_without_join():
+    loaded = {"L6": {"results": [{"task_id": "L6-X", "golden_fields": []}]}}
+    prepared, provenance = task_data.prepare_v3_loaded(loaded)
+    _assert(prepared == loaded, "persisted golden_fields were changed")
+    _assert(provenance["join_needed"] is False, "persisted fields triggered join")
+    _assert(provenance["golden_fields_source"] == "artifact", "source mismatch")
+
+
+def test_v3_task_data_join_rejects_missing_and_duplicate_task_ids():
+    fixtures = [
+        ({"L6": {"results": [{}]}}, "missing task_id"),
+        (
+            {"L6": {"results": [{"task_id": "L6-X"}, {"task_id": "L6-X"}]}},
+            "duplicate task_id",
+        ),
+    ]
+    for loaded, expected in fixtures:
+        try:
+            task_data.prepare_v3_loaded(loaded)
+        except RuntimeError as exc:
+            _assert(expected in str(exc), f"wrong task-data join error: {exc}")
+        else:
+            raise AssertionError(f"task-data join accepted {expected}")
+
+
 def test_redundant_call_rate_empty_without_bench():
     original = extra_metrics.load_metrics_module
 
@@ -344,6 +409,209 @@ def test_redundant_call_rate_nonempty_loads_bench():
             raise AssertionError("non-empty action trace must load vendored metrics")
     finally:
         extra_metrics.load_metrics_module = original
+
+
+def test_refetch_avoidance_empty_one_and_missing_trace():
+    empty = DummyContext(action_trace=[], logs={})
+    _assert_close(
+        extra_metrics.refetch_avoidance_det(empty), 1.0, "empty new-call trace"
+    )
+
+    one_call = DummyContext(action_trace=[{"tool": "Lookup"}], logs={})
+    _assert_close(
+        extra_metrics.refetch_avoidance_det(one_call), 0.0, "one new call"
+    )
+
+    missing = DummyContext()
+    missing.action_trace = None
+    _assert(
+        extra_metrics.refetch_avoidance_det(missing) is None,
+        "missing trace must be not applicable",
+    )
+
+
+def _seeded_recall_context(
+    final_response,
+    seed_payload=None,
+    golden_fields=None,
+    action_trace=None,
+    include_refetch=False,
+    task_schema=None,
+):
+    seed_payload = seed_payload or {
+        "price": 1234.0,
+        "item": [{"title": "Alpha Book", "author": "Beta Writer"}],
+    }
+    golden_fields = golden_fields or [
+        {
+            "tool": "Lookup",
+            "fields": ["price", "item[0].title", "item[0].author"],
+        }
+    ]
+    messages = [
+        {
+            "role": "tool",
+            "tool_call_id": "seed_call_2_1",
+            "name": "Lookup",
+            "content": seed_payload,
+        }
+    ]
+    if include_refetch:
+        messages.append(
+            {
+                "role": "tool",
+                "tool_call_id": "call_model_1",
+                "name": "Lookup",
+                "content": {
+                    "price": 9999,
+                    "item": [{"title": "Wrong Fetch", "author": "Wrong Writer"}],
+                },
+            }
+        )
+    schema = {"golden_fields": golden_fields}
+    schema.update(task_schema or {})
+    return DummyContext(
+        action_trace=[] if action_trace is None else action_trace,
+        task_schema=schema,
+        logs={
+            "conversation_log": {"messages": messages},
+            "final_response": final_response,
+        },
+    )
+
+
+def test_seeded_field_recall_uses_seed_when_refetch_also_exists():
+    ctx = _seeded_recall_context(
+        "Alpha Book by Beta Writer costs 1,234 won", include_refetch=True
+    )
+    _assert_close(
+        extra_metrics.seeded_field_recall_det(ctx),
+        1.0,
+        "later model refetch replaced the seed payload",
+    )
+
+
+def test_seeded_field_recall_uses_seed_in_moe_artifact_or_skip():
+    artifact = (
+        TREE_ROOT
+        / "results/qwen_qwen3.5_35b_a3b_fp8/p0verify_20260816/language"
+        / "agent_p0verify/L6.json"
+    )
+    if not artifact.is_file():
+        print("SKIP test_seeded_field_recall_uses_seed_in_moe_artifact_or_skip: artifact absent")
+        return
+    tasks = json.loads(artifact.read_text(encoding="utf-8"))["results"]
+    task = next(task for task in tasks if task.get("task_id") == "L6-002")
+    seed_payload = next(
+        message["content"]
+        for message in task["conversation_log"]["messages"]
+        if str(message.get("tool_call_id", "")).startswith("seed_call_")
+    )
+    _assert(task.get("tool_calls"), "MoE hazard fixture lost its new re-fetch")
+    _assert(
+        task["tool_calls"][0].get("result") != seed_payload,
+        "MoE re-fetch no longer differs from the seed payload",
+    )
+    final_response = " | ".join(
+        [
+            seed_payload["items"][0]["title"],
+            seed_payload["items"][0]["description"],
+            seed_payload["items"][1]["title"],
+            seed_payload["items"][2]["title"],
+        ]
+    )
+    ctx = DummyContext(
+        action_trace=task["tool_calls"],
+        task_schema={
+            "golden_fields": [
+                {
+                    "tool": "NewsSearch_naver",
+                    "fields": [
+                        "items[0].title",
+                        "items[0].description",
+                        "items[1].title",
+                        "items[2].title",
+                    ],
+                }
+            ]
+        },
+        logs={
+            "conversation_log": task["conversation_log"],
+            "final_response": final_response,
+        },
+    )
+    _assert_close(
+        extra_metrics.seeded_field_recall_det(ctx),
+        1.0,
+        "MoE artifact resolved against its later re-fetch instead of seed_call_2_1",
+    )
+
+
+def test_seeded_field_recall_all_and_partial():
+    all_present = _seeded_recall_context(
+        "ALPHA BOOK by beta writer costs 1,234.00 won"
+    )
+    _assert_close(
+        extra_metrics.seeded_field_recall_det(all_present), 1.0, "all seeded values"
+    )
+
+    partial = _seeded_recall_context("Alpha Book costs 1,234 won")
+    _assert_close(
+        extra_metrics.seeded_field_recall_det(partial),
+        2 / 3,
+        "partial seeded field fraction",
+    )
+
+
+def test_seeded_field_recall_unresolvable_is_not_applicable():
+    ctx = _seeded_recall_context(
+        "Alpha Book",
+        golden_fields=[{"tool": "Lookup", "fields": ["missing.path"]}],
+    )
+    _assert(
+        extra_metrics.seeded_field_recall_det(ctx) is None,
+        "unresolvable declaration must be not applicable",
+    )
+    diagnostics = extra_metrics.seeded_field_recall_diagnostics(ctx)
+    _assert(diagnostics["fields_unresolved"] == 1, "unresolved count missing")
+    _assert(diagnostics["fields_checked"] == 0, "unresolved field was checked")
+
+
+def test_seeded_field_recall_excludes_long_text_without_failure():
+    long_text = "A nondeterministic free-text description " * 4
+    ctx = _seeded_recall_context(
+        "Alpha Book",
+        seed_payload={"title": "Alpha Book", "description": long_text},
+        golden_fields=[
+            {"tool": "Lookup", "fields": ["title", "description"]}
+        ],
+    )
+    _assert_close(
+        extra_metrics.seeded_field_recall_det(ctx),
+        1.0,
+        "long free text must not count as a miss",
+    )
+    diagnostics = extra_metrics.seeded_field_recall_diagnostics(ctx)
+    _assert(diagnostics["fields_required"] == 2, "required count mismatch")
+    _assert(diagnostics["fields_checked"] == 1, "checked count mismatch")
+    _assert(
+        diagnostics["fields_excluded_long_text"] == 1,
+        "long-text exclusion count mismatch",
+    )
+
+
+def test_l6_freshness_and_minimum_calls_do_not_affect_v3_metrics():
+    base = _seeded_recall_context("Alpha Book by Beta Writer costs 1,234 won")
+    decorated = _seeded_recall_context(
+        "Alpha Book by Beta Writer costs 1,234 won",
+        task_schema={"freshness_threshold": "24h", "minimum_calls": 2},
+    )
+    for spec in level_spec.LEVEL_SPECS_V3["L6"]:
+        _assert_close(
+            spec.producer(base),
+            spec.producer(decorated),
+            f"{spec.name} used freshness_threshold or minimum_calls",
+        )
 
 
 def test_context_retention_det_all_with_normalization_and_extra_args():
@@ -599,7 +867,7 @@ def test_result_field_coverage_diagnostics_are_aggregated():
     _assert(entry["fields_unresolved"] == 0, "aggregate unresolved count")
 
 
-def test_l6_spec_wires_redundant_call_rate():
+def test_frozen_v2_l6_spec_is_unchanged():
     specs = level_spec.LEVEL_SPECS["L6"]
     _assert(len(specs) == 2, "L6 must have exactly two metric specs")
     _assert(
@@ -618,6 +886,21 @@ def test_l6_spec_wires_redundant_call_rate():
     )
 
 
+def test_v3_l6_spec_is_exactly_two_in_score_metrics():
+    specs = level_spec.LEVEL_SPECS_V3["L6"]
+    _assert(
+        tuple(spec.name for spec in specs)
+        == ("RefetchAvoidance_det", "SeededFieldRecall_det"),
+        "v3 L6 metric contract mismatch",
+    )
+    _assert(all(spec.in_score for spec in specs), "both v3 L6 metrics must be in score")
+    _assert(
+        specs[1].diagnostic_producer.__name__
+        == "seeded_field_recall_diagnostics",
+        "v3 seeded recall diagnostics are not wired",
+    )
+
+
 def test_l7_spec_is_exactly_two_record_only_metrics():
     specs = level_spec.LEVEL_SPECS["L7"]
     _assert(len(specs) == 2, "L7 must have exactly two metric specs")
@@ -632,43 +915,53 @@ def test_l7_spec_is_exactly_two_record_only_metrics():
     )
 
 
-def test_l6_empty_trace_depends_on_tool_acc():
-    original_context = aggregate.build_eval_context
-    original_specs = aggregate.LEVEL_SPECS["L6"]
-    redundant_spec = next(
-        spec for spec in original_specs if spec.name == "RedundantCallRate"
+def _contract_score(specs, ctx, evaluator=None):
+    values = []
+    for spec in specs:
+        if not spec.in_score:
+            continue
+        value = evaluator(spec, ctx) if evaluator else spec.producer(ctx)
+        if value is not None:
+            values.append(value)
+    return level_spec.mean_or_none(values)
+
+
+def _nonincrease_property(specs, original, with_identical_new_call, evaluator=None):
+    before = _contract_score(specs, original, evaluator)
+    after = _contract_score(specs, with_identical_new_call, evaluator)
+    return before is not None and after is not None and after <= before
+
+
+def test_seed_clone_polarity_fails_v2_and_passes_v3():
+    original = _seeded_recall_context("Alpha Book by Beta Writer costs 1,234 won")
+    cloned = _seeded_recall_context(
+        "Alpha Book by Beta Writer costs 1,234 won",
+        action_trace=[{"tool": "Lookup", "args": {}, "result": {}}],
+        include_refetch=True,
     )
-    empty_context = DummyContext([], [])
-    tasks = [{"resp_schema": {"type": "string"}} for _ in range(15)]
 
-    def score_with_tool_acc(value):
-        aggregate.LEVEL_SPECS["L6"] = (
-            aggregate.MetricSpec("ToolAcc", lambda _ctx: value, True),
-            redundant_spec,
-        )
-        return aggregate.score_level("L6", {"results": tasks})
+    # Plain-python facsimile of the frozen vendored v2 behavior for this
+    # metamorph: ToolAcc rewards the cloned golden-tool call and the published
+    # RedundantCallRate yields 1 for the one-call trace.
+    def frozen_v2_eval(spec, ctx):
+        if spec.name == "ToolAcc":
+            return 1.0 if ctx.action_trace else 0.0
+        if spec.name == "RedundantCallRate":
+            return 1.0 if ctx.action_trace else None
+        raise AssertionError(f"unexpected frozen-v2 metric {spec.name}")
 
-    aggregate.build_eval_context = lambda _task: empty_context
-    try:
-        zero_result = score_with_tool_acc(0.0)
-        _assert_close(zero_result["score"], 0.0, "zero-call ToolAcc zero score")
-        redundant_entry = zero_result["metrics"]["RedundantCallRate"]
-        _assert(
-            redundant_entry["status"] == "not_applicable",
-            "empty redundant call rate must be not applicable",
-        )
-        _assert(
-            "unscorable_reason" not in zero_result,
-            "ToolAcc keeps the empty-trace L6 level scorable",
-        )
-
-        one_result = score_with_tool_acc(1.0)
-        # This documents the premise: if vendored ToolAcc ever rewards a 0-call
-        # task, the original "everyone scores 100" inflation returns through this path.
-        _assert_close(one_result["score"], 1.0, "zero-call ToolAcc rewarded score")
-    finally:
-        aggregate.build_eval_context = original_context
-        aggregate.LEVEL_SPECS["L6"] = original_specs
+    v2_holds = _nonincrease_property(
+        level_spec.LEVEL_SPECS["L6"], original, cloned, frozen_v2_eval
+    )
+    v3_holds = _nonincrease_property(
+        level_spec.LEVEL_SPECS_V3["L6"], original, cloned
+    )
+    print(
+        "POLARITY seeded-call clone: "
+        f"v2={'PASS' if v2_holds else 'FAIL'} v3={'PASS' if v3_holds else 'FAIL'}"
+    )
+    _assert(not v2_holds, "frozen v2 unexpectedly satisfies non-increase")
+    _assert(v3_holds, "v3 score increased after an identical redundant new call")
 
 
 def test_judge_missing_without_call():
@@ -983,6 +1276,10 @@ def test_scorable_levels_and_version_contract():
         aggregate.SCORING_VERSION == "agent_det_v2",
         "scoring version contract mismatch",
     )
+    _assert(
+        aggregate.SCORING_VERSION_V3 == "agent_det_v3",
+        "v3 scoring version contract mismatch",
+    )
 
 
 def test_all_six_loaded_one_unscorable_is_incomplete():
@@ -1192,9 +1489,38 @@ def test_applied_metrics_counts_only_scored_in_score_metrics():
     )
 
 
-def test_validator_accepts_complete_summary():
+def test_v2_only_summary_is_still_readable():
     failures, _warnings = _validate_fixture(_validation_summary())
-    _assert(not failures, f"complete summary failed validation: {failures}")
+    _assert(not failures, f"v2-only summary failed validation: {failures}")
+
+
+def test_validator_accepts_v2_plus_v3_summary():
+    failures, _warnings = _validate_fixture(_validation_summary_with_v3())
+    _assert(not failures, f"v2+v3 summary failed validation: {failures}")
+
+
+def test_validator_rejects_perturbed_v3_agent_score():
+    summary = _validation_summary_with_v3()
+    summary["scoring_v3"]["agent_score"] += 0.001
+    failures, _warnings = _validate_fixture(summary)
+    _assert(
+        any("scoring_v3.agent_score mean invariant failed" in item for item in failures),
+        "perturbed v3 mean passed",
+    )
+
+
+def test_validator_rejects_wrong_v3_in_score_metric_set():
+    summary = _validation_summary_with_v3()
+    summary["scoring_v3"]["by_level"]["L6"]["metrics"]["ToolAcc"] = {
+        "score": 1.0,
+        "status": "ok",
+        "in_score": True,
+    }
+    failures, _warnings = _validate_fixture(summary)
+    _assert(
+        any("scoring_v3.L6 in_score metric set mismatch" in item for item in failures),
+        "extra v2 metric was accepted in the v3 L6 denominator",
+    )
 
 
 def test_validator_main_nonexistent_results_dir_exits_2():
@@ -1478,8 +1804,17 @@ TESTS = [
     test_mean_all_none,
     test_in_score_false_excluded,
     test_context_exposes_l7_ground_truth_with_empty_defaults,
+    test_v3_task_data_prefers_persisted_fields_without_join,
+    test_v3_task_data_join_rejects_missing_and_duplicate_task_ids,
     test_redundant_call_rate_empty_without_bench,
     test_redundant_call_rate_nonempty_loads_bench,
+    test_refetch_avoidance_empty_one_and_missing_trace,
+    test_seeded_field_recall_uses_seed_when_refetch_also_exists,
+    test_seeded_field_recall_uses_seed_in_moe_artifact_or_skip,
+    test_seeded_field_recall_all_and_partial,
+    test_seeded_field_recall_unresolvable_is_not_applicable,
+    test_seeded_field_recall_excludes_long_text_without_failure,
+    test_l6_freshness_and_minimum_calls_do_not_affect_v3_metrics,
     test_context_retention_det_all_with_normalization_and_extra_args,
     test_context_retention_det_partial_and_wrong_value,
     test_context_retention_det_none_matched_and_no_data,
@@ -1492,9 +1827,10 @@ TESTS = [
     test_result_field_coverage_counts_unresolved_as_failure,
     test_result_field_coverage_no_data_and_missing_tool_response,
     test_result_field_coverage_diagnostics_are_aggregated,
-    test_l6_spec_wires_redundant_call_rate,
+    test_frozen_v2_l6_spec_is_unchanged,
+    test_v3_l6_spec_is_exactly_two_in_score_metrics,
     test_l7_spec_is_exactly_two_record_only_metrics,
-    test_l6_empty_trace_depends_on_tool_acc,
+    test_seed_clone_polarity_fails_v2_and_passes_v3,
     test_judge_missing_without_call,
     test_l7_without_ground_truth_is_all_not_applicable,
     test_empty_level_spec_has_no_deterministic_metric_reason,
@@ -1516,7 +1852,10 @@ TESTS = [
     test_print_table_shows_l7_record_only_metrics_without_judges,
     test_task_spread_counts_scored_tasks,
     test_applied_metrics_counts_only_scored_in_score_metrics,
-    test_validator_accepts_complete_summary,
+    test_v2_only_summary_is_still_readable,
+    test_validator_accepts_v2_plus_v3_summary,
+    test_validator_rejects_perturbed_v3_agent_score,
+    test_validator_rejects_wrong_v3_in_score_metric_set,
     test_validator_main_nonexistent_results_dir_exits_2,
     test_validator_main_missing_summary_exits_1,
     test_validator_main_complete_summary_exits_0,

@@ -5,30 +5,34 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, List
 
 if __package__:
-    from . import SCORING_VERSION
+    from . import SCORING_VERSION, SCORING_VERSION_V3
     from .context import build_eval_context
     from .level_spec import (
         COMMON_RECORD_ONLY,
         JUDGE_METRICS,
         LEVEL_SPECS,
+        LEVEL_SPECS_V3,
         MetricSpec,
         level_score,
         mean_or_none,
         vendored_metric,
     )
+    from .task_data import prepare_v3_loaded
 else:
     sys.path.insert(0, str(Path(__file__).resolve().parent))
-    from __init__ import SCORING_VERSION
+    from __init__ import SCORING_VERSION, SCORING_VERSION_V3
     from context import build_eval_context
     from level_spec import (
         COMMON_RECORD_ONLY,
         JUDGE_METRICS,
         LEVEL_SPECS,
+        LEVEL_SPECS_V3,
         MetricSpec,
         level_score,
         mean_or_none,
         vendored_metric,
     )
+    from task_data import prepare_v3_loaded
 
 
 ALL_LEVELS = tuple(f"L{i}" for i in range(1, 8))
@@ -128,9 +132,12 @@ def _resp_ok_entry(tasks: List[Dict[str, Any]]) -> Dict[str, Any]:
 
 
 def _unscorable_reason(
-    level: str, total: int, entries: Dict[str, Dict[str, Any]]
+    level: str,
+    total: int,
+    entries: Dict[str, Dict[str, Any]],
+    level_specs,
 ) -> str:
-    if not LEVEL_SPECS[level]:
+    if not level_specs[level]:
         return "no_deterministic_metric"
     if total == 0:
         return "no_tasks"
@@ -142,11 +149,11 @@ def _unscorable_reason(
     return "all_not_applicable"
 
 
-def score_level(level: str, data: Dict[str, Any]) -> Dict[str, Any]:
+def _score_level_with_specs(level: str, data: Dict[str, Any], level_specs) -> Dict[str, Any]:
     tasks = _tasks(data)
     entries: Dict[str, Dict[str, Any]] = {}
 
-    for spec in LEVEL_SPECS[level]:
+    for spec in level_specs[level]:
         entries[spec.name] = _average_metric(tasks, spec)
 
     for metric_name in JUDGE_METRICS:
@@ -174,8 +181,15 @@ def score_level(level: str, data: Dict[str, Any]) -> Dict[str, Any]:
         "metrics": entries,
     }
     if score is None:
-        result["unscorable_reason"] = _unscorable_reason(level, len(tasks), entries)
+        result["unscorable_reason"] = _unscorable_reason(
+            level, len(tasks), entries, level_specs
+        )
     return result
+
+
+def score_level(level: str, data: Dict[str, Any]) -> Dict[str, Any]:
+    """Score under the frozen v2 contract (kept as the compatibility API)."""
+    return _score_level_with_specs(level, data, LEVEL_SPECS)
 
 
 def _native_tool_calling(level_data: Iterable[Dict[str, Any]]):
@@ -206,6 +220,8 @@ def _model_name(results_dir: Path, level_data: Iterable[Dict[str, Any]]) -> str:
 def build_summary_from_loaded(
     loaded: Dict[str, Dict[str, Any]], results_dir: Path
 ) -> Dict[str, Any]:
+    # The top-level contract is the published, frozen v2 summary. Keep this
+    # construction and all existing field meanings intact.
     by_level = {level: score_level(level, data) for level, data in loaded.items()}
     levels_missing = [level for level in ALL_LEVELS if level not in loaded]
     levels_unscorable = [
@@ -238,7 +254,7 @@ def build_summary_from_loaded(
 
     track = results_dir.name
     level_values = list(loaded.values())
-    return {
+    summary = {
         "benchmark": "Ko-AgentBench (deterministic scoring)",
         "model": _model_name(results_dir, level_values),
         "track": track,
@@ -253,3 +269,35 @@ def build_summary_from_loaded(
         "levels_missing": levels_missing,
         "levels_unscorable": levels_unscorable,
     }
+
+    v3_loaded, task_data_provenance = prepare_v3_loaded(loaded)
+    v3_by_level = {
+        level: _score_level_with_specs(level, data, LEVEL_SPECS_V3)
+        for level, data in v3_loaded.items()
+    }
+    v3_levels_unscorable = [
+        level for level, result in v3_by_level.items() if result.get("score") is None
+    ]
+    v3_scored_levels = sum(
+        1
+        for level in SCORABLE_LEVELS
+        if level in v3_by_level and v3_by_level[level].get("score") is not None
+    )
+    v3_complete = v3_scored_levels == required_levels
+    v3_agent_score = (
+        mean_or_none([v3_by_level[level]["score"] for level in SCORABLE_LEVELS])
+        if v3_complete
+        else None
+    )
+    summary["scoring_v3"] = {
+        "scoring_version": SCORING_VERSION_V3,
+        "agent_score": v3_agent_score,
+        "scored_levels": v3_scored_levels,
+        "required_levels": required_levels,
+        "agent_score_status": "complete" if v3_complete else "incomplete",
+        "by_level": v3_by_level,
+        "levels_missing": levels_missing,
+        "levels_unscorable": v3_levels_unscorable,
+        "task_data": task_data_provenance,
+    }
+    return summary

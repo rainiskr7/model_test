@@ -38,6 +38,30 @@ def redundant_call_rate_det(ctx) -> Optional[float]:
     return load_metrics_module().METRICS["RedundantCallRate"].evaluate(ctx).score
 
 
+def refetch_avoidance_det(ctx) -> Optional[float]:
+    """Reward the reference L6 behavior: answer without a new evaluation-turn call.
+
+    ``freshness_threshold`` is intentionally ignored. The fixture timestamp is
+    2025-09-27 while the evaluated runs are from 2026-08-16, so a literal 24-hour
+    comparison would declare every seeded result stale despite the golden
+    ``context_used`` action. It would also make a saved trace change score as time
+    passes. ``minimum_calls`` describes the already-seeded conversation, not the
+    single evaluation turn, and is ignored for the same reference-behavior reason.
+    """
+    logs = getattr(ctx, "logs", {}) or {}
+    if logs.get("_new_call_trace_present") is False:
+        return None
+
+    trace = getattr(ctx, "action_trace", None)
+    if trace is None:
+        if "tool_calls" not in logs:
+            return None
+        trace = logs.get("tool_calls")
+    if not isinstance(trace, list):
+        return None
+    return 1.0 if not trace else 0.0
+
+
 def _model_calls(ctx):
     action_trace = getattr(ctx, "action_trace", None)
     if action_trace:
@@ -155,6 +179,50 @@ def _tool_responses(ctx):
     return responses
 
 
+def _seeded_tool_responses(ctx):
+    """Return only payloads attached to ``seed_call_*`` ids.
+
+    Model-generated re-fetches can appear later in the same conversation. They
+    must never replace the seeded payload used by L6 recall scoring.
+    """
+    logs = getattr(ctx, "logs", {}) or {}
+    conversation = logs.get("conversation_log", {}) or {}
+    messages = conversation.get("messages", []) or []
+
+    tool_by_call_id = {}
+    for message in messages:
+        if message.get("role") != "assistant":
+            continue
+        for call in message.get("tool_calls", []) or []:
+            call_id = call.get("id") or call.get("tool_call_id")
+            if not isinstance(call_id, str) or not call_id.startswith("seed_call_"):
+                continue
+            function = call.get("function", {}) or {}
+            tool_name = function.get("name") or _call_tool(call)
+            if tool_name:
+                tool_by_call_id[call_id] = tool_name
+
+    responses = []
+    for message in messages:
+        call_id = message.get("tool_call_id")
+        if (
+            message.get("role") != "tool"
+            or not isinstance(call_id, str)
+            or not call_id.startswith("seed_call_")
+            or not isinstance(message.get("content"), dict)
+        ):
+            continue
+        responses.append(
+            (
+                message.get("name")
+                or message.get("tool_name")
+                or tool_by_call_id.get(call_id),
+                message["content"],
+            )
+        )
+    return responses
+
+
 _NUMBER_LITERAL = re.compile(
     r"(?<![\d.,])[-+]?(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?(?![\d.,])"
 )
@@ -247,3 +315,70 @@ def result_field_coverage_det(ctx) -> Optional[float]:
 
 def result_field_coverage_diagnostics(ctx):
     return _result_field_coverage(ctx)[1]
+
+
+def _seeded_field_recall(ctx):
+    golden_fields = ctx.task_schema.get("golden_fields", []) or []
+    diagnostics = {
+        "fields_required": sum(
+            len(entry.get("fields", [])) for entry in golden_fields
+        ),
+        "fields_checked": 0,
+        "fields_excluded_long_text": 0,
+        "fields_unresolved": 0,
+    }
+    if not golden_fields:
+        return None, diagnostics
+
+    seeded = _seeded_tool_responses(ctx)
+    if not seeded:
+        return None, diagnostics
+
+    resolved_entries = []
+    for golden_entry in golden_fields:
+        tool_name = golden_entry.get("tool")
+        candidates = [content for tool, content in seeded if tool == tool_name]
+        # Current L6 fixtures omit the tool name on the seeded tool message but
+        # contain exactly one seeded payload and one golden-field entry.
+        if not candidates and len(seeded) == 1 and len(golden_fields) == 1:
+            candidates = [seeded[0][1]]
+        if not candidates:
+            return None, diagnostics
+        resolved_entries.append((golden_entry, candidates[-1]))
+
+    final_response = (getattr(ctx, "logs", {}) or {}).get("final_response", "")
+    satisfied = 0
+    judged = 0
+    for golden_entry, response in resolved_entries:
+        values = []
+        entry_unresolved = False
+        for field_name in golden_entry.get("fields", []):
+            value = _field_value(response, field_name)
+            if value is _MISSING:
+                diagnostics["fields_unresolved"] += 1
+                entry_unresolved = True
+                continue
+            if not isinstance(value, numbers.Number) or isinstance(value, bool):
+                if len(_normalized_text(value)) > 80:
+                    diagnostics["fields_excluded_long_text"] += 1
+                    continue
+            values.append(value)
+
+        # A malformed declaration is benchmark data, not a model miss. Exclude
+        # the whole golden-field entry rather than mixing its resolvable subset
+        # into the model's score.
+        if entry_unresolved:
+            continue
+        diagnostics["fields_checked"] += len(values)
+        judged += len(values)
+        satisfied += sum(_value_appears(value, final_response) for value in values)
+
+    return (satisfied / judged if judged else None), diagnostics
+
+
+def seeded_field_recall_det(ctx) -> Optional[float]:
+    return _seeded_field_recall(ctx)[0]
+
+
+def seeded_field_recall_diagnostics(ctx):
+    return _seeded_field_recall(ctx)[1]
