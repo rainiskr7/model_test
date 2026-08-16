@@ -19,16 +19,22 @@ if not os.environ.get("MODEL_TEST_BASE") and (
 
 def _load_module(name):
     path = SCORING_DIR / f"{name}.py"
+    return _load_module_from_path(name, path, str(SCORING_DIR))
+
+
+def _load_module_from_path(name, path, import_dir=None):
     spec = importlib.util.spec_from_file_location(f"{name}_under_test", path)
     module = importlib.util.module_from_spec(spec)
-    sys.path.insert(0, str(SCORING_DIR))
+    if import_dir is not None:
+        sys.path.insert(0, str(import_dir))
     try:
         spec.loader.exec_module(module)
     finally:
-        try:
-            sys.path.remove(str(SCORING_DIR))
-        except ValueError:
-            pass
+        if import_dir is not None:
+            try:
+                sys.path.remove(str(import_dir))
+            except ValueError:
+                pass
     return module
 
 

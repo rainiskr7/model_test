@@ -27,6 +27,8 @@ fi
 # 커스텀 파일 복사
 cp "$SCRIPT_DIR/gpustack_custom/run_gpustack_benchmark_with_logging.py" \
    "$KOA_DIR/run_gpustack_benchmark_with_logging.py"
+cp "$SCRIPT_DIR/gpustack_custom/result_records.py" \
+   "$KOA_DIR/result_records.py"
 cp "$SCRIPT_DIR/gpustack_custom/run_ko-agentbench.sh" \
    "$KOA_DIR/run_ko-agentbench.sh"
 cp "$SCRIPT_DIR/gpustack_custom/openai_compat_adapter.py" \

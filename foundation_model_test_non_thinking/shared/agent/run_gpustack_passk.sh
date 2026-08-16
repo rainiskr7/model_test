@@ -80,6 +80,8 @@ fi
 # 건너뛰면 옛 사본이 남는다. 원본을 항상 강제 반영한다.
 cp "$SCRIPT_DIR/gpustack_custom/run_gpustack_benchmark_with_logging.py" \
    "$KOA_DIR/run_gpustack_benchmark_with_logging.py"
+cp "$SCRIPT_DIR/gpustack_custom/result_records.py" \
+   "$KOA_DIR/result_records.py"
 cp "$SCRIPT_DIR/gpustack_custom/openai_compat_adapter.py" \
    "$KOA_DIR/bench/adapters/openai_compat_adapter.py"
 # adapter 가 import 하는 파서 (없으면 ImportError — passk 단독 실행 시 실제로 터진다)

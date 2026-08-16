@@ -16,6 +16,7 @@ CASE_MODULES = [
     "test_data_health",
     "test_weighting",
     "test_passk",
+    "test_result_records",
     "test_bench_pin",
 ]
 

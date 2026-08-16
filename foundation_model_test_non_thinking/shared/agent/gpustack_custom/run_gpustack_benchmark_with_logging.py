@@ -27,6 +27,12 @@ from bench.tools.base_api import BaseTool
 from bench.models import MODEL_IDS
 from bench.tools.tool_catalog import resolve_tool_classes, TOOL_CATALOG
 from bench.config import set_cache_mode
+from result_records import (
+    build_detailed_results_log,
+    failed_task_record,
+    failure_repetition_record,
+    repetition_record,
+)
 
 # Import API keys from secrets
 from configs.secrets import (
@@ -208,142 +214,6 @@ def _resolve_multiturn_mode(args: argparse.Namespace) -> str:
     return "full_rollout" if getattr(args, "full_rollout", False) else "seed_replay"
 
 
-def simplify_result(result: Dict[str, Any]) -> Dict[str, Any]:
-    """Simplify and flatten a single task result for easier analysis.
-    
-    Args:
-        result: Original task result
-        
-    Returns:
-        Simplified, flattened result
-    """
-    simplified = {
-        "task_id": result.get("task_id", "unknown"),
-        "instruction": result.get("instruction", ""),
-        "level": result.get("level", 0),
-        "category": result.get("category", "unknown"),
-        "success": result.get("success", False),
-        "execution_time": result.get("execution_time", 0),
-        "steps_taken": result.get("steps_taken", 0),
-        "error": result.get("error"),
-        "expected_tools": result.get("expected_tools", []),
-        "golden_action": result.get("golden_action", []),
-        "minimum_steps": result.get("minimum_steps"),
-        "data_flow": result.get("data_flow", []),
-        "error_injection": result.get("error_injection"),
-        "fallback_options": result.get("fallback_options", []),
-        "resp_schema": result.get("resp_schema", {}),
-        "arg_schema": result.get("arg_schema", {}),
-        "repetitions": result.get("repetitions", 1),
-        "repetition_results": result.get("repetition_results", []),
-        "token_usage": result.get("token_usage", {
-            "prompt_tokens": 0,
-            "completion_tokens": 0,
-            "total_tokens": 0
-        }),
-        "ttft_stats": result.get("ttft_stats", { 
-            "average": 0,
-            "min": 0,
-            "max": 0,
-            "count": 0
-        }),
-    }
-    if result.get("repetition_records"):
-        simplified["repetition_records"] = result.get("repetition_records", [])
-    
-    # Extract tool calls in a simplified format with results
-    tool_calls = []
-    for invocation in result.get("tool_calls", []):
-        tool_call = {
-            "step": invocation.get("step"),
-            "tool_name": invocation.get("tool_name"),
-            "arguments": invocation.get("arguments"),
-            "success": invocation.get("success"),
-            "error": invocation.get("error")
-        }
-        
-        # Include API result if available and successful
-        if invocation.get("success") and invocation.get("result"):
-            tool_call["result"] = invocation["result"]
-        
-        tool_calls.append(tool_call)
-    
-    simplified["tool_calls"] = tool_calls
-    
-    # Extract final response
-    if result.get("result") and result["result"].get("final_response"):
-        simplified["final_response"] = result["result"]["final_response"]
-    else:
-        simplified["final_response"] = None
-
-    # Store complete conversation log for multi-turn scenarios
-    try:
-        conv = (result.get("result") or {}).get("conversation") or []
-        total_msgs = len(conv)
-        
-        def _format_message(msg):
-            """Format a single message for logging."""
-            role = msg.get("role", "unknown")
-            content = msg.get("content", "")
-            
-            # For tool messages, include tool_call_id
-            if role == "tool":
-                tcid = msg.get("tool_call_id")
-                # Try to parse and format tool result
-                try:
-                    tool_data = json.loads(content) if isinstance(content, str) else content
-                    return {
-                        "role": role,
-                        "tool_call_id": tcid,
-                        "content": tool_data
-                    }
-                except (json.JSONDecodeError, TypeError, ValueError):
-                    return {
-                        "role": role,
-                        "tool_call_id": tcid,
-                        "content": content
-                    }
-            
-            # For user/assistant messages, return as-is
-            return {"role": role, "content": content}
-
-        # Store complete conversation log
-        simplified["conversation_log"] = {
-            "total_messages": total_msgs,
-            "messages": [_format_message(m) for m in conv]
-        }
-            
-    except Exception as e:
-        # Non-fatal: skip conversation logging if structure unexpected
-        simplified["conversation_log_error"] = str(e)
-    
-    return simplified
-
-
-_REPETITION_DYNAMIC_FIELDS = (
-    "success",
-    "steps_taken",
-    "execution_time",
-    "error",
-    "tool_calls",
-    "final_response",
-    "conversation_log",
-    "token_usage",
-    "ttft_stats",
-)
-
-
-def _repetition_record(result: Dict[str, Any], rep_index: int, seed=None) -> Dict[str, Any]:
-    simplified = simplify_result(result)
-    record = {"rep_index": rep_index}
-    for key in _REPETITION_DYNAMIC_FIELDS:
-        if key in simplified:
-            record[key] = simplified[key]
-    if seed is not None:
-        record["seed"] = seed
-    return record
-
-
 def save_detailed_results(
     results: List[Dict[str, Any]],
     model_name: str,
@@ -396,90 +266,13 @@ def save_detailed_results(
     filename = f"{level_name}.json"
     filepath = result_path / filename
     
-    # Simplify and flatten results
-    simplified_results = [simplify_result(r) for r in results]
-    
-    # Calculate statistics
-    total_tasks = len(simplified_results)
-    successful_tasks = sum(1 for r in simplified_results if r.get('success', False))
-    total_time = sum(r.get('execution_time', 0) for r in simplified_results)
-    total_steps = sum(r.get('steps_taken', 0) for r in simplified_results)
-    total_tool_calls = sum(len(r.get('tool_calls', [])) for r in simplified_results)
-   
-    # 토큰 통계 추가
-    total_prompt_tokens = 0
-    total_completion_tokens = 0
-    total_tokens = 0
-
-    # TTFT 통계 수집
-    all_ttft_values = []
-
-    for result in simplified_results:
-        token_usage = result.get('token_usage', {})
-        total_prompt_tokens += token_usage.get('prompt_tokens', 0)
-        total_completion_tokens += token_usage.get('completion_tokens', 0)
-        total_tokens += token_usage.get('total_tokens', 0)
-        
-        ttft_stats = result.get('ttft_stats', {})
-        avg_ttft = ttft_stats.get('average', 0)
-        if avg_ttft > 0:
-            all_ttft_values.append(avg_ttft)
-
-    # TPS 계산
-    average_tps = total_tokens / total_time if total_time > 0 else 0
-
-    average_ttft = sum(all_ttft_values) / len(all_ttft_values) if all_ttft_values else 0
-    min_ttft = min(all_ttft_values) if all_ttft_values else 0
-    max_ttft = max(all_ttft_values) if all_ttft_values else 0
-    
-    # Tool usage statistics
-    tool_usage_stats = {}
-    for result in simplified_results:
-        for tool_call in result.get('tool_calls', []):
-            tool_name = tool_call.get('tool_name', 'unknown')
-            if tool_name not in tool_usage_stats:
-                tool_usage_stats[tool_name] = {
-                    'count': 0,
-                    'success': 0,
-                    'failure': 0
-                }
-            tool_usage_stats[tool_name]['count'] += 1
-            if tool_call.get('success', False):
-                tool_usage_stats[tool_name]['success'] += 1
-            else:
-                tool_usage_stats[tool_name]['failure'] += 1
-    
-    log_data = {
-        "metadata": {
-            "timestamp": datetime.now().isoformat(),
-            "model": model_name,
-            "level": level_name,
-            "native_tool_calling": native_tool_calling,
-            "total_tasks": total_tasks,
-            "successful_tasks": successful_tasks,
-            "failed_tasks": total_tasks - successful_tasks,
-            "success_rate": round(successful_tasks / total_tasks * 100, 2) if total_tasks > 0 else 0,
-            "total_execution_time": round(total_time, 2),
-            "average_execution_time": round(total_time / total_tasks, 2) if total_tasks > 0 else 0,
-            "total_steps": total_steps,
-            "average_steps": round(total_steps / total_tasks, 2) if total_tasks > 0 else 0,
-            "total_tool_calls": total_tool_calls,
-            "average_tool_calls": round(total_tool_calls / total_tasks, 2) if total_tasks > 0 else 0,
-            "total_tokens": total_tokens,
-            "average_tokens_per_task": round(total_tokens / total_tasks, 2) if total_tasks > 0 else 0,
-            "average_prompt_tokens": round(total_prompt_tokens / total_tasks, 2) if total_tasks > 0 else 0,
-            "average_completion_tokens": round(total_completion_tokens / total_tasks, 2) if total_tasks > 0 else 0,
-            "average_tps": round(average_tps, 2),
-            "ttft": {
-                "average": round(average_ttft, 4),
-                "min": round(min_ttft, 4),
-                "max": round(max_ttft, 4),
-                "unit": "seconds"
-            },
-        },
-        "tool_usage_statistics": tool_usage_stats,
-        "results": simplified_results
-    }
+    log_data = build_detailed_results_log(
+        results,
+        model_name,
+        level_name,
+        datetime.now().isoformat(),
+        native_tool_calling=native_tool_calling,
+    )
     
     with open(filepath, 'w', encoding='utf-8') as f:
         json.dump(log_data, f, indent=2, ensure_ascii=False)
@@ -651,7 +444,7 @@ def run_benchmark_on_dataset(
                 # Store repetition success status
                 repetition_results.append(result.get('success', False))
                 if repetitions > 1:
-                    repetition_records.append(_repetition_record(result, rep, seed_used))
+                    repetition_records.append(repetition_record(result, rep, seed_used))
 
                 # Use first run as main result
                 if rep == 0:
@@ -738,49 +531,10 @@ def run_benchmark_on_dataset(
                     seed_used = None
                     if hasattr(adapter, "seed") and getattr(adapter, "temperature", 0.0) > 0:
                         seed_used = 1000 + rep
-                    failure_record = {
-                        "rep_index": rep,
-                        "success": False,
-                        "steps_taken": 0,
-                        "execution_time": 0,
-                        "error": str(e),
-                        "tool_calls": [],
-                        "final_response": None,
-                        "conversation_log": {"total_messages": 0, "messages": []},
-                        "token_usage": {
-                            "prompt_tokens": 0,
-                            "completion_tokens": 0,
-                            "total_tokens": 0,
-                        },
-                        "ttft_stats": {
-                            "average": 0,
-                            "min": 0,
-                            "max": 0,
-                            "count": 0,
-                        },
-                    }
-                    if seed_used is not None:
-                        failure_record["seed"] = seed_used
-                    repetition_records.append(failure_record)
-            all_results.append({
-                "task_id": task.get('id', 'unknown'),
-                "instruction": task.get('description', ''),
-                "level": task.get('level', 0),
-                "category": task.get('category', 'unknown'),
-                "expected_tools": task.get('available_tools', []),
-                "golden_action": task.get('golden_action', []),
-                "minimum_steps": task.get('minimum_steps'),
-                "data_flow": task.get('data_flow', []),
-                "repetitions": repetitions,
-                "repetition_results": repetition_results + [False] * (repetitions - len(repetition_results)),
-                **({"repetition_records": repetition_records} if repetitions > 1 else {}),
-                "success": False,
-                "error": str(e),
-                "execution_time": 0,
-                "steps_taken": 0,
-                "tool_invocations": [],
-                "tool_calls": []
-            })
+                    repetition_records.append(failure_repetition_record(str(e), rep, seed_used))
+            all_results.append(
+                failed_task_record(task, str(e), repetitions, repetition_results, repetition_records)
+            )
     
     # Save results
     if save_logs and all_results:
