@@ -28,8 +28,10 @@ def _fmt(value: Optional[float]) -> str:
 
 def _metric_token(name: str, entry: Dict[str, Any]) -> str:
     token = f"{name}={_fmt(entry.get('score'))}/{entry.get('status')}"
-    if entry.get("status") in ("partial", "error"):
-        token += f"({entry.get('n_scored')}/{entry.get('n_tasks')})"
+    n_scored = entry.get("n_scored")
+    n_tasks = entry.get("n_tasks")
+    if isinstance(n_scored, int) and isinstance(n_tasks, int) and n_scored < n_tasks:
+        token += f"({n_scored}/{n_tasks})"
     return token
 
 

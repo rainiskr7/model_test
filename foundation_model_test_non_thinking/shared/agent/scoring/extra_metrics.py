@@ -155,50 +155,95 @@ def _tool_responses(ctx):
     return responses
 
 
+_NUMBER_LITERAL = re.compile(
+    r"(?<![\d.,])[-+]?(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?(?![\d.,])"
+)
+_HTML_TAG = re.compile(r"<[^>]*>")
+
+
+def _normalized_text(value) -> str:
+    without_tags = _HTML_TAG.sub(" ", str(value))
+    return " ".join(without_tags.split()).casefold()
+
+
 def _value_appears(value, final_response) -> bool:
     response_text = str(final_response or "")
     if isinstance(value, numbers.Number) and not isinstance(value, bool):
-        normalized_response = re.sub(
-            r"(?<=\d)\.0(?!\d)", "", response_text.replace(",", "")
-        )
-        normalized_value = str(value).replace(",", "")
-        if normalized_value.endswith(".0"):
-            normalized_value = normalized_value[:-2]
-        return bool(
-            normalized_value
-            and re.search(
-                rf"(?<![\d.]){re.escape(normalized_value)}(?![\d.])",
-                normalized_response,
-            )
-        )
-    value_text = str(value).casefold()
-    return bool(value_text and value_text in response_text.casefold())
+        for match in _NUMBER_LITERAL.finditer(response_text):
+            literal = match.group(0)
+            decimals = min(len(literal.rsplit(".", 1)[1]), 6) if "." in literal else 0
+            candidate = float(literal.replace(",", ""))
+            if round(float(value), decimals) == round(candidate, decimals):
+                return True
+        return False
+    value_text = _normalized_text(value)
+    return bool(value_text and value_text in _normalized_text(response_text))
 
 
-def ref_recall_det(ctx) -> Optional[float]:
+def _result_field_coverage(ctx):
     golden_fields = ctx.task_schema.get("golden_fields", []) or []
+    diagnostics = {
+        "fields_required": sum(
+            len(entry.get("fields", [])) for entry in golden_fields
+        ),
+        "fields_checked": 0,
+        "fields_excluded_long_text": 0,
+        "fields_unresolved": 0,
+    }
     if not golden_fields:
-        return None
+        return None, diagnostics
 
     responses = _tool_responses(ctx)
     resolved = []
     for golden_entry in golden_fields:
-        tool_name = golden_entry.get("tool")
         response = next(
-            (content for tool, content in reversed(responses) if tool == tool_name),
+            (
+                content
+                for tool, content in reversed(responses)
+                if tool == golden_entry.get("tool")
+            ),
             None,
         )
         if response is None:
-            return None
+            return None, diagnostics
         resolved.append((golden_entry, response))
 
     final_response = (getattr(ctx, "logs", {}) or {}).get("final_response", "")
     satisfied = 0
+    judged = 0
     for golden_entry, response in resolved:
-        values = [_field_value(response, name) for name in golden_entry.get("fields", [])]
-        if all(
-            value is not _MISSING and _value_appears(value, final_response)
-            for value in values
-        ):
+        entry_judged = False
+        entry_satisfied = True
+        for field_name in golden_entry.get("fields", []):
+            value = _field_value(response, field_name)
+            if value is _MISSING:
+                diagnostics["fields_unresolved"] += 1
+                entry_judged = True
+                entry_satisfied = False
+                continue
+            if not isinstance(value, numbers.Number) or isinstance(value, bool):
+                if len(_normalized_text(value)) > 80:
+                    diagnostics["fields_excluded_long_text"] += 1
+                    continue
+            diagnostics["fields_checked"] += 1
+            entry_judged = True
+            if not _value_appears(value, final_response):
+                entry_satisfied = False
+
+        if not entry_judged:
+            continue
+        judged += 1
+        if entry_satisfied:
             satisfied += 1
-    return satisfied / len(golden_fields)
+    return (satisfied / judged if judged else None), diagnostics
+
+
+def result_field_coverage_det(ctx) -> Optional[float]:
+    # Upstream RefRecall is judge-only and measures conversational fact recall from
+    # the message transcript. This checks golden-field values in the final answer,
+    # which is a different construct; do not conflate them or rename this back.
+    return _result_field_coverage(ctx)[0]
+
+
+def result_field_coverage_diagnostics(ctx):
+    return _result_field_coverage(ctx)[1]

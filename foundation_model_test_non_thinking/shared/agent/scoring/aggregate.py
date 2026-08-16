@@ -48,12 +48,27 @@ def _tasks(data: Dict[str, Any]) -> List[Dict[str, Any]]:
 def _average_metric(tasks: List[Dict[str, Any]], spec: MetricSpec) -> Dict[str, Any]:
     scores = []
     errors = []
+    diagnostics: Dict[str, int] = (
+        {
+            "fields_required": 0,
+            "fields_checked": 0,
+            "fields_excluded_long_text": 0,
+            "fields_unresolved": 0,
+        }
+        if spec.diagnostic_producer
+        else {}
+    )
     for task in tasks:
         try:
             ctx = build_eval_context(task)
             score = spec.producer(ctx)
+            task_diagnostics = (
+                spec.diagnostic_producer(ctx) if spec.diagnostic_producer else {}
+            )
             if score is not None:
                 scores.append(float(score))
+            for name, count in task_diagnostics.items():
+                diagnostics[name] = diagnostics.get(name, 0) + int(count)
         except Exception as exc:
             errors.append(exc)
 
@@ -70,6 +85,7 @@ def _average_metric(tasks: List[Dict[str, Any]], spec: MetricSpec) -> Dict[str, 
         "n_scored": len(scores),
         "n_errors": len(errors),
     }
+    entry.update(diagnostics)
     if errors:
         exc = errors[0]
         entry["error"] = f"{type(exc).__name__}: {exc}"

@@ -234,7 +234,7 @@ def test_context_retention_det_none_matched_and_no_data():
     )
 
 
-def _ref_recall_context(final_response, golden_fields=None, include_second=True):
+def _result_field_coverage_context(final_response, golden_fields=None, include_second=True):
     first_result = {
         "price": 1234.0,
         "item": [{"title": "Alpha Book"}],
@@ -268,28 +268,139 @@ def _ref_recall_context(final_response, golden_fields=None, include_second=True)
     )
 
 
-def test_ref_recall_det_all_and_partial():
-    all_present = _ref_recall_context(
+def _single_result_field_context(value, final_response, field_name="value"):
+    result = {"value": value}
+    return DummyContext(
+        action_trace=[{"tool": "Lookup", "args": {}, "result": result}],
+        task_schema={
+            "golden_fields": [{"tool": "Lookup", "fields": [field_name]}]
+        },
+        logs={
+            "conversation_log": {
+                "messages": [
+                    {"role": "tool", "tool_call_id": "call_1", "content": result}
+                ]
+            },
+            "final_response": final_response,
+        },
+    )
+
+
+def test_result_field_coverage_all_and_partial():
+    all_present = _result_field_coverage_context(
         "The price is 1,234 and the title is ALPHA BOOK by beta writer."
     )
-    _assert_close(extra_metrics.ref_recall_det(all_present), 1.0, "all references recalled")
+    _assert_close(
+        extra_metrics.result_field_coverage_det(all_present),
+        1.0,
+        "all result fields covered",
+    )
 
-    one_missing = _ref_recall_context("The price is 1234.0; title: alpha book.")
-    _assert_close(extra_metrics.ref_recall_det(one_missing), 0.5, "one reference missing")
+    one_missing = _result_field_coverage_context(
+        "The price is 1234.0; title: alpha book."
+    )
+    _assert_close(
+        extra_metrics.result_field_coverage_det(one_missing),
+        0.5,
+        "one result entry missing",
+    )
 
 
-def test_ref_recall_det_no_data_and_missing_tool_response():
-    no_data = _ref_recall_context("anything", golden_fields=[])
+def test_result_field_coverage_numeric_tolerance():
+    ctx = _single_result_field_context(1.9782121400000001, "약 1.98% 상승")
+    _assert_close(
+        extra_metrics.result_field_coverage_det(ctx), 1.0, "model precision"
+    )
+
+
+def test_result_field_coverage_thousands_separator():
+    ctx = _single_result_field_context(129650000.0, "129,650,000원")
+    _assert_close(
+        extra_metrics.result_field_coverage_det(ctx), 1.0, "thousands separator"
+    )
+
+
+def test_result_field_coverage_wrong_number():
+    ctx = _single_result_field_context(129650000.0, "131,000,000원")
+    _assert_close(extra_metrics.result_field_coverage_det(ctx), 0.0, "wrong number")
+
+
+def test_result_field_coverage_normalizes_string_html_and_case():
+    ctx = _single_result_field_context("<b>Alpha</b>   BOOK", "alpha book is available")
+    _assert_close(
+        extra_metrics.result_field_coverage_det(ctx), 1.0, "normalized string"
+    )
+
+
+def test_result_field_coverage_excludes_long_text():
+    long_text = "This is a long result description " * 4
+    ctx = _single_result_field_context(long_text, "short summary")
     _assert(
-        extra_metrics.ref_recall_det(no_data) is None,
+        extra_metrics.result_field_coverage_det(ctx) is None,
+        "all-long-text task must yield no judgement",
+    )
+    diagnostics = extra_metrics.result_field_coverage_diagnostics(ctx)
+    _assert(diagnostics["fields_required"] == 1, "long field required count")
+    _assert(diagnostics["fields_checked"] == 0, "long field checked count")
+    _assert(
+        diagnostics["fields_excluded_long_text"] == 1,
+        "long field exclusion count",
+    )
+    _assert(diagnostics["fields_unresolved"] == 0, "long field unresolved count")
+
+
+def test_result_field_coverage_counts_unresolved_as_failure():
+    ctx = _single_result_field_context("present", "present", "missing.path")
+    _assert_close(
+        extra_metrics.result_field_coverage_det(ctx), 0.0, "unresolved field"
+    )
+    diagnostics = extra_metrics.result_field_coverage_diagnostics(ctx)
+    _assert(diagnostics["fields_required"] == 1, "unresolved required count")
+    _assert(diagnostics["fields_checked"] == 0, "unresolved checked count")
+    _assert(
+        diagnostics["fields_excluded_long_text"] == 0,
+        "unresolved exclusion count",
+    )
+    _assert(diagnostics["fields_unresolved"] == 1, "unresolved field count")
+
+
+def test_result_field_coverage_no_data_and_missing_tool_response():
+    no_data = _result_field_coverage_context("anything", golden_fields=[])
+    _assert(
+        extra_metrics.result_field_coverage_det(no_data) is None,
         "no golden fields must be not applicable",
     )
 
-    missing_response = _ref_recall_context("beta writer", include_second=False)
+    missing_response = _single_result_field_context("present", "present")
+    missing_response.action_trace = []
+    missing_response.logs["conversation_log"] = {"messages": []}
     _assert(
-        extra_metrics.ref_recall_det(missing_response) is None,
-        "missing required tool response must be not applicable",
+        extra_metrics.result_field_coverage_det(missing_response) is None,
+        "missing tool response must be not applicable",
     )
+    diagnostics = extra_metrics.result_field_coverage_diagnostics(missing_response)
+    _assert(diagnostics["fields_required"] == 1, "missing-response required count")
+    _assert(diagnostics["fields_checked"] == 0, "missing-response checked count")
+    _assert(diagnostics["fields_unresolved"] == 0, "missing response is not unresolved")
+
+
+def test_result_field_coverage_diagnostics_are_aggregated():
+    original_context = aggregate.build_eval_context
+    ctx = _single_result_field_context("present", "present")
+    spec = next(
+        spec
+        for spec in level_spec.LEVEL_SPECS["L7"]
+        if spec.name == "ResultFieldCoverage_det"
+    )
+    aggregate.build_eval_context = lambda _task: ctx
+    try:
+        entry = aggregate._average_metric([{}, {}], spec)
+    finally:
+        aggregate.build_eval_context = original_context
+    _assert(entry["fields_required"] == 2, "aggregate required count")
+    _assert(entry["fields_checked"] == 2, "aggregate checked count")
+    _assert(entry["fields_excluded_long_text"] == 0, "aggregate excluded count")
+    _assert(entry["fields_unresolved"] == 0, "aggregate unresolved count")
 
 
 def test_l6_spec_wires_redundant_call_rate():
@@ -316,7 +427,7 @@ def test_l7_spec_is_exactly_two_record_only_metrics():
     _assert(len(specs) == 2, "L7 must have exactly two metric specs")
     _assert(
         tuple(spec.name for spec in specs)
-        == ("ContextRetention_det", "RefRecall_det"),
+        == ("ContextRetention_det", "ResultFieldCoverage_det"),
         "L7 metric names mismatch",
     )
     _assert(
@@ -766,7 +877,13 @@ def test_print_table_shows_l7_record_only_metrics_without_judges():
             "status": "ok",
             "in_score": False,
         },
-        "RefRecall_det": {"score": 0.5, "status": "ok", "in_score": False},
+        "ResultFieldCoverage_det": {
+            "score": 0.5,
+            "status": "ok",
+            "in_score": False,
+            "n_scored": 3,
+            "n_tasks": 10,
+        },
         "SR": {"score": None, "status": "judge_missing", "in_score": False},
         "ArgAcc": {"score": None, "status": "judge_missing", "in_score": False},
         "EffScore": {"score": None, "status": "judge_missing", "in_score": False},
@@ -798,7 +915,10 @@ def test_print_table_shows_l7_record_only_metrics_without_judges():
         score_run.print_table(summary, 0)
     printed = output.getvalue()
     _assert("ContextRetention_det=1.000/ok" in printed, "L7 context metric hidden")
-    _assert("RefRecall_det=0.500/ok" in printed, "L7 recall metric hidden")
+    _assert(
+        "ResultFieldCoverage_det=0.500/ok(3/10)" in printed,
+        "L7 result field metric or scored-task count hidden",
+    )
     _assert("judge_missing" not in printed, "judge-missing metrics must stay hidden")
 
 
@@ -837,8 +957,15 @@ TESTS = [
     test_context_retention_det_all_with_normalization_and_extra_args,
     test_context_retention_det_partial_and_wrong_value,
     test_context_retention_det_none_matched_and_no_data,
-    test_ref_recall_det_all_and_partial,
-    test_ref_recall_det_no_data_and_missing_tool_response,
+    test_result_field_coverage_all_and_partial,
+    test_result_field_coverage_numeric_tolerance,
+    test_result_field_coverage_thousands_separator,
+    test_result_field_coverage_wrong_number,
+    test_result_field_coverage_normalizes_string_html_and_case,
+    test_result_field_coverage_excludes_long_text,
+    test_result_field_coverage_counts_unresolved_as_failure,
+    test_result_field_coverage_no_data_and_missing_tool_response,
+    test_result_field_coverage_diagnostics_are_aggregated,
     test_l6_spec_wires_redundant_call_rate,
     test_l7_spec_is_exactly_two_record_only_metrics,
     test_l6_empty_trace_depends_on_tool_acc,
