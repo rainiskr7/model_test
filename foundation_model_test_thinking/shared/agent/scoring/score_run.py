@@ -9,12 +9,17 @@ from typing import Any, Dict, Optional
 
 if __package__:
     from .aggregate import ALL_LEVELS, build_summary_from_loaded, safe_model_name
+    from .level_spec import LEVEL_SPECS
 else:
     sys.path.insert(0, str(Path(__file__).resolve().parent))
     from aggregate import ALL_LEVELS, build_summary_from_loaded, safe_model_name
+    from level_spec import LEVEL_SPECS
 
 
 PREFIX = "[agent-scoring]"
+DETERMINISTIC_METRICS = {
+    spec.name for specs in LEVEL_SPECS.values() for spec in specs
+}
 
 
 def _fmt(value: Optional[float]) -> str:
@@ -23,8 +28,10 @@ def _fmt(value: Optional[float]) -> str:
 
 def _metric_token(name: str, entry: Dict[str, Any]) -> str:
     token = f"{name}={_fmt(entry.get('score'))}/{entry.get('status')}"
-    if entry.get("status") in ("partial", "error"):
-        token += f"({entry.get('n_scored')}/{entry.get('n_tasks')})"
+    n_scored = entry.get("n_scored")
+    n_tasks = entry.get("n_tasks")
+    if isinstance(n_scored, int) and isinstance(n_tasks, int) and n_scored < n_tasks:
+        token += f"({n_scored}/{n_tasks})"
     return token
 
 
@@ -73,14 +80,19 @@ def print_table(summary: Dict[str, Any], skipped_count: int) -> None:
         metrics = " ".join(
             _metric_token(name, entry)
             for name, entry in result["metrics"].items()
-            if entry.get("in_score") or name == "FSM_prefix"
+            if entry.get("in_score") or name in DETERMINISTIC_METRICS
         )
         unscorable = ""
         if result.get("score") is None and result.get("unscorable_reason"):
             unscorable = f" unscorable={result['unscorable_reason']}"
+        declared_metrics = sum(spec.in_score for spec in LEVEL_SPECS[level])
+        applied = result.get("applied_metrics")
+        applied_token = ""
+        if isinstance(applied, int) and applied < declared_metrics:
+            applied_token = f" applied_metrics={applied}/{declared_metrics}"
         print(
             f"{PREFIX} {level} total={result['total']} "
-            f"score={_fmt(result.get('score'))}{unscorable} {metrics}"
+            f"score={_fmt(result.get('score'))}{unscorable}{applied_token} {metrics}"
         )
     scored_levels = summary.get(
         "scored_levels",

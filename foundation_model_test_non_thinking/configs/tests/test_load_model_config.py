@@ -3,12 +3,14 @@
 import contextlib
 import importlib.util
 import io
+import os
 import sys
 from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
 LOADER = ROOT / "load_model_config.py"
+OVERRIDE_KEYS = ("BASE_URL_CHAT_OVERRIDE", "BASE_URL_V1_OVERRIDE")
 
 
 def load_module():
@@ -18,7 +20,21 @@ def load_module():
     return module
 
 
-def capture_emit_shell(module, extra_cfg):
+@contextlib.contextmanager
+def endpoint_override_env(values):
+    saved = {key: os.environ[key] for key in OVERRIDE_KEYS if key in os.environ}
+    for key in OVERRIDE_KEYS:
+        os.environ.pop(key, None)
+    os.environ.update(values)
+    try:
+        yield
+    finally:
+        for key in OVERRIDE_KEYS:
+            os.environ.pop(key, None)
+        os.environ.update(saved)
+
+
+def test_config(extra_cfg):
     cfg = {
         "model": "test_model",
         "tokenizer_path": "/tmp/test-tokenizer",
@@ -30,11 +46,32 @@ def capture_emit_shell(module, extra_cfg):
         "tracks": ["agent"],
     }
     cfg.update(extra_cfg)
+    return cfg
+
+
+def capture_emit_shell(module, extra_cfg):
+    cfg = test_config(extra_cfg)
 
     stdout = io.StringIO()
-    with contextlib.redirect_stdout(stdout):
+    with endpoint_override_env({}), contextlib.redirect_stdout(stdout):
         module.emit_shell(cfg)
     return stdout.getvalue().splitlines()
+
+
+def capture_endpoint_override(module, overrides):
+    stdout = io.StringIO()
+    stderr = io.StringIO()
+    error = None
+    with (
+        endpoint_override_env(overrides),
+        contextlib.redirect_stdout(stdout),
+        contextlib.redirect_stderr(stderr),
+    ):
+        try:
+            module.emit_shell(test_config({}))
+        except SystemExit as exc:
+            error = str(exc)
+    return stdout.getvalue().splitlines(), stderr.getvalue(), error
 
 
 def assert_contains(lines, expected):
@@ -117,13 +154,59 @@ def main():
             except AssertionError as exc:
                 failures.append(f"{name}: {exc}")
 
+    endpoint_cases = 3
+    yaml_chat = "export BASE_URL_CHAT=http://127.0.0.1:18023/v1/chat/completions"
+    yaml_v1 = "export BASE_URL_V1=http://127.0.0.1:18023/v1"
+
+    lines, stderr, error = capture_endpoint_override(module, {})
+    if lines.count(yaml_chat) != 1 or lines.count(yaml_v1) != 1:
+        failures.append(f"endpoint overrides absent: YAML endpoints changed: {lines!r}")
+    if stderr or error is not None:
+        failures.append(
+            f"endpoint overrides absent: unexpected stderr/error: {stderr!r}, {error!r}"
+        )
+
+    override_chat = "http://host-b:28023/v1/chat/completions"
+    override_v1 = "http://host-b:28023/v1"
+    lines, stderr, error = capture_endpoint_override(
+        module,
+        {
+            "BASE_URL_CHAT_OVERRIDE": override_chat,
+            "BASE_URL_V1_OVERRIDE": override_v1,
+        },
+    )
+    chat_exports = [line for line in lines if line.startswith("export BASE_URL_CHAT=")]
+    v1_exports = [line for line in lines if line.startswith("export BASE_URL_V1=")]
+    if chat_exports != [yaml_chat, f"export BASE_URL_CHAT={override_chat}"]:
+        failures.append(f"both endpoint overrides: unexpected chat exports: {chat_exports!r}")
+    if v1_exports != [yaml_v1, f"export BASE_URL_V1={override_v1}"]:
+        failures.append(f"both endpoint overrides: unexpected v1 exports: {v1_exports!r}")
+    expected_notice = (
+        f"[config] endpoint override: BASE_URL_CHAT={override_chat} "
+        f"BASE_URL_V1={override_v1}\n"
+    )
+    if stderr != expected_notice or error is not None:
+        failures.append(f"both endpoint overrides: stderr/error: {stderr!r}, {error!r}")
+
+    lines, stderr, error = capture_endpoint_override(
+        module, {"BASE_URL_CHAT_OVERRIDE": override_chat}
+    )
+    expected_error = (
+        "[config] ERROR: BASE_URL_CHAT_OVERRIDE and BASE_URL_V1_OVERRIDE "
+        "must be set together"
+    )
+    if lines or stderr or error != expected_error:
+        failures.append(
+            f"one endpoint override: output/error: {lines!r}, {stderr!r}, {error!r}"
+        )
+
     if failures:
         print("FAIL")
         for failure in failures:
             print(f"- {failure}")
         return 1
 
-    print(f"OK {len(cases)} cases")
+    print(f"OK {len(cases) + endpoint_cases} cases")
     return 0
 
 

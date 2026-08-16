@@ -16,6 +16,9 @@ tracks:
   - agent
   - multimodal
 
+agent:
+  native_tool_calling: true
+
 backend_reference:
   engine: vllm
   notes: |
@@ -24,5 +27,8 @@ backend_reference:
     라이브 엔드포인트 확인: reasoning_content 없음(non-thinking).
     KRETA 는 direct 모드(max_tokens 32)로 실행 — run_full_eval 앞단에서
     KRETA_SETTING=direct export.
-    TODO: 서버를 --enable-auto-tool-choice 로 재서빙한 뒤 agent.native_tool_calling: true 를 켜야
-    agent 트랙을 다른 모델과 같은 축에서 비교할 수 있다.
+    2026-08-16 재서빙 확인: --enable-auto-tool-choice 적용됨. 라이브 엔드포인트에
+    tools 파라미터를 직접 넣어 확인 — finish_reason=tool_calls 로 네이티브 반환.
+    → agent.native_tool_calling: true 로 전환 (텍스트 파서 모드와는 같은 축에서 비교 불가).
+    실측 단일 스트림 8.05 tok/s (300토큰/37.3s). 60초 요청 타임아웃으로는 약 483토큰까지만
+    생성되어 부족하다 — agent 트랙은 AGENT_REQUEST_TIMEOUT 250 권장.

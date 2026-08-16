@@ -4,9 +4,23 @@ from dataclasses import dataclass
 from typing import Callable, Iterable, List, Optional, Sequence
 
 try:
-    from .extra_metrics import arg_f1_det, fsm_prefix, redundant_call_rate_det
+    from .extra_metrics import (
+        arg_f1_det,
+        context_retention_det,
+        fsm_prefix,
+        redundant_call_rate_det,
+        result_field_coverage_det,
+        result_field_coverage_diagnostics,
+    )
 except ImportError:  # direct file loading in tests
-    from extra_metrics import arg_f1_det, fsm_prefix, redundant_call_rate_det
+    from extra_metrics import (
+        arg_f1_det,
+        context_retention_det,
+        fsm_prefix,
+        redundant_call_rate_det,
+        result_field_coverage_det,
+        result_field_coverage_diagnostics,
+    )
 
 
 JUDGE_METRICS = ("SR", "ArgAcc", "EffScore", "ContextRetention", "RefRecall")
@@ -18,6 +32,7 @@ class MetricSpec:
     name: str
     producer: Callable
     in_score: bool
+    diagnostic_producer: Optional[Callable] = None
 
 
 def vendored_metric(metric_name: str):
@@ -59,7 +74,19 @@ LEVEL_SPECS = {
         MetricSpec("ToolAcc", vendored_metric("ToolAcc"), True),
         MetricSpec("RedundantCallRate", redundant_call_rate_det, True),
     ),
-    "L7": (),
+    # Record-only in agent_det_v2: L7 does not contribute to agent_score until an
+    # explicit promotion decision bumps the scoring version. Upstream RefRecall is
+    # judge-only conversational fact recall from the transcript; result-field coverage
+    # is a different construct, so do not conflate them or rename it back.
+    "L7": (
+        MetricSpec("ContextRetention_det", context_retention_det, False),
+        MetricSpec(
+            "ResultFieldCoverage_det",
+            result_field_coverage_det,
+            False,
+            result_field_coverage_diagnostics,
+        ),
+    ),
 }
 
 

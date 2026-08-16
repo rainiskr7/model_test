@@ -48,12 +48,35 @@ def _tasks(data: Dict[str, Any]) -> List[Dict[str, Any]]:
 def _average_metric(tasks: List[Dict[str, Any]], spec: MetricSpec) -> Dict[str, Any]:
     scores = []
     errors = []
+    task_spread = {"n_perfect": 0, "n_zero": 0, "n_partial": 0}
+    diagnostics: Dict[str, int] = (
+        {
+            "fields_required": 0,
+            "fields_checked": 0,
+            "fields_excluded_long_text": 0,
+            "fields_unresolved": 0,
+        }
+        if spec.diagnostic_producer
+        else {}
+    )
     for task in tasks:
         try:
             ctx = build_eval_context(task)
             score = spec.producer(ctx)
+            task_diagnostics = (
+                spec.diagnostic_producer(ctx) if spec.diagnostic_producer else {}
+            )
             if score is not None:
-                scores.append(float(score))
+                numeric_score = float(score)
+                scores.append(numeric_score)
+                if numeric_score == 1.0:
+                    task_spread["n_perfect"] += 1
+                elif numeric_score == 0.0:
+                    task_spread["n_zero"] += 1
+                elif 0.0 < numeric_score < 1.0:
+                    task_spread["n_partial"] += 1
+            for name, count in task_diagnostics.items():
+                diagnostics[name] = diagnostics.get(name, 0) + int(count)
         except Exception as exc:
             errors.append(exc)
 
@@ -69,7 +92,9 @@ def _average_metric(tasks: List[Dict[str, Any]], spec: MetricSpec) -> Dict[str, 
         "n_tasks": len(tasks),
         "n_scored": len(scores),
         "n_errors": len(errors),
+        "task_spread": task_spread,
     }
+    entry.update(diagnostics)
     if errors:
         exc = errors[0]
         entry["error"] = f"{type(exc).__name__}: {exc}"
@@ -141,6 +166,11 @@ def score_level(level: str, data: Dict[str, Any]) -> Dict[str, Any]:
     result = {
         "total": len(tasks),
         "score": score,
+        "applied_metrics": sum(
+            entry.get("in_score")
+            and entry.get("status") in {"ok", "partial"}
+            for entry in entries.values()
+        ),
         "metrics": entries,
     }
     if score is None:
@@ -153,7 +183,9 @@ def _native_tool_calling(level_data: Iterable[Dict[str, Any]]):
         metadata = data.get("metadata") or {}
         if "native_tool_calling" in metadata:
             return metadata.get("native_tool_calling")
-    return None
+    # 이 필드가 추가되기 전 결과는 text parser 기반(non-native) 런이었다.
+    # 오래된 raw 결과를 재채점해도 현재 summary 계약(boolean)을 만족시킨다.
+    return False
 
 
 def safe_model_name(model: str) -> str:
@@ -187,7 +219,7 @@ def build_summary_from_loaded(
     )
     required_levels = len(SCORABLE_LEVELS)
     complete = scored_levels == required_levels
-    # L7 has no deterministic metrics and can never contribute to agent_score.
+    # L7 deterministic metrics are record-only and do not contribute to agent_score.
     agent_score = (
         mean_or_none([by_level[level]["score"] for level in SCORABLE_LEVELS])
         if complete

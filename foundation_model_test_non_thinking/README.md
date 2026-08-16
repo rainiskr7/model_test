@@ -113,7 +113,7 @@ bash vsm/multimodal/install.sh     # KRETA + KOFFVQA + KO-VLM-Benchmark clone
 bash vsm/agent/install.sh          # Ko-AgentBench clone + 설치
 ```
 
-외부 repo들은 모두 `data/`에 중앙 집중으로 clone된다. 재현성을 위해 commit SHA를 env로 핀할 수 있다 (`KRETA_SHA`, `KOFFVQA_SHA`, `KOVLM_SHA`).
+외부 repo들은 모두 `data/`에 중앙 집중으로 clone된다. 재현성을 위해 commit SHA를 env로 핀할 수 있다 (`KRETA_SHA`, `KOFFVQA_SHA`, `KOVLM_SHA`, `KO_AGENTBENCH_SHA`).
 
 > **KRETA 로컬 패치:** `vsm/multimodal/install.sh`는 KRETA를 clone·SHA 핀한 뒤 `shared/multimodal/patches/kreta_infer_gpt.patch`를 `git apply`한다. 패치 내용 — ① `OPENAI_BASE_URL` / `KRETA_WORKERS`(기본 2) / `KRETA_MAX_TOKENS`(기본 4096) / `KRETA_TIMEOUT`(기본 600초) env 지원, ② OpenAI 클라이언트를 sample마다 생성하던 것을 단일 인스턴스 재사용으로 변경(커넥션 누수·점진적 열화 수정), ③ streaming append(jsonl)+fsync 와 id 기반 idempotent resume(에러/타임아웃 행은 드롭 후 재시도), ④ 완주 invariant(기록 고유 id 수 != 2577 시 fail). 생성 상한·타임아웃 튜닝은 §3.8 참고. 패치 적용이 실패하면 install은 즉시 중단된다(조용히 upstream 기본동작으로 남는 사고 방지).
 
@@ -201,6 +201,27 @@ results/<safe_model_name>/<timestamp>/
 ```
 
 `safe_model_name`은 모델 이름의 `/`, `-`, `:`을 `_`로 치환한 값 (예: `Qwen/Qwen3.5-35B-A3B` → `Qwen_Qwen3.5_35B_A3B`).
+
+#### 3.6.1 Agent 트랙 채점·검증
+
+`agent_score`는 L1~L6 **레벨 점수의 동일 가중 평균**이다. 각 레벨 점수도 그 레벨에서 적용 가능한 `in_score=true` 지표의 동일 가중 평균이며, 여섯 레벨이 모두 채점 가능할 때만 숫자를 기록하고 하나라도 빠지거나 채점 불가이면 `null`(`incomplete`)이다. L7은 실행하지만 기록 전용이다. `ContextRetention_det`·`ResultFieldCoverage_det` 두 결정론 지표와 L7 레벨 자체는 `agent_score`에 절대 들어가지 않는다. 다섯 judge 지표는 현재 측정하지 않아 `judge_missing`으로 남으므로, 이 점수는 결정론적 부분집합만 나타낸다.
+
+`metadata.success_rate`는 정확도가 아니라 **생존 신호**(`final_response` 존재 AND `steps >= 1`)다. 측정된 두 모델의 모든 레벨에서 100%였지만 결정론 점수와 무관하므로 점수로 인용하지 않는다.
+
+2026-08-16 관측 코호트(Qwen3.5-35B-A3B-FP8, DiffusionGemma-26B-A4B-it)에서는 L2가 두 모델 모두 15/15로 포화됐다. 이는 측정 버그는 배제하지만 쉬운 task suite 또는 얇은 단일 지표 가능성은 배제하지 않는다. 포화 레벨은 모든 모델에 같은 1/6을 더하므로 순위는 바꾸지 않고 절대 크기만 부풀린다. 레벨 동일 가중은 이 문제의 수정책이 아니라 의도적으로 동결한 정책이다. 또한 L2는 `in_score` 지표가 1개뿐이고 L5는 20 task인 반면 L3/L4는 각 10 task이므로, `agent_score`를 표본 수나 정밀도로 가중한 평균으로 해석하면 안 된다.
+
+기존 `L*.json`은 평가를 다시 실행하지 않고 재채점할 수 있다. `--results-dir`을 써도 vendored metric을 불러오려면 `MODEL_TEST_BASE`가 반드시 필요하다.
+
+```bash
+MODEL_TEST_BASE="$PWD" .venv/bin/python shared/agent/scoring/score_run.py \
+  --results-dir results/<model>/<timestamp>/language/<agent-track>
+MODEL_TEST_BASE="$PWD" .venv/bin/python shared/agent/scoring/validate_run.py \
+  --results-dir results/<model>/<timestamp>/language/<agent-track>
+```
+
+validator는 scoring version·요약 구조·점수 범위, judge/L7의 기록 전용 계약, raw/summary의 native-tool 모드 일치, 6개 레벨 완전성·평균 불변식을 검사하고 포화/바닥·생존 신호 차이는 경고한다. 종료 코드는 `0`=유효(경고 허용), `1`=검증 실패, `2`=호출·설정·입력 읽기·내부 오류다. `run_full_eval.sh`에서는 agent 트랙이 성공하면 validator가 자동 실행된다.
+
+변형 런은 `AGENT_TRACK_NAME=<variant>`로 별도 폴더에 기록한다. 변형 결과와 canonical `agent` 트랙 결과를 한 트랙에 섞지 않는다.
 
 ### 3.7 두 머신 간 동기화
 

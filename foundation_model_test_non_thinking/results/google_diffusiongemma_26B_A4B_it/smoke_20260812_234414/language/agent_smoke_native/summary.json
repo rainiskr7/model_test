@@ -2,28 +2,56 @@
   "benchmark": "Ko-AgentBench (deterministic scoring)",
   "model": "google_diffusiongemma_26B_A4B_it",
   "track": "agent_smoke_native",
-  "scoring_version": "agent_det_v1",
+  "scoring_version": "agent_det_v2",
   "native_tool_calling": true,
-  "agent_score": 0.7025813692480359,
+  "agent_score": null,
+  "scored_levels": 3,
+  "required_levels": 6,
+  "agent_score_status": "incomplete",
   "by_level": {
     "L1": {
       "total": 11,
       "score": 0.5855218855218854,
+      "applied_metrics": 3,
       "metrics": {
         "ToolAcc": {
           "score": 0.9090909090909091,
           "status": "ok",
-          "in_score": true
+          "in_score": true,
+          "n_tasks": 11,
+          "n_scored": 11,
+          "n_errors": 0,
+          "task_spread": {
+            "n_perfect": 10,
+            "n_zero": 1,
+            "n_partial": 0
+          }
         },
         "CallEM": {
           "score": 0.2727272727272727,
           "status": "ok",
-          "in_score": true
+          "in_score": true,
+          "n_tasks": 11,
+          "n_scored": 11,
+          "n_errors": 0,
+          "task_spread": {
+            "n_perfect": 3,
+            "n_zero": 8,
+            "n_partial": 0
+          }
         },
         "ArgF1_det": {
           "score": 0.5747474747474747,
           "status": "ok",
-          "in_score": true
+          "in_score": true,
+          "n_tasks": 11,
+          "n_scored": 11,
+          "n_errors": 0,
+          "task_spread": {
+            "n_perfect": 3,
+            "n_zero": 3,
+            "n_partial": 5
+          }
         },
         "SR": {
           "score": null,
@@ -67,26 +95,59 @@
     "L3": {
       "total": 10,
       "score": 0.5222222222222223,
+      "applied_metrics": 3,
       "metrics": {
         "FSM_strict": {
           "score": 0.4,
           "status": "ok",
-          "in_score": true
+          "in_score": true,
+          "n_tasks": 10,
+          "n_scored": 10,
+          "n_errors": 0,
+          "task_spread": {
+            "n_perfect": 4,
+            "n_zero": 6,
+            "n_partial": 0
+          }
         },
         "PSM": {
           "score": 0.8666666666666666,
           "status": "ok",
-          "in_score": true
+          "in_score": true,
+          "n_tasks": 10,
+          "n_scored": 10,
+          "n_errors": 0,
+          "task_spread": {
+            "n_perfect": 8,
+            "n_zero": 1,
+            "n_partial": 1
+          }
         },
         "ΔSteps_norm": {
           "score": 0.3,
           "status": "ok",
-          "in_score": true
+          "in_score": true,
+          "n_tasks": 10,
+          "n_scored": 10,
+          "n_errors": 0,
+          "task_spread": {
+            "n_perfect": 1,
+            "n_zero": 5,
+            "n_partial": 4
+          }
         },
         "FSM_prefix": {
           "score": 0.8,
           "status": "ok",
-          "in_score": false
+          "in_score": false,
+          "n_tasks": 10,
+          "n_scored": 10,
+          "n_errors": 0,
+          "task_spread": {
+            "n_perfect": 8,
+            "n_zero": 2,
+            "n_partial": 0
+          }
         },
         "SR": {
           "score": null,
@@ -122,18 +183,48 @@
         "RespOK": {
           "score": 0.9,
           "status": "ok",
-          "in_score": false
+          "in_score": false,
+          "n_tasks": 10,
+          "n_scored": 10,
+          "n_errors": 0,
+          "task_spread": {
+            "n_perfect": 9,
+            "n_zero": 1,
+            "n_partial": 0
+          }
         }
       }
     },
     "L6": {
       "total": 15,
-      "score": 1.0,
+      "score": 0.0,
+      "applied_metrics": 1,
       "metrics": {
-        "RedundantCallRate": {
-          "score": 1.0,
+        "ToolAcc": {
+          "score": 0.0,
           "status": "ok",
-          "in_score": true
+          "in_score": true,
+          "n_tasks": 15,
+          "n_scored": 15,
+          "n_errors": 0,
+          "task_spread": {
+            "n_perfect": 0,
+            "n_zero": 15,
+            "n_partial": 0
+          }
+        },
+        "RedundantCallRate": {
+          "score": null,
+          "status": "not_applicable",
+          "in_score": true,
+          "n_tasks": 15,
+          "n_scored": 0,
+          "n_errors": 0,
+          "task_spread": {
+            "n_perfect": 0,
+            "n_zero": 0,
+            "n_partial": 0
+          }
         },
         "SR": {
           "score": null,
@@ -169,14 +260,53 @@
         "RespOK": {
           "score": 1.0,
           "status": "ok",
-          "in_score": false
+          "in_score": false,
+          "n_tasks": 15,
+          "n_scored": 15,
+          "n_errors": 0,
+          "task_spread": {
+            "n_perfect": 15,
+            "n_zero": 0,
+            "n_partial": 0
+          }
         }
       }
     },
     "L7": {
       "total": 10,
       "score": null,
+      "applied_metrics": 0,
       "metrics": {
+        "ContextRetention_det": {
+          "score": null,
+          "status": "not_applicable",
+          "in_score": false,
+          "n_tasks": 10,
+          "n_scored": 0,
+          "n_errors": 0,
+          "task_spread": {
+            "n_perfect": 0,
+            "n_zero": 0,
+            "n_partial": 0
+          }
+        },
+        "ResultFieldCoverage_det": {
+          "score": null,
+          "status": "not_applicable",
+          "in_score": false,
+          "n_tasks": 10,
+          "n_scored": 0,
+          "n_errors": 0,
+          "task_spread": {
+            "n_perfect": 0,
+            "n_zero": 0,
+            "n_partial": 0
+          },
+          "fields_required": 0,
+          "fields_checked": 0,
+          "fields_excluded_long_text": 0,
+          "fields_unresolved": 0
+        },
         "SR": {
           "score": null,
           "status": "judge_missing",
@@ -211,9 +341,18 @@
         "RespOK": {
           "score": 1.0,
           "status": "ok",
-          "in_score": false
+          "in_score": false,
+          "n_tasks": 10,
+          "n_scored": 10,
+          "n_errors": 0,
+          "task_spread": {
+            "n_perfect": 10,
+            "n_zero": 0,
+            "n_partial": 0
+          }
         }
-      }
+      },
+      "unscorable_reason": "all_not_applicable"
     }
   },
   "runner_survival_rate": {
