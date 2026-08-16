@@ -3,6 +3,7 @@
 패키지 import 없이 파일 경로에서 직접 로드한다.
 """
 
+import ast
 import contextlib
 import copy
 import importlib.util
@@ -12,6 +13,7 @@ import os
 import sys
 import tempfile
 from pathlib import Path
+from typing import Any, Dict, List
 
 
 SCORING_DIR = Path(__file__).resolve().parents[1] / "scoring"
@@ -21,6 +23,7 @@ TIMEOUT_CONFIG_PATH = (
     CUSTOM_DIR / "runner_timeout_config.py"
 )
 RESULT_OBSERVABILITY_PATH = CUSTOM_DIR / "result_observability.py"
+RUNNER_PATH = CUSTOM_DIR / "run_gpustack_benchmark_with_logging.py"
 
 
 def _load_module(name):
@@ -57,6 +60,30 @@ _result_spec = importlib.util.spec_from_file_location(
 )
 result_observability = importlib.util.module_from_spec(_result_spec)
 _result_spec.loader.exec_module(result_observability)
+
+
+def _load_runner_helpers():
+    """Load pure runner helpers without importing optional benchmark dependencies."""
+    parsed = ast.parse(RUNNER_PATH.read_text(encoding="utf-8"), filename=str(RUNNER_PATH))
+    wanted = {"convert_dataset_to_tasks", "simplify_result"}
+    functions = [
+        node
+        for node in parsed.body
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name in wanted
+    ]
+    namespace = {
+        "Any": Any,
+        "Dict": Dict,
+        "List": List,
+        "json": json,
+        "completion_latency_from_task": result_observability.completion_latency_from_task,
+        "finish_reason_fields": result_observability.finish_reason_fields,
+    }
+    exec(compile(ast.Module(body=functions, type_ignores=[]), str(RUNNER_PATH), "exec"), namespace)
+    return namespace
+
+
+runner_helpers = _load_runner_helpers()
 
 
 class DummyContext:
@@ -159,6 +186,54 @@ def test_result_observability_builders():
         "level truncation count must be an integer",
     )
     _assert(metadata["tasks_with_length_finish_reason"] == 1, "truncated task count mismatch")
+
+
+def test_conversion_preserves_source_tools_and_keeps_required_tools():
+    source = {
+        "task_id": "L2-test",
+        "golden_action": [{"tool": "GoldenTool", "args": {}}],
+        "available_tools": ["DistractorTool", "GoldenTool"],
+        "conversation_tracking": {
+            "turns": [{"action": {"tool": "HistoryTool", "args": {}}}]
+        },
+        "fallback_options": [{"tool": "FallbackTool"}],
+    }
+    converted = runner_helpers["convert_dataset_to_tasks"]([source])[0]
+    _assert(
+        converted["available_tools"]
+        == ["GoldenTool", "HistoryTool", "DistractorTool", "FallbackTool"],
+        "conversion dropped or reordered an exposed tool",
+    )
+    _assert(converted["tools"] == converted["available_tools"], "tools alias mismatch")
+    _assert(
+        converted["expected_tools"] == ["GoldenTool", "HistoryTool"],
+        "legacy expected tool set changed",
+    )
+
+
+def test_conversion_without_source_available_tools_keeps_legacy_exposure():
+    source = {
+        "task_id": "L3-test",
+        "golden_action": [{"tool": "FirstTool"}, {"tool": "SecondTool"}],
+        "conversation_tracking": {
+            "turns": [{"actions": [{"tool": "HistoryTool"}]}]
+        },
+    }
+    converted = runner_helpers["convert_dataset_to_tasks"]([source])[0]
+    legacy_tools = ["FirstTool", "SecondTool", "HistoryTool"]
+    _assert(converted["available_tools"] == legacy_tools, "legacy exposure changed")
+    _assert(converted["expected_tools"] == legacy_tools, "legacy expected tools changed")
+
+
+def test_simplified_artifact_records_exposed_candidate_set():
+    simplified = runner_helpers["simplify_result"](
+        {
+            "expected_tools": ["GoldenTool"],
+            "exposed_tools": ["GoldenTool", "DistractorA", "DistractorB"],
+        }
+    )
+    _assert(simplified["expected_tools"] == ["GoldenTool"], "expected_tools changed")
+    _assert(len(simplified["exposed_tools"]) == 3, "exposed candidate count was not saved")
 
 
 def test_old_ttft_summary_reader_does_not_crash():
@@ -347,6 +422,26 @@ def test_context_exposes_l7_ground_truth_with_empty_defaults():
     empty_schema, _logs = scoring_context.task_to_schema_and_logs({})
     for key in expected:
         _assert(empty_schema[key] == [], f"{key} default must be []")
+
+
+def test_context_prefers_persisted_exposed_tools_with_legacy_fallback():
+    task_schema, _logs = scoring_context.task_to_schema_and_logs(
+        {
+            "expected_tools": ["GoldenTool"],
+            "exposed_tools": ["GoldenTool", "DistractorTool"],
+        }
+    )
+    _assert(
+        task_schema["available_tools"] == ["GoldenTool", "DistractorTool"],
+        "scoring context ignored exposed_tools",
+    )
+    legacy_schema, _logs = scoring_context.task_to_schema_and_logs(
+        {"expected_tools": ["GoldenTool"]}
+    )
+    _assert(
+        legacy_schema["available_tools"] == ["GoldenTool"],
+        "legacy expected_tools fallback changed",
+    )
 
 
 def test_v3_task_data_prefers_persisted_fields_without_join():
@@ -1565,6 +1660,27 @@ def test_validator_accepts_v2_plus_v3_summary():
     _assert(not failures, f"v2+v3 summary failed validation: {failures}")
 
 
+def test_validator_warns_on_single_candidate_l2_without_failing():
+    with tempfile.TemporaryDirectory() as temp_dir:
+        results_dir = Path(temp_dir)
+        _write_validation_fixture(results_dir, _validation_summary())
+        l2_path = results_dir / "L2.json"
+        l2 = json.loads(l2_path.read_text(encoding="utf-8"))
+        l2["results"] = [
+            {"task_id": "L2-one", "exposed_tools": ["OnlyTool"]},
+            {"task_id": "L2-many", "exposed_tools": ["GoldenTool", "DistractorTool"]},
+        ]
+        l2_path.write_text(json.dumps(l2), encoding="utf-8")
+        failures, warnings = validate_run.validate_results_dir(results_dir)
+    _assert(not failures, f"single-candidate warning failed validation: {failures}")
+    candidate_warnings = [warning for warning in warnings if "exposed tool candidate" in warning]
+    _assert(
+        candidate_warnings
+        == ["L2 task L2-one has only one exposed tool candidate"],
+        f"single-candidate warnings mismatch: {candidate_warnings}",
+    )
+
+
 def test_validator_rejects_perturbed_v3_agent_score():
     summary = _validation_summary_with_v3()
     summary["scoring_v3"]["agent_score"] += 0.001
@@ -1860,6 +1976,9 @@ TESTS = [
     test_runner_timeout_guard_rejects_non_greater_task_budget,
     test_runner_timeout_guard_accepts_greater_task_budget,
     test_result_observability_builders,
+    test_conversion_preserves_source_tools_and_keeps_required_tools,
+    test_conversion_without_source_available_tools_keeps_legacy_exposure,
+    test_simplified_artifact_records_exposed_candidate_set,
     test_old_ttft_summary_reader_does_not_crash,
     test_fsm_prefix_exact_match,
     test_fsm_prefix_with_extra_calls,
@@ -1870,6 +1989,7 @@ TESTS = [
     test_mean_all_none,
     test_in_score_false_excluded,
     test_context_exposes_l7_ground_truth_with_empty_defaults,
+    test_context_prefers_persisted_exposed_tools_with_legacy_fallback,
     test_v3_task_data_prefers_persisted_fields_without_join,
     test_v3_task_data_join_rejects_missing_and_duplicate_task_ids,
     test_redundant_call_rate_empty_without_bench,
@@ -1921,6 +2041,7 @@ TESTS = [
     test_applied_metrics_counts_only_scored_in_score_metrics,
     test_v2_only_summary_is_still_readable,
     test_validator_accepts_v2_plus_v3_summary,
+    test_validator_warns_on_single_candidate_l2_without_failing,
     test_validator_rejects_perturbed_v3_agent_score,
     test_validator_rejects_wrong_v3_in_score_metric_set,
     test_validator_main_nonexistent_results_dir_exits_2,

@@ -28,9 +28,9 @@ def task_to_schema_and_logs(task_result: Dict[str, Any]):
         "long_term_tests": task_result.get("long_term_tests", []),
         "minimum_steps": task_result.get("minimum_steps"),
         "data_flow": task_result.get("data_flow", []),
-        # Known L2 defect: runner conversion drops source available_tools and leaves
-        # only expected_tools (the correct tool). Fix separately; do not reweight L2.
-        "available_tools": task_result.get("expected_tools", []),
+        "available_tools": task_result.get(
+            "exposed_tools", task_result.get("expected_tools", [])
+        ),
         "error_injection": task_result.get("error_injection"),
         "fallback_options": task_result.get("fallback_options", []),
         "resp_schema": task_result.get("resp_schema"),

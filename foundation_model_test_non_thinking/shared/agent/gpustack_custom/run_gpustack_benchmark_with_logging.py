@@ -112,7 +112,8 @@ def convert_dataset_to_tasks(dataset_tasks: List[Dict]) -> List[Dict]:
             print(f"[WARNING] Skipping non-dict task: {type(task)}")
             continue
             
-        # Extract required tools from golden_action OR conversation_tracking
+        # Keep the legacy expected set separate from every tool the task may expose.
+        # expected_tools remains golden/conversation-derived for artifact compatibility.
         tools_needed = []
         
         # First, try golden_action (L1-L6)
@@ -143,8 +144,25 @@ def convert_dataset_to_tasks(dataset_tasks: List[Dict]) -> List[Dict]:
                         tools_needed.append(tool_name)
                         print(f"  [OK] Found tool in turn.action: {tool_name}")
         
+        expected_tools = list(tools_needed)
+        exposed_tools = list(expected_tools)
+
+        # L2 source tasks declare distractors in available_tools. Preserve those
+        # candidates without dropping any golden or conversation-derived tools.
+        for tool_name in task.get("available_tools") or []:
+            if tool_name and tool_name not in exposed_tools:
+                exposed_tools.append(tool_name)
+
+        # L5 fallback tools are registered and may be exposed after a failed call.
+        for fallback_option in task.get("fallback_options") or []:
+            if not isinstance(fallback_option, dict):
+                continue
+            tool_name = fallback_option.get("tool")
+            if tool_name and tool_name not in exposed_tools:
+                exposed_tools.append(tool_name)
+
         # 선언된 도구 이름을 그대로 사용
-        print(f"  [INFO] Task {task.get('task_id')}: tools_needed = {tools_needed}")
+        print(f"  [INFO] Task {task.get('task_id')}: exposed_tools = {exposed_tools}")
 
         conversation_tracking = task.get("conversation_tracking") or {}
         evaluation_context = conversation_tracking.get("evaluation_context") or {}
@@ -153,9 +171,10 @@ def convert_dataset_to_tasks(dataset_tasks: List[Dict]) -> List[Dict]:
             "id": task.get("task_id", "unknown"),
             "description": task.get("instruction", ""),
             "expected_output": task.get("resp_schema", {}),
-            "available_tools": tools_needed,
+            "available_tools": exposed_tools,
             # keep backward-compat with runner that expects 'tools'
-            "tools": tools_needed,
+            "tools": exposed_tools,
+            "expected_tools": expected_tools,
             "level": task.get("task_level", 0),
             "category": task.get("task_category", "unknown"),
             "golden_action": task.get("golden_action", []),
@@ -204,6 +223,7 @@ def simplify_result(result: Dict[str, Any]) -> Dict[str, Any]:
         "steps_taken": result.get("steps_taken", 0),
         "error": result.get("error"),
         "expected_tools": result.get("expected_tools", []),
+        "exposed_tools": result.get("exposed_tools", []),
         "golden_action": result.get("golden_action", []),
         "golden_fields": result.get("golden_fields", []),
         "context_tests": result.get("context_tests", []),
@@ -567,7 +587,8 @@ def run_benchmark_on_dataset(
         print(f"Task {i}/{len(converted_tasks)}: {task['id']}")
         print(f"Level: {task['level']} | Category: {task['category']}")
         print(f"Instruction: {task['description']}")
-        print(f"Expected tools: {task['available_tools']}")
+        print(f"Expected tools: {task['expected_tools']}")
+        print(f"Exposed tools: {task['available_tools']}")
         
         # Log multi-turn conversation context if present
         if task.get("conversation_tracking") and isinstance(task["conversation_tracking"].get("turns"), list):
@@ -623,7 +644,8 @@ def run_benchmark_on_dataset(
             result['instruction'] = task['description']
             result['level'] = task['level']
             result['category'] = task['category']
-            result['expected_tools'] = task['available_tools']
+            result['expected_tools'] = task['expected_tools']
+            result['exposed_tools'] = task['available_tools']
             result['golden_action'] = task['golden_action']
             result['golden_fields'] = task['golden_fields']
             result['context_tests'] = task['context_tests']
@@ -696,7 +718,8 @@ def run_benchmark_on_dataset(
                 "instruction": task.get('description', ''),
                 "level": task.get('level', 0),
                 "category": task.get('category', 'unknown'),
-                "expected_tools": task.get('available_tools', []),
+                "expected_tools": task.get('expected_tools', []),
+                "exposed_tools": task.get('available_tools', []),
                 "golden_action": task.get('golden_action', []),
                 "golden_fields": task.get('golden_fields', []),
                 "context_tests": task.get('context_tests', []),

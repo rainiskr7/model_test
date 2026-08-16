@@ -259,6 +259,21 @@ def validate_results_dir(results_dir: Path) -> Tuple[List[str], List[str]]:
 
     if not raw_levels:
         failures.append("no direct L1.json ... L7.json raw level files found")
+
+    l2_select_acc = ((by_level.get("L2") or {}).get("metrics") or {}).get("SelectAcc")
+    if isinstance(l2_select_acc, dict) and _is_finite_score(l2_select_acc.get("score")):
+        l2_results = (raw_levels.get("L2") or {}).get("results") or []
+        if isinstance(l2_results, list):
+            for task in l2_results:
+                if not isinstance(task, dict):
+                    continue
+                exposed_tools = task.get("exposed_tools")
+                if isinstance(exposed_tools, list) and len(exposed_tools) == 1:
+                    task_id = task.get("task_id", "unknown")
+                    warnings.append(
+                        f"L2 task {task_id} has only one exposed tool candidate"
+                    )
+
     summary_native = summary.get("native_tool_calling")
     if not isinstance(summary_native, bool):
         failures.append("summary native_tool_calling must be a boolean")
