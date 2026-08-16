@@ -15,6 +15,7 @@ import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+import openai
 from openai import OpenAI
 from .base_adapter import BaseAdapter
 from .tool_call_parser import extract_tool_calls
@@ -76,7 +77,15 @@ class OpenAICompatAdapter(BaseAdapter):
 
         # Explicit config wins; else OPENAI_API_KEY from environment (.env via load_dotenv).
         api_key = config.get("api_key") or os.getenv("OPENAI_API_KEY") or "EMPTY"
-        self.client = OpenAI(base_url=self.base_url, api_key=api_key)
+        # Keep the harness as the only retry layer. Otherwise the SDK's two hidden
+        # retries multiply every BenchmarkRunner attempt into three HTTP sends.
+        self.openai_sdk_version = openai.__version__
+        self.client = OpenAI(
+            base_url=self.base_url,
+            api_key=api_key,
+            max_retries=0,
+        )
+        self.sdk_max_retries = self.client.max_retries
 
         # 평가 default: 결정론적 (codex 권장 — temp=0.0 메인, 분산 제거 비교 기준선)
         # agent pass@k 보조 트랙은 호출 시 temperature=0.3~0.7로 override
@@ -221,6 +230,8 @@ class OpenAICompatAdapter(BaseAdapter):
         tool_calls = extract_tool_calls(content)
         if tool_calls:
             canonical["message"]["tool_calls"] = tool_calls
-            canonical["finish_reason"] = "tool_calls"
+            # A parsed tool call must not conceal provider-reported truncation.
+            if canonical.get("finish_reason") != "length":
+                canonical["finish_reason"] = "tool_calls"
 
         return canonical

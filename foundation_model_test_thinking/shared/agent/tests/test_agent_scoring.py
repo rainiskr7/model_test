@@ -14,6 +14,11 @@ from pathlib import Path
 
 
 SCORING_DIR = Path(__file__).resolve().parents[1] / "scoring"
+CUSTOM_DIR = Path(__file__).resolve().parents[1] / "gpustack_custom"
+TIMEOUT_CONFIG_PATH = (
+    CUSTOM_DIR / "runner_timeout_config.py"
+)
+RESULT_OBSERVABILITY_PATH = CUSTOM_DIR / "result_observability.py"
 
 
 def _load_module(name):
@@ -38,6 +43,18 @@ score_run = _load_module("score_run")
 validate_run = _load_module("validate_run")
 scoring_context = _load_module("context")
 
+_timeout_spec = importlib.util.spec_from_file_location(
+    "runner_timeout_config_under_test", TIMEOUT_CONFIG_PATH
+)
+runner_timeout_config = importlib.util.module_from_spec(_timeout_spec)
+_timeout_spec.loader.exec_module(runner_timeout_config)
+
+_result_spec = importlib.util.spec_from_file_location(
+    "result_observability_under_test", RESULT_OBSERVABILITY_PATH
+)
+result_observability = importlib.util.module_from_spec(_result_spec)
+_result_spec.loader.exec_module(result_observability)
+
 
 class DummyContext:
     def __init__(self, golden_action=None, action_trace=None, task_schema=None, logs=None):
@@ -55,6 +72,100 @@ def _assert(condition, message):
 def _assert_close(actual, expected, message):
     if actual is None or abs(actual - expected) > 1e-9:
         raise AssertionError(f"{message}: expected {expected}, got {actual}")
+
+
+def test_runner_request_timeout_parse_default_and_override():
+    defaults = runner_timeout_config.parse_args([])
+    overridden = runner_timeout_config.parse_args(["--request-timeout", "300"])
+    _assert(defaults.request_timeout == 60, "request timeout default must be 60")
+    _assert(overridden.request_timeout == 300, "request timeout flag was ignored")
+
+
+def test_runner_max_retries_parse_default_and_override():
+    defaults = runner_timeout_config.parse_args([])
+    overridden = runner_timeout_config.parse_args(["--max-retries", "4"])
+    _assert(defaults.max_retries == 2, "max retries default must be 2")
+    _assert(overridden.max_retries == 4, "max retries flag was ignored")
+
+
+def test_runner_adapter_config_contains_request_timeout():
+    # adapter_config 는 "request_timeout" 키로 나른다. "timeout" 을 쓰면
+    # run_benchmark_on_dataset(timeout=태스크예산) 의 명명 인자와 충돌해
+    # TypeError: got multiple values for keyword argument 'timeout' 이 난다.
+    args = runner_timeout_config.parse_args(["--request-timeout", "300"])
+    config = runner_timeout_config.build_adapter_config(args)
+    _assert(config.get("request_timeout") == 300, "adapter timeout plumbing mismatch")
+    _assert("timeout" not in config, "adapter_config must not carry a 'timeout' key")
+
+
+def test_runner_adapter_config_maps_to_adapter_timeout():
+    # 러너가 어댑터 생성 직전에 하는 변환을 그대로 재현한다.
+    args = runner_timeout_config.parse_args(["--request-timeout", "250"])
+    config = dict(runner_timeout_config.build_adapter_config(args))
+    if "request_timeout" in config:
+        config["timeout"] = config.pop("request_timeout")
+    _assert(config.get("timeout") == 250, "request_timeout must map to adapter timeout")
+
+
+def test_runner_timeout_guard_rejects_non_greater_task_budget():
+    for task_timeout in (299, 300):
+        stderr = io.StringIO()
+        with contextlib.redirect_stderr(stderr):
+            rc = runner_timeout_config.main(
+                ["--timeout", str(task_timeout), "--request-timeout", "300"]
+            )
+        _assert(rc != 0, "non-greater task/request timeouts must fail")
+        _assert(stderr.getvalue().startswith("[ERROR] "), "guard error prefix mismatch")
+
+
+def test_runner_timeout_guard_accepts_greater_task_budget():
+    stdout = io.StringIO()
+    with contextlib.redirect_stdout(stdout):
+        rc = runner_timeout_config.main(
+            ["--timeout", "301", "--request-timeout", "300"]
+        )
+    _assert(rc == 0, "greater task timeout must be accepted")
+
+
+def test_result_observability_builders():
+    raw_result = {
+        "ttft_stats": {"average": 1.5, "min": 1.0, "max": 2.0, "count": 2},
+        "result": {
+            "steps": [
+                {"llm_response": {"finish_reason": "length"}},
+                {"llm_response": {"finish_reason": "stop"}},
+            ]
+        },
+    }
+    task_fields = {
+        "completion_latency": result_observability.completion_latency_from_task(raw_result),
+        **result_observability.finish_reason_fields(raw_result),
+    }
+    metadata = result_observability.build_observability_metadata([task_fields])
+
+    _assert("completion_latency" in metadata, "completion latency metadata missing")
+    _assert("ttft" not in metadata, "new metadata must not emit the old ttft key")
+    _assert(task_fields["last_finish_reason"] == "stop", "last finish reason mismatch")
+    _assert(
+        isinstance(task_fields["length_finish_reason_count"], int),
+        "per-task truncation count must be an integer",
+    )
+    _assert(task_fields["length_finish_reason_count"] == 1, "length finish count mismatch")
+    _assert(
+        isinstance(metadata["tasks_with_length_finish_reason"], int),
+        "level truncation count must be an integer",
+    )
+    _assert(metadata["tasks_with_length_finish_reason"] == 1, "truncated task count mismatch")
+
+
+def test_old_ttft_summary_reader_does_not_crash():
+    old_summary = {
+        "metadata": {
+            "ttft": {"average": 3.0, "min": 2.0, "max": 4.0, "unit": "seconds"}
+        }
+    }
+    latency = result_observability.read_completion_latency(old_summary)
+    _assert(latency["average"] == 3.0, "legacy ttft compatibility read mismatch")
 
 
 def _task_spread(score):
@@ -1228,7 +1339,136 @@ def test_arg_f1_det_or_skip():
     _assert_close(extra_metrics.arg_f1_det(ctx), 1.0, "arg_f1_det")
 
 
+def _runner_source():
+    return (CUSTOM_DIR / "run_gpustack_benchmark_with_logging.py").read_text()
+
+
+def _timeout_config_source():
+    return TIMEOUT_CONFIG_PATH.read_text()
+
+
+def _adapter_source():
+    return (CUSTOM_DIR / "openai_compat_adapter.py").read_text()
+
+
+def test_runner_passes_max_retries_to_benchmark_runner():
+    import ast
+
+    runner = ast.parse(_runner_source())
+    calls = [
+        node for node in ast.walk(runner)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "BenchmarkRunner"
+    ]
+    _assert(calls, "BenchmarkRunner construction disappeared")
+    keyword = next(
+        (kw for kw in calls[0].keywords if kw.arg == "max_retries"),
+        None,
+    )
+    _assert(keyword is not None, "BenchmarkRunner does not receive max_retries")
+    _assert(
+        isinstance(keyword.value, ast.Name) and keyword.value.id == "max_retries",
+        "BenchmarkRunner must receive the run_benchmark_on_dataset max_retries argument",
+    )
+
+    run_calls = [
+        node for node in ast.walk(runner)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "run_benchmark_on_dataset"
+    ]
+    _assert(run_calls, "run_benchmark_on_dataset call disappeared")
+    run_keyword = next(
+        (kw for kw in run_calls[0].keywords if kw.arg == "max_retries"),
+        None,
+    )
+    _assert(run_keyword is not None, "CLI max_retries is not passed to the dataset runner")
+    _assert(
+        isinstance(run_keyword.value, ast.Attribute)
+        and isinstance(run_keyword.value.value, ast.Name)
+        and run_keyword.value.value.id == "args"
+        and run_keyword.value.attr == "max_retries",
+        "dataset runner must receive args.max_retries",
+    )
+
+
+def test_adapter_disables_openai_sdk_retries():
+    import ast
+
+    adapter = ast.parse(_adapter_source())
+    calls = [
+        node for node in ast.walk(adapter)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "OpenAI"
+    ]
+    _assert(calls, "OpenAI client construction disappeared")
+    retry_keywords = [
+        kw for call in calls for kw in call.keywords if kw.arg == "max_retries"
+    ]
+    _assert(retry_keywords, "OpenAI client no longer sets max_retries explicitly")
+    _assert(
+        all(isinstance(kw.value, ast.Constant) and kw.value.value == 0
+            for kw in retry_keywords),
+        "OpenAI SDK max_retries must be the literal 0",
+    )
+
+
+def test_adapter_config_keys_do_not_collide_with_call_site():
+    """adapter_config 키가 run_benchmark_on_dataset 의 명명 인자와 겹치면 안 된다.
+
+    겹치면 `f(timeout=..., **adapter_config)` 가
+    TypeError: got multiple values for keyword argument 'timeout' 로 죽는다.
+    러너는 vendored bench 없이 import 되지 않아 단위 테스트로 못 덮는 구간이라
+    소스를 AST 로 정적 검사한다.
+    """
+    import ast
+
+    runner = ast.parse(_runner_source())
+    fn = next(
+        (n for n in ast.walk(runner)
+         if isinstance(n, ast.FunctionDef) and n.name == "run_benchmark_on_dataset"),
+        None,
+    )
+    _assert(fn is not None, "run_benchmark_on_dataset 를 찾지 못했다")
+    params = {a.arg for a in fn.args.args} | {a.arg for a in fn.args.kwonlyargs}
+
+    cfg = ast.parse(_timeout_config_source())
+    build = next(
+        (n for n in ast.walk(cfg)
+         if isinstance(n, ast.FunctionDef) and n.name == "build_adapter_config"),
+        None,
+    )
+    _assert(build is not None, "build_adapter_config 를 찾지 못했다")
+
+    keys = set()
+    for node in ast.walk(build):
+        if isinstance(node, ast.Assign):
+            for tgt in node.targets:
+                if (isinstance(tgt, ast.Subscript)
+                        and isinstance(tgt.value, ast.Name)
+                        and tgt.value.id == "adapter_config"
+                        and isinstance(tgt.slice, ast.Constant)):
+                    keys.add(tgt.slice.value)
+
+    _assert(keys, "build_adapter_config 에서 키를 하나도 못 찾았다 — 검사가 무력화됐다")
+    clash = keys & params
+    _assert(not clash, f"adapter_config 키가 호출부 인자와 충돌: {sorted(clash)}")
+
+
 TESTS = [
+    test_runner_request_timeout_parse_default_and_override,
+    test_runner_max_retries_parse_default_and_override,
+    test_runner_adapter_config_contains_request_timeout,
+    test_runner_adapter_config_maps_to_adapter_timeout,
+    test_runner_passes_max_retries_to_benchmark_runner,
+    test_adapter_disables_openai_sdk_retries,
+    test_adapter_config_keys_do_not_collide_with_call_site,
+    test_runner_timeout_guard_rejects_non_greater_task_budget,
+    test_runner_timeout_guard_accepts_greater_task_budget,
+    test_result_observability_builders,
+    test_old_ttft_summary_reader_does_not_crash,
     test_fsm_prefix_exact_match,
     test_fsm_prefix_with_extra_calls,
     test_fsm_prefix_wrong_order,

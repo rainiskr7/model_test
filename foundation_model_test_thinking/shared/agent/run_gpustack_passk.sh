@@ -34,6 +34,11 @@ cp -u "$SCRIPT_DIR/gpustack_custom/openai_compat_adapter.py" \
       "$KOA_DIR/bench/adapters/openai_compat_adapter.py"
 cp "$SCRIPT_DIR/gpustack_custom/tool_call_parser.py" \
    "$KOA_DIR/bench/adapters/tool_call_parser.py"
+# 러너가 import 하는 timeout 설정 모듈 (없으면 ModuleNotFoundError)
+cp "$SCRIPT_DIR/gpustack_custom/runner_timeout_config.py" \
+   "$KOA_DIR/runner_timeout_config.py"
+cp "$SCRIPT_DIR/gpustack_custom/result_observability.py" \
+   "$KOA_DIR/result_observability.py"
 # adapter 가 import 하는 reasoning 모듈도 함께 복사 (없으면 ModuleNotFoundError)
 cp -u "$SCRIPT_DIR/gpustack_custom/reasoning.py" \
       "$KOA_DIR/bench/adapters/reasoning.py"

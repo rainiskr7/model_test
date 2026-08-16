@@ -13,6 +13,7 @@ import json
 import os
 from typing import Any, Dict, List, Optional
 
+import openai
 from openai import OpenAI
 from .base_adapter import BaseAdapter
 from .reasoning import split_reasoning, message_content_and_reasoning
@@ -35,7 +36,15 @@ class OpenAICompatAdapter(BaseAdapter):
 
         # Explicit config wins; else OPENAI_API_KEY from environment (.env via load_dotenv).
         api_key = config.get("api_key") or os.getenv("OPENAI_API_KEY") or "EMPTY"
-        self.client = OpenAI(base_url=self.base_url, api_key=api_key)
+        # Keep the harness as the only retry layer. Otherwise the SDK's two hidden
+        # retries multiply every BenchmarkRunner attempt into three HTTP sends.
+        self.openai_sdk_version = openai.__version__
+        self.client = OpenAI(
+            base_url=self.base_url,
+            api_key=api_key,
+            max_retries=0,
+        )
+        self.sdk_max_retries = self.client.max_retries
 
         # thinking 모델 default: 권장 sampling (THINK_* env). greedy 는 thinking 에서
         # 반복·퇴화를 유발하므로 temp 0.6 / top_p 0.95 / top_k 20 기본.
@@ -200,6 +209,8 @@ class OpenAICompatAdapter(BaseAdapter):
         tool_calls = extract_tool_calls(content)
         if tool_calls:
             canonical["message"]["tool_calls"] = tool_calls
-            canonical["finish_reason"] = "tool_calls"
+            # A parsed tool call must not conceal provider-reported truncation.
+            if canonical.get("finish_reason") != "length":
+                canonical["finish_reason"] = "tool_calls"
 
         return canonical

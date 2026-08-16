@@ -10,6 +10,7 @@ import argparse
 import json
 import glob
 import logging
+import sys
 from datetime import datetime
 from pathlib import Path
 from typing import Any, List, Optional, Type, Dict
@@ -26,6 +27,17 @@ from bench.tools.base_api import BaseTool
 from bench.models import MODEL_IDS
 from bench.tools.tool_catalog import resolve_tool_classes, TOOL_CATALOG
 from bench.config import set_cache_mode
+from runner_timeout_config import (
+    TimeoutConfigurationError,
+    add_timeout_arguments,
+    build_adapter_config,
+    validate_timeouts,
+)
+from result_observability import (
+    build_observability_metadata,
+    completion_latency_from_task,
+    finish_reason_fields,
+)
 
 # Import API keys from secrets
 from configs.secrets import (
@@ -209,13 +221,9 @@ def simplify_result(result: Dict[str, Any]) -> Dict[str, Any]:
             "completion_tokens": 0,
             "total_tokens": 0
         }),
-        "ttft_stats": result.get("ttft_stats", { 
-            "average": 0,
-            "min": 0,
-            "max": 0,
-            "count": 0
-        }),
+        "completion_latency": completion_latency_from_task(result),
     }
+    simplified.update(finish_reason_fields(result))
     
     # Extract tool calls in a simplified format with results
     tool_calls = []
@@ -294,6 +302,13 @@ def save_detailed_results(
     run_timestamp: str = None,
     track_name: str = "agent",
     native_tool_calling: bool = False,
+    *,
+    request_timeout: float,
+    task_timeout: float,
+    max_tokens: int,
+    max_retries: int,
+    openai_sdk_version: str,
+    sdk_max_retries: int,
 ) -> str:
     """Save detailed benchmark results including tool call information.
 
@@ -311,6 +326,12 @@ def save_detailed_results(
         run_timestamp: Timestamp for the run (if None, uses EVAL_TIMESTAMP env or now)
         track_name: Subfolder under language/ (default 'agent')
         native_tool_calling: Whether native OpenAI-compatible tool calling was enabled
+        request_timeout: Timeout used for each HTTP chat-completion request
+        task_timeout: Timeout used for each whole task
+        max_tokens: Completion token limit used by the adapter
+        max_retries: Logical-call attempt count used by the benchmark runner
+        openai_sdk_version: Installed OpenAI Python SDK version
+        sdk_max_retries: OpenAI SDK retry count actually configured on the client
 
     Returns:
         Path to saved JSON file
@@ -353,26 +374,18 @@ def save_detailed_results(
     total_completion_tokens = 0
     total_tokens = 0
 
-    # TTFT 통계 수집
-    all_ttft_values = []
-
     for result in simplified_results:
         token_usage = result.get('token_usage', {})
         total_prompt_tokens += token_usage.get('prompt_tokens', 0)
         total_completion_tokens += token_usage.get('completion_tokens', 0)
         total_tokens += token_usage.get('total_tokens', 0)
         
-        ttft_stats = result.get('ttft_stats', {})
-        avg_ttft = ttft_stats.get('average', 0)
-        if avg_ttft > 0:
-            all_ttft_values.append(avg_ttft)
-
     # TPS 계산
     average_tps = total_tokens / total_time if total_time > 0 else 0
 
-    average_ttft = sum(all_ttft_values) / len(all_ttft_values) if all_ttft_values else 0
-    min_ttft = min(all_ttft_values) if all_ttft_values else 0
-    max_ttft = max(all_ttft_values) if all_ttft_values else 0
+    # Requests are synchronous and non-streaming, so these measurements are full
+    # completion latency. Real TTFT requires streaming and is not currently measured.
+    observability_metadata = build_observability_metadata(simplified_results)
     
     # Tool usage statistics
     tool_usage_stats = {}
@@ -397,6 +410,12 @@ def save_detailed_results(
             "model": model_name,
             "level": level_name,
             "native_tool_calling": native_tool_calling,
+            "request_timeout": request_timeout,
+            "task_timeout": task_timeout,
+            "max_tokens": max_tokens,
+            "max_retries": max_retries,
+            "openai_sdk_version": openai_sdk_version,
+            "sdk_max_retries": sdk_max_retries,
             "total_tasks": total_tasks,
             "successful_tasks": successful_tasks,
             "failed_tasks": total_tasks - successful_tasks,
@@ -412,12 +431,7 @@ def save_detailed_results(
             "average_prompt_tokens": round(total_prompt_tokens / total_tasks, 2) if total_tasks > 0 else 0,
             "average_completion_tokens": round(total_completion_tokens / total_tasks, 2) if total_tasks > 0 else 0,
             "average_tps": round(average_tps, 2),
-            "ttft": {
-                "average": round(average_ttft, 4),
-                "min": round(min_ttft, 4),
-                "max": round(max_ttft, 4),
-                "unit": "seconds"
-            },
+            **observability_metadata,
         },
         "tool_usage_statistics": tool_usage_stats,
         "results": simplified_results
@@ -436,6 +450,7 @@ def run_benchmark_on_dataset(
     use_local: bool = False,
     max_steps: int = 10,
     timeout: int = 60,
+    max_retries: int = 2,
     save_logs: bool = True,
     log_dir: Optional[str] = None,
     run_timestamp: str = None,
@@ -453,6 +468,7 @@ def run_benchmark_on_dataset(
         use_local: If True, use TransformersAdapter for local inference
         max_steps: Maximum steps per task
         timeout: Timeout per task in seconds
+        max_retries: Harness attempts per logical model call
         save_logs: Whether to save results to JSON
         log_dir: Directory to save logs
         run_timestamp: Timestamp for the entire run (shared across levels)
@@ -526,6 +542,11 @@ def run_benchmark_on_dataset(
     
     # Always use OpenAICompatAdapter for OpenAI-compatible endpoint
     print(f"\n[API] Using OpenAICompatAdapter for OpenAI-compatible endpoint")
+    # request_timeout(요청당) → 어댑터의 timeout 키로 변환.
+    # 함수 인자 timeout 은 태스크 예산이라 이름이 겹치면 안 된다.
+    adapter_config = dict(adapter_config)
+    if "request_timeout" in adapter_config:
+        adapter_config["timeout"] = adapter_config.pop("request_timeout")
     adapter = OpenAICompatAdapter(model_name, **adapter_config)
     native_tool_calling = bool(adapter_config.get("native_tool_calling", False))
     
@@ -534,6 +555,7 @@ def run_benchmark_on_dataset(
         registry,
         max_steps=max_steps,
         timeout=timeout,
+        max_retries=max_retries,
         multiturn_mode=multiturn_mode,
     )
     
@@ -701,6 +723,12 @@ def run_benchmark_on_dataset(
                 run_timestamp,
                 track_name=track_name,
                 native_tool_calling=native_tool_calling,
+                request_timeout=adapter.timeout,
+                task_timeout=runner.timeout,
+                max_tokens=adapter.max_tokens,
+                max_retries=runner.max_retries,
+                openai_sdk_version=adapter.openai_sdk_version,
+                sdk_max_retries=adapter.sdk_max_retries,
             )
             print(f"\n{'='*80}")
             print(f"Results saved to: {filepath}")
@@ -719,8 +747,7 @@ def main():
     # removed --limit: always run full level
     parser.add_argument("--max-steps", type=int, default=10,
                         help="Maximum steps per task")
-    parser.add_argument("--timeout", type=int, default=60,
-                        help="Timeout (seconds) per task")
+    add_timeout_arguments(parser)
     parser.add_argument(
         "--full-rollout",
         action="store_true",
@@ -788,6 +815,11 @@ def main():
                              "THINK_MAX_TOKENS env). thinking 은 추론 토큰까지 포함하므로 크게.")
 
     args = parser.parse_args()
+    try:
+        validate_timeouts(args)
+    except TimeoutConfigurationError as exc:
+        print(f"[ERROR] {exc}", file=sys.stderr)
+        return 2
     
     # Set cache mode from command-line argument
     set_cache_mode(args.cache_mode)
@@ -923,7 +955,7 @@ def main():
         print(f"Dtype: {args.dtype}")
     
     # Prepare adapter config for local models
-    adapter_config = {}
+    adapter_config = build_adapter_config(args)
     if args.use_local:
         adapter_config['device'] = args.device
         adapter_config['dtype'] = args.dtype
@@ -1000,6 +1032,7 @@ def main():
                 use_local=args.use_local,
                 max_steps=args.max_steps,
                 timeout=args.timeout,
+                max_retries=args.max_retries,
                 save_logs=(not args.no_save_logs),
                 log_dir=None,  # auto-resolve to <MODEL_TEST_BASE>/results
                 run_timestamp=run_timestamp,
@@ -1025,4 +1058,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
