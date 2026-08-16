@@ -264,7 +264,16 @@ def validate_results_dir(results_dir: Path) -> Tuple[List[str], List[str]]:
         failures.append("summary native_tool_calling must be a boolean")
     raw_native: Dict[str, bool] = {}
     for level, data in raw_levels.items():
-        native = (data.get("metadata") or {}).get("native_tool_calling")
+        metadata = data.get("metadata") or {}
+        if "native_tool_calling" not in metadata:
+            # 필드 도입 전 raw 결과는 non-native runner만 사용했다.
+            native = False
+            warnings.append(
+                f"{level}.json metadata.native_tool_calling missing; "
+                "treating legacy run as false"
+            )
+        else:
+            native = metadata.get("native_tool_calling")
         if not isinstance(native, bool):
             failures.append(f"{level}.json metadata.native_tool_calling must be a boolean")
         else:

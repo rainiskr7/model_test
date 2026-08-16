@@ -183,7 +183,9 @@ def _native_tool_calling(level_data: Iterable[Dict[str, Any]]):
         metadata = data.get("metadata") or {}
         if "native_tool_calling" in metadata:
             return metadata.get("native_tool_calling")
-    return None
+    # 이 필드가 추가되기 전 결과는 text parser 기반(non-native) 런이었다.
+    # 오래된 raw 결과를 재채점해도 현재 summary 계약(boolean)을 만족시킨다.
+    return False
 
 
 def safe_model_name(model: str) -> str:

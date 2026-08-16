@@ -114,11 +114,14 @@ def _write_validation_fixture(results_dir, summary, native_overrides=None):
     native_overrides = native_overrides or {}
     (results_dir / "summary.json").write_text(json.dumps(summary), encoding="utf-8")
     for level in summary.get("by_level", {}):
+        metadata = {
+            "success_rate": 0.5,
+        }
+        native = native_overrides.get(level, True)
+        if native is not None:
+            metadata["native_tool_calling"] = native
         raw = {
-            "metadata": {
-                "native_tool_calling": native_overrides.get(level, True),
-                "success_rate": 0.5,
-            },
+            "metadata": metadata,
             "results": [{}],
         }
         (results_dir / f"{level}.json").write_text(json.dumps(raw), encoding="utf-8")
@@ -810,6 +813,27 @@ def test_partial_run_is_incomplete():
     )
 
 
+def test_legacy_missing_native_tool_calling_defaults_false():
+    original = aggregate.score_level
+    aggregate.score_level = lambda level, data: {
+        "total": 1,
+        "score": data["score"],
+        "metrics": {},
+    }
+    try:
+        summary = aggregate.build_summary_from_loaded(
+            {"L1": {"score": 0.5}},
+            Path("/tmp/results/x/t/language/agent"),
+        )
+    finally:
+        aggregate.score_level = original
+
+    _assert(
+        summary["native_tool_calling"] is False,
+        "legacy result without native metadata must default false",
+    )
+
+
 def test_complete_run_has_agent_score():
     original = aggregate.score_level
     aggregate.score_level = lambda level, data: {
@@ -1101,6 +1125,19 @@ def test_validator_accepts_partial_summary():
     _assert(not failures, f"partial summary failed validation: {failures}")
 
 
+def test_validator_accepts_legacy_missing_native_metadata():
+    summary = _validation_summary()
+    summary["native_tool_calling"] = False
+    native_overrides = {level: None for level in summary["by_level"]}
+    failures, warnings = _validate_fixture(summary, native_overrides)
+    _assert(not failures, f"legacy native metadata failed validation: {failures}")
+    _assert(
+        len([warning for warning in warnings if "treating legacy run as false" in warning])
+        == len(summary["by_level"]),
+        "legacy native metadata warnings mismatch",
+    )
+
+
 def test_validator_rejects_version_mismatch():
     summary = _validation_summary()
     summary["scoring_version"] = "agent_det_old"
@@ -1229,6 +1266,7 @@ TESTS = [
     test_record_only_metric_error_does_not_fail_level,
     test_all_in_score_metrics_not_applicable,
     test_partial_run_is_incomplete,
+    test_legacy_missing_native_tool_calling_defaults_false,
     test_complete_run_has_agent_score,
     test_scorable_levels_and_version_contract,
     test_all_six_loaded_one_unscorable_is_incomplete,
@@ -1244,6 +1282,7 @@ TESTS = [
     test_validator_main_complete_summary_exits_0,
     test_validator_main_unparseable_summary_exits_2,
     test_validator_accepts_partial_summary,
+    test_validator_accepts_legacy_missing_native_metadata,
     test_validator_rejects_version_mismatch,
     test_validator_rejects_score_outside_unit_interval,
     test_validator_rejects_partial_in_score_metric,

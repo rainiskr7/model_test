@@ -1,13 +1,13 @@
 {
   "benchmark": "Ko-AgentBench (deterministic scoring)",
   "model": "google_diffusiongemma_26B_A4B_it",
-  "track": "agent_smoke_native",
+  "track": "agent_p0verify",
   "scoring_version": "agent_det_v2",
   "native_tool_calling": true,
-  "agent_score": null,
-  "scored_levels": 3,
+  "agent_score": 0.41517957351290685,
+  "scored_levels": 6,
   "required_levels": 6,
-  "agent_score_status": "incomplete",
+  "agent_score_status": "complete",
   "by_level": {
     "L1": {
       "total": 11,
@@ -92,60 +92,21 @@
         }
       }
     },
-    "L3": {
-      "total": 10,
-      "score": 0.5222222222222223,
-      "applied_metrics": 3,
+    "L2": {
+      "total": 15,
+      "score": 1.0,
+      "applied_metrics": 1,
       "metrics": {
-        "FSM_strict": {
-          "score": 0.4,
+        "SelectAcc": {
+          "score": 1.0,
           "status": "ok",
           "in_score": true,
-          "n_tasks": 10,
-          "n_scored": 10,
+          "n_tasks": 15,
+          "n_scored": 15,
           "n_errors": 0,
           "task_spread": {
-            "n_perfect": 4,
-            "n_zero": 6,
-            "n_partial": 0
-          }
-        },
-        "PSM": {
-          "score": 0.8666666666666666,
-          "status": "ok",
-          "in_score": true,
-          "n_tasks": 10,
-          "n_scored": 10,
-          "n_errors": 0,
-          "task_spread": {
-            "n_perfect": 8,
-            "n_zero": 1,
-            "n_partial": 1
-          }
-        },
-        "ΔSteps_norm": {
-          "score": 0.3,
-          "status": "ok",
-          "in_score": true,
-          "n_tasks": 10,
-          "n_scored": 10,
-          "n_errors": 0,
-          "task_spread": {
-            "n_perfect": 1,
-            "n_zero": 5,
-            "n_partial": 4
-          }
-        },
-        "FSM_prefix": {
-          "score": 0.8,
-          "status": "ok",
-          "in_score": false,
-          "n_tasks": 10,
-          "n_scored": 10,
-          "n_errors": 0,
-          "task_spread": {
-            "n_perfect": 8,
-            "n_zero": 2,
+            "n_perfect": 15,
+            "n_zero": 0,
             "n_partial": 0
           }
         },
@@ -181,6 +142,65 @@
           "reason": "repetition_results length < 2"
         },
         "RespOK": {
+          "score": 1.0,
+          "status": "ok",
+          "in_score": false,
+          "n_tasks": 15,
+          "n_scored": 15,
+          "n_errors": 0,
+          "task_spread": {
+            "n_perfect": 15,
+            "n_zero": 0,
+            "n_partial": 0
+          }
+        }
+      }
+    },
+    "L3": {
+      "total": 10,
+      "score": 0.6388888888888888,
+      "applied_metrics": 3,
+      "metrics": {
+        "FSM_strict": {
+          "score": 0.5,
+          "status": "ok",
+          "in_score": true,
+          "n_tasks": 10,
+          "n_scored": 10,
+          "n_errors": 0,
+          "task_spread": {
+            "n_perfect": 5,
+            "n_zero": 5,
+            "n_partial": 0
+          }
+        },
+        "PSM": {
+          "score": 0.9666666666666666,
+          "status": "ok",
+          "in_score": true,
+          "n_tasks": 10,
+          "n_scored": 10,
+          "n_errors": 0,
+          "task_spread": {
+            "n_perfect": 9,
+            "n_zero": 0,
+            "n_partial": 1
+          }
+        },
+        "ΔSteps_norm": {
+          "score": 0.45,
+          "status": "ok",
+          "in_score": true,
+          "n_tasks": 10,
+          "n_scored": 10,
+          "n_errors": 0,
+          "task_spread": {
+            "n_perfect": 2,
+            "n_zero": 3,
+            "n_partial": 5
+          }
+        },
+        "FSM_prefix": {
           "score": 0.9,
           "status": "ok",
           "in_score": false,
@@ -190,6 +210,217 @@
           "task_spread": {
             "n_perfect": 9,
             "n_zero": 1,
+            "n_partial": 0
+          }
+        },
+        "SR": {
+          "score": null,
+          "status": "judge_missing",
+          "in_score": false
+        },
+        "ArgAcc": {
+          "score": null,
+          "status": "judge_missing",
+          "in_score": false
+        },
+        "EffScore": {
+          "score": null,
+          "status": "judge_missing",
+          "in_score": false
+        },
+        "ContextRetention": {
+          "score": null,
+          "status": "judge_missing",
+          "in_score": false
+        },
+        "RefRecall": {
+          "score": null,
+          "status": "judge_missing",
+          "in_score": false
+        },
+        "pass@k": {
+          "score": null,
+          "status": "not_applicable",
+          "in_score": false,
+          "reason": "repetition_results length < 2"
+        },
+        "RespOK": {
+          "score": 1.0,
+          "status": "ok",
+          "in_score": false,
+          "n_tasks": 10,
+          "n_scored": 10,
+          "n_errors": 0,
+          "task_spread": {
+            "n_perfect": 10,
+            "n_zero": 0,
+            "n_partial": 0
+          }
+        }
+      }
+    },
+    "L4": {
+      "total": 10,
+      "score": 0.1,
+      "applied_metrics": 2,
+      "metrics": {
+        "Coverage": {
+          "score": 0.1,
+          "status": "ok",
+          "in_score": true,
+          "n_tasks": 10,
+          "n_scored": 10,
+          "n_errors": 0,
+          "task_spread": {
+            "n_perfect": 0,
+            "n_zero": 8,
+            "n_partial": 2
+          }
+        },
+        "SourceEPR": {
+          "score": 0.1,
+          "status": "ok",
+          "in_score": true,
+          "n_tasks": 10,
+          "n_scored": 10,
+          "n_errors": 0,
+          "task_spread": {
+            "n_perfect": 0,
+            "n_zero": 8,
+            "n_partial": 2
+          }
+        },
+        "SR": {
+          "score": null,
+          "status": "judge_missing",
+          "in_score": false
+        },
+        "ArgAcc": {
+          "score": null,
+          "status": "judge_missing",
+          "in_score": false
+        },
+        "EffScore": {
+          "score": null,
+          "status": "judge_missing",
+          "in_score": false
+        },
+        "ContextRetention": {
+          "score": null,
+          "status": "judge_missing",
+          "in_score": false
+        },
+        "RefRecall": {
+          "score": null,
+          "status": "judge_missing",
+          "in_score": false
+        },
+        "pass@k": {
+          "score": null,
+          "status": "not_applicable",
+          "in_score": false,
+          "reason": "repetition_results length < 2"
+        },
+        "RespOK": {
+          "score": 1.0,
+          "status": "ok",
+          "in_score": false,
+          "n_tasks": 10,
+          "n_scored": 10,
+          "n_errors": 0,
+          "task_spread": {
+            "n_perfect": 10,
+            "n_zero": 0,
+            "n_partial": 0
+          }
+        }
+      }
+    },
+    "L5": {
+      "total": 20,
+      "score": 0.16666666666666666,
+      "applied_metrics": 3,
+      "metrics": {
+        "FallbackSR": {
+          "score": 0.25,
+          "status": "ok",
+          "in_score": true,
+          "n_tasks": 20,
+          "n_scored": 20,
+          "n_errors": 0,
+          "task_spread": {
+            "n_perfect": 5,
+            "n_zero": 15,
+            "n_partial": 0
+          }
+        },
+        "AdaptiveRoutingScore": {
+          "score": 0.15,
+          "status": "ok",
+          "in_score": true,
+          "n_tasks": 20,
+          "n_scored": 20,
+          "n_errors": 0,
+          "task_spread": {
+            "n_perfect": 0,
+            "n_zero": 13,
+            "n_partial": 7
+          }
+        },
+        "EPR_CVR": {
+          "score": 0.1,
+          "status": "ok",
+          "in_score": true,
+          "n_tasks": 20,
+          "n_scored": 20,
+          "n_errors": 0,
+          "task_spread": {
+            "n_perfect": 0,
+            "n_zero": 15,
+            "n_partial": 5
+          }
+        },
+        "SR": {
+          "score": null,
+          "status": "judge_missing",
+          "in_score": false
+        },
+        "ArgAcc": {
+          "score": null,
+          "status": "judge_missing",
+          "in_score": false
+        },
+        "EffScore": {
+          "score": null,
+          "status": "judge_missing",
+          "in_score": false
+        },
+        "ContextRetention": {
+          "score": null,
+          "status": "judge_missing",
+          "in_score": false
+        },
+        "RefRecall": {
+          "score": null,
+          "status": "judge_missing",
+          "in_score": false
+        },
+        "pass@k": {
+          "score": null,
+          "status": "not_applicable",
+          "in_score": false,
+          "reason": "repetition_results length < 2"
+        },
+        "RespOK": {
+          "score": 1.0,
+          "status": "ok",
+          "in_score": false,
+          "n_tasks": 20,
+          "n_scored": 20,
+          "n_errors": 0,
+          "task_spread": {
+            "n_perfect": 20,
+            "n_zero": 0,
             "n_partial": 0
           }
         }
@@ -357,16 +588,15 @@
   },
   "runner_survival_rate": {
     "L1": 100.0,
-    "L3": 90.0,
+    "L2": 100.0,
+    "L3": 100.0,
+    "L4": 100.0,
+    "L5": 100.0,
     "L6": 100.0,
     "L7": 100.0,
     "note": "기존 metadata.success_rate. 정답률이 아니라 'final_response 반환 + step>=1' 생존신호다 (run.py:232-235). 비교용으로 쓰지 말 것."
   },
-  "levels_missing": [
-    "L2",
-    "L4",
-    "L5"
-  ],
+  "levels_missing": [],
   "levels_unscorable": [
     "L7"
   ]
