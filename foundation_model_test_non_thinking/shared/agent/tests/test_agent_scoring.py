@@ -6,8 +6,10 @@
 import contextlib
 import importlib.util
 import io
+import json
 import os
 import sys
+import tempfile
 from pathlib import Path
 
 
@@ -33,6 +35,7 @@ extra_metrics = _load_module("extra_metrics")
 level_spec = _load_module("level_spec")
 aggregate = _load_module("aggregate")
 score_run = _load_module("score_run")
+validate_run = _load_module("validate_run")
 scoring_context = _load_module("context")
 
 
@@ -52,6 +55,85 @@ def _assert(condition, message):
 def _assert_close(actual, expected, message):
     if actual is None or abs(actual - expected) > 1e-9:
         raise AssertionError(f"{message}: expected {expected}, got {actual}")
+
+
+def _task_spread(score):
+    return {
+        "n_perfect": int(score == 1.0),
+        "n_zero": int(score == 0.0),
+        "n_partial": int(0.0 < score < 1.0),
+    }
+
+
+def _validation_summary():
+    by_level = {}
+    for index, level in enumerate(aggregate.ALL_LEVELS, start=1):
+        level_value = index / 10.0 if level != "L7" else None
+        metrics = {}
+        for metric_spec in level_spec.LEVEL_SPECS[level]:
+            metric_value = level_value if level_value is not None else 0.5
+            metrics[metric_spec.name] = {
+                "score": metric_value,
+                "status": "ok",
+                "in_score": metric_spec.in_score,
+                "n_tasks": 1,
+                "n_scored": 1,
+                "n_errors": 0,
+                "task_spread": _task_spread(metric_value),
+            }
+        for metric_name in level_spec.JUDGE_METRICS:
+            metrics[metric_name] = {
+                "score": None,
+                "status": "judge_missing",
+                "in_score": False,
+            }
+        by_level[level] = {
+            "total": 1,
+            "score": level_value,
+            "applied_metrics": sum(
+                entry["in_score"] and entry["status"] in {"ok", "partial"}
+                for entry in metrics.values()
+            ),
+            "metrics": metrics,
+        }
+    return {
+        "benchmark": "Ko-AgentBench (deterministic scoring)",
+        "model": "test_model",
+        "track": "agent_test",
+        "scoring_version": aggregate.SCORING_VERSION,
+        "native_tool_calling": True,
+        "agent_score": 0.35,
+        "scored_levels": 6,
+        "required_levels": 6,
+        "agent_score_status": "complete",
+        "by_level": by_level,
+    }
+
+
+def _write_validation_fixture(results_dir, summary, native_overrides=None):
+    native_overrides = native_overrides or {}
+    (results_dir / "summary.json").write_text(json.dumps(summary), encoding="utf-8")
+    for level in summary.get("by_level", {}):
+        raw = {
+            "metadata": {
+                "native_tool_calling": native_overrides.get(level, True),
+                "success_rate": 0.5,
+            },
+            "results": [{}],
+        }
+        (results_dir / f"{level}.json").write_text(json.dumps(raw), encoding="utf-8")
+
+
+def _validate_fixture(summary, native_overrides=None):
+    with tempfile.TemporaryDirectory() as temp_dir:
+        results_dir = Path(temp_dir)
+        _write_validation_fixture(results_dir, summary, native_overrides)
+        return validate_run.validate_results_dir(results_dir)
+
+
+def _validator_exit(argv):
+    with contextlib.redirect_stdout(io.StringIO()):
+        return validate_run.main(argv)
 
 
 def test_fsm_prefix_exact_match():
@@ -922,6 +1004,173 @@ def test_print_table_shows_l7_record_only_metrics_without_judges():
     _assert("judge_missing" not in printed, "judge-missing metrics must stay hidden")
 
 
+def test_task_spread_counts_scored_tasks():
+    original_context = aggregate.build_eval_context
+    aggregate.build_eval_context = lambda task: task
+    try:
+        entry = aggregate._average_metric(
+            [{"score": 1.0}, {"score": 0.0}, {"score": 0.25}],
+            aggregate.MetricSpec("Spread", lambda task: task["score"], True),
+        )
+    finally:
+        aggregate.build_eval_context = original_context
+    _assert(
+        entry["task_spread"]
+        == {"n_perfect": 1, "n_zero": 1, "n_partial": 1},
+        "task spread buckets mismatch",
+    )
+    _assert(
+        sum(entry["task_spread"].values()) == entry["n_scored"],
+        "task spread must sum to n_scored",
+    )
+
+
+def test_applied_metrics_counts_only_scored_in_score_metrics():
+    original_context = aggregate.build_eval_context
+    original_specs = aggregate.LEVEL_SPECS["L6"]
+    aggregate.build_eval_context = lambda task: task
+    aggregate.LEVEL_SPECS["L6"] = (
+        aggregate.MetricSpec("Applied", lambda _task: 0.5, True),
+        aggregate.MetricSpec("Missing", lambda _task: None, True),
+    )
+    try:
+        result = aggregate.score_level("L6", {"results": [{}]})
+        output = io.StringIO()
+        summary = {
+            "model": "x",
+            "track": "agent",
+            "agent_score": None,
+            "agent_score_status": "incomplete",
+            "scored_levels": 1,
+            "required_levels": 6,
+            "by_level": {"L6": result},
+        }
+        with contextlib.redirect_stdout(output):
+            score_run.print_table(summary, 5)
+    finally:
+        aggregate.build_eval_context = original_context
+        aggregate.LEVEL_SPECS["L6"] = original_specs
+    _assert(result["applied_metrics"] == 1, "applied metric count mismatch")
+    _assert(
+        "applied_metrics=1/2" in output.getvalue(),
+        "reduced applied metric count not printed",
+    )
+
+
+def test_validator_accepts_complete_summary():
+    failures, _warnings = _validate_fixture(_validation_summary())
+    _assert(not failures, f"complete summary failed validation: {failures}")
+
+
+def test_validator_main_nonexistent_results_dir_exits_2():
+    with tempfile.TemporaryDirectory() as temp_dir:
+        missing = Path(temp_dir) / "missing"
+        exit_code = _validator_exit(["--results-dir", str(missing)])
+    _assert(exit_code == 2, f"nonexistent results dir exited {exit_code}, expected 2")
+
+
+def test_validator_main_missing_summary_exits_1():
+    with tempfile.TemporaryDirectory() as temp_dir:
+        exit_code = _validator_exit(["--results-dir", temp_dir])
+    _assert(exit_code == 1, f"missing summary exited {exit_code}, expected 1")
+
+
+def test_validator_main_complete_summary_exits_0():
+    with tempfile.TemporaryDirectory() as temp_dir:
+        results_dir = Path(temp_dir)
+        _write_validation_fixture(results_dir, _validation_summary())
+        exit_code = _validator_exit(["--results-dir", str(results_dir)])
+    _assert(exit_code == 0, f"complete summary exited {exit_code}, expected 0")
+
+
+def test_validator_main_unparseable_summary_exits_2():
+    with tempfile.TemporaryDirectory() as temp_dir:
+        results_dir = Path(temp_dir)
+        (results_dir / "summary.json").write_text("{", encoding="utf-8")
+        exit_code = _validator_exit(["--results-dir", str(results_dir)])
+    _assert(exit_code == 2, f"unparseable summary exited {exit_code}, expected 2")
+
+
+def test_validator_accepts_partial_summary():
+    summary = _validation_summary()
+    del summary["by_level"]["L6"]
+    summary["agent_score"] = None
+    summary["agent_score_status"] = "incomplete"
+    summary["scored_levels"] = 5
+    failures, _warnings = _validate_fixture(summary)
+    _assert(not failures, f"partial summary failed validation: {failures}")
+
+
+def test_validator_rejects_version_mismatch():
+    summary = _validation_summary()
+    summary["scoring_version"] = "agent_det_old"
+    failures, _warnings = _validate_fixture(summary)
+    _assert(any("scoring_version mismatch" in item for item in failures), "version mismatch passed")
+
+
+def test_validator_rejects_score_outside_unit_interval():
+    summary = _validation_summary()
+    summary["by_level"]["L1"]["metrics"]["ToolAcc"]["score"] = 1.01
+    failures, _warnings = _validate_fixture(summary)
+    _assert(any("within [0, 1]" in item for item in failures), "out-of-range score passed")
+
+
+def test_validator_rejects_partial_in_score_metric():
+    summary = _validation_summary()
+    summary["by_level"]["L1"]["metrics"]["ToolAcc"]["status"] = "partial"
+    failures, _warnings = _validate_fixture(summary)
+    _assert(any("unclean status" in item for item in failures), "partial metric passed")
+
+
+def test_validator_rejects_not_applicable_numeric_score():
+    summary = _validation_summary()
+    summary["by_level"]["L1"]["metrics"]["pass@k"] = {
+        "score": 0.0,
+        "status": "not_applicable",
+        "in_score": False,
+    }
+    failures, _warnings = _validate_fixture(summary)
+    _assert(
+        any("must not carry a numeric score" in item for item in failures),
+        "not-applicable numeric score passed",
+    )
+
+
+def test_validator_rejects_native_tool_calling_disagreement():
+    failures, _warnings = _validate_fixture(
+        _validation_summary(), {"L1": True, "L2": False}
+    )
+    _assert(
+        any("disagrees across raw levels" in item for item in failures),
+        "native tool calling disagreement passed",
+    )
+
+
+def test_validator_rejects_headline_status_mismatch_both_directions():
+    incomplete = _validation_summary()
+    incomplete["agent_score_status"] = "incomplete"
+    failures, _warnings = _validate_fixture(incomplete)
+    _assert(
+        any("if and only if status is complete" in item for item in failures),
+        "headline present with incomplete status passed",
+    )
+
+    complete_without_score = _validation_summary()
+    complete_without_score["agent_score"] = None
+    failures, _warnings = _validate_fixture(complete_without_score)
+    _assert(
+        any("if and only if status is complete" in item for item in failures),
+        "headline missing with complete status passed",
+    )
+
+
+def test_validator_rejects_perturbed_agent_score():
+    summary = _validation_summary()
+    summary["agent_score"] += 0.001
+    failures, _warnings = _validate_fixture(summary)
+    _assert(any("mean invariant failed" in item for item in failures), "perturbed mean passed")
+
+
 def test_arg_f1_det_or_skip():
     base = os.environ.get("MODEL_TEST_BASE")
     metrics_py = Path(base or "") / "data" / "Ko-AgentBench" / "bench" / "runner" / "metrics.py"
@@ -987,6 +1236,21 @@ TESTS = [
     test_empty_results_are_unscorable_no_tasks,
     test_print_table_shows_partial_run_status,
     test_print_table_shows_l7_record_only_metrics_without_judges,
+    test_task_spread_counts_scored_tasks,
+    test_applied_metrics_counts_only_scored_in_score_metrics,
+    test_validator_accepts_complete_summary,
+    test_validator_main_nonexistent_results_dir_exits_2,
+    test_validator_main_missing_summary_exits_1,
+    test_validator_main_complete_summary_exits_0,
+    test_validator_main_unparseable_summary_exits_2,
+    test_validator_accepts_partial_summary,
+    test_validator_rejects_version_mismatch,
+    test_validator_rejects_score_outside_unit_interval,
+    test_validator_rejects_partial_in_score_metric,
+    test_validator_rejects_not_applicable_numeric_score,
+    test_validator_rejects_native_tool_calling_disagreement,
+    test_validator_rejects_headline_status_mismatch_both_directions,
+    test_validator_rejects_perturbed_agent_score,
     test_arg_f1_det_or_skip,
 ]
 

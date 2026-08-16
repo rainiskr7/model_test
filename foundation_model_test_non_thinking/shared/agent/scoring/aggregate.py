@@ -48,6 +48,7 @@ def _tasks(data: Dict[str, Any]) -> List[Dict[str, Any]]:
 def _average_metric(tasks: List[Dict[str, Any]], spec: MetricSpec) -> Dict[str, Any]:
     scores = []
     errors = []
+    task_spread = {"n_perfect": 0, "n_zero": 0, "n_partial": 0}
     diagnostics: Dict[str, int] = (
         {
             "fields_required": 0,
@@ -66,7 +67,14 @@ def _average_metric(tasks: List[Dict[str, Any]], spec: MetricSpec) -> Dict[str, 
                 spec.diagnostic_producer(ctx) if spec.diagnostic_producer else {}
             )
             if score is not None:
-                scores.append(float(score))
+                numeric_score = float(score)
+                scores.append(numeric_score)
+                if numeric_score == 1.0:
+                    task_spread["n_perfect"] += 1
+                elif numeric_score == 0.0:
+                    task_spread["n_zero"] += 1
+                elif 0.0 < numeric_score < 1.0:
+                    task_spread["n_partial"] += 1
             for name, count in task_diagnostics.items():
                 diagnostics[name] = diagnostics.get(name, 0) + int(count)
         except Exception as exc:
@@ -84,6 +92,7 @@ def _average_metric(tasks: List[Dict[str, Any]], spec: MetricSpec) -> Dict[str, 
         "n_tasks": len(tasks),
         "n_scored": len(scores),
         "n_errors": len(errors),
+        "task_spread": task_spread,
     }
     entry.update(diagnostics)
     if errors:
@@ -157,6 +166,11 @@ def score_level(level: str, data: Dict[str, Any]) -> Dict[str, Any]:
     result = {
         "total": len(tasks),
         "score": score,
+        "applied_metrics": sum(
+            entry.get("in_score")
+            and entry.get("status") in {"ok", "partial"}
+            for entry in entries.values()
+        ),
         "metrics": entries,
     }
     if score is None:
