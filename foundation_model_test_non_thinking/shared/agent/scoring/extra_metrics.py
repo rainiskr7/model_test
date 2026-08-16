@@ -27,3 +27,10 @@ def arg_f1_det(ctx) -> Optional[float]:
     if not prf.get("ok"):
         return None
     return prf.get("f1")
+
+
+def redundant_call_rate_det(ctx) -> Optional[float]:
+    """툴 호출이 없으면 '중복 호출률'은 정의되지 않는다 → None (0.0 아님)."""
+    if not ctx.action_trace:
+        return None
+    return load_metrics_module().METRICS["RedundantCallRate"].evaluate(ctx).score

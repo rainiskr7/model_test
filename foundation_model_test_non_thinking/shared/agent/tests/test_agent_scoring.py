@@ -3,7 +3,9 @@
 패키지 import 없이 파일 경로에서 직접 로드한다.
 """
 
+import contextlib
 import importlib.util
+import io
 import os
 import sys
 from pathlib import Path
@@ -29,6 +31,7 @@ def _load_module(name):
 
 extra_metrics = _load_module("extra_metrics")
 level_spec = _load_module("level_spec")
+aggregate = _load_module("aggregate")
 score_run = _load_module("score_run")
 
 
@@ -92,12 +95,122 @@ def test_in_score_false_excluded():
     _assert_close(level_spec.representative_score(entries), 1.0, "in_score false excluded")
 
 
+def test_redundant_call_rate_empty_without_bench():
+    original = extra_metrics.load_metrics_module
+
+    def fail_if_called():
+        raise AssertionError("vendored metrics must not be loaded")
+
+    extra_metrics.load_metrics_module = fail_if_called
+    try:
+        ctx = DummyContext([], [])
+        _assert(
+            extra_metrics.redundant_call_rate_det(ctx) is None,
+            "empty action trace should be not applicable",
+        )
+    finally:
+        extra_metrics.load_metrics_module = original
+
+
+def test_redundant_call_rate_nonempty_loads_bench():
+    original = extra_metrics.load_metrics_module
+    sentinel = RuntimeError("sentinel vendored load")
+
+    def raise_sentinel():
+        raise sentinel
+
+    extra_metrics.load_metrics_module = raise_sentinel
+    try:
+        ctx = DummyContext([], [{"tool": "A"}])
+        try:
+            extra_metrics.redundant_call_rate_det(ctx)
+        except RuntimeError as exc:
+            _assert(exc is sentinel, "redundant call rate raised a different exception")
+        else:
+            raise AssertionError("non-empty action trace must load vendored metrics")
+    finally:
+        extra_metrics.load_metrics_module = original
+
+
+def test_l6_spec_wires_redundant_call_rate():
+    specs = level_spec.LEVEL_SPECS["L6"]
+    _assert(len(specs) == 2, "L6 must have exactly two metric specs")
+    _assert(
+        {spec.name for spec in specs} == {"ToolAcc", "RedundantCallRate"},
+        "L6 metric names mismatch",
+    )
+    _assert(all(spec.in_score for spec in specs), "both L6 metrics must be in score")
+    by_name = {spec.name: spec for spec in specs}
+    _assert(
+        by_name["RedundantCallRate"].producer.__name__ == "redundant_call_rate_det",
+        "RedundantCallRate producer mismatch",
+    )
+    _assert(
+        by_name["ToolAcc"].producer.__name__ != "redundant_call_rate_det",
+        "ToolAcc must not use redundant_call_rate_det",
+    )
+
+
+def test_l6_empty_trace_depends_on_tool_acc():
+    original_context = aggregate.build_eval_context
+    original_specs = aggregate.LEVEL_SPECS["L6"]
+    redundant_spec = next(
+        spec for spec in original_specs if spec.name == "RedundantCallRate"
+    )
+    empty_context = DummyContext([], [])
+    tasks = [{"resp_schema": {"type": "string"}} for _ in range(15)]
+
+    def score_with_tool_acc(value):
+        aggregate.LEVEL_SPECS["L6"] = (
+            aggregate.MetricSpec("ToolAcc", lambda _ctx: value, True),
+            redundant_spec,
+        )
+        return aggregate.score_level("L6", {"results": tasks})
+
+    aggregate.build_eval_context = lambda _task: empty_context
+    try:
+        zero_result = score_with_tool_acc(0.0)
+        _assert_close(zero_result["score"], 0.0, "zero-call ToolAcc zero score")
+        redundant_entry = zero_result["metrics"]["RedundantCallRate"]
+        _assert(
+            redundant_entry["status"] == "not_applicable",
+            "empty redundant call rate must be not applicable",
+        )
+        _assert(
+            "unscorable_reason" not in zero_result,
+            "ToolAcc keeps the empty-trace L6 level scorable",
+        )
+
+        one_result = score_with_tool_acc(1.0)
+        # This documents the premise: if vendored ToolAcc ever rewards a 0-call
+        # task, the original "everyone scores 100" inflation returns through this path.
+        _assert_close(one_result["score"], 1.0, "zero-call ToolAcc rewarded score")
+    finally:
+        aggregate.build_eval_context = original_context
+        aggregate.LEVEL_SPECS["L6"] = original_specs
+
+
 def test_judge_missing_without_call():
-    summary = score_run.score_level("L7", {"results": []})
+    summary = aggregate.score_level("L7", {"results": []})
     entry = summary["metrics"]["SR"]
     _assert(entry["status"] == "judge_missing", "judge status mismatch")
     _assert(entry["score"] is None, "judge score should be None")
     _assert(entry["in_score"] is False, "judge in_score should be false")
+    _assert(
+        summary["unscorable_reason"] == "no_deterministic_metric",
+        "structural L7 reason must outrank empty results",
+    )
+
+
+def test_l7_nonempty_has_no_deterministic_metric():
+    summary = aggregate.score_level(
+        "L7", {"results": [{"resp_schema": {"type": "string"}}]}
+    )
+    _assert(summary["score"] is None, "L7 score should be None")
+    _assert(
+        summary["unscorable_reason"] == "no_deterministic_metric",
+        "L7 unscorable reason mismatch",
+    )
 
 
 def test_missing_level_not_zero_filled():
@@ -105,10 +218,356 @@ def test_missing_level_not_zero_filled():
         "metadata": {"model": "x", "native_tool_calling": True, "success_rate": 100.0},
         "results": [],
     }
-    summary = score_run.build_summary_from_loaded_for_test({"L7": result}, Path("/tmp/results/x/t/language/agent"))
+    summary = aggregate.build_summary_from_loaded(
+        {"L7": result}, Path("/tmp/results/x/t/language/agent")
+    )
     _assert("L1" in summary["levels_missing"], "missing L1 not recorded")
     _assert("L1" not in summary["by_level"], "missing L1 should not be zero-filled")
     _assert(summary["agent_score"] is None, "missing levels must not create score zero")
+
+
+def test_non_l7_none_is_unscorable():
+    summary = aggregate.build_summary_from_loaded(
+        {"L1": {"results": []}}, Path("/tmp/results/x/t/language/agent")
+    )
+    _assert("L1" in summary["levels_unscorable"], "unscorable L1 not recorded")
+
+
+def test_metric_error_fails_closed():
+    original_context = aggregate.build_eval_context
+    original_specs = aggregate.LEVEL_SPECS["L1"]
+
+    def broken_metric(_ctx):
+        raise RuntimeError("broken metric")
+
+    aggregate.build_eval_context = lambda task: task
+    aggregate.LEVEL_SPECS["L1"] = (
+        aggregate.MetricSpec("Broken", broken_metric, True),
+    )
+    try:
+        result = aggregate.score_level(
+            "L1", {"results": [{"resp_schema": {"type": "string"}}]}
+        )
+    finally:
+        aggregate.build_eval_context = original_context
+        aggregate.LEVEL_SPECS["L1"] = original_specs
+
+    _assert(result["metrics"]["Broken"]["status"] == "error", "error status lost")
+    _assert(result["metrics"]["Broken"]["in_score"] is True, "in_score spec lost")
+    _assert(result["score"] is None, "metric error must fail the level closed")
+    _assert(
+        result["unscorable_reason"] == "metric_error",
+        "metric error reason mismatch",
+    )
+
+
+def test_partial_metric_keeps_level_scorable():
+    original_context = aggregate.build_eval_context
+    original_specs = aggregate.LEVEL_SPECS["L1"]
+
+    def sometimes_broken(ctx):
+        if ctx.get("broken"):
+            raise ValueError("bad task")
+        return ctx["score"]
+
+    aggregate.build_eval_context = lambda task: task
+    aggregate.LEVEL_SPECS["L1"] = (
+        aggregate.MetricSpec("PartialMetric", sometimes_broken, True),
+    )
+    try:
+        result = aggregate.score_level(
+            "L1",
+            {
+                "results": [
+                    {"score": 0.25, "resp_schema": {"type": "string"}},
+                    {"broken": True, "resp_schema": {"type": "string"}},
+                    {"score": 0.75, "resp_schema": {"type": "string"}},
+                ]
+            },
+        )
+    finally:
+        aggregate.build_eval_context = original_context
+        aggregate.LEVEL_SPECS["L1"] = original_specs
+
+    entry = result["metrics"]["PartialMetric"]
+    _assert(entry["status"] == "partial", "partial metric status mismatch")
+    _assert(entry["n_tasks"] == 3, "partial metric task count mismatch")
+    _assert(entry["n_scored"] == 2, "partial metric scored count mismatch")
+    _assert(entry["n_errors"] == 1, "partial metric error count mismatch")
+    _assert_close(entry["score"], 0.5, "partial metric mean")
+    _assert_close(result["score"], 0.5, "partial metric level score")
+    _assert(
+        "unscorable_reason" not in result,
+        "partial metric must not make the level unscorable",
+    )
+
+    summary = {
+        "model": "x",
+        "track": "agent",
+        "agent_score": None,
+        "agent_score_status": "incomplete",
+        "scored_levels": 1,
+        "required_levels": 6,
+        "by_level": {"L1": result},
+    }
+    output = io.StringIO()
+    with contextlib.redirect_stdout(output):
+        score_run.print_table(summary, 5)
+    _assert(
+        "PartialMetric=0.500/partial(2/3)" in output.getvalue(),
+        "partial metric coverage token mismatch",
+    )
+
+
+def test_all_tasks_error_fails_level_closed():
+    original_context = aggregate.build_eval_context
+    original_specs = aggregate.LEVEL_SPECS["L1"]
+
+    def broken_metric(_ctx):
+        raise RuntimeError("all broken")
+
+    aggregate.build_eval_context = lambda task: task
+    aggregate.LEVEL_SPECS["L1"] = (
+        aggregate.MetricSpec("Broken", broken_metric, True),
+    )
+    try:
+        result = aggregate.score_level(
+            "L1",
+            {
+                "results": [
+                    {"resp_schema": {"type": "string"}},
+                    {"resp_schema": {"type": "string"}},
+                    {"resp_schema": {"type": "string"}},
+                ]
+            },
+        )
+    finally:
+        aggregate.build_eval_context = original_context
+        aggregate.LEVEL_SPECS["L1"] = original_specs
+
+    entry = result["metrics"]["Broken"]
+    _assert(entry["status"] == "error", "all-error metric status mismatch")
+    _assert(entry["n_tasks"] == 3, "all-error metric task count mismatch")
+    _assert(entry["n_scored"] == 0, "all-error metric scored count mismatch")
+    _assert(entry["n_errors"] == 3, "all-error metric error count mismatch")
+    _assert(result["score"] is None, "all-error metric must fail level closed")
+    _assert(
+        result["unscorable_reason"] == "metric_error",
+        "all-error unscorable reason mismatch",
+    )
+
+
+def test_record_only_metric_error_does_not_fail_level():
+    original_context = aggregate.build_eval_context
+    original_specs = aggregate.LEVEL_SPECS["L1"]
+
+    def broken_metric(_ctx):
+        raise RuntimeError("record only broken")
+
+    aggregate.build_eval_context = lambda task: task
+    aggregate.LEVEL_SPECS["L1"] = (
+        aggregate.MetricSpec("Good", lambda _ctx: 0.75, True),
+        aggregate.MetricSpec("RecordOnlyBroken", broken_metric, False),
+    )
+    try:
+        result = aggregate.score_level(
+            "L1", {"results": [{"resp_schema": {"type": "string"}}]}
+        )
+    finally:
+        aggregate.build_eval_context = original_context
+        aggregate.LEVEL_SPECS["L1"] = original_specs
+
+    entry = result["metrics"]["RecordOnlyBroken"]
+    _assert(entry["status"] == "error", "record-only error status mismatch")
+    _assert(entry["in_score"] is False, "record-only in_score mismatch")
+    _assert_close(result["score"], 0.75, "record-only error level score")
+
+
+def test_all_in_score_metrics_not_applicable():
+    original_context = aggregate.build_eval_context
+    original_specs = aggregate.LEVEL_SPECS["L1"]
+    aggregate.build_eval_context = lambda task: task
+    aggregate.LEVEL_SPECS["L1"] = (
+        aggregate.MetricSpec("NoScore", lambda _ctx: None, True),
+    )
+    try:
+        result = aggregate.score_level(
+            "L1", {"results": [{"resp_schema": {"type": "string"}}]}
+        )
+    finally:
+        aggregate.build_eval_context = original_context
+        aggregate.LEVEL_SPECS["L1"] = original_specs
+
+    _assert(result["score"] is None, "all-not-applicable score must be None")
+    _assert(
+        result["unscorable_reason"] == "all_not_applicable",
+        "all-not-applicable reason mismatch",
+    )
+
+
+def test_partial_run_is_incomplete():
+    original = aggregate.score_level
+    aggregate.score_level = lambda level, data: {
+        "total": 1,
+        "score": data["score"],
+        "metrics": {},
+    }
+    try:
+        summary = aggregate.build_summary_from_loaded(
+            {"L1": {"score": 0.5}, "L3": {"score": 0.75}},
+            Path("/tmp/results/x/t/language/agent"),
+        )
+    finally:
+        aggregate.score_level = original
+
+    _assert(summary["agent_score"] is None, "partial run must not have agent score")
+    _assert(summary["scored_levels"] == 2, "partial scored level count mismatch")
+    _assert(
+        summary["agent_score_status"] == "incomplete",
+        "partial run status mismatch",
+    )
+
+
+def test_complete_run_has_agent_score():
+    original = aggregate.score_level
+    aggregate.score_level = lambda level, data: {
+        "total": 1,
+        "score": data["score"],
+        "metrics": {},
+    }
+    try:
+        loaded = {
+            level: {"score": index / 10.0}
+            for index, level in enumerate(
+                ("L1", "L2", "L3", "L4", "L5", "L6"), start=1
+            )
+        }
+        summary = aggregate.build_summary_from_loaded(
+            loaded, Path("/tmp/results/x/t/language/agent")
+        )
+    finally:
+        aggregate.score_level = original
+
+    _assert_close(summary["agent_score"], 0.35, "complete agent score")
+    _assert(summary["scored_levels"] == 6, "complete scored level count mismatch")
+    _assert(summary["required_levels"] == 6, "required level count mismatch")
+    _assert(
+        summary["agent_score_status"] == "complete",
+        "complete run status mismatch",
+    )
+
+
+def test_scorable_levels_and_version_contract():
+    _assert(
+        aggregate.SCORABLE_LEVELS == ("L1", "L2", "L3", "L4", "L5", "L6"),
+        "scorable levels contract mismatch",
+    )
+    _assert(
+        aggregate.SCORING_VERSION == "agent_det_v2",
+        "scoring version contract mismatch",
+    )
+
+
+def test_all_six_loaded_one_unscorable_is_incomplete():
+    original = aggregate.score_level
+    aggregate.score_level = lambda level, data: {
+        "total": 1,
+        "score": data["score"],
+        "metrics": {},
+    }
+    try:
+        loaded = {
+            "L1": {"score": 0.1},
+            "L2": {"score": 0.2},
+            "L3": {"score": 0.3},
+            "L4": {"score": None},
+            "L5": {"score": 0.5},
+            "L6": {"score": 0.6},
+        }
+        summary = aggregate.build_summary_from_loaded(
+            loaded, Path("/tmp/results/x/t/language/agent")
+        )
+    finally:
+        aggregate.score_level = original
+
+    _assert(summary["agent_score"] is None, "one unscorable level must fail headline")
+    _assert(summary["scored_levels"] == 5, "one-unscorable level count mismatch")
+    _assert(
+        summary["agent_score_status"] == "incomplete",
+        "one-unscorable status mismatch",
+    )
+
+
+def test_complete_six_with_l7_ignores_l7_in_headline():
+    original = aggregate.score_level
+    aggregate.score_level = lambda level, data: {
+        "total": 1,
+        "score": data["score"],
+        "metrics": {},
+    }
+    try:
+        loaded = {
+            "L1": {"score": 0.1},
+            "L2": {"score": 0.2},
+            "L3": {"score": 0.3},
+            "L4": {"score": 0.4},
+            "L5": {"score": 0.5},
+            "L6": {"score": 0.6},
+            "L7": {"score": None},
+        }
+        summary = aggregate.build_summary_from_loaded(
+            loaded, Path("/tmp/results/x/t/language/agent")
+        )
+    finally:
+        aggregate.score_level = original
+
+    _assert_close(summary["agent_score"], 0.35, "L7-independent agent score")
+    _assert("L7" in summary["levels_unscorable"], "L7 must be unscorable")
+    _assert(summary["scored_levels"] == 6, "L7 must not affect scored level count")
+    _assert(
+        summary["agent_score_status"] == "complete",
+        "L7 must not make headline incomplete",
+    )
+
+
+def test_empty_results_are_unscorable_no_tasks():
+    summary = aggregate.build_summary_from_loaded(
+        {"L2": {"results": [], "tasks": [{"ignored": True}]}},
+        Path("/tmp/results/x/t/language/agent"),
+    )
+    result = summary["by_level"]["L2"]
+    _assert(result["total"] == 0, "empty results must not fall through to tasks")
+    _assert("L2" in summary["levels_unscorable"], "empty L2 not unscorable")
+    _assert(result["unscorable_reason"] == "no_tasks", "no_tasks reason mismatch")
+
+
+def test_print_table_shows_partial_run_status():
+    summary = {
+        "model": "x",
+        "track": "agent",
+        "agent_score": None,
+        "agent_score_status": "incomplete",
+        "scored_levels": 1,
+        "required_levels": 6,
+        "by_level": {
+            "L1": {
+                "total": 1,
+                "score": None,
+                "unscorable_reason": "all_not_applicable",
+                "metrics": {},
+            }
+        },
+    }
+    output = io.StringIO()
+    with contextlib.redirect_stdout(output):
+        score_run.print_table(summary, 5)
+    printed = output.getvalue()
+    _assert("status=incomplete" in printed, "agent score status not printed")
+    _assert("scored_levels=1/6" in printed, "scored level count not printed")
+    _assert(
+        "score=null unscorable=all_not_applicable" in printed,
+        "unscorable level reason not printed",
+    )
 
 
 def test_arg_f1_det_or_skip():
@@ -140,8 +599,26 @@ TESTS = [
     test_mean_excludes_none,
     test_mean_all_none,
     test_in_score_false_excluded,
+    test_redundant_call_rate_empty_without_bench,
+    test_redundant_call_rate_nonempty_loads_bench,
+    test_l6_spec_wires_redundant_call_rate,
+    test_l6_empty_trace_depends_on_tool_acc,
     test_judge_missing_without_call,
+    test_l7_nonempty_has_no_deterministic_metric,
     test_missing_level_not_zero_filled,
+    test_non_l7_none_is_unscorable,
+    test_metric_error_fails_closed,
+    test_partial_metric_keeps_level_scorable,
+    test_all_tasks_error_fails_level_closed,
+    test_record_only_metric_error_does_not_fail_level,
+    test_all_in_score_metrics_not_applicable,
+    test_partial_run_is_incomplete,
+    test_complete_run_has_agent_score,
+    test_scorable_levels_and_version_contract,
+    test_all_six_loaded_one_unscorable_is_incomplete,
+    test_complete_six_with_l7_ignores_l7_in_headline,
+    test_empty_results_are_unscorable_no_tasks,
+    test_print_table_shows_partial_run_status,
     test_arg_f1_det_or_skip,
 ]
 

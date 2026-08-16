@@ -4,9 +4,9 @@ from dataclasses import dataclass
 from typing import Callable, Iterable, List, Optional, Sequence
 
 try:
-    from .extra_metrics import arg_f1_det, fsm_prefix
+    from .extra_metrics import arg_f1_det, fsm_prefix, redundant_call_rate_det
 except ImportError:  # direct file loading in tests
-    from extra_metrics import arg_f1_det, fsm_prefix
+    from extra_metrics import arg_f1_det, fsm_prefix, redundant_call_rate_det
 
 
 JUDGE_METRICS = ("SR", "ArgAcc", "EffScore", "ContextRetention", "RefRecall")
@@ -55,7 +55,10 @@ LEVEL_SPECS = {
         MetricSpec("AdaptiveRoutingScore", vendored_metric("AdaptiveRoutingScore"), True),
         MetricSpec("EPR_CVR", vendored_metric("EPR_CVR"), True),
     ),
-    "L6": (MetricSpec("RedundantCallRate", vendored_metric("RedundantCallRate"), True),),
+    "L6": (
+        MetricSpec("ToolAcc", vendored_metric("ToolAcc"), True),
+        MetricSpec("RedundantCallRate", redundant_call_rate_det, True),
+    ),
     "L7": (),
 }
 
