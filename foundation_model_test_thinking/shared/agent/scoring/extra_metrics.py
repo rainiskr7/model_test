@@ -218,9 +218,70 @@ def _seeded_tool_responses(ctx):
                 or message.get("tool_name")
                 or tool_by_call_id.get(call_id),
                 message["content"],
+                call_id,
             )
         )
     return responses
+
+
+def _resolve_seeded_golden_fields(ctx, golden_fields):
+    """Resolve declarations only against persisted ``seed_call_*`` payloads.
+
+    Saved artifacts can omit the seeded assistant ``tool_calls`` that carried the
+    tool name. L7 therefore maps an unnamed seed only when its encoded turn is
+    identified by context-test metadata; payload shape alone is not enough because
+    several unrelated calls can return the same schema. L6's single-seed fixture
+    remains unambiguous without turn metadata.
+    """
+    seeded = _seeded_tool_responses(ctx)
+    if not seeded:
+        return None
+
+    resolved = []
+    for golden_entry in golden_fields:
+        context_tests = ctx.task_schema.get("context_tests", []) or []
+        long_term_tests = ctx.task_schema.get("long_term_tests", []) or []
+        tool_name = golden_entry.get("tool")
+        target_turns = set()
+        if len(golden_fields) == 1 and (context_tests or long_term_tests):
+            final_test_turn = max(
+                (test.get("turn") for test in context_tests if test.get("turn") is not None),
+                default=None,
+            )
+            target_turns = {
+                test.get("turn")
+                for test in context_tests
+                if test.get("turn") == final_test_turn
+                and (test.get("expected_action") or {}).get("tool") == tool_name
+            }
+            if not target_turns:
+                target_turns = {
+                    int(test["plant_turn"]) + 1
+                    for test in long_term_tests
+                    if test.get("test_turn") == final_test_turn
+                    and test.get("plant_turn") is not None
+                }
+        if target_turns:
+            candidates = [
+                content
+                for tool, content, call_id in seeded
+                if tool in {None, tool_name}
+                and any(call_id.startswith(f"seed_call_{turn}_") for turn in target_turns)
+            ]
+        elif not context_tests and not long_term_tests:
+            candidates = [
+                content
+                for tool, content, _call_id in seeded
+                if tool == tool_name
+            ]
+            if not candidates and len(golden_fields) == 1 and len(seeded) == 1:
+                candidates = [seeded[0][1]]
+        else:
+            candidates = []
+        if not candidates:
+            return None
+        resolved.append((golden_entry, candidates[-1]))
+    return resolved
 
 
 _NUMBER_LITERAL = re.compile(
@@ -261,20 +322,9 @@ def _result_field_coverage(ctx):
     if not golden_fields:
         return None, diagnostics
 
-    responses = _tool_responses(ctx)
-    resolved = []
-    for golden_entry in golden_fields:
-        response = next(
-            (
-                content
-                for tool, content in reversed(responses)
-                if tool == golden_entry.get("tool")
-            ),
-            None,
-        )
-        if response is None:
-            return None, diagnostics
-        resolved.append((golden_entry, response))
+    resolved = _resolve_seeded_golden_fields(ctx, golden_fields)
+    if resolved is None:
+        return None, diagnostics
 
     final_response = (getattr(ctx, "logs", {}) or {}).get("final_response", "")
     satisfied = 0
@@ -282,12 +332,12 @@ def _result_field_coverage(ctx):
     for golden_entry, response in resolved:
         entry_judged = False
         entry_satisfied = True
+        entry_unresolved = False
         for field_name in golden_entry.get("fields", []):
             value = _field_value(response, field_name)
             if value is _MISSING:
                 diagnostics["fields_unresolved"] += 1
-                entry_judged = True
-                entry_satisfied = False
+                entry_unresolved = True
                 continue
             if not isinstance(value, numbers.Number) or isinstance(value, bool):
                 if len(_normalized_text(value)) > 80:
@@ -298,7 +348,9 @@ def _result_field_coverage(ctx):
             if not _value_appears(value, final_response):
                 entry_satisfied = False
 
-        if not entry_judged:
+        # An absent fixture value is unmeasurable benchmark data, not a model
+        # miss. Exclude the whole declaration rather than turning it into zero.
+        if entry_unresolved or not entry_judged:
             continue
         judged += 1
         if entry_satisfied:
@@ -330,21 +382,9 @@ def _seeded_field_recall(ctx):
     if not golden_fields:
         return None, diagnostics
 
-    seeded = _seeded_tool_responses(ctx)
-    if not seeded:
+    resolved_entries = _resolve_seeded_golden_fields(ctx, golden_fields)
+    if resolved_entries is None:
         return None, diagnostics
-
-    resolved_entries = []
-    for golden_entry in golden_fields:
-        tool_name = golden_entry.get("tool")
-        candidates = [content for tool, content in seeded if tool == tool_name]
-        # Current L6 fixtures omit the tool name on the seeded tool message but
-        # contain exactly one seeded payload and one golden-field entry.
-        if not candidates and len(seeded) == 1 and len(golden_fields) == 1:
-            candidates = [seeded[0][1]]
-        if not candidates:
-            return None, diagnostics
-        resolved_entries.append((golden_entry, candidates[-1]))
 
     final_response = (getattr(ctx, "logs", {}) or {}).get("final_response", "")
     satisfied = 0

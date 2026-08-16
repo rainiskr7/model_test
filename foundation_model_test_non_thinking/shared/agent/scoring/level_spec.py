@@ -80,8 +80,10 @@ LEVEL_SPECS = {
         MetricSpec("ToolAcc", vendored_metric("ToolAcc"), True),
         MetricSpec("RedundantCallRate", redundant_call_rate_det, True),
     ),
-    # Record-only in agent_det_v2: L7 does not contribute to agent_score until an
-    # explicit promotion decision bumps the scoring version. Upstream RefRecall is
+    # Record-only in agent_det_v2: L7 does not contribute to agent_score until both
+    # metrics apply to most tasks across models and tool-call rate is high enough that
+    # coverage is not success-conditioned; promotion also bumps the scoring version.
+    # Upstream RefRecall is
     # judge-only conversational fact recall from the transcript; result-field coverage
     # is a different construct, so do not conflate them or rename it back.
     "L7": (

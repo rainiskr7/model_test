@@ -705,14 +705,24 @@ def _result_field_coverage_context(final_response, golden_fields=None, include_s
     }
     second_result = {"author": "Beta Writer"}
     messages = [
-        {"role": "tool", "tool_call_id": "call_1", "content": first_result},
+        {
+            "role": "tool",
+            "tool_call_id": "seed_call_2_1",
+            "name": "Catalog",
+            "content": first_result,
+        },
     ]
     action_trace = [
         {"tool": "Catalog", "args": {}, "result": first_result},
     ]
     if include_second:
         messages.append(
-            {"role": "tool", "tool_call_id": "call_2", "content": second_result}
+            {
+                "role": "tool",
+                "tool_call_id": "seed_call_4_1",
+                "name": "Author",
+                "content": second_result,
+            }
         )
         action_trace.append({"tool": "Author", "args": {}, "result": second_result})
     return DummyContext(
@@ -742,7 +752,12 @@ def _single_result_field_context(value, final_response, field_name="value"):
         logs={
             "conversation_log": {
                 "messages": [
-                    {"role": "tool", "tool_call_id": "call_1", "content": result}
+                    {
+                        "role": "tool",
+                        "tool_call_id": "seed_call_2_1",
+                        "name": "Lookup",
+                        "content": result,
+                    }
                 ]
             },
             "final_response": final_response,
@@ -813,10 +828,11 @@ def test_result_field_coverage_excludes_long_text():
     _assert(diagnostics["fields_unresolved"] == 0, "long field unresolved count")
 
 
-def test_result_field_coverage_counts_unresolved_as_failure():
+def test_result_field_coverage_unresolved_is_not_applicable():
     ctx = _single_result_field_context("present", "present", "missing.path")
-    _assert_close(
-        extra_metrics.result_field_coverage_det(ctx), 0.0, "unresolved field"
+    _assert(
+        extra_metrics.result_field_coverage_det(ctx) is None,
+        "unresolvable seed payload must be not applicable",
     )
     diagnostics = extra_metrics.result_field_coverage_diagnostics(ctx)
     _assert(diagnostics["fields_required"] == 1, "unresolved required count")
@@ -846,6 +862,56 @@ def test_result_field_coverage_no_data_and_missing_tool_response():
     _assert(diagnostics["fields_required"] == 1, "missing-response required count")
     _assert(diagnostics["fields_checked"] == 0, "missing-response checked count")
     _assert(diagnostics["fields_unresolved"] == 0, "missing response is not unresolved")
+
+
+def test_result_field_coverage_seed_only_applicability_denominator():
+    resolvable = _single_result_field_context("present", "present")
+    resolvable.action_trace = []
+    target_message = resolvable.logs["conversation_log"]["messages"][0]
+    target_message.pop("name")
+    target_message["tool_call_id"] = "seed_call_4_1"
+    resolvable.logs["conversation_log"]["messages"].insert(
+        0,
+        {
+            "role": "tool",
+            "tool_call_id": "seed_call_2_1",
+            "content": {"value": "unrelated"},
+        },
+    )
+    resolvable.task_schema["context_tests"] = [
+        {
+            "turn": 4,
+            "expected_action": {"tool": "Lookup", "args": {}},
+        }
+    ]
+    unresolvable = _single_result_field_context("present", "present")
+    unresolvable.action_trace = []
+    unresolvable.logs["conversation_log"]["messages"][0].pop("name")
+    unresolvable.task_schema["context_tests"] = [
+        {
+            "turn": 5,
+            "expected_action": {"tool": "Lookup", "args": {}},
+        }
+    ]
+    spec = next(
+        spec
+        for spec in level_spec.LEVEL_SPECS["L7"]
+        if spec.name == "ResultFieldCoverage_det"
+    )
+    original_context = aggregate.build_eval_context
+    aggregate.build_eval_context = lambda task: task
+    try:
+        entry = aggregate._average_metric([resolvable, unresolvable], spec)
+    finally:
+        aggregate.build_eval_context = original_context
+    _assert_close(entry["score"], 1.0, "seed-only denominator score")
+    _assert(entry["n_tasks"] == 2, "seed-only total task count")
+    _assert(entry["n_scored"] == 1, "unmapped seed entered denominator")
+    _assert(
+        isinstance(entry["n_tasks"], int) and isinstance(entry["n_scored"], int),
+        "applicability counts must be integral",
+    )
+    _assert(entry["in_score"] is False, "L7 coverage must remain record-only")
 
 
 def test_result_field_coverage_diagnostics_are_aggregated():
@@ -1103,7 +1169,7 @@ def test_partial_metric_keeps_level_scorable():
     with contextlib.redirect_stdout(output):
         score_run.print_table(summary, 5)
     _assert(
-        "PartialMetric=0.500/partial(2/3)" in output.getvalue(),
+        "PartialMetric=0.500/partial(applicable=2/3)" in output.getvalue(),
         "partial metric coverage token mismatch",
     )
 
@@ -1430,7 +1496,7 @@ def test_print_table_shows_l7_record_only_metrics_without_judges():
     printed = output.getvalue()
     _assert("ContextRetention_det=1.000/ok" in printed, "L7 context metric hidden")
     _assert(
-        "ResultFieldCoverage_det=0.500/ok(3/10)" in printed,
+        "ResultFieldCoverage_det=0.500/ok(applicable=3/10)" in printed,
         "L7 result field metric or scored-task count hidden",
     )
     _assert("judge_missing" not in printed, "judge-missing metrics must stay hidden")
@@ -1824,8 +1890,9 @@ TESTS = [
     test_result_field_coverage_wrong_number,
     test_result_field_coverage_normalizes_string_html_and_case,
     test_result_field_coverage_excludes_long_text,
-    test_result_field_coverage_counts_unresolved_as_failure,
+    test_result_field_coverage_unresolved_is_not_applicable,
     test_result_field_coverage_no_data_and_missing_tool_response,
+    test_result_field_coverage_seed_only_applicability_denominator,
     test_result_field_coverage_diagnostics_are_aggregated,
     test_frozen_v2_l6_spec_is_unchanged,
     test_v3_l6_spec_is_exactly_two_in_score_metrics,

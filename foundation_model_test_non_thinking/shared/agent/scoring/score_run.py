@@ -34,7 +34,7 @@ def _metric_token(name: str, entry: Dict[str, Any]) -> str:
     n_scored = entry.get("n_scored")
     n_tasks = entry.get("n_tasks")
     if isinstance(n_scored, int) and isinstance(n_tasks, int) and n_scored < n_tasks:
-        token += f"({n_scored}/{n_tasks})"
+        token += f"(applicable={n_scored}/{n_tasks})"
     return token
 
 

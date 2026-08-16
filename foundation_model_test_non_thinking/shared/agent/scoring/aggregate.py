@@ -235,6 +235,8 @@ def build_summary_from_loaded(
     )
     required_levels = len(SCORABLE_LEVELS)
     complete = scored_levels == required_levels
+    # Equal level weighting is a frozen score definition. Do not infer new weights
+    # from a saturated cohort (including trivial L2); that requires a version bump.
     # L7 deterministic metrics are record-only and do not contribute to agent_score.
     agent_score = (
         mean_or_none([by_level[level]["score"] for level in SCORABLE_LEVELS])
