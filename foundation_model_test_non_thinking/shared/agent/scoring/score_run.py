@@ -9,12 +9,17 @@ from typing import Any, Dict, Optional
 
 if __package__:
     from .aggregate import ALL_LEVELS, build_summary_from_loaded, safe_model_name
+    from .level_spec import LEVEL_SPECS
 else:
     sys.path.insert(0, str(Path(__file__).resolve().parent))
     from aggregate import ALL_LEVELS, build_summary_from_loaded, safe_model_name
+    from level_spec import LEVEL_SPECS
 
 
 PREFIX = "[agent-scoring]"
+DETERMINISTIC_METRICS = {
+    spec.name for specs in LEVEL_SPECS.values() for spec in specs
+}
 
 
 def _fmt(value: Optional[float]) -> str:
@@ -73,7 +78,7 @@ def print_table(summary: Dict[str, Any], skipped_count: int) -> None:
         metrics = " ".join(
             _metric_token(name, entry)
             for name, entry in result["metrics"].items()
-            if entry.get("in_score") or name == "FSM_prefix"
+            if entry.get("in_score") or name in DETERMINISTIC_METRICS
         )
         unscorable = ""
         if result.get("score") is None and result.get("unscorable_reason"):

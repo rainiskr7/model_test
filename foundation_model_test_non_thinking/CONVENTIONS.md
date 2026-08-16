@@ -54,7 +54,8 @@ results/<safe_model_name>/<timestamp>/<category>/<track>/<benchmark>.json
 - `safe_model_name`: maker prefix + 풀네임 + 양자화 태그 (정규화는 `/`/`-`/`:` → `_` 만, 점/대소문자 보존)
   - 예: `Qwen/Qwen3.6-35B-A3B` → `Qwen_Qwen3.6_35B_A3B`
 - `category`: `language` | `vision`
-- `track`: `harness` | `nlu` | `agent` | `multimodal` | `customB`
+- `track`: `harness` | `nlu` | `agent` | `multimodal` | `customB`; agent 변형은 `AGENT_TRACK_NAME` 으로 `agent_<variant>` 를 선택 (`agent_passk`, 검증용 `agent_<purpose>` 등)
+  - 변형 결과는 모델 비교 시 canonical `agent` 트랙과 절대 섞지 않는다.
 - 최상위 `results/` 통합 (클래스 폴더 안에 결과 만들지 말 것)
 
 ## 5. 결과 JSON 표준 (새 bench)

@@ -133,6 +133,9 @@ def convert_dataset_to_tasks(dataset_tasks: List[Dict]) -> List[Dict]:
         
         # 선언된 도구 이름을 그대로 사용
         print(f"  [INFO] Task {task.get('task_id')}: tools_needed = {tools_needed}")
+
+        conversation_tracking = task.get("conversation_tracking") or {}
+        evaluation_context = conversation_tracking.get("evaluation_context") or {}
         
         converted_task = {
             "id": task.get("task_id", "unknown"),
@@ -144,6 +147,9 @@ def convert_dataset_to_tasks(dataset_tasks: List[Dict]) -> List[Dict]:
             "level": task.get("task_level", 0),
             "category": task.get("task_category", "unknown"),
             "golden_action": task.get("golden_action", []),
+            "golden_fields": task.get("golden_fields", []),
+            "context_tests": evaluation_context.get("context_tests", []),
+            "long_term_tests": task.get("long_term_tests", []),
             "conversation_tracking": task.get("conversation_tracking"),
             "arg_schema": task.get("arg_schema", {}),
             # Pass through evaluation helpers if present
@@ -187,6 +193,9 @@ def simplify_result(result: Dict[str, Any]) -> Dict[str, Any]:
         "error": result.get("error"),
         "expected_tools": result.get("expected_tools", []),
         "golden_action": result.get("golden_action", []),
+        "golden_fields": result.get("golden_fields", []),
+        "context_tests": result.get("context_tests", []),
+        "long_term_tests": result.get("long_term_tests", []),
         "minimum_steps": result.get("minimum_steps"),
         "data_flow": result.get("data_flow", []),
         "error_injection": result.get("error_injection"),
@@ -594,6 +603,9 @@ def run_benchmark_on_dataset(
             result['category'] = task['category']
             result['expected_tools'] = task['available_tools']
             result['golden_action'] = task['golden_action']
+            result['golden_fields'] = task['golden_fields']
+            result['context_tests'] = task['context_tests']
+            result['long_term_tests'] = task['long_term_tests']
             # Add repetition results for pass@k metric
             result['repetitions'] = repetitions
             result['repetition_results'] = repetition_results
@@ -664,6 +676,9 @@ def run_benchmark_on_dataset(
                 "category": task.get('category', 'unknown'),
                 "expected_tools": task.get('available_tools', []),
                 "golden_action": task.get('golden_action', []),
+                "golden_fields": task.get('golden_fields', []),
+                "context_tests": task.get('context_tests', []),
+                "long_term_tests": task.get('long_term_tests', []),
                 "minimum_steps": task.get('minimum_steps'),
                 "data_flow": task.get('data_flow', []),
                 "repetitions": repetitions,

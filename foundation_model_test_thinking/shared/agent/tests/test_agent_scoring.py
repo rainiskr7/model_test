@@ -33,12 +33,15 @@ extra_metrics = _load_module("extra_metrics")
 level_spec = _load_module("level_spec")
 aggregate = _load_module("aggregate")
 score_run = _load_module("score_run")
+scoring_context = _load_module("context")
 
 
 class DummyContext:
-    def __init__(self, golden_action, action_trace):
-        self.task_schema = {"golden_action": golden_action}
-        self.action_trace = action_trace
+    def __init__(self, golden_action=None, action_trace=None, task_schema=None, logs=None):
+        self.task_schema = {"golden_action": golden_action or []}
+        self.task_schema.update(task_schema or {})
+        self.action_trace = action_trace or []
+        self.logs = logs or {}
 
 
 def _assert(condition, message):
@@ -95,6 +98,21 @@ def test_in_score_false_excluded():
     _assert_close(level_spec.representative_score(entries), 1.0, "in_score false excluded")
 
 
+def test_context_exposes_l7_ground_truth_with_empty_defaults():
+    expected = {
+        "golden_fields": [{"tool": "Lookup", "fields": ["value"]}],
+        "context_tests": [{"expected_action": {"tool": "Lookup", "args": {}}}],
+        "long_term_tests": [{"plant_turn": 1, "test_turn": 5}],
+    }
+    task_schema, _logs = scoring_context.task_to_schema_and_logs(expected)
+    for key, value in expected.items():
+        _assert(task_schema[key] == value, f"{key} was not exposed to scoring")
+
+    empty_schema, _logs = scoring_context.task_to_schema_and_logs({})
+    for key in expected:
+        _assert(empty_schema[key] == [], f"{key} default must be []")
+
+
 def test_redundant_call_rate_empty_without_bench():
     original = extra_metrics.load_metrics_module
 
@@ -132,6 +150,148 @@ def test_redundant_call_rate_nonempty_loads_bench():
         extra_metrics.load_metrics_module = original
 
 
+def test_context_retention_det_all_with_normalization_and_extra_args():
+    context_tests = [
+        {
+            "expected_action": {
+                "tool": "Lookup",
+                "args": {"query": " BTC ", "limit": 500},
+            }
+        },
+        {"expected_action": {"tool": "Weather", "args": {"city": "SEOUL"}}},
+    ]
+    ctx = DummyContext(
+        action_trace=[
+            {
+                "tool": "Lookup",
+                "args": {"query": "btc", "limit": 500.0, "extra": True},
+            },
+            {"tool": "Weather", "args": {"city": "seoul"}},
+        ],
+        task_schema={"context_tests": context_tests},
+    )
+    _assert_close(
+        extra_metrics.context_retention_det(ctx),
+        1.0,
+        "all context actions with normalized values and extra args",
+    )
+
+    fallback = DummyContext(
+        task_schema={"context_tests": [context_tests[0]]},
+        logs={
+            "tool_calls": [
+                {
+                    "tool_name": "Lookup",
+                    "arguments": {"query": "btc", "limit": 500.0, "extra": True},
+                }
+            ]
+        },
+    )
+    _assert_close(
+        extra_metrics.context_retention_det(fallback),
+        1.0,
+        "raw tool call fallback",
+    )
+
+
+def test_context_retention_det_partial_and_wrong_value():
+    context_tests = [
+        {"expected_action": {"tool": "Lookup", "args": {"symbol": "BTC"}}},
+        {"expected_action": {"tool": "Lookup", "args": {"symbol": "ETH"}}},
+    ]
+    ctx = DummyContext(
+        action_trace=[{"tool": "Lookup", "args": {"symbol": "BTC"}}],
+        task_schema={"context_tests": context_tests},
+    )
+    _assert_close(
+        extra_metrics.context_retention_det(ctx), 0.5, "half context actions matched"
+    )
+
+    wrong_value = DummyContext(
+        action_trace=[{"tool": "Lookup", "args": {"symbol": "SOL"}}],
+        task_schema={"context_tests": [context_tests[0]]},
+    )
+    _assert_close(
+        extra_metrics.context_retention_det(wrong_value),
+        0.0,
+        "wrong argument value must not match",
+    )
+
+
+def test_context_retention_det_none_matched_and_no_data():
+    ctx = DummyContext(
+        action_trace=[{"tool": "Other", "args": {"symbol": "BTC"}}],
+        task_schema={
+            "context_tests": [
+                {"expected_action": {"tool": "Lookup", "args": {"symbol": "BTC"}}}
+            ]
+        },
+    )
+    _assert_close(extra_metrics.context_retention_det(ctx), 0.0, "no actions matched")
+    _assert(
+        extra_metrics.context_retention_det(DummyContext()) is None,
+        "no context tests must be not applicable",
+    )
+
+
+def _ref_recall_context(final_response, golden_fields=None, include_second=True):
+    first_result = {
+        "price": 1234.0,
+        "item": [{"title": "Alpha Book"}],
+    }
+    second_result = {"author": "Beta Writer"}
+    messages = [
+        {"role": "tool", "tool_call_id": "call_1", "content": first_result},
+    ]
+    action_trace = [
+        {"tool": "Catalog", "args": {}, "result": first_result},
+    ]
+    if include_second:
+        messages.append(
+            {"role": "tool", "tool_call_id": "call_2", "content": second_result}
+        )
+        action_trace.append({"tool": "Author", "args": {}, "result": second_result})
+    return DummyContext(
+        action_trace=action_trace,
+        task_schema={
+            "golden_fields": golden_fields
+            if golden_fields is not None
+            else [
+                {"tool": "Catalog", "fields": ["price", "item[0].title"]},
+                {"tool": "Author", "fields": ["author"]},
+            ]
+        },
+        logs={
+            "conversation_log": {"messages": messages},
+            "final_response": final_response,
+        },
+    )
+
+
+def test_ref_recall_det_all_and_partial():
+    all_present = _ref_recall_context(
+        "The price is 1,234 and the title is ALPHA BOOK by beta writer."
+    )
+    _assert_close(extra_metrics.ref_recall_det(all_present), 1.0, "all references recalled")
+
+    one_missing = _ref_recall_context("The price is 1234.0; title: alpha book.")
+    _assert_close(extra_metrics.ref_recall_det(one_missing), 0.5, "one reference missing")
+
+
+def test_ref_recall_det_no_data_and_missing_tool_response():
+    no_data = _ref_recall_context("anything", golden_fields=[])
+    _assert(
+        extra_metrics.ref_recall_det(no_data) is None,
+        "no golden fields must be not applicable",
+    )
+
+    missing_response = _ref_recall_context("beta writer", include_second=False)
+    _assert(
+        extra_metrics.ref_recall_det(missing_response) is None,
+        "missing required tool response must be not applicable",
+    )
+
+
 def test_l6_spec_wires_redundant_call_rate():
     specs = level_spec.LEVEL_SPECS["L6"]
     _assert(len(specs) == 2, "L6 must have exactly two metric specs")
@@ -148,6 +308,20 @@ def test_l6_spec_wires_redundant_call_rate():
     _assert(
         by_name["ToolAcc"].producer.__name__ != "redundant_call_rate_det",
         "ToolAcc must not use redundant_call_rate_det",
+    )
+
+
+def test_l7_spec_is_exactly_two_record_only_metrics():
+    specs = level_spec.LEVEL_SPECS["L7"]
+    _assert(len(specs) == 2, "L7 must have exactly two metric specs")
+    _assert(
+        tuple(spec.name for spec in specs)
+        == ("ContextRetention_det", "RefRecall_det"),
+        "L7 metric names mismatch",
+    )
+    _assert(
+        all(spec.in_score is False for spec in specs),
+        "both L7 metrics must remain record-only",
     )
 
 
@@ -197,19 +371,34 @@ def test_judge_missing_without_call():
     _assert(entry["score"] is None, "judge score should be None")
     _assert(entry["in_score"] is False, "judge in_score should be false")
     _assert(
-        summary["unscorable_reason"] == "no_deterministic_metric",
-        "structural L7 reason must outrank empty results",
+        summary["unscorable_reason"] == "no_tasks",
+        "empty L7 reason mismatch",
     )
 
 
-def test_l7_nonempty_has_no_deterministic_metric():
+def test_l7_without_ground_truth_is_all_not_applicable():
     summary = aggregate.score_level(
         "L7", {"results": [{"resp_schema": {"type": "string"}}]}
     )
     _assert(summary["score"] is None, "L7 score should be None")
     _assert(
-        summary["unscorable_reason"] == "no_deterministic_metric",
+        summary["unscorable_reason"] == "all_not_applicable",
         "L7 unscorable reason mismatch",
+    )
+
+
+def test_empty_level_spec_has_no_deterministic_metric_reason():
+    original_specs = aggregate.LEVEL_SPECS["L1"]
+    aggregate.LEVEL_SPECS["L1"] = ()
+    try:
+        result = aggregate.score_level(
+            "L1", {"results": [{"resp_schema": {"type": "string"}}]}
+        )
+    finally:
+        aggregate.LEVEL_SPECS["L1"] = original_specs
+    _assert(
+        result["unscorable_reason"] == "no_deterministic_metric",
+        "empty metric spec reason mismatch",
     )
 
 
@@ -570,6 +759,49 @@ def test_print_table_shows_partial_run_status():
     )
 
 
+def test_print_table_shows_l7_record_only_metrics_without_judges():
+    metrics = {
+        "ContextRetention_det": {
+            "score": 1.0,
+            "status": "ok",
+            "in_score": False,
+        },
+        "RefRecall_det": {"score": 0.5, "status": "ok", "in_score": False},
+        "SR": {"score": None, "status": "judge_missing", "in_score": False},
+        "ArgAcc": {"score": None, "status": "judge_missing", "in_score": False},
+        "EffScore": {"score": None, "status": "judge_missing", "in_score": False},
+        "ContextRetention": {
+            "score": None,
+            "status": "judge_missing",
+            "in_score": False,
+        },
+        "RefRecall": {"score": None, "status": "judge_missing", "in_score": False},
+    }
+    summary = {
+        "model": "x",
+        "track": "agent",
+        "agent_score": 0.5,
+        "agent_score_status": "complete",
+        "scored_levels": 6,
+        "required_levels": 6,
+        "by_level": {
+            "L7": {
+                "total": 1,
+                "score": None,
+                "unscorable_reason": "all_not_applicable",
+                "metrics": metrics,
+            }
+        },
+    }
+    output = io.StringIO()
+    with contextlib.redirect_stdout(output):
+        score_run.print_table(summary, 0)
+    printed = output.getvalue()
+    _assert("ContextRetention_det=1.000/ok" in printed, "L7 context metric hidden")
+    _assert("RefRecall_det=0.500/ok" in printed, "L7 recall metric hidden")
+    _assert("judge_missing" not in printed, "judge-missing metrics must stay hidden")
+
+
 def test_arg_f1_det_or_skip():
     base = os.environ.get("MODEL_TEST_BASE")
     metrics_py = Path(base or "") / "data" / "Ko-AgentBench" / "bench" / "runner" / "metrics.py"
@@ -599,12 +831,20 @@ TESTS = [
     test_mean_excludes_none,
     test_mean_all_none,
     test_in_score_false_excluded,
+    test_context_exposes_l7_ground_truth_with_empty_defaults,
     test_redundant_call_rate_empty_without_bench,
     test_redundant_call_rate_nonempty_loads_bench,
+    test_context_retention_det_all_with_normalization_and_extra_args,
+    test_context_retention_det_partial_and_wrong_value,
+    test_context_retention_det_none_matched_and_no_data,
+    test_ref_recall_det_all_and_partial,
+    test_ref_recall_det_no_data_and_missing_tool_response,
     test_l6_spec_wires_redundant_call_rate,
+    test_l7_spec_is_exactly_two_record_only_metrics,
     test_l6_empty_trace_depends_on_tool_acc,
     test_judge_missing_without_call,
-    test_l7_nonempty_has_no_deterministic_metric,
+    test_l7_without_ground_truth_is_all_not_applicable,
+    test_empty_level_spec_has_no_deterministic_metric_reason,
     test_missing_level_not_zero_filled,
     test_non_l7_none_is_unscorable,
     test_metric_error_fails_closed,
@@ -619,6 +859,7 @@ TESTS = [
     test_complete_six_with_l7_ignores_l7_in_headline,
     test_empty_results_are_unscorable_no_tasks,
     test_print_table_shows_partial_run_status,
+    test_print_table_shows_l7_record_only_metrics_without_judges,
     test_arg_f1_det_or_skip,
 ]
 

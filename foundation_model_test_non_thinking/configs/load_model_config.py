@@ -8,6 +8,7 @@ Usage:
 run_full_eval.sh 가 이 helper 로 yaml 파싱.
 """
 import argparse
+import os
 import shlex
 import sys
 from pathlib import Path
@@ -111,6 +112,7 @@ def emit_shell(cfg: dict) -> None:
 
     yaml 의 backend_reference 섹션은 사람용 메모라 export 안 함.
     """
+    override_chat, override_v1 = endpoint_overrides()
     q = shlex.quote
     print(f"export MODEL={q(cfg['model'])}")
     print(f"export TOKENIZER={q(cfg['tokenizer_path'])}")
@@ -118,6 +120,14 @@ def emit_shell(cfg: dict) -> None:
     endpoint = cfg.get("endpoint", {})
     print(f"export BASE_URL_CHAT={q(endpoint.get('chat', ''))}")
     print(f"export BASE_URL_V1={q(endpoint.get('v1', ''))}")
+    if override_chat is not None:
+        print(f"export BASE_URL_CHAT={q(override_chat)}")
+        print(f"export BASE_URL_V1={q(override_v1)}")
+        print(
+            f"[config] endpoint override: BASE_URL_CHAT={override_chat} "
+            f"BASE_URL_V1={override_v1}",
+            file=sys.stderr,
+        )
     tracks = cfg.get("tracks", [])
     print(f"export TRACKS={q(' '.join(tracks))}")
 
@@ -147,6 +157,24 @@ def emit_shell(cfg: dict) -> None:
         print(f"export SKIP_BENCHES={q(' '.join(skip_benches))}")
     else:
         print("unset SKIP_BENCHES")
+
+
+def endpoint_overrides() -> tuple[str | None, str | None]:
+    """명시적인 endpoint override pair 를 검증해 반환."""
+    chat_is_set = "BASE_URL_CHAT_OVERRIDE" in os.environ
+    v1_is_set = "BASE_URL_V1_OVERRIDE" in os.environ
+    if chat_is_set != v1_is_set:
+        sys.exit(
+            "[config] ERROR: BASE_URL_CHAT_OVERRIDE and BASE_URL_V1_OVERRIDE "
+            "must be set together"
+        )
+
+    if not chat_is_set:
+        return None, None
+
+    # LM_EVAL_MODE/KRETA_SETTING 식의 암묵적 보존과 달리 별도 *_OVERRIDE 를 쓴다.
+    # 이전 모델의 stale endpoint 가 다음 모델 실행을 조용히 바꾸지 않게 하기 위해서다.
+    return os.environ["BASE_URL_CHAT_OVERRIDE"], os.environ["BASE_URL_V1_OVERRIDE"]
 
 
 def emit_agent(agent: dict) -> None:

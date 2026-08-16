@@ -4,9 +4,21 @@ from dataclasses import dataclass
 from typing import Callable, Iterable, List, Optional, Sequence
 
 try:
-    from .extra_metrics import arg_f1_det, fsm_prefix, redundant_call_rate_det
+    from .extra_metrics import (
+        arg_f1_det,
+        context_retention_det,
+        fsm_prefix,
+        redundant_call_rate_det,
+        ref_recall_det,
+    )
 except ImportError:  # direct file loading in tests
-    from extra_metrics import arg_f1_det, fsm_prefix, redundant_call_rate_det
+    from extra_metrics import (
+        arg_f1_det,
+        context_retention_det,
+        fsm_prefix,
+        redundant_call_rate_det,
+        ref_recall_det,
+    )
 
 
 JUDGE_METRICS = ("SR", "ArgAcc", "EffScore", "ContextRetention", "RefRecall")
@@ -59,7 +71,12 @@ LEVEL_SPECS = {
         MetricSpec("ToolAcc", vendored_metric("ToolAcc"), True),
         MetricSpec("RedundantCallRate", redundant_call_rate_det, True),
     ),
-    "L7": (),
+    # Record-only in agent_det_v2: L7 does not contribute to agent_score until an
+    # explicit promotion decision bumps the scoring version.
+    "L7": (
+        MetricSpec("ContextRetention_det", context_retention_det, False),
+        MetricSpec("RefRecall_det", ref_recall_det, False),
+    ),
 }
 
 

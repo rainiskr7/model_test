@@ -57,7 +57,9 @@ MODEL_CONFIG="$1"
 
 # yaml → env 변수 (MODEL, TOKENIZER, MODEL_CLASS, BASE_URL_CHAT, BASE_URL_V1, TRACKS)
 # shellcheck disable=SC1090
-source <(python "$SCRIPT_DIR/configs/load_model_config.py" "$MODEL_CONFIG")
+CONFIG_SHELL="$(python "$SCRIPT_DIR/configs/load_model_config.py" "$MODEL_CONFIG")" || exit $?
+source <(printf '%s\n' "$CONFIG_SHELL")
+unset CONFIG_SHELL
 echo "[full_eval] config=$MODEL_CONFIG → MODEL=$MODEL CLASS=$MODEL_CLASS"
 
 # API key 외부화: .env 파일 또는 env 변수에서 로드 (하드코딩 금지)
