@@ -2521,6 +2521,28 @@ def test_score_run_rejected_summary_writes_sidecar_only():
         _assert("scoring_version mismatch" in output, "validation failure was not printed")
 
 
+def test_score_run_rejects_all_legacy_metadata_without_replacing_summary():
+    with tempfile.TemporaryDirectory() as temp_dir:
+        results_dir = Path(temp_dir)
+        candidate = _scoring_candidate()
+        candidate["native_tool_calling"] = False
+        native_overrides = {level: None for level in candidate["by_level"]}
+        _write_validation_fixture(results_dir, candidate, native_overrides)
+        summary_path = results_dir / "summary.json"
+        before = summary_path.read_bytes()
+
+        exit_code, output = _run_score_candidate(results_dir, candidate)
+        sidecar = results_dir / "summary.invalid.json"
+        _assert(exit_code == 1, f"legacy summary exited {exit_code}, expected 1")
+        _assert(summary_path.read_bytes() == before, "legacy run replaced summary.json")
+        _assert(sidecar.is_file(), "legacy run did not write an invalid-summary sidecar")
+        _assert(
+            json.loads(sidecar.read_text(encoding="utf-8")) == candidate,
+            "legacy sidecar payload mismatch",
+        )
+        _assert("pre-harness-fix artifact" in output, "legacy rejection was not printed")
+
+
 def test_score_run_clean_summary_uses_atomic_replace_and_clears_sidecar():
     with tempfile.TemporaryDirectory() as temp_dir:
         results_dir = Path(temp_dir)
@@ -2554,6 +2576,32 @@ def test_score_run_clean_summary_uses_atomic_replace_and_clears_sidecar():
             ),
             "clean publish did not atomically replace summary.json",
         )
+
+
+def test_score_run_full_harness_metadata_still_publishes():
+    with tempfile.TemporaryDirectory() as temp_dir:
+        results_dir = Path(temp_dir)
+        candidate = _scoring_candidate()
+        _write_validation_fixture(results_dir, candidate)
+        for level in candidate["by_level"]:
+            level_path = results_dir / f"{level}.json"
+            raw = json.loads(level_path.read_text(encoding="utf-8"))
+            raw["metadata"].update(
+                {
+                    "request_timeout": 60,
+                    "task_timeout": 300,
+                    "max_retries": 0,
+                    "native_tool_calling": True,
+                }
+            )
+            level_path.write_text(json.dumps(raw), encoding="utf-8")
+
+        exit_code, output = _run_score_candidate(results_dir, candidate)
+        published = json.loads(
+            (results_dir / "summary.json").read_text(encoding="utf-8")
+        )
+        _assert(exit_code == 0, f"full harness metadata exited {exit_code}: {output}")
+        _assert(published == candidate, "full harness metadata was not published")
 
 
 def test_score_run_bad_argv_exits_2():
@@ -2711,16 +2759,51 @@ def test_validator_accepts_partial_summary():
     _assert(not failures, f"partial summary failed validation: {failures}")
 
 
-def test_validator_accepts_legacy_missing_native_metadata():
+def test_validator_rejects_all_legacy_level_metadata():
     summary = _validation_summary()
     summary["native_tool_calling"] = False
     native_overrides = {level: None for level in summary["by_level"]}
     failures, warnings = _validate_fixture(summary, native_overrides)
-    _assert(not failures, f"legacy native metadata failed validation: {failures}")
+    _assert(
+        any("pre-harness-fix artifact" in failure for failure in failures),
+        f"all-legacy raw levels passed validation: {failures}",
+    )
     _assert(
         len([warning for warning in warnings if "treating legacy run as false" in warning])
         == len(summary["by_level"]),
         "legacy native metadata warnings mismatch",
+    )
+
+
+def test_validator_accepts_native_tool_calling_only_metadata():
+    failures, _warnings = _validate_fixture(_validation_summary())
+    _assert(
+        not failures,
+        f"native_tool_calling-only metadata was rejected: {failures}",
+    )
+
+
+def test_validator_accepts_mixed_legacy_and_current_levels_with_warning():
+    with tempfile.TemporaryDirectory() as temp_dir:
+        results_dir = Path(temp_dir)
+        summary = _validation_summary()
+        summary["native_tool_calling"] = False
+        native_overrides = {level: None for level in summary["by_level"]}
+        _write_validation_fixture(results_dir, summary, native_overrides)
+        l1_path = results_dir / "L1.json"
+        l1 = json.loads(l1_path.read_text(encoding="utf-8"))
+        l1["metadata"]["native_tool_calling"] = False
+        l1_path.write_text(json.dumps(l1), encoding="utf-8")
+
+        failures, warnings = validate_run.validate_summary(summary, results_dir)
+
+    _assert(not failures, f"mixed legacy/current levels were rejected: {failures}")
+    legacy_warnings = [
+        warning for warning in warnings if "treating legacy run as false" in warning
+    ]
+    _assert(
+        len(legacy_warnings) == len(summary["by_level"]) - 1,
+        f"mixed-run legacy warnings mismatch: {legacy_warnings}",
     )
 
 
@@ -3036,7 +3119,9 @@ TESTS = [
     test_score_run_bootstrap_failure_exits_2_without_writes,
     test_score_run_internal_failure_preserves_existing_summary,
     test_score_run_rejected_summary_writes_sidecar_only,
+    test_score_run_rejects_all_legacy_metadata_without_replacing_summary,
     test_score_run_clean_summary_uses_atomic_replace_and_clears_sidecar,
+    test_score_run_full_harness_metadata_still_publishes,
     test_score_run_bad_argv_exits_2,
     test_validate_summary_agrees_with_validate_results_dir,
     test_contract_error_metric_validates_and_publishes,
@@ -3047,7 +3132,9 @@ TESTS = [
     test_score_run_check_collapses_wholly_absent_subtree,
     test_score_run_check_and_dry_run_are_mutually_exclusive,
     test_validator_accepts_partial_summary,
-    test_validator_accepts_legacy_missing_native_metadata,
+    test_validator_rejects_all_legacy_level_metadata,
+    test_validator_accepts_native_tool_calling_only_metadata,
+    test_validator_accepts_mixed_legacy_and_current_levels_with_warning,
     test_validator_rejects_version_mismatch,
     test_validator_rejects_score_outside_unit_interval,
     test_validator_rejects_partial_in_score_metric,

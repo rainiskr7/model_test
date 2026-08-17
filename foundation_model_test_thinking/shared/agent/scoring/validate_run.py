@@ -43,6 +43,12 @@ else:
 PREFIX = "[agent-validate]"
 NO_SCORE_STATUSES = {"not_applicable", "error", "contract_error", "judge_missing"}
 CACHE_MISS_WARNING_THRESHOLD = 0.20
+HARNESS_INTEGRITY_FIELDS = (
+    "request_timeout",
+    "task_timeout",
+    "max_retries",
+    "native_tool_calling",
+)
 EXIT_CODE_HELP = """exit codes:
   0  results valid (warnings allowed)
   1  results invalid -- validation errors found
@@ -304,8 +310,11 @@ def validate_summary(
     if not isinstance(summary_native, bool):
         failures.append("summary native_tool_calling must be a boolean")
     raw_native: Dict[str, bool] = {}
+    legacy_levels: List[str] = []
     for level, data in raw_levels.items():
         metadata = data.get("metadata") or {}
+        if not any(field in metadata for field in HARNESS_INTEGRITY_FIELDS):
+            legacy_levels.append(level)
         if "native_tool_calling" not in metadata:
             # 필드 도입 전 raw 결과는 non-native runner만 사용했다.
             native = False
@@ -329,6 +338,13 @@ def validate_summary(
             warnings.append(
                 f"{level} metadata.success_rate={success_rate!r} but deterministic score={level_score:.12g}"
             )
+    if raw_levels and len(legacy_levels) == len(raw_levels):
+        fields = ", ".join(HARNESS_INTEGRITY_FIELDS)
+        failures.append(
+            f"run {results_dir} is a pre-harness-fix artifact: every present raw "
+            f"level file lacks all harness-integrity metadata fields ({fields}); "
+            "publishing is not allowed"
+        )
     if len(set(raw_native.values())) > 1:
         details = ", ".join(f"{level}={value}" for level, value in sorted(raw_native.items()))
         failures.append(f"native_tool_calling disagrees across raw levels: {details}")
