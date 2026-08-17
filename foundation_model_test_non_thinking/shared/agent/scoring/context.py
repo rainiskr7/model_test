@@ -1,5 +1,6 @@
 """Build Ko-AgentBench EvalContext objects from saved task results."""
 
+from functools import lru_cache
 from typing import Any, Dict
 
 try:
@@ -8,6 +9,7 @@ except ImportError:  # direct file loading in tests
     from bench_path import ensure_bench_path
 
 
+@lru_cache(maxsize=1)
 def load_metrics_module():
     ensure_bench_path()
     from bench.runner import metrics

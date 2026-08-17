@@ -389,6 +389,30 @@ def _validate_fixture(summary, native_overrides=None):
         return validate_run.validate_results_dir(results_dir)
 
 
+def _scoring_candidate(summary=None):
+    candidate = copy.deepcopy(summary or _validation_summary())
+    candidate.setdefault("levels_missing", [])
+    candidate.setdefault("levels_unscorable", ["L7"])
+    return candidate
+
+
+def _run_score_candidate(results_dir, summary, *extra_argv):
+    original_bootstrap = score_run.load_metrics_module
+    original_build = score_run.build_summary
+    score_run.load_metrics_module = lambda: object()
+    score_run.build_summary = lambda _results_dir: copy.deepcopy(summary)
+    output = io.StringIO()
+    try:
+        with contextlib.redirect_stdout(output), contextlib.redirect_stderr(output):
+            exit_code = score_run.main(
+                ["--results-dir", str(results_dir), *extra_argv]
+            )
+    finally:
+        score_run.load_metrics_module = original_bootstrap
+        score_run.build_summary = original_build
+    return exit_code, output.getvalue()
+
+
 def _cache_miss_call(tool_name, arguments):
     return {
         "tool_name": tool_name,
@@ -2416,6 +2440,182 @@ def test_validator_main_unparseable_summary_exits_2():
     _assert(exit_code == 2, f"unparseable summary exited {exit_code}, expected 2")
 
 
+def test_score_run_bootstrap_failure_exits_2_without_writes():
+    with tempfile.TemporaryDirectory() as temp_dir:
+        results_dir = Path(temp_dir)
+        correct = _scoring_candidate()
+        _write_validation_fixture(results_dir, correct)
+        l6_path = results_dir / "L6.json"
+        l6 = json.loads(l6_path.read_text(encoding="utf-8"))
+        l6["results"][0]["golden_fields"] = []
+        l6_path.write_text(json.dumps(l6), encoding="utf-8")
+        summary_path = results_dir / "summary.json"
+        before = summary_path.read_bytes()
+
+        previous_base = os.environ.pop("MODEL_TEST_BASE", None)
+        score_run.load_metrics_module.cache_clear()
+        output = io.StringIO()
+        try:
+            with contextlib.redirect_stdout(output), contextlib.redirect_stderr(output):
+                exit_code = score_run.main(["--results-dir", str(results_dir)])
+        finally:
+            if previous_base is not None:
+                os.environ["MODEL_TEST_BASE"] = previous_base
+            score_run.load_metrics_module.cache_clear()
+
+        _assert(exit_code == 2, f"bootstrap failure exited {exit_code}, expected 2")
+        _assert(summary_path.read_bytes() == before, "bootstrap failure replaced summary.json")
+        _assert(
+            not (results_dir / "summary.invalid.json").exists(),
+            "bootstrap failure wrote an invalid-summary sidecar",
+        )
+        _assert("MODEL_TEST_BASE is required" in output.getvalue(), "bootstrap error hidden")
+
+
+def test_score_run_internal_failure_preserves_existing_summary():
+    with tempfile.TemporaryDirectory() as temp_dir:
+        results_dir = Path(temp_dir)
+        correct = _scoring_candidate()
+        _write_validation_fixture(results_dir, correct)
+        summary_path = results_dir / "summary.json"
+        before = summary_path.read_bytes()
+        original_bootstrap = score_run.load_metrics_module
+        original_build = score_run.build_summary
+        score_run.load_metrics_module = lambda: object()
+
+        def fail_build(_results_dir):
+            raise RuntimeError("synthetic scoring failure")
+
+        score_run.build_summary = fail_build
+        try:
+            with contextlib.redirect_stderr(io.StringIO()):
+                exit_code = score_run.main(["--results-dir", str(results_dir)])
+        finally:
+            score_run.load_metrics_module = original_bootstrap
+            score_run.build_summary = original_build
+
+        _assert(exit_code == 2, f"internal scoring failure exited {exit_code}, expected 2")
+        _assert(summary_path.read_bytes() == before, "scoring failure modified summary.json")
+        _assert(
+            not (results_dir / "summary.invalid.json").exists(),
+            "internal scoring failure wrote a sidecar",
+        )
+
+
+def test_score_run_rejected_summary_writes_sidecar_only():
+    with tempfile.TemporaryDirectory() as temp_dir:
+        results_dir = Path(temp_dir)
+        correct = _scoring_candidate()
+        _write_validation_fixture(results_dir, correct)
+        summary_path = results_dir / "summary.json"
+        before = summary_path.read_bytes()
+        rejected = _scoring_candidate()
+        rejected["scoring_version"] = "rejected-version"
+
+        exit_code, output = _run_score_candidate(results_dir, rejected)
+        sidecar = results_dir / "summary.invalid.json"
+        _assert(exit_code == 1, f"rejected summary exited {exit_code}, expected 1")
+        _assert(summary_path.read_bytes() == before, "rejected summary replaced summary.json")
+        _assert(sidecar.is_file(), "rejected summary sidecar was not written")
+        _assert(json.loads(sidecar.read_text(encoding="utf-8")) == rejected, "sidecar payload mismatch")
+        _assert("scoring_version mismatch" in output, "validation failure was not printed")
+
+
+def test_score_run_clean_summary_uses_atomic_replace_and_clears_sidecar():
+    with tempfile.TemporaryDirectory() as temp_dir:
+        results_dir = Path(temp_dir)
+        candidate = _scoring_candidate()
+        _write_validation_fixture(results_dir, candidate)
+        summary_path = results_dir / "summary.json"
+        summary_path.write_text("old summary", encoding="utf-8")
+        sidecar = results_dir / "summary.invalid.json"
+        sidecar.write_text("stale invalid summary", encoding="utf-8")
+        original_replace = score_run.os.replace
+        replacements = []
+
+        def record_replace(source, destination):
+            replacements.append((Path(source), Path(destination)))
+            return original_replace(source, destination)
+
+        score_run.os.replace = record_replace
+        try:
+            exit_code, _output = _run_score_candidate(results_dir, candidate)
+        finally:
+            score_run.os.replace = original_replace
+
+        _assert(exit_code == 0, f"clean summary exited {exit_code}, expected 0")
+        _assert(json.loads(summary_path.read_text(encoding="utf-8")) == candidate, "summary payload mismatch")
+        _assert(not sidecar.exists(), "clean publish left a stale invalid sidecar")
+        _assert(
+            any(
+                source.parent.resolve() == results_dir.resolve()
+                and destination.resolve() == summary_path.resolve()
+                for source, destination in replacements
+            ),
+            "clean publish did not atomically replace summary.json",
+        )
+
+
+def test_score_run_bad_argv_exits_2():
+    with contextlib.redirect_stderr(io.StringIO()):
+        exit_code = score_run.main(["--unknown-option"])
+    _assert(exit_code == 2, f"bad argv exited {exit_code}, expected 2")
+
+
+def test_validate_summary_agrees_with_validate_results_dir():
+    with tempfile.TemporaryDirectory() as temp_dir:
+        results_dir = Path(temp_dir)
+        summary = _scoring_candidate()
+        _write_validation_fixture(results_dir, summary)
+        in_memory = validate_run.validate_summary(summary, results_dir)
+        from_disk = validate_run.validate_results_dir(results_dir)
+    _assert(in_memory == from_disk, f"validator split changed judgment: {in_memory!r} != {from_disk!r}")
+
+
+def test_contract_error_metric_validates_and_publishes():
+    with tempfile.TemporaryDirectory() as temp_dir:
+        results_dir = Path(temp_dir)
+        candidate = _scoring_candidate()
+        metric = next(
+            entry
+            for entry in candidate["by_level"]["L1"]["metrics"].values()
+            if entry.get("in_score") is True
+        )
+        metric["score"] = None
+        metric["status"] = "contract_error"
+        _write_validation_fixture(results_dir, candidate)
+        failures, _warnings = validate_run.validate_summary(candidate, results_dir)
+        _assert(not failures, f"contract_error was rejected by validator: {failures}")
+
+        exit_code, _output = _run_score_candidate(results_dir, candidate)
+        _assert(exit_code == 0, f"contract_error candidate exited {exit_code}, expected 0")
+        published = json.loads((results_dir / "summary.json").read_text(encoding="utf-8"))
+        _assert(published == candidate, "accepted contract_error candidate was not published")
+
+
+def test_score_run_dry_run_writes_nothing_for_clean_and_rejected_summaries():
+    for rejected in (False, True):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            results_dir = Path(temp_dir)
+            candidate = _scoring_candidate()
+            _write_validation_fixture(results_dir, candidate)
+            if rejected:
+                candidate["scoring_version"] = "rejected-version"
+            summary_path = results_dir / "summary.json"
+            sidecar = results_dir / "summary.invalid.json"
+            summary_before = summary_path.read_bytes()
+            sidecar.write_bytes(b"existing sidecar")
+            sidecar_before = sidecar.read_bytes()
+
+            exit_code, _output = _run_score_candidate(
+                results_dir, candidate, "--dry-run"
+            )
+            expected = 1 if rejected else 0
+            _assert(exit_code == expected, f"dry-run rejected={rejected} exited {exit_code}")
+            _assert(summary_path.read_bytes() == summary_before, "dry-run modified summary.json")
+            _assert(sidecar.read_bytes() == sidecar_before, "dry-run modified the sidecar")
+
+
 def test_validator_accepts_partial_summary():
     summary = _validation_summary()
     del summary["by_level"]["L6"]
@@ -2748,6 +2948,14 @@ TESTS = [
     test_validator_main_missing_summary_exits_1,
     test_validator_main_complete_summary_exits_0,
     test_validator_main_unparseable_summary_exits_2,
+    test_score_run_bootstrap_failure_exits_2_without_writes,
+    test_score_run_internal_failure_preserves_existing_summary,
+    test_score_run_rejected_summary_writes_sidecar_only,
+    test_score_run_clean_summary_uses_atomic_replace_and_clears_sidecar,
+    test_score_run_bad_argv_exits_2,
+    test_validate_summary_agrees_with_validate_results_dir,
+    test_contract_error_metric_validates_and_publishes,
+    test_score_run_dry_run_writes_nothing_for_clean_and_rejected_summaries,
     test_validator_accepts_partial_summary,
     test_validator_accepts_legacy_missing_native_metadata,
     test_validator_rejects_version_mismatch,

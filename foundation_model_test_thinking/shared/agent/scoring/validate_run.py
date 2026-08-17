@@ -178,22 +178,14 @@ def _all_scored_tasks_are(result: Dict[str, Any], spread_key: str) -> bool:
     return True
 
 
-def validate_results_dir(results_dir: Path) -> Tuple[List[str], List[str]]:
-    """Return ``(failures, warnings)`` for exactly one agent results directory."""
+def validate_summary(
+    summary: Dict[str, Any], results_dir: Path
+) -> Tuple[List[str], List[str]]:
+    """Validate an in-memory summary against one agent results directory."""
 
     results_dir = Path(results_dir)
     failures: List[str] = []
     warnings: List[str] = []
-    summary_path = results_dir / "summary.json"
-    if not summary_path.is_file():
-        return ([f"summary.json not found: {summary_path}"], warnings)
-    try:
-        summary = _load_json(summary_path)
-    except Exception as exc:
-        return (
-            [f"summary.json could not be parsed: {type(exc).__name__}: {exc}"],
-            warnings,
-        )
 
     if summary.get("scoring_version") != SCORING_VERSION:
         failures.append(
@@ -567,6 +559,24 @@ def validate_results_dir(results_dir: Path) -> Tuple[List[str], List[str]]:
                 )
 
     return failures, warnings
+
+
+def validate_results_dir(results_dir: Path) -> Tuple[List[str], List[str]]:
+    """Load and validate exactly one agent results directory."""
+
+    results_dir = Path(results_dir)
+    warnings: List[str] = []
+    summary_path = results_dir / "summary.json"
+    if not summary_path.is_file():
+        return ([f"summary.json not found: {summary_path}"], warnings)
+    try:
+        summary = _load_json(summary_path)
+    except Exception as exc:
+        return (
+            [f"summary.json could not be parsed: {type(exc).__name__}: {exc}"],
+            warnings,
+        )
+    return validate_summary(summary, results_dir)
 
 
 def parse_args(argv=None):

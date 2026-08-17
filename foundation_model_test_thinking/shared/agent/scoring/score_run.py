@@ -4,6 +4,7 @@ import argparse
 import json
 import os
 import sys
+import tempfile
 from pathlib import Path
 from typing import Any, Dict, Optional
 
@@ -17,7 +18,9 @@ if __package__:
         safe_model_name,
     )
     from . import SCORING_VERSION, SCORING_VERSION_V3, SCORING_VERSION_V4
+    from .context import load_metrics_module
     from .level_spec import LEVEL_SPECS, LEVEL_SPECS_V3
+    from .validate_run import validate_summary
 else:
     sys.path.insert(0, str(Path(__file__).resolve().parent))
     from aggregate import (
@@ -29,16 +32,27 @@ else:
         safe_model_name,
     )
     from __init__ import SCORING_VERSION, SCORING_VERSION_V3, SCORING_VERSION_V4
+    from context import load_metrics_module
     from level_spec import LEVEL_SPECS, LEVEL_SPECS_V3
+    from validate_run import validate_summary
 
 
 PREFIX = "[agent-scoring]"
+EXIT_CODE_HELP = """exit codes:
+  0  summary produced and publishable (warnings allowed)
+  1  scoring completed but the summary is unusable
+  2  invocation, configuration, input-reading, or internal error"""
 DETERMINISTIC_METRICS = {
     spec.name
     for level_specs in (LEVEL_SPECS, LEVEL_SPECS_V3)
     for specs in level_specs.values()
     for spec in specs
 }
+
+
+class _ArgumentParser(argparse.ArgumentParser):
+    def error(self, message):
+        raise ValueError(message)
 
 
 def _fmt(value: Optional[float]) -> str:
@@ -99,7 +113,10 @@ def _result_dir_from_args(args) -> Path:
 
 def _load_level(path: Path) -> Dict[str, Any]:
     with path.open("r", encoding="utf-8") as f:
-        return json.load(f)
+        data = json.load(f)
+    if not isinstance(data, dict):
+        raise ValueError("top-level JSON value must be an object")
+    return data
 
 
 def build_summary(results_dir: Path) -> Dict[str, Any]:
@@ -221,8 +238,27 @@ def print_table(summary: Dict[str, Any], skipped_count: int) -> None:
     print(f"{PREFIX} skipped_missing_levels={skipped_count}")
 
 
+def _write_json_atomic(path: Path, payload: Dict[str, Any]) -> None:
+    fd, temp_name = tempfile.mkstemp(
+        dir=path.parent, prefix=f".{path.name}.", suffix=".tmp"
+    )
+    temp_path = Path(temp_name)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            json.dump(payload, handle, indent=2, ensure_ascii=False)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temp_path, path)
+    finally:
+        temp_path.unlink(missing_ok=True)
+
+
 def parse_args(argv=None):
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = _ArgumentParser(
+        description=__doc__,
+        epilog=EXIT_CODE_HELP,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
     parser.add_argument("--results-dir", help="Path to language/<track> containing L*.json")
     parser.add_argument("--model", help="Model name used to build results path")
     parser.add_argument("--timestamp", help="Evaluation timestamp used to build results path")
@@ -232,21 +268,36 @@ def parse_args(argv=None):
 
 
 def main(argv=None) -> int:
-    args = parse_args(argv)
     try:
+        args = parse_args(argv)
         results_dir = _result_dir_from_args(args)
+        # 벤치 패키지는 실행 전체의 전제다. 태스크별 예외 처리 밖에서 한 번만
+        # 확인해 구성 실패가 메트릭 오류로 세탁되지 않게 한다.
+        load_metrics_module()
         summary = build_summary(results_dir)
         skipped = len(summary["levels_missing"])
         print_table(summary, skipped)
+        failures, warnings = validate_summary(summary, results_dir)
+        for warning in warnings:
+            print(f"{PREFIX} WARN {warning}")
+        if failures:
+            for failure in failures:
+                print(f"{PREFIX} FAIL {failure}")
+            if not args.dry_run:
+                invalid_out = results_dir / "summary.invalid.json"
+                _write_json_atomic(invalid_out, summary)
+                print(f"{PREFIX} wrote {invalid_out}")
+            return 1
         if not args.dry_run:
             out = results_dir / "summary.json"
-            with out.open("w", encoding="utf-8") as f:
-                json.dump(summary, f, indent=2, ensure_ascii=False)
+            invalid_out = results_dir / "summary.invalid.json"
+            invalid_out.unlink(missing_ok=True)
+            _write_json_atomic(out, summary)
             print(f"{PREFIX} wrote {out}")
         return 0
     except Exception as exc:
         print(f"{PREFIX} error: {type(exc).__name__}: {exc}", file=sys.stderr)
-        return 1
+        return 2
 
 
 if __name__ == "__main__":
