@@ -32,7 +32,13 @@ def arg_f1_det(ctx) -> Optional[float]:
 
 
 def redundant_call_rate_det(ctx) -> Optional[float]:
-    """툴 호출이 없으면 '중복 호출률'은 정의되지 않는다 → None (0.0 아님)."""
+    """툴 호출이 없으면 '중복 호출률'은 정의되지 않는다 → None (0.0 아님).
+
+    Vendored RedundantCallRate is ``1 - redundant_calls / reuse_opportunities``.
+    Its redundant-call numerator is unbounded while the pinned golden actions
+    provide only one or two ``context_used`` reuse opportunities, so the
+    formula can legitimately produce a negative contract-violating value.
+    """
     if not ctx.action_trace:
         return None
     return load_metrics_module().METRICS["RedundantCallRate"].evaluate(ctx).score

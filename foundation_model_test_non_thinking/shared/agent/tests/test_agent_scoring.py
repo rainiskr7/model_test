@@ -1591,6 +1591,96 @@ def test_metric_error_fails_closed():
     )
 
 
+def test_metric_contract_error_fails_closed_with_diagnostics():
+    original_context = aggregate.build_eval_context
+    original_specs = aggregate.LEVEL_SPECS["L1"]
+    invalid_cases = (
+        (-8.0, "out_of_range"),
+        (1.4, "out_of_range"),
+        (2.0, "out_of_range"),
+        (float("nan"), "non_finite"),
+        (float("inf"), "non_finite"),
+    )
+
+    aggregate.build_eval_context = lambda task: task
+    aggregate.LEVEL_SPECS["L1"] = (
+        aggregate.MetricSpec("BoundedMetric", lambda task: task["score"], True),
+    )
+    try:
+        for invalid, violation in invalid_cases:
+            result = aggregate.score_level(
+                "L1",
+                {
+                    "results": [
+                        {"task_id": "bad-task", "score": invalid},
+                        {"task_id": "good-task", "score": 1.0},
+                    ]
+                },
+            )
+            entry = result["metrics"]["BoundedMetric"]
+            _assert(entry["status"] == "contract_error", "contract status mismatch")
+            _assert(entry["score"] is None, "contract failure must not publish a mean")
+            _assert(result["score"] is None, "contract failure must fail level closed")
+            _assert(
+                result["unscorable_reason"] == "metric_contract_error",
+                "contract failure reason mismatch",
+            )
+            _assert(entry["n_tasks"] == 2, "contract task count mismatch")
+            _assert(entry["n_scored"] == 1, "valid task count mismatch")
+            _assert(entry["n_errors"] == 0, "contract failure became producer error")
+            _assert(entry["n_contract_errors"] == 1, "contract error count mismatch")
+            _assert(
+                sum(entry["task_spread"].values()) == entry["n_scored"],
+                "task spread must still sum to n_scored",
+            )
+            _assert(
+                entry["score"] != 1.0,
+                "offending task was silently dropped and remaining mean published",
+            )
+            diagnostic = entry["contract_errors"][0]
+            _assert(diagnostic["metric"] == "BoundedMetric", "diagnostic metric missing")
+            _assert(diagnostic["task_id"] == "bad-task", "diagnostic task id missing")
+            _assert(
+                diagnostic["raw_value"] == repr(invalid),
+                "diagnostic raw repr mismatch",
+            )
+            _assert(diagnostic["violation"] == violation, "diagnostic reason mismatch")
+            if violation == "out_of_range":
+                clamped_mean = (min(1.0, max(0.0, invalid)) + 1.0) / 2.0
+                _assert(
+                    entry["score"] != clamped_mean,
+                    "offending value was clamped into the metric mean",
+                )
+    finally:
+        aggregate.build_eval_context = original_context
+        aggregate.LEVEL_SPECS["L1"] = original_specs
+
+
+def test_metric_contract_accepts_unit_interval_boundaries():
+    original_context = aggregate.build_eval_context
+    aggregate.build_eval_context = lambda task: task
+    try:
+        entry = aggregate._average_metric(
+            [
+                {"task_id": "zero", "score": 0.0},
+                {"task_id": "one", "score": 1.0},
+            ],
+            aggregate.MetricSpec("Boundaries", lambda task: task["score"], True),
+        )
+    finally:
+        aggregate.build_eval_context = original_context
+
+    _assert(entry["status"] == "ok", "unit interval boundary was rejected")
+    _assert_close(entry["score"], 0.5, "boundary mean")
+    _assert(entry["n_scored"] == 2, "boundary scored count mismatch")
+    _assert(entry["n_contract_errors"] == 0, "boundary contract count mismatch")
+    _assert(
+        entry["task_spread"]
+        == {"n_perfect": 1, "n_zero": 1, "n_partial": 0},
+        "boundary spread mismatch",
+    )
+
+
 def test_partial_metric_keeps_level_scorable():
     original_context = aggregate.build_eval_context
     original_specs = aggregate.LEVEL_SPECS["L1"]
@@ -1711,6 +1801,30 @@ def test_record_only_metric_error_does_not_fail_level():
     _assert(entry["status"] == "error", "record-only error status mismatch")
     _assert(entry["in_score"] is False, "record-only in_score mismatch")
     _assert_close(result["score"], 0.75, "record-only error level score")
+
+
+def test_record_only_metric_contract_error_fails_level_closed():
+    original_context = aggregate.build_eval_context
+    original_specs = aggregate.LEVEL_SPECS["L1"]
+
+    aggregate.build_eval_context = lambda task: task
+    aggregate.LEVEL_SPECS["L1"] = (
+        aggregate.MetricSpec("Good", lambda _task: 0.75, True),
+        aggregate.MetricSpec("RecordOnlyInvalid", lambda _task: 1.4, False),
+    )
+    try:
+        result = aggregate.score_level("L1", {"results": [{"task_id": "bad-task"}]})
+    finally:
+        aggregate.build_eval_context = original_context
+        aggregate.LEVEL_SPECS["L1"] = original_specs
+
+    entry = result["metrics"]["RecordOnlyInvalid"]
+    _assert(entry["status"] == "contract_error", "record-only contract status mismatch")
+    _assert(result["score"] is None, "record-only contract error must fail level closed")
+    _assert(
+        result["unscorable_reason"] == "metric_contract_error",
+        "record-only contract failure reason mismatch",
+    )
 
 
 def test_all_in_score_metrics_not_applicable():
@@ -2599,9 +2713,12 @@ TESTS = [
     test_missing_level_not_zero_filled,
     test_non_l7_none_is_unscorable,
     test_metric_error_fails_closed,
+    test_metric_contract_error_fails_closed_with_diagnostics,
+    test_metric_contract_accepts_unit_interval_boundaries,
     test_partial_metric_keeps_level_scorable,
     test_all_tasks_error_fails_level_closed,
     test_record_only_metric_error_does_not_fail_level,
+    test_record_only_metric_contract_error_fails_level_closed,
     test_all_in_score_metrics_not_applicable,
     test_partial_run_is_incomplete,
     test_legacy_missing_native_tool_calling_defaults_false,

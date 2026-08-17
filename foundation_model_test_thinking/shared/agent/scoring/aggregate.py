@@ -1,5 +1,6 @@
 """Aggregation policy for deterministic Ko-AgentBench agent scoring."""
 
+import math
 import sys
 from pathlib import Path
 from typing import Any, Dict, Iterable, List
@@ -77,6 +78,7 @@ def _tasks(data: Dict[str, Any]) -> List[Dict[str, Any]]:
 def _average_metric(tasks: List[Dict[str, Any]], spec: MetricSpec) -> Dict[str, Any]:
     scores = []
     errors = []
+    contract_errors = []
     task_spread = {"n_perfect": 0, "n_zero": 0, "n_partial": 0}
     diagnostics: Dict[str, int] = (
         {
@@ -97,36 +99,55 @@ def _average_metric(tasks: List[Dict[str, Any]], spec: MetricSpec) -> Dict[str, 
             )
             if score is not None:
                 numeric_score = float(score)
-                scores.append(numeric_score)
-                if numeric_score == 1.0:
-                    task_spread["n_perfect"] += 1
-                elif numeric_score == 0.0:
-                    task_spread["n_zero"] += 1
-                elif 0.0 < numeric_score < 1.0:
-                    task_spread["n_partial"] += 1
+                if not math.isfinite(numeric_score) or not 0.0 <= numeric_score <= 1.0:
+                    contract_errors.append(
+                        {
+                            "metric": spec.name,
+                            "task_id": task.get("task_id") or "unknown",
+                            "raw_value": repr(score),
+                            "violation": (
+                                "non_finite"
+                                if not math.isfinite(numeric_score)
+                                else "out_of_range"
+                            ),
+                        }
+                    )
+                else:
+                    scores.append(numeric_score)
+                    if numeric_score == 1.0:
+                        task_spread["n_perfect"] += 1
+                    elif numeric_score == 0.0:
+                        task_spread["n_zero"] += 1
+                    else:
+                        task_spread["n_partial"] += 1
             for name, count in task_diagnostics.items():
                 diagnostics[name] = diagnostics.get(name, 0) + int(count)
         except Exception as exc:
             errors.append(exc)
 
-    if errors:
+    if contract_errors:
+        status = "contract_error"
+    elif errors:
         status = "partial" if scores else "error"
     else:
         status = "ok" if scores else "not_applicable"
 
     entry = {
-        "score": mean_or_none(scores),
+        "score": None if contract_errors else mean_or_none(scores),
         "status": status,
         "in_score": spec.in_score,
         "n_tasks": len(tasks),
         "n_scored": len(scores),
         "n_errors": len(errors),
+        "n_contract_errors": len(contract_errors),
         "task_spread": task_spread,
     }
     entry.update(diagnostics)
     if errors:
         exc = errors[0]
         entry["error"] = f"{type(exc).__name__}: {exc}"
+    if contract_errors:
+        entry["contract_errors"] = contract_errors
     return entry
 
 
@@ -167,6 +188,10 @@ def _unscorable_reason(
     if total == 0:
         return "no_tasks"
     if any(
+        entry.get("status") == "contract_error" for entry in entries.values()
+    ):
+        return "metric_contract_error"
+    if any(
         entry.get("in_score") and entry.get("status") == "error"
         for entry in entries.values()
     ):
@@ -190,11 +215,12 @@ def _score_level_with_specs(level: str, data: Dict[str, Any], level_specs) -> Di
         elif metric_name == "RespOK":
             entries[metric_name] = _resp_ok_entry(tasks)
 
-    metric_error = any(
-        entry.get("in_score") and entry.get("status") == "error"
+    fatal_metric_error = any(
+        entry.get("status") == "contract_error"
+        or (entry.get("in_score") and entry.get("status") == "error")
         for entry in entries.values()
     )
-    score = None if metric_error else level_score(entries)
+    score = None if fatal_metric_error else level_score(entries)
     result = {
         "total": len(tasks),
         "score": score,

@@ -41,7 +41,7 @@ else:
 
 
 PREFIX = "[agent-validate]"
-NO_SCORE_STATUSES = {"not_applicable", "error", "judge_missing"}
+NO_SCORE_STATUSES = {"not_applicable", "error", "contract_error", "judge_missing"}
 CACHE_MISS_WARNING_THRESHOLD = 0.20
 EXIT_CODE_HELP = """exit codes:
   0  results valid (warnings allowed)
