@@ -18,7 +18,7 @@ from typing import Any, Dict, List, Optional
 import openai
 from openai import OpenAI
 from .base_adapter import BaseAdapter
-from .tool_call_parser import extract_tool_calls
+from .tool_call_parser import contains_tool_call_candidate, extract_tool_calls
 from ..observability import observe
 
 def _load_serving_constraints():
@@ -99,6 +99,7 @@ class OpenAICompatAdapter(BaseAdapter):
         self.seed = config.get("seed", None)
 
         self.native_tool_calling = config.get("native_tool_calling", False)
+        self.unparsed_tool_call_candidates = 0
 
     # ── public interface ──────────────────────────────────────────────
 
@@ -221,8 +222,7 @@ class OpenAICompatAdapter(BaseAdapter):
 
     # ── parse tool calls from plain-text model output ─────────────────
 
-    @classmethod
-    def _parse_tool_calls_from_text(cls, canonical: Dict[str, Any]) -> Dict[str, Any]:
+    def _parse_tool_calls_from_text(self, canonical: Dict[str, Any]) -> Dict[str, Any]:
         content = canonical.get("message", {}).get("content", "")
         if not content:
             return canonical
@@ -233,5 +233,12 @@ class OpenAICompatAdapter(BaseAdapter):
             # A parsed tool call must not conceal provider-reported truncation.
             if canonical.get("finish_reason") != "length":
                 canonical["finish_reason"] = "tool_calls"
+        elif contains_tool_call_candidate(content):
+            self.unparsed_tool_call_candidates += 1
+            print(
+                "[adapter] 파싱되지 않은 tool call 후보: "
+                "호출 형태의 텍스트가 있지만 디코드된 tool call이 없음",
+                file=sys.stderr,
+            )
 
         return canonical

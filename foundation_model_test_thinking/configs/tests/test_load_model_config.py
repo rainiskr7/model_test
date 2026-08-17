@@ -5,6 +5,7 @@ import importlib.util
 import io
 import os
 import sys
+import tempfile
 from pathlib import Path
 
 
@@ -83,6 +84,27 @@ def assert_absent_prefix(lines, prefix):
     matches = [line for line in lines if line.startswith(prefix)]
     if matches:
         raise AssertionError(f"{prefix!r} output should be absent, got: {matches!r}")
+
+
+def load_fixture(module, cfg):
+    """임시 models 디렉터리의 YAML을 실제 load() 경로로 검증한다."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        config_dir = Path(tmpdir) / "configs"
+        models_dir = config_dir / "models"
+        models_dir.mkdir(parents=True)
+        (models_dir / "fixture.yaml").write_text(
+            module.yaml.safe_dump(cfg, allow_unicode=True),
+            encoding="utf-8",
+        )
+        previous_file = module.__file__
+        module.__file__ = str(config_dir / "load_model_config.py")
+        try:
+            try:
+                return module.load("fixture"), None
+            except SystemExit as exc:
+                return None, str(exc)
+        finally:
+            module.__file__ = previous_file
 
 
 def main():
@@ -207,16 +229,43 @@ def main():
             f"one endpoint override: output/error: {lines!r}, {stderr!r}, {error!r}"
         )
 
+    validation_cases = 3
+    _, error = load_fixture(
+        module,
+        test_config({"agent": {}}),
+    )
+    expected_fragment = "agent.native_tool_calling을 true 또는 false로 명시"
+    if error is None or expected_fragment not in error:
+        failures.append(f"agent track without native decision loaded: {error!r}")
+
+    loaded, error = load_fixture(
+        module,
+        test_config({"agent": {"native_tool_calling": False}}),
+    )
+    if error is not None or loaded["agent"]["native_tool_calling"] is not False:
+        failures.append(f"explicit native_tool_calling false did not load: {error!r}")
+
+    real_configs = sorted((ROOT / "models").glob("*.yaml"))
+    real_failures = []
+    for path in real_configs:
+        try:
+            module.load(path.name)
+        except SystemExit as exc:
+            real_failures.append(f"{path.name}: {exc}")
+    if not real_configs:
+        failures.append("no real configs found")
+    if real_failures:
+        failures.append(f"real configs failed to load: {real_failures!r}")
+
     if failures:
         print("FAIL")
         for failure in failures:
             print(f"- {failure}")
         return 1
 
-    print(f"OK {len(cases) + endpoint_cases} cases")
+    print(f"OK {len(cases) + endpoint_cases + validation_cases} cases")
     return 0
 
 
 if __name__ == "__main__":
     sys.exit(main())
-

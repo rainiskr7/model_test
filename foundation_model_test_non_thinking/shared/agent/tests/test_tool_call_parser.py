@@ -3,13 +3,18 @@
 패키지 import 없이 파일 경로에서 직접 로드한다.
 """
 
+import ast
 import contextlib
 import importlib.util
 import io
 import json
+import os
 import signal
 import sys
+import tempfile
+from datetime import datetime
 from pathlib import Path
+from typing import Any, Dict, List, Optional
 
 
 PARSER_PATH = (
@@ -17,6 +22,9 @@ PARSER_PATH = (
     / "gpustack_custom"
     / "tool_call_parser.py"
 )
+CUSTOM_DIR = PARSER_PATH.parent
+ADAPTER_PATH = CUSTOM_DIR / "openai_compat_adapter.py"
+RUNNER_PATH = CUSTOM_DIR / "run_gpustack_benchmark_with_logging.py"
 
 
 def _load_parser():
@@ -27,6 +35,71 @@ def _load_parser():
 
 
 parser = _load_parser()
+
+
+def _load_adapter_parse_class():
+    """선택 의존성을 import하지 않고 adapter의 실제 text parser method를 로드한다."""
+    parsed = ast.parse(ADAPTER_PATH.read_text(encoding="utf-8"), filename=str(ADAPTER_PATH))
+    adapter_class = next(
+        node
+        for node in parsed.body
+        if isinstance(node, ast.ClassDef) and node.name == "OpenAICompatAdapter"
+    )
+    method = next(
+        node
+        for node in adapter_class.body
+        if isinstance(node, ast.FunctionDef) and node.name == "_parse_tool_calls_from_text"
+    )
+    test_class = ast.ClassDef(
+        name="AdapterTextParser",
+        bases=[],
+        keywords=[],
+        body=[method],
+        decorator_list=[],
+    )
+    module = ast.fix_missing_locations(ast.Module(body=[test_class], type_ignores=[]))
+    namespace = {
+        "Any": Any,
+        "Dict": Dict,
+        "contains_tool_call_candidate": parser.contains_tool_call_candidate,
+        "extract_tool_calls": parser.extract_tool_calls,
+        "sys": sys,
+    }
+    exec(compile(module, str(ADAPTER_PATH), "exec"), namespace)
+    return namespace["AdapterTextParser"]
+
+
+def _load_save_detailed_results():
+    """벤치 선택 의존성 없이 실제 artifact 저장 함수를 로드한다."""
+    parsed = ast.parse(RUNNER_PATH.read_text(encoding="utf-8"), filename=str(RUNNER_PATH))
+    function = next(
+        node
+        for node in parsed.body
+        if isinstance(node, ast.FunctionDef) and node.name == "save_detailed_results"
+    )
+    namespace = {
+        "Any": Any,
+        "Dict": Dict,
+        "List": List,
+        "Optional": Optional,
+        "Path": Path,
+        "datetime": datetime,
+        "json": json,
+        "os": os,
+        "simplify_result": lambda result: dict(result),
+        "build_observability_metadata": lambda _results: {
+            "tasks_with_length_finish_reason": 0
+        },
+    }
+    exec(
+        compile(ast.Module(body=[function], type_ignores=[]), str(RUNNER_PATH), "exec"),
+        namespace,
+    )
+    return namespace["save_detailed_results"]
+
+
+AdapterTextParser = _load_adapter_parse_class()
+save_detailed_results = _load_save_detailed_results()
 
 
 def _arguments(call):
@@ -71,6 +144,37 @@ def test_multiple_tool_calls():
     _assert([c["function"]["name"] for c in calls] == ["First", "Second"], "order mismatch")
 
 
+def test_colon_text_form_multiple_calls():
+    calls = parser.extract_tool_calls(
+        'call:Directions_naver:{"start": "126.97070,37.55360", '
+        '"goal": "126.45123,37.46349", '
+        '"waypoints": "126.97688,37.57594|126.92490,37.52190", '
+        '"option": "traavoidtoll"}\n'
+        'call:ItemSearch_aladin:{"query": "히가시노 게이고", "sort": "SalesPoint"}'
+    )
+    _assert(len(calls) == 2, f"expected 2 form-B calls, got {len(calls)}")
+    _assert(
+        [call["function"]["name"] for call in calls]
+        == ["Directions_naver", "ItemSearch_aladin"],
+        "form-B names mismatch",
+    )
+    _assert(_arguments(calls[0])["option"] == "traavoidtoll", "form-B args mismatch")
+
+
+def test_braceless_separator_text_form_multiple_calls():
+    calls = parser.extract_tool_calls(
+        'call:ItemSearch_aladin{"query": "히가시노 게이고", "sort": "SalesPoint"}\n'
+        'call:VideoSearch_daum{"query": "손흥민 해트트릭"}'
+    )
+    _assert(len(calls) == 2, f"expected 2 form-C calls, got {len(calls)}")
+    _assert(
+        [call["function"]["name"] for call in calls]
+        == ["ItemSearch_aladin", "VideoSearch_daum"],
+        "form-C names mismatch",
+    )
+    _assert(_arguments(calls[1]) == {"query": "손흥민 해트트릭"}, "form-C args mismatch")
+
+
 def test_markdown_json_fence():
     calls = parser.extract_tool_calls(
         '```json\n{"tool_call": {"name": "Fenced", "arguments": {"ok": true}}}\n```'
@@ -92,6 +196,124 @@ def test_surrounding_prose():
 def test_plain_text_without_tool_call():
     calls = parser.extract_tool_calls("도구 호출 없이 일반 답변입니다.")
     _assert(calls == [], f"expected empty list, got {calls}")
+
+
+def _assert_unparsed_candidate(content):
+    adapter = AdapterTextParser()
+    adapter.unparsed_tool_call_candidates = 0
+    canonical = {"message": {"content": content}, "finish_reason": "length"}
+    stderr = io.StringIO()
+    with contextlib.redirect_stderr(stderr):
+        returned = adapter._parse_tool_calls_from_text(canonical)
+    _assert(returned is canonical, "adapter must return the canonical response")
+    _assert("tool_calls" not in canonical["message"], "truncated call must not be fabricated")
+    _assert(
+        adapter.unparsed_tool_call_candidates == 1,
+        "unparsed candidate counter did not increment",
+    )
+    _assert(
+        "[adapter] 파싱되지 않은 tool call 후보:" in stderr.getvalue(),
+        f"missing unparsed-candidate warning: {stderr.getvalue()!r}",
+    )
+
+
+def test_truncated_json_form_is_unparsed_candidate():
+    _assert_unparsed_candidate(
+        '{"tool_call": {"name": "Directions_naver", "arguments": {"start": "126.97"}'
+    )
+
+
+def test_truncated_text_forms_are_unparsed_candidates():
+    _assert_unparsed_candidate('call:Directions_naver:{"start": "126.97", "goal": ')
+    _assert_unparsed_candidate('call:ItemSearch_aladin{"query": "히가시노 게이고"')
+
+
+def test_ordinary_prose_is_not_unparsed_candidate():
+    adapter = AdapterTextParser()
+    adapter.unparsed_tool_call_candidates = 0
+    canonical = {
+        "message": {"content": "요청하신 내용을 확인했습니다. 일반 답변을 드립니다."},
+        "finish_reason": "stop",
+    }
+    stderr = io.StringIO()
+    with contextlib.redirect_stderr(stderr):
+        adapter._parse_tool_calls_from_text(canonical)
+    _assert(adapter.unparsed_tool_call_candidates == 0, "prose triggered candidate counter")
+    _assert(stderr.getvalue() == "", f"prose triggered warning: {stderr.getvalue()!r}")
+
+
+def test_unparsed_candidate_counter_is_persisted_in_level_metadata():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        path = save_detailed_results(
+            [{}],
+            "test/model",
+            "L1",
+            tmpdir,
+            "test_timestamp",
+            unparsed_tool_call_candidates=3,
+            request_timeout=60,
+            task_timeout=120,
+            max_tokens=1024,
+            max_retries=2,
+            openai_sdk_version="test",
+            sdk_max_retries=0,
+        )
+        artifact = json.loads(Path(path).read_text(encoding="utf-8"))
+    _assert(
+        artifact["metadata"]["unparsed_tool_call_candidates"] == 3,
+        "unparsed candidate counter missing from level metadata",
+    )
+
+
+def test_unparsed_candidate_counter_is_wired_from_adapter_to_artifact():
+    adapter_tree = ast.parse(
+        ADAPTER_PATH.read_text(encoding="utf-8"), filename=str(ADAPTER_PATH)
+    )
+    adapter_class = next(
+        node
+        for node in adapter_tree.body
+        if isinstance(node, ast.ClassDef) and node.name == "OpenAICompatAdapter"
+    )
+    initializer = next(
+        node
+        for node in adapter_class.body
+        if isinstance(node, ast.FunctionDef) and node.name == "__init__"
+    )
+    initialized = any(
+        isinstance(target, ast.Attribute)
+        and isinstance(target.value, ast.Name)
+        and target.value.id == "self"
+        and target.attr == "unparsed_tool_call_candidates"
+        for node in ast.walk(initializer)
+        if isinstance(node, (ast.Assign, ast.AnnAssign))
+        for target in (node.targets if isinstance(node, ast.Assign) else [node.target])
+    )
+    _assert(initialized, "adapter counter is not initialized")
+
+    runner_tree = ast.parse(
+        RUNNER_PATH.read_text(encoding="utf-8"), filename=str(RUNNER_PATH)
+    )
+    run_function = next(
+        node
+        for node in runner_tree.body
+        if isinstance(node, ast.FunctionDef) and node.name == "run_benchmark_on_dataset"
+    )
+    wired = False
+    for call in (node for node in ast.walk(run_function) if isinstance(node, ast.Call)):
+        if not isinstance(call.func, ast.Name) or call.func.id != "save_detailed_results":
+            continue
+        keyword = next(
+            (item for item in call.keywords if item.arg == "unparsed_tool_call_candidates"),
+            None,
+        )
+        value = keyword.value if keyword is not None else None
+        wired = (
+            isinstance(value, ast.Attribute)
+            and value.attr == "unparsed_tool_call_candidates"
+            and isinstance(value.value, ast.Name)
+            and value.value.id == "adapter"
+        )
+    _assert(wired, "adapter counter is not passed to level artifact persistence")
 
 
 def test_broken_json_warns_without_raising():
@@ -185,9 +407,16 @@ TESTS = [
     test_nested_arguments_regression,
     test_two_level_nested_arguments,
     test_multiple_tool_calls,
+    test_colon_text_form_multiple_calls,
+    test_braceless_separator_text_form_multiple_calls,
     test_markdown_json_fence,
     test_surrounding_prose,
     test_plain_text_without_tool_call,
+    test_truncated_json_form_is_unparsed_candidate,
+    test_truncated_text_forms_are_unparsed_candidates,
+    test_ordinary_prose_is_not_unparsed_candidate,
+    test_unparsed_candidate_counter_is_persisted_in_level_metadata,
+    test_unparsed_candidate_counter_is_wired_from_adapter_to_artifact,
     test_broken_json_warns_without_raising,
     test_missing_name_is_skipped,
     test_korean_arguments_preserved,

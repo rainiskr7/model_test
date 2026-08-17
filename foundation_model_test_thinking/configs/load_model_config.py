@@ -24,7 +24,19 @@ def load(config_name: str) -> dict:
     if not path.exists():
         available = sorted(p.stem for p in config_dir.glob("*.yaml"))
         sys.exit(f"ERROR: config 없음 {path}\n사용 가능: {available}")
-    return yaml.safe_load(path.read_text())
+    cfg = yaml.safe_load(path.read_text()) or {}
+    validate_agent_native_tool_calling(cfg)
+    return cfg
+
+
+def validate_agent_native_tool_calling(cfg: dict) -> None:
+    """agent 트랙은 native tool calling 사용 여부를 반드시 명시한다."""
+    agent = cfg.get("agent") or {}
+    if "agent" in (cfg.get("tracks") or []) and "native_tool_calling" not in agent:
+        sys.exit(
+            "ERROR: tracks에 'agent'가 있으면 "
+            "agent.native_tool_calling을 true 또는 false로 명시해야 합니다."
+        )
 
 
 def emit_shell(cfg: dict) -> None:

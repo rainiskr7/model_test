@@ -322,6 +322,7 @@ def save_detailed_results(
     run_timestamp: str = None,
     track_name: str = "agent",
     native_tool_calling: bool = False,
+    unparsed_tool_call_candidates: int = 0,
     *,
     request_timeout: float,
     task_timeout: float,
@@ -346,6 +347,7 @@ def save_detailed_results(
         run_timestamp: Timestamp for the run (if None, uses EVAL_TIMESTAMP env or now)
         track_name: Subfolder under language/ (default 'agent')
         native_tool_calling: Whether native OpenAI-compatible tool calling was enabled
+        unparsed_tool_call_candidates: Text-mode responses with call-like syntax that did not parse
         request_timeout: Timeout used for each HTTP chat-completion request
         task_timeout: Timeout used for each whole task
         max_tokens: Completion token limit used by the adapter
@@ -430,6 +432,7 @@ def save_detailed_results(
             "model": model_name,
             "level": level_name,
             "native_tool_calling": native_tool_calling,
+            "unparsed_tool_call_candidates": unparsed_tool_call_candidates,
             "request_timeout": request_timeout,
             "task_timeout": task_timeout,
             "max_tokens": max_tokens,
@@ -746,6 +749,7 @@ def run_benchmark_on_dataset(
                 run_timestamp,
                 track_name=track_name,
                 native_tool_calling=native_tool_calling,
+                unparsed_tool_call_candidates=adapter.unparsed_tool_call_candidates,
                 request_timeout=adapter.timeout,
                 task_timeout=runner.timeout,
                 max_tokens=adapter.max_tokens,

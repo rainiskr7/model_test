@@ -25,7 +25,9 @@ def load(config_name: str) -> dict:
         available = sorted(p.stem for p in config_dir.glob("*.yaml"))
         sys.exit(f"ERROR: config 없음 {path}\n사용 가능: {available}")
     cfg = yaml.safe_load(path.read_text()) or {}
-    return apply_serving_profile(cfg)
+    cfg = apply_serving_profile(cfg)
+    validate_agent_native_tool_calling(cfg)
+    return cfg
 
 
 def load_serving_profile(profile_name: str) -> dict:
@@ -93,6 +95,16 @@ def validate_skip_benches(skip_benches: list) -> None:
             f"사용 가능: {sorted(SKIPPABLE_BENCHES)}\n"
             "(run_all.sh 에 skip 훅이 있는 벤치만 지정 가능. "
             "훅을 추가했다면 load_model_config.py 의 SKIPPABLE_BENCHES 에도 추가할 것.)"
+        )
+
+
+def validate_agent_native_tool_calling(cfg: dict) -> None:
+    """agent 트랙은 native tool calling 사용 여부를 반드시 명시한다."""
+    agent = cfg.get("agent") or {}
+    if "agent" in (cfg.get("tracks") or []) and "native_tool_calling" not in agent:
+        sys.exit(
+            "ERROR: tracks에 'agent'가 있으면 "
+            "agent.native_tool_calling을 true 또는 false로 명시해야 합니다."
         )
 
 
