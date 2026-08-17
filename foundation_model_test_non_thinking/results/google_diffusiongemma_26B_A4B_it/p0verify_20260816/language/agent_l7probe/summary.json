@@ -432,5 +432,72 @@
     "miss_rate": 0.0,
     "miss_counts": {},
     "statement": "L4 Coverage/SourceEPR treat a cache miss as success=False; L4 is excluded from v4 because those labels measure fixture coverage, not capability."
+  },
+  "l3_retry_inflation": {
+    "classes": {
+      "no_tool_calls_emitted": {
+        "tasks": 0,
+        "calls_emitted": 0,
+        "golden_action_calls": 0,
+        "inflation_ratio": null
+      },
+      "no_cache_miss": {
+        "tasks": 0,
+        "calls_emitted": 0,
+        "golden_action_calls": 0,
+        "inflation_ratio": null
+      },
+      "cache_miss_only_at_final_call": {
+        "tasks": 0,
+        "calls_emitted": 0,
+        "golden_action_calls": 0,
+        "inflation_ratio": null
+      },
+      "cache_miss_before_final_call": {
+        "tasks": 0,
+        "calls_emitted": 0,
+        "golden_action_calls": 0,
+        "inflation_ratio": null
+      }
+    },
+    "after_non_final_miss": {
+      "misses_with_following_call": 0,
+      "same_tool_identical_arguments": 0,
+      "same_tool_different_arguments": 0,
+      "different_tool": 0
+    },
+    "context_construction_failures": {
+      "count": 0
+    }
+  },
+  "l5_ceiling": {
+    "metrics": {
+      "FallbackSR": {
+        "observed_max": null,
+        "structural_ceiling": 1.0,
+        "producer_failures": {
+          "count": 0
+        }
+      },
+      "AdaptiveRoutingScore": {
+        "observed_max": null,
+        "structural_ceiling": 0.5,
+        "producer_failures": {
+          "count": 0
+        }
+      },
+      "EPR_CVR": {
+        "observed_max": null,
+        "structural_ceiling": 0.5,
+        "producer_failures": {
+          "count": 0
+        }
+      }
+    },
+    "context_construction_failures": {
+      "count": 0
+    },
+    "level_ceiling": 0.6666666666666666,
+    "statement": "AdaptiveRoutingScore and EPR_CVR are capped at 0.5 for schema-respecting models: the runner withholds fallback tools until a reset second pass (forcing a step gap) and injects one mandatory failed call."
   }
 }

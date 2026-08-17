@@ -750,6 +750,364 @@ def test_cache_diagnostic_does_not_change_v2_or_v3_headline_bytes():
     _assert(before == after, "diagnostic block changed a v2/v3 headline byte")
 
 
+def _synthetic_l3_mid_miss_task():
+    return {
+        "task_id": "L3-retry",
+        "golden_fields": [],
+        "golden_action": [{"tool": "A"}, {"tool": "B"}],
+        "tool_calls": [
+            _cache_miss_call("A", {"query": "one"}),
+            _cache_miss_call("A", {"query": "one"}),
+            _cache_miss_call("A", {"query": "two"}),
+            {"tool_name": "B", "arguments": {}, "success": True, "error": None},
+        ],
+    }
+
+
+def _build_score_neutral_diagnostic_summary(l3_tasks=None, l5_tasks=None):
+    original_score_level = aggregate.score_level
+    original_score_with_specs = aggregate._score_level_with_specs
+    original_prepare_v3 = aggregate.prepare_v3_loaded
+
+    def fake_level(_level, data, *_args):
+        return {
+            "total": len(data.get("results", [])) or 1,
+            "score": data["score"],
+            "applied_metrics": 0,
+            "metrics": {},
+        }
+
+    aggregate.score_level = fake_level
+    aggregate._score_level_with_specs = fake_level
+    aggregate.prepare_v3_loaded = lambda loaded: (
+        loaded,
+        {
+            "golden_fields_source": "artifact",
+            "join_needed": False,
+            "benchmark_sha": None,
+            "task_file": None,
+            "task_file_sha256": None,
+            "tasks_joined": 0,
+        },
+    )
+    try:
+        loaded = {
+            level: {
+                "score": index / 10.0,
+                "results": (
+                    l3_tasks or []
+                    if level == "L3"
+                    else l5_tasks or []
+                    if level == "L5"
+                    else []
+                ),
+            }
+            for index, level in enumerate(aggregate.SCORABLE_LEVELS, start=1)
+        }
+        return aggregate.build_summary_from_loaded(
+            loaded, Path("/tmp/results/x/t/language/agent")
+        )
+    finally:
+        aggregate.score_level = original_score_level
+        aggregate._score_level_with_specs = original_score_with_specs
+        aggregate.prepare_v3_loaded = original_prepare_v3
+
+
+def test_l3_retry_inflation_mid_miss_counts_and_ratio():
+    original_context = aggregate.build_eval_context
+    aggregate.build_eval_context = lambda task: task
+    try:
+        diagnostic = aggregate._build_l3_retry_inflation(
+            {"results": [_synthetic_l3_mid_miss_task()]}
+        )
+    finally:
+        aggregate.build_eval_context = original_context
+    classes = diagnostic["classes"]
+    mid = classes["cache_miss_before_final_call"]
+    _assert(mid["tasks"] == 1, "mid-sequence miss task was not classified")
+    _assert(mid["calls_emitted"] == 4, "emitted-call count mismatch")
+    _assert(mid["golden_action_calls"] == 2, "golden action length mismatch")
+    _assert_close(mid["inflation_ratio"], 2.0, "mid-miss inflation ratio")
+    _assert(
+        diagnostic["after_non_final_miss"]
+        == {
+            "misses_with_following_call": 3,
+            "same_tool_identical_arguments": 1,
+            "same_tool_different_arguments": 1,
+            "different_tool": 1,
+        },
+        "post-miss action classes mismatch",
+    )
+    _assert(
+        diagnostic["context_construction_failures"] == {"count": 0},
+        "clean L3 task reported a context construction failure",
+    )
+
+
+def test_l3_retry_inflation_reports_context_construction_failures():
+    original_context = aggregate.build_eval_context
+
+    def broken_context(_task):
+        raise LookupError("L3 context unavailable")
+
+    aggregate.build_eval_context = broken_context
+    try:
+        diagnostic = aggregate._build_l3_retry_inflation(
+            {"results": [_synthetic_l3_mid_miss_task()]}
+        )
+    finally:
+        aggregate.build_eval_context = original_context
+
+    _assert(
+        diagnostic["context_construction_failures"]
+        == {"count": 1, "error": "LookupError: L3 context unavailable"},
+        "L3 context construction failure was laundered",
+    )
+    _assert(
+        sum(entry["tasks"] for entry in diagnostic["classes"].values()) == 1,
+        "L3 context failure changed the raw-call retry classification",
+    )
+
+
+def test_l3_retry_inflation_zero_calls_are_separate_from_one_x_baseline():
+    no_miss_task = {
+        "golden_action": [{"tool": "A"}, {"tool": "B"}],
+        "tool_calls": [
+            {"tool_name": "A", "arguments": {}, "success": True},
+            {"tool_name": "B", "arguments": {}, "success": True},
+        ],
+    }
+    zero_call_task = {
+        "golden_action": [{"tool": "A"}, {"tool": "B"}],
+        "tool_calls": [],
+    }
+    classes = aggregate._build_l3_retry_inflation(
+        {"results": [no_miss_task, zero_call_task]}
+    )["classes"]
+    no_miss = classes["no_cache_miss"]
+    _assert(no_miss["tasks"] == 1, "no-miss task was not classified")
+    _assert(no_miss["calls_emitted"] == 2, "zero-call task entered baseline")
+    _assert(no_miss["golden_action_calls"] == 2, "baseline denominator drift")
+    _assert_close(no_miss["inflation_ratio"], 1.0, "no-miss inflation ratio")
+    zero_calls = classes["no_tool_calls_emitted"]
+    _assert(zero_calls["tasks"] == 1, "zero-call task was not separated")
+    _assert(zero_calls["calls_emitted"] == 0, "zero-call numerator mismatch")
+    _assert(zero_calls["golden_action_calls"] == 2, "zero-call golden mismatch")
+    _assert(zero_calls["inflation_ratio"] is None, "zero-call ratio is comparable")
+
+
+def test_l3_retry_inflation_four_classes_partition_all_tasks():
+    tasks = [
+        {"golden_action": [{"tool": "A"}], "tool_calls": []},
+        {
+            "golden_action": [{"tool": "A"}],
+            "tool_calls": [
+                {"tool_name": "A", "arguments": {}, "success": True}
+            ],
+        },
+        {
+            "golden_action": [{"tool": "A"}],
+            "tool_calls": [_cache_miss_call("A", {})],
+        },
+        _synthetic_l3_mid_miss_task(),
+    ]
+    classes = aggregate._build_l3_retry_inflation({"results": tasks})["classes"]
+    _assert(
+        set(classes)
+        == {
+            "no_tool_calls_emitted",
+            "no_cache_miss",
+            "cache_miss_only_at_final_call",
+            "cache_miss_before_final_call",
+        },
+        "L3 retry diagnostic does not expose exactly four classes",
+    )
+    _assert(
+        {name: entry["tasks"] for name, entry in classes.items()}
+        == {name: 1 for name in classes},
+        "synthetic L3 tasks did not land in exactly one class each",
+    )
+    _assert(
+        sum(entry["tasks"] for entry in classes.values()) == len(tasks),
+        "L3 retry classes do not partition the level tasks",
+    )
+
+
+def test_l3_retry_diagnostic_is_score_and_headline_neutral():
+    summary = _build_score_neutral_diagnostic_summary(
+        l3_tasks=[_synthetic_l3_mid_miss_task()]
+    )
+    _assert(
+        summary["l3_retry_inflation"]["classes"][
+            "cache_miss_before_final_call"
+        ]["tasks"]
+        == 1,
+        "summary omitted the L3 retry diagnostic",
+    )
+    _assert_close(summary["by_level"]["L3"]["score"], 0.3, "v2 L3 score")
+    _assert_close(
+        summary["scoring_v3"]["by_level"]["L3"]["score"], 0.3, "v3 L3 score"
+    )
+    _assert_close(summary["agent_score"], 0.35, "v2 headline")
+    _assert_close(summary["scoring_v3"]["agent_score"], 0.35, "v3 headline")
+    _assert_close(summary["scoring_v4"]["agent_score"], 0.34, "v4 headline")
+
+
+def test_l5_ceiling_reports_observed_max_and_caps():
+    original_context = aggregate.build_eval_context
+    original_specs = aggregate.LEVEL_SPECS_V3["L5"]
+    aggregate.build_eval_context = lambda task: task
+    aggregate.LEVEL_SPECS_V3["L5"] = tuple(
+        aggregate.MetricSpec(name, lambda task, key=name: task[key], True)
+        for name in aggregate.L5_METRIC_CEILINGS
+    )
+    try:
+        diagnostic = aggregate._build_l5_ceiling(
+            {
+                "results": [
+                    {
+                        "FallbackSR": 0.25,
+                        "AdaptiveRoutingScore": 0.5,
+                        "EPR_CVR": 0.25,
+                    },
+                    {
+                        "FallbackSR": 1.0,
+                        "AdaptiveRoutingScore": 0.4,
+                        "EPR_CVR": 0.5,
+                    },
+                ]
+            }
+        )
+    finally:
+        aggregate.build_eval_context = original_context
+        aggregate.LEVEL_SPECS_V3["L5"] = original_specs
+
+    _assert_close(
+        diagnostic["metrics"]["FallbackSR"]["observed_max"],
+        1.0,
+        "FallbackSR observed max",
+    )
+    for name in ("AdaptiveRoutingScore", "EPR_CVR"):
+        _assert_close(
+            diagnostic["metrics"][name]["observed_max"],
+            0.5,
+            f"{name} observed max",
+        )
+        _assert_close(
+            diagnostic["metrics"][name]["structural_ceiling"],
+            0.5,
+            f"{name} structural cap",
+        )
+    _assert_close(diagnostic["level_ceiling"], 2 / 3, "L5 level ceiling")
+    _assert(
+        diagnostic["context_construction_failures"] == {"count": 0},
+        "clean L5 tasks reported context construction failures",
+    )
+    for name in aggregate.L5_METRIC_CEILINGS:
+        _assert(
+            diagnostic["metrics"][name]["producer_failures"] == {"count": 0},
+            f"clean {name} evaluations reported producer failures",
+        )
+
+
+def test_l5_ceiling_reports_metric_producer_failure():
+    original_context = aggregate.build_eval_context
+    original_specs = aggregate.LEVEL_SPECS_V3["L5"]
+
+    def broken_producer(task):
+        raise RuntimeError(f"FallbackSR producer unavailable for {task['id']}")
+
+    aggregate.build_eval_context = lambda task: task
+    aggregate.LEVEL_SPECS_V3["L5"] = (
+        aggregate.MetricSpec("FallbackSR", broken_producer, True),
+        aggregate.MetricSpec("AdaptiveRoutingScore", lambda task: 0.5, True),
+        aggregate.MetricSpec("EPR_CVR", lambda task: 0.5, True),
+    )
+    try:
+        diagnostic = aggregate._build_l5_ceiling(
+            {"results": [{"id": "first"}, {"id": "second"}]}
+        )
+    finally:
+        aggregate.build_eval_context = original_context
+        aggregate.LEVEL_SPECS_V3["L5"] = original_specs
+
+    failures = diagnostic["metrics"]["FallbackSR"]["producer_failures"]
+    _assert(
+        failures
+        == {
+            "count": 2,
+            "error": "RuntimeError: FallbackSR producer unavailable for first",
+        },
+        "L5 producer failures did not retain count and first exception",
+    )
+    _assert(
+        diagnostic["metrics"]["FallbackSR"]["observed_max"] is None,
+        "all-error L5 metric unexpectedly produced an observed maximum",
+    )
+
+
+def test_l5_ceiling_distinguishes_all_context_failures_from_no_values():
+    original_context = aggregate.build_eval_context
+
+    def broken_context(_task):
+        raise ImportError("benchmark metrics unavailable")
+
+    aggregate.build_eval_context = broken_context
+    try:
+        diagnostic = aggregate._build_l5_ceiling({"results": [{}, {}]})
+    finally:
+        aggregate.build_eval_context = original_context
+
+    _assert(
+        all(
+            entry["observed_max"] is None
+            for entry in diagnostic["metrics"].values()
+        ),
+        "all-context-error L5 run unexpectedly produced a value",
+    )
+    _assert(
+        diagnostic["context_construction_failures"]
+        == {"count": 2, "error": "ImportError: benchmark metrics unavailable"},
+        "all-context-error L5 run is indistinguishable from no values",
+    )
+
+
+def test_l5_ceiling_diagnostic_is_score_and_headline_neutral():
+    summary = _build_score_neutral_diagnostic_summary()
+    _assert_close(summary["l5_ceiling"]["level_ceiling"], 2 / 3, "L5 ceiling")
+    _assert_close(summary["by_level"]["L5"]["score"], 0.5, "v2 L5 score")
+    _assert_close(
+        summary["scoring_v3"]["by_level"]["L5"]["score"], 0.5, "v3 L5 score"
+    )
+    _assert_close(summary["agent_score"], 0.35, "v2 headline")
+    _assert_close(summary["scoring_v3"]["agent_score"], 0.35, "v3 headline")
+    _assert_close(summary["scoring_v4"]["agent_score"], 0.34, "v4 headline")
+
+
+def test_new_diagnostics_round_trip_and_validate():
+    summary = _validation_summary_with_v4()
+    summary["l3_retry_inflation"] = aggregate._build_l3_retry_inflation(
+        {"results": [_synthetic_l3_mid_miss_task()]}
+    )
+    summary["l5_ceiling"] = aggregate._build_l5_ceiling({"results": []})
+    with tempfile.TemporaryDirectory() as temp_dir:
+        results_dir = Path(temp_dir)
+        _write_validation_fixture(results_dir, summary)
+        round_tripped = json.loads(
+            (results_dir / "summary.json").read_text(encoding="utf-8")
+        )
+        failures, _warnings = validate_run.validate_results_dir(results_dir)
+    _assert(
+        round_tripped["l3_retry_inflation"] == summary["l3_retry_inflation"],
+        "L3 diagnostic did not survive JSON round-trip",
+    )
+    _assert(
+        round_tripped["l5_ceiling"] == summary["l5_ceiling"],
+        "L5 diagnostic did not survive JSON round-trip",
+    )
+    _assert(not failures, f"new diagnostic blocks failed validation: {failures}")
+
+
 def test_validator_warns_above_cache_threshold_without_failing():
     summary = _validation_summary_with_v3()
     summary["cache_miss_diagnostics"] = {
@@ -3022,6 +3380,16 @@ TESTS = [
     test_cache_classifier_non_text_identity_is_semantic_not_unclassified,
     test_cache_classifier_collision_tie_break_is_deterministic,
     test_cache_diagnostic_does_not_change_v2_or_v3_headline_bytes,
+    test_l3_retry_inflation_mid_miss_counts_and_ratio,
+    test_l3_retry_inflation_reports_context_construction_failures,
+    test_l3_retry_inflation_zero_calls_are_separate_from_one_x_baseline,
+    test_l3_retry_inflation_four_classes_partition_all_tasks,
+    test_l3_retry_diagnostic_is_score_and_headline_neutral,
+    test_l5_ceiling_reports_observed_max_and_caps,
+    test_l5_ceiling_reports_metric_producer_failure,
+    test_l5_ceiling_distinguishes_all_context_failures_from_no_values,
+    test_l5_ceiling_diagnostic_is_score_and_headline_neutral,
+    test_new_diagnostics_round_trip_and_validate,
     test_validator_warns_above_cache_threshold_without_failing,
     test_runner_request_timeout_parse_default_and_override,
     test_runner_max_retries_parse_default_and_override,

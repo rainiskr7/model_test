@@ -7,7 +7,7 @@ from typing import Any, Dict, Iterable, List
 
 if __package__:
     from . import SCORING_VERSION, SCORING_VERSION_V3, SCORING_VERSION_V4
-    from .cache_diagnostics import build_cache_diagnostics
+    from .cache_diagnostics import CACHE_MISS_RE, build_cache_diagnostics
     from .context import build_eval_context
     from .level_spec import (
         COMMON_RECORD_ONLY,
@@ -23,7 +23,7 @@ if __package__:
 else:
     sys.path.insert(0, str(Path(__file__).resolve().parent))
     from __init__ import SCORING_VERSION, SCORING_VERSION_V3, SCORING_VERSION_V4
-    from cache_diagnostics import build_cache_diagnostics
+    from cache_diagnostics import CACHE_MISS_RE, build_cache_diagnostics
     from context import build_eval_context
     from level_spec import (
         COMMON_RECORD_ONLY,
@@ -53,15 +53,29 @@ SCORABLE_LEVELS = ("L1", "L2", "L3", "L4", "L5", "L6")
 # L4 satisfies all four: Coverage and SourceEPR both count distinct tools whose
 # responses succeeded over distinct required tools, cache misses become
 # success=False, the score therefore absorbs the misses, and 0/177 measured
-# misses are repairable under the frozen key-matching rules. L3 fails (1):
-# FSM/PSM/ΔSteps use call shape only, so even its 52--71% miss rate is not
-# scored as failure. L5 fails (2) and (4) at its measured 2--12% miss rate. L6
-# v3 reads whether a refetch happened, not a response payload.
+# misses are repairable under the frozen key-matching rules. L3 fails (1), but
+# its misses still propagate through retry-inflated call sequences and strongly
+# depress the level; removing L3 shifts the six-model headline by at most 0.019
+# and preserves order. L5 remains included because its two runner-imposed 0.5
+# metric ceilings compress scale without removing signal: rescaling preserves
+# the six-model order, while dropping L5 changes it. L6 v3 reads whether a
+# refetch happened, not a response payload.
 V4_HEADLINE_LEVELS = ("L1", "L2", "L3", "L5", "L6")
 V4_EXCLUDED_LEVELS = ("L4",)
 L4_FIXTURE_COVERAGE_NOTICE = (
     "L4 Coverage/SourceEPR treat a cache miss as success=False; L4 is excluded "
     "from v4 because those labels measure fixture coverage, not capability."
+)
+L5_METRIC_CEILINGS = {
+    "FallbackSR": 1.0,
+    "AdaptiveRoutingScore": 0.5,
+    "EPR_CVR": 0.5,
+}
+L5_LEVEL_CEILING = sum(L5_METRIC_CEILINGS.values()) / len(L5_METRIC_CEILINGS)
+L5_CEILING_NOTICE = (
+    "AdaptiveRoutingScore and EPR_CVR are capped at 0.5 for schema-respecting "
+    "models: the runner withholds fallback tools until a reset second pass "
+    "(forcing a step gap) and injects one mandatory failed call."
 )
 
 
@@ -73,6 +87,174 @@ def _tasks(data: Dict[str, Any]) -> List[Dict[str, Any]]:
     if isinstance(tasks, list):
         return tasks
     return []
+
+
+def _call_tool(call: Dict[str, Any]):
+    return call.get("tool_name") or call.get("tool")
+
+
+def _call_arguments(call: Dict[str, Any]):
+    arguments = call.get("arguments")
+    if isinstance(arguments, dict):
+        return arguments
+    arguments = call.get("args")
+    return arguments if isinstance(arguments, dict) else {}
+
+
+def _diagnostic_failures(count: int, first_error: Any) -> Dict[str, Any]:
+    entry = {"count": count}
+    if first_error is not None:
+        entry["error"] = f"{type(first_error).__name__}: {first_error}"
+    return entry
+
+
+def _build_l3_retry_inflation(level_data: Dict[str, Any]) -> Dict[str, Any]:
+    class_names = (
+        "no_tool_calls_emitted",
+        "no_cache_miss",
+        "cache_miss_only_at_final_call",
+        "cache_miss_before_final_call",
+    )
+    classes = {
+        name: {
+            "tasks": 0,
+            "calls_emitted": 0,
+            "golden_action_calls": 0,
+            "inflation_ratio": None,
+        }
+        for name in class_names
+    }
+    after_non_final_miss = {
+        "misses_with_following_call": 0,
+        "same_tool_identical_arguments": 0,
+        "same_tool_different_arguments": 0,
+        "different_tool": 0,
+    }
+    context_failure_count = 0
+    first_context_error = None
+
+    for task in _tasks(level_data):
+        if not isinstance(task, dict):
+            continue
+        try:
+            build_eval_context(task)
+        except Exception as exc:
+            context_failure_count += 1
+            if first_context_error is None:
+                first_context_error = exc
+        # L3 수치는 저장된 call만 읽으므로 context 실패와 무관하게 기존 분류를 유지한다.
+        calls = task.get("tool_calls")
+        calls = calls if isinstance(calls, list) else []
+        golden_action = task.get("golden_action")
+        if isinstance(golden_action, dict):
+            golden_action = [golden_action]
+        elif not isinstance(golden_action, list):
+            golden_action = []
+        miss_indexes = [
+            index
+            for index, call in enumerate(calls)
+            if isinstance(call, dict)
+            and CACHE_MISS_RE.search(str(call.get("error") or ""))
+        ]
+        if not calls:
+            class_name = "no_tool_calls_emitted"
+        elif not miss_indexes:
+            class_name = "no_cache_miss"
+        elif miss_indexes == [len(calls) - 1]:
+            class_name = "cache_miss_only_at_final_call"
+        else:
+            class_name = "cache_miss_before_final_call"
+
+        entry = classes[class_name]
+        entry["tasks"] += 1
+        entry["calls_emitted"] += len(calls)
+        entry["golden_action_calls"] += len(golden_action)
+
+        for index in miss_indexes:
+            if index >= len(calls) - 1:
+                continue
+            current = calls[index]
+            following = calls[index + 1]
+            if not isinstance(current, dict) or not isinstance(following, dict):
+                after_non_final_miss["different_tool"] += 1
+            elif _call_tool(current) != _call_tool(following):
+                after_non_final_miss["different_tool"] += 1
+            elif _call_arguments(current) == _call_arguments(following):
+                after_non_final_miss["same_tool_identical_arguments"] += 1
+            else:
+                after_non_final_miss["same_tool_different_arguments"] += 1
+            after_non_final_miss["misses_with_following_call"] += 1
+
+    for name, entry in classes.items():
+        if name == "no_tool_calls_emitted":
+            continue
+        golden_calls = entry["golden_action_calls"]
+        if golden_calls:
+            entry["inflation_ratio"] = entry["calls_emitted"] / golden_calls
+
+    return {
+        "classes": classes,
+        "after_non_final_miss": after_non_final_miss,
+        "context_construction_failures": _diagnostic_failures(
+            context_failure_count, first_context_error
+        ),
+    }
+
+
+def _build_l5_ceiling(level_data: Dict[str, Any]) -> Dict[str, Any]:
+    observed = {name: [] for name in L5_METRIC_CEILINGS}
+    producer_failure_counts = {name: 0 for name in L5_METRIC_CEILINGS}
+    first_producer_errors = {name: None for name in L5_METRIC_CEILINGS}
+    context_failure_count = 0
+    first_context_error = None
+    specs = {
+        spec.name: spec
+        for spec in LEVEL_SPECS_V3["L5"]
+        if spec.in_score and spec.name in observed
+    }
+    for task in _tasks(level_data):
+        if not isinstance(task, dict):
+            continue
+        try:
+            ctx = build_eval_context(task)
+        except Exception as exc:
+            context_failure_count += 1
+            if first_context_error is None:
+                first_context_error = exc
+            continue
+        for name, spec in specs.items():
+            try:
+                value = spec.producer(ctx)
+                numeric = float(value) if value is not None else None
+                if (
+                    numeric is not None
+                    and math.isfinite(numeric)
+                    and 0.0 <= numeric <= 1.0
+                ):
+                    observed[name].append(numeric)
+            except Exception as exc:
+                producer_failure_counts[name] += 1
+                if first_producer_errors[name] is None:
+                    first_producer_errors[name] = exc
+                continue
+
+    return {
+        "metrics": {
+            name: {
+                "observed_max": max(observed[name]) if observed[name] else None,
+                "structural_ceiling": ceiling,
+                "producer_failures": _diagnostic_failures(
+                    producer_failure_counts[name], first_producer_errors[name]
+                ),
+            }
+            for name, ceiling in L5_METRIC_CEILINGS.items()
+        },
+        "context_construction_failures": _diagnostic_failures(
+            context_failure_count, first_context_error
+        ),
+        "level_ceiling": L5_LEVEL_CEILING,
+        "statement": L5_CEILING_NOTICE,
+    }
 
 
 def _average_metric(tasks: List[Dict[str, Any]], spec: MetricSpec) -> Dict[str, Any]:
@@ -397,8 +579,8 @@ def build_summary_from_loaded(
         SCORING_VERSION_V3: list(SCORABLE_LEVELS),
         SCORING_VERSION_V4: list(V4_HEADLINE_LEVELS),
     }
-    # Additive and score-neutral: classification only observes saved calls and
-    # fixtures after all scoring contracts have been computed.
+    # Additive and score-neutral: diagnostics only observe saved tasks/calls and
+    # fixed metric definitions after all scoring contracts have been computed.
     summary["cache_miss_diagnostics"] = build_cache_diagnostics(
         loaded, results_dir
     )
@@ -413,4 +595,8 @@ def build_summary_from_loaded(
         "miss_counts": l4_diagnostic.get("miss_counts", {}),
         "statement": L4_FIXTURE_COVERAGE_NOTICE,
     }
+    summary["l3_retry_inflation"] = _build_l3_retry_inflation(
+        loaded.get("L3", {})
+    )
+    summary["l5_ceiling"] = _build_l5_ceiling(loaded.get("L5", {}))
     return summary
