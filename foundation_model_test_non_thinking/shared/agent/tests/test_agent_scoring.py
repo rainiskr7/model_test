@@ -2616,6 +2616,91 @@ def test_score_run_dry_run_writes_nothing_for_clean_and_rejected_summaries():
             _assert(sidecar.read_bytes() == sidecar_before, "dry-run modified the sidecar")
 
 
+def test_score_run_check_matching_summary_exits_0_without_writes():
+    with tempfile.TemporaryDirectory() as temp_dir:
+        results_dir = Path(temp_dir)
+        candidate = _scoring_candidate()
+        _write_validation_fixture(results_dir, candidate)
+        summary_path = results_dir / "summary.json"
+        sidecar = results_dir / "summary.invalid.json"
+        sidecar.write_bytes(b"existing sidecar")
+        summary_before = summary_path.read_bytes()
+        sidecar_before = sidecar.read_bytes()
+
+        exit_code, output = _run_score_candidate(results_dir, candidate, "--check")
+
+        _assert(exit_code == 0, f"matching check exited {exit_code}, expected 0")
+        _assert("CHECK summary.json matches" in output, "matching result was not printed")
+        _assert(summary_path.read_bytes() == summary_before, "check modified summary.json")
+        _assert(sidecar.read_bytes() == sidecar_before, "check modified the sidecar")
+
+
+def test_score_run_check_drift_exits_1_with_path_without_writes():
+    with tempfile.TemporaryDirectory() as temp_dir:
+        results_dir = Path(temp_dir)
+        candidate = _scoring_candidate()
+        stored = copy.deepcopy(candidate)
+        stored["by_level"]["L1"]["score"] = 0.123456
+        _write_validation_fixture(results_dir, stored)
+        summary_path = results_dir / "summary.json"
+        sidecar = results_dir / "summary.invalid.json"
+        sidecar.write_bytes(b"existing sidecar")
+        summary_before = summary_path.read_bytes()
+        sidecar_before = sidecar.read_bytes()
+
+        exit_code, output = _run_score_candidate(results_dir, candidate, "--check")
+
+        _assert(exit_code == 1, f"drifted check exited {exit_code}, expected 1")
+        _assert("DRIFT .by_level.L1.score" in output, "changed dotted path was not printed")
+        _assert(summary_path.read_bytes() == summary_before, "check replaced summary.json")
+        _assert(sidecar.read_bytes() == sidecar_before, "check modified the sidecar")
+
+
+def test_score_run_check_missing_summary_exits_2():
+    with tempfile.TemporaryDirectory() as temp_dir:
+        results_dir = Path(temp_dir)
+        candidate = _scoring_candidate()
+        _write_validation_fixture(results_dir, candidate)
+        (results_dir / "summary.json").unlink()
+
+        exit_code, output = _run_score_candidate(results_dir, candidate, "--check")
+
+        _assert(exit_code == 2, f"missing-summary check exited {exit_code}, expected 2")
+        _assert("summary.json not found" in output, "missing summary error was not printed")
+        _assert(not (results_dir / "summary.json").exists(), "check created summary.json")
+        _assert(
+            not (results_dir / "summary.invalid.json").exists(),
+            "check created an invalid-summary sidecar",
+        )
+
+
+def test_score_run_check_collapses_wholly_absent_subtree():
+    with tempfile.TemporaryDirectory() as temp_dir:
+        results_dir = Path(temp_dir)
+        stored = _scoring_candidate()
+        candidate = copy.deepcopy(stored)
+        candidate["fresh_block"] = {
+            "branch": {f"metric_{index}": index for index in range(60)}
+        }
+        _write_validation_fixture(results_dir, stored)
+
+        exit_code, output = _run_score_candidate(results_dir, candidate, "--check")
+
+        collapsed = "DRIFT+ .fresh_block (60 leaves absent in stored)"
+        _assert(exit_code == 1, f"absent-subtree check exited {exit_code}, expected 1")
+        _assert(collapsed in output, "absent subtree was not collapsed with its leaf count")
+        _assert(".fresh_block.branch" not in output, "absent subtree printed child differences")
+        _assert(output.count("DRIFT+ .fresh_block") == 1, "absent subtree printed multiple lines")
+
+
+def test_score_run_check_and_dry_run_are_mutually_exclusive():
+    output = io.StringIO()
+    with contextlib.redirect_stdout(output), contextlib.redirect_stderr(output):
+        exit_code = score_run.main(["--check", "--dry-run"])
+    _assert(exit_code == 2, f"--check --dry-run exited {exit_code}, expected 2")
+    _assert("not allowed with argument" in output.getvalue(), "mutual exclusion error hidden")
+
+
 def test_validator_accepts_partial_summary():
     summary = _validation_summary()
     del summary["by_level"]["L6"]
@@ -2956,6 +3041,11 @@ TESTS = [
     test_validate_summary_agrees_with_validate_results_dir,
     test_contract_error_metric_validates_and_publishes,
     test_score_run_dry_run_writes_nothing_for_clean_and_rejected_summaries,
+    test_score_run_check_matching_summary_exits_0_without_writes,
+    test_score_run_check_drift_exits_1_with_path_without_writes,
+    test_score_run_check_missing_summary_exits_2,
+    test_score_run_check_collapses_wholly_absent_subtree,
+    test_score_run_check_and_dry_run_are_mutually_exclusive,
     test_validator_accepts_partial_summary,
     test_validator_accepts_legacy_missing_native_metadata,
     test_validator_rejects_version_mismatch,

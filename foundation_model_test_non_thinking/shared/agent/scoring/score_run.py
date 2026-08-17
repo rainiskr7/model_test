@@ -6,7 +6,7 @@ import os
 import sys
 import tempfile
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 if __package__:
     from .aggregate import (
@@ -38,9 +38,10 @@ else:
 
 
 PREFIX = "[agent-scoring]"
+MAX_DRIFT_LINES = 40
 EXIT_CODE_HELP = """exit codes:
-  0  summary produced and publishable (warnings allowed)
-  1  scoring completed but the summary is unusable
+  0  summary produced and publishable, or --check found no drift
+  1  scoring completed but the summary is unusable, or --check found drift
   2  invocation, configuration, input-reading, or internal error"""
 DETERMINISTIC_METRICS = {
     spec.name
@@ -253,6 +254,86 @@ def _write_json_atomic(path: Path, payload: Dict[str, Any]) -> None:
         temp_path.unlink(missing_ok=True)
 
 
+def _json_leaf_count(value: Any) -> int:
+    if isinstance(value, dict):
+        return sum((_json_leaf_count(item) for item in value.values()), 0) or 1
+    if isinstance(value, list):
+        return sum((_json_leaf_count(item) for item in value), 0) or 1
+    return 1
+
+
+def _absent_difference(marker: str, path: str, value: Any, location: str) -> str:
+    if isinstance(value, (dict, list)):
+        count = _json_leaf_count(value)
+        noun = "leaf" if count == 1 else "leaves"
+        return f"{marker} {path} ({count} {noun} absent in {location})"
+    return f"{marker} {path} (absent in {location})"
+
+
+def _render_json_value(value: Any) -> str:
+    return json.dumps(value, ensure_ascii=False, separators=(",", ":"))
+
+
+def _json_differences(stored: Any, computed: Any, path: str = ".") -> List[str]:
+    if isinstance(stored, dict) and isinstance(computed, dict):
+        differences = []
+        for key in sorted(stored.keys() | computed.keys()):
+            child_path = f"{path}{key}" if path == "." else f"{path}.{key}"
+            if key not in stored:
+                differences.append(
+                    _absent_difference("DRIFT+", child_path, computed[key], "stored")
+                )
+            elif key not in computed:
+                differences.append(
+                    _absent_difference("DRIFT-", child_path, stored[key], "computed")
+                )
+            else:
+                differences.extend(
+                    _json_differences(stored[key], computed[key], child_path)
+                )
+        return differences
+
+    if isinstance(stored, list) and isinstance(computed, list):
+        differences = []
+        common = min(len(stored), len(computed))
+        for index in range(common):
+            differences.extend(
+                _json_differences(stored[index], computed[index], f"{path}[{index}]")
+            )
+        for index in range(common, len(stored)):
+            differences.append(
+                _absent_difference(
+                    "DRIFT-", f"{path}[{index}]", stored[index], "computed"
+                )
+            )
+        for index in range(common, len(computed)):
+            differences.append(
+                _absent_difference(
+                    "DRIFT+", f"{path}[{index}]", computed[index], "stored"
+                )
+            )
+        return differences
+
+    # JSON에서 bool은 숫자와 별도 타입이므로 True와 1을 같다고 보지 않는다.
+    same_value = stored == computed
+    if isinstance(stored, bool) != isinstance(computed, bool):
+        same_value = False
+    if same_value:
+        return []
+    return [
+        f"DRIFT {path} stored={_render_json_value(stored)} "
+        f"computed={_render_json_value(computed)}"
+    ]
+
+
+def _print_differences(differences: List[str]) -> None:
+    for difference in differences[:MAX_DRIFT_LINES]:
+        print(f"{PREFIX} {difference}")
+    suppressed = len(differences) - MAX_DRIFT_LINES
+    if suppressed > 0:
+        print(f"{PREFIX} DRIFT ... {suppressed} additional differences suppressed")
+
+
 def parse_args(argv=None):
     parser = _ArgumentParser(
         description=__doc__,
@@ -263,7 +344,13 @@ def parse_args(argv=None):
     parser.add_argument("--model", help="Model name used to build results path")
     parser.add_argument("--timestamp", help="Evaluation timestamp used to build results path")
     parser.add_argument("--track", default="agent", help="Track folder under language/")
-    parser.add_argument("--dry-run", action="store_true", help="Do not write summary.json")
+    output_mode = parser.add_mutually_exclusive_group()
+    output_mode.add_argument("--dry-run", action="store_true", help="Do not write summary.json")
+    output_mode.add_argument(
+        "--check",
+        action="store_true",
+        help="Compare with summary.json without writing anything",
+    )
     return parser.parse_args(argv)
 
 
@@ -271,6 +358,13 @@ def main(argv=None) -> int:
     try:
         args = parse_args(argv)
         results_dir = _result_dir_from_args(args)
+        stored_summary = None
+        if args.check:
+            summary_path = results_dir / "summary.json"
+            if not summary_path.is_file():
+                raise RuntimeError(f"summary.json not found: {summary_path}")
+            with summary_path.open("r", encoding="utf-8") as handle:
+                stored_summary = json.load(handle)
         # 벤치 패키지는 실행 전체의 전제다. 태스크별 예외 처리 밖에서 한 번만
         # 확인해 구성 실패가 메트릭 오류로 세탁되지 않게 한다.
         load_metrics_module()
@@ -283,6 +377,14 @@ def main(argv=None) -> int:
         if failures:
             for failure in failures:
                 print(f"{PREFIX} FAIL {failure}")
+        if args.check:
+            differences = _json_differences(stored_summary, summary)
+            if differences:
+                _print_differences(differences)
+                return 1
+            print(f"{PREFIX} CHECK summary.json matches computed summary")
+            return 0
+        if failures:
             if not args.dry_run:
                 invalid_out = results_dir / "summary.invalid.json"
                 _write_json_atomic(invalid_out, summary)
