@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, List
 
 if __package__:
-    from . import SCORING_VERSION, SCORING_VERSION_V3
+    from . import SCORING_VERSION, SCORING_VERSION_V3, SCORING_VERSION_V4
     from .cache_diagnostics import build_cache_diagnostics
     from .context import build_eval_context
     from .level_spec import (
@@ -21,7 +21,7 @@ if __package__:
     from .task_data import prepare_v3_loaded
 else:
     sys.path.insert(0, str(Path(__file__).resolve().parent))
-    from __init__ import SCORING_VERSION, SCORING_VERSION_V3
+    from __init__ import SCORING_VERSION, SCORING_VERSION_V3, SCORING_VERSION_V4
     from cache_diagnostics import build_cache_diagnostics
     from context import build_eval_context
     from level_spec import (
@@ -39,6 +39,29 @@ else:
 
 ALL_LEVELS = tuple(f"L{i}" for i in range(1, 8))
 SCORABLE_LEVELS = ("L1", "L2", "L3", "L4", "L5", "L6")
+
+# A scoring version's denominator is a pinned constant. It must never be chosen
+# from the data being scored, so this is deliberately not a runtime
+# auto-exclusion predicate. V4 excludes a level only when all four conditions
+# were established on the frozen benchmark evidence: (1) every in-scope metric
+# derives success/count from tool-response outcomes rather than call shape;
+# (2) a material share of those outcome labels on the pinned fixture set are
+# cache misses; (3) the level score is not separable from that miss process; and
+# (4) the misses are not repairable under the fixture freeze.
+#
+# L4 satisfies all four: Coverage and SourceEPR both count distinct tools whose
+# responses succeeded over distinct required tools, cache misses become
+# success=False, the score therefore absorbs the misses, and 0/177 measured
+# misses are repairable under the frozen key-matching rules. L3 fails (1):
+# FSM/PSM/ΔSteps use call shape only, so even its 52--71% miss rate is not
+# scored as failure. L5 fails (2) and (4) at its measured 2--12% miss rate. L6
+# v3 reads whether a refetch happened, not a response payload.
+V4_HEADLINE_LEVELS = ("L1", "L2", "L3", "L5", "L6")
+V4_EXCLUDED_LEVELS = ("L4",)
+L4_FIXTURE_COVERAGE_NOTICE = (
+    "L4 Coverage/SourceEPR treat a cache miss as success=False; L4 is excluded "
+    "from v4 because those labels measure fixture coverage, not capability."
+)
 
 
 def _tasks(data: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -194,6 +217,42 @@ def score_level(level: str, data: Dict[str, Any]) -> Dict[str, Any]:
     return _score_level_with_specs(level, data, LEVEL_SPECS)
 
 
+def _build_v4_block(
+    v3_by_level: Dict[str, Dict[str, Any]],
+    levels_missing: List[str],
+    task_data_provenance: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Build the pinned five-level v4 headline from the v3 level matrix."""
+    levels_unscorable = [
+        level for level, result in v3_by_level.items() if result.get("score") is None
+    ]
+    scored_levels = sum(
+        1
+        for level in V4_HEADLINE_LEVELS
+        if level in v3_by_level and v3_by_level[level].get("score") is not None
+    )
+    required_levels = len(V4_HEADLINE_LEVELS)
+    complete = scored_levels == required_levels
+    agent_score = (
+        mean_or_none([v3_by_level[level]["score"] for level in V4_HEADLINE_LEVELS])
+        if complete
+        else None
+    )
+    return {
+        "scoring_version": SCORING_VERSION_V4,
+        "agent_score": agent_score,
+        "scored_levels": scored_levels,
+        "required_levels": required_levels,
+        "agent_score_status": "complete" if complete else "incomplete",
+        "headline_levels": list(V4_HEADLINE_LEVELS),
+        "excluded_levels": list(V4_EXCLUDED_LEVELS),
+        "by_level": v3_by_level,
+        "levels_missing": levels_missing,
+        "levels_unscorable": levels_unscorable,
+        "task_data": task_data_provenance,
+    }
+
+
 def _native_tool_calling(level_data: Iterable[Dict[str, Any]]):
     for data in level_data:
         metadata = data.get("metadata") or {}
@@ -304,9 +363,28 @@ def build_summary_from_loaded(
         "levels_unscorable": v3_levels_unscorable,
         "task_data": task_data_provenance,
     }
+    summary["scoring_v4"] = _build_v4_block(
+        v3_by_level, levels_missing, task_data_provenance
+    )
+    summary["headline_denominators"] = {
+        SCORING_VERSION: list(SCORABLE_LEVELS),
+        SCORING_VERSION_V3: list(SCORABLE_LEVELS),
+        SCORING_VERSION_V4: list(V4_HEADLINE_LEVELS),
+    }
     # Additive and score-neutral: classification only observes saved calls and
-    # fixtures after both frozen scoring contracts have been computed.
+    # fixtures after all scoring contracts have been computed.
     summary["cache_miss_diagnostics"] = build_cache_diagnostics(
         loaded, results_dir
     )
+    l4_diagnostic = (
+        summary["cache_miss_diagnostics"].get("by_level", {}).get("L4", {})
+    )
+    summary["l4_fixture_coverage"] = {
+        "score": (v3_by_level.get("L4") or {}).get("score"),
+        "cache_misses": l4_diagnostic.get("cache_misses", 0),
+        "total_calls": l4_diagnostic.get("total_calls", 0),
+        "miss_rate": l4_diagnostic.get("miss_rate", 0.0),
+        "miss_counts": l4_diagnostic.get("miss_counts", {}),
+        "statement": L4_FIXTURE_COVERAGE_NOTICE,
+    }
     return summary

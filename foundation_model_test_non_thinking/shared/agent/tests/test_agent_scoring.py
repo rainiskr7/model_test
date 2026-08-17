@@ -337,6 +337,34 @@ def _validation_summary_with_v3():
     return summary
 
 
+def _validation_summary_with_v4():
+    summary = _validation_summary_with_v3()
+    v4_by_level = copy.deepcopy(summary["scoring_v3"]["by_level"])
+    v4_scores = [
+        v4_by_level[level]["score"]
+        for level in ("L1", "L2", "L3", "L5", "L6")
+    ]
+    summary["scoring_v4"] = {
+        "scoring_version": aggregate.SCORING_VERSION_V4,
+        "agent_score": sum(v4_scores) / len(v4_scores),
+        "scored_levels": 5,
+        "required_levels": 5,
+        "agent_score_status": "complete",
+        "headline_levels": ["L1", "L2", "L3", "L5", "L6"],
+        "excluded_levels": ["L4"],
+        "by_level": v4_by_level,
+        "levels_missing": [],
+        "levels_unscorable": ["L7"],
+        "task_data": copy.deepcopy(summary["scoring_v3"]["task_data"]),
+    }
+    summary["headline_denominators"] = {
+        "agent_det_v2": ["L1", "L2", "L3", "L4", "L5", "L6"],
+        "agent_det_v3": ["L1", "L2", "L3", "L4", "L5", "L6"],
+        "agent_det_v4": ["L1", "L2", "L3", "L5", "L6"],
+    }
+    return summary
+
+
 def _write_validation_fixture(results_dir, summary, native_overrides=None):
     native_overrides = native_overrides or {}
     (results_dir / "summary.json").write_text(json.dumps(summary), encoding="utf-8")
@@ -1793,6 +1821,127 @@ def test_scorable_levels_and_version_contract():
         aggregate.SCORING_VERSION_V3 == "agent_det_v3",
         "v3 scoring version contract mismatch",
     )
+    _assert(
+        aggregate.SCORING_VERSION_V4 == "agent_det_v4",
+        "v4 scoring version contract mismatch",
+    )
+    _assert(
+        aggregate.V4_HEADLINE_LEVELS == ("L1", "L2", "L3", "L5", "L6"),
+        "v4 denominator literal changed",
+    )
+    _assert(
+        aggregate.V4_EXCLUDED_LEVELS == ("L4",),
+        "v4 excluded-level constant changed",
+    )
+
+
+def _synthetic_v4_matrix(l4_score=0.4, l6_score=0.6):
+    scores = {
+        "L1": 0.1,
+        "L2": 0.2,
+        "L3": 0.3,
+        "L4": l4_score,
+        "L5": 0.5,
+        "L6": l6_score,
+    }
+    return {
+        level: {"total": 1, "score": score, "metrics": {}}
+        for level, score in scores.items()
+    }
+
+
+def test_v4_requires_exactly_its_five_scorable_levels():
+    block = aggregate._build_v4_block(
+        _synthetic_v4_matrix(), [], {"join_needed": False}
+    )
+    _assert(block["agent_score_status"] == "complete", "five scores did not complete v4")
+    _assert(block["scored_levels"] == 5, "v4 scored-level count mismatch")
+
+    missing_headline = aggregate._build_v4_block(
+        _synthetic_v4_matrix(l6_score=None), [], {"join_needed": False}
+    )
+    _assert(missing_headline["agent_score"] is None, "missing v4 level produced a headline")
+    _assert(
+        missing_headline["agent_score_status"] == "incomplete",
+        "missing v4 level did not mark it incomplete",
+    )
+
+
+def test_v4_l4_null_does_not_block_and_mean_is_exact():
+    block = aggregate._build_v4_block(
+        _synthetic_v4_matrix(l4_score=None), [], {"join_needed": False}
+    )
+    expected = (0.1 + 0.2 + 0.3 + 0.5 + 0.6) / 5
+    _assert(block["agent_score_status"] == "complete", "null L4 blocked v4")
+    _assert_close(block["agent_score"], expected, "v4 five-level mean")
+    _assert(block["by_level"]["L4"]["score"] is None, "v4 matrix hid null L4")
+
+
+def test_v4_exclusion_is_constant_when_l4_is_clean():
+    block = aggregate._build_v4_block(
+        _synthetic_v4_matrix(l4_score=1.0), [], {"join_needed": False}
+    )
+    expected = (0.1 + 0.2 + 0.3 + 0.5 + 0.6) / 5
+    six_level_mean = (0.1 + 0.2 + 0.3 + 1.0 + 0.5 + 0.6) / 6
+    _assert_close(block["agent_score"], expected, "clean-L4 v4 mean")
+    _assert(
+        abs(block["agent_score"] - six_level_mean) > 1e-9,
+        "clean L4 silently entered the v4 denominator",
+    )
+
+
+def test_adding_v4_does_not_change_v2_or_v3_headline_bytes():
+    summary = _validation_summary_with_v3()
+    before = json.dumps(
+        {
+            "v2": summary["agent_score"],
+            "v3": summary["scoring_v3"]["agent_score"],
+        },
+        separators=(",", ":"),
+    ).encode()
+    with_v4 = _validation_summary_with_v4()
+    after = json.dumps(
+        {
+            "v2": with_v4["agent_score"],
+            "v3": with_v4["scoring_v3"]["agent_score"],
+        },
+        separators=(",", ":"),
+    ).encode()
+    _assert(before == after, "adding v4 changed a v2/v3 headline byte")
+
+
+def test_adding_v4_does_not_change_v2_or_v3_blocks():
+    v2_keys = (
+        "benchmark",
+        "model",
+        "track",
+        "scoring_version",
+        "native_tool_calling",
+        "agent_score",
+        "scored_levels",
+        "required_levels",
+        "agent_score_status",
+        "by_level",
+    )
+    before_summary = _validation_summary_with_v3()
+    after_summary = _validation_summary_with_v4()
+    before = json.dumps(
+        {
+            "v2": {key: before_summary[key] for key in v2_keys},
+            "v3": before_summary["scoring_v3"],
+        },
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode()
+    after = json.dumps(
+        {
+            "v2": {key: after_summary[key] for key in v2_keys},
+            "v3": after_summary["scoring_v3"],
+        },
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode()
+    _assert(before == after, "adding v4 changed the frozen v2/v3 blocks")
 
 
 def test_all_six_loaded_one_unscorable_is_incomplete():
@@ -1949,6 +2098,50 @@ def test_print_table_shows_l7_record_only_metrics_without_judges():
     _assert("judge_missing" not in printed, "judge-missing metrics must stay hidden")
 
 
+def test_print_table_reports_all_versions_matrix_and_l4_fixture_context():
+    summary = _validation_summary_with_v4()
+    summary["model"] = "x"
+    summary["track"] = "agent"
+    summary["cache_miss_diagnostics"] = {
+        "by_level": {
+            "L4": {
+                "total_calls": 12,
+                "cache_misses": 5,
+                "miss_rate": 5 / 12,
+                "counts": {},
+                "miss_counts": {"query_absent": 4, "semantic_mismatch": 1},
+            }
+        }
+    }
+    output = io.StringIO()
+    with contextlib.redirect_stdout(output):
+        score_run.print_table(summary, 0)
+    printed = output.getvalue()
+    _assert(
+        'version=agent_det_v2 denominator=("L1","L2","L3","L4","L5","L6")'
+        in printed,
+        "v2 denominator not spelled out",
+    )
+    _assert(
+        'version=agent_det_v3 denominator=("L1","L2","L3","L4","L5","L6")'
+        in printed,
+        "v3 denominator not spelled out",
+    )
+    _assert(
+        'version=agent_det_v4 denominator=("L1","L2","L3","L5","L6")'
+        in printed,
+        "v4 denominator not spelled out",
+    )
+    _assert("matrix L1" in printed and "matrix L7" in printed, "full matrix missing")
+    l4_line = next(line for line in printed.splitlines() if "matrix L4" in line)
+    _assert("cache_miss=5/12" in l4_line, "L4 misses are not next to its score")
+    _assert("qa" in l4_line and "sm" in l4_line, "L4 bucket breakdown missing")
+    _assert(
+        aggregate.L4_FIXTURE_COVERAGE_NOTICE in printed,
+        "L4 fixture-coverage sentence missing",
+    )
+
+
 def test_task_spread_counts_scored_tasks():
     original_context = aggregate.build_eval_context
     aggregate.build_eval_context = lambda task: task
@@ -2010,6 +2203,29 @@ def test_v2_only_summary_is_still_readable():
 def test_validator_accepts_v2_plus_v3_summary():
     failures, _warnings = _validate_fixture(_validation_summary_with_v3())
     _assert(not failures, f"v2+v3 summary failed validation: {failures}")
+
+
+def test_validator_accepts_v2_plus_v3_plus_v4_summary():
+    failures, _warnings = _validate_fixture(_validation_summary_with_v4())
+    _assert(not failures, f"v2+v3+v4 summary failed validation: {failures}")
+
+
+def test_validator_rejects_wrong_v4_denominator_and_mean():
+    wrong_levels = _validation_summary_with_v4()
+    wrong_levels["scoring_v4"]["headline_levels"] = ["L1", "L2", "L3", "L4", "L5", "L6"]
+    failures, _warnings = _validate_fixture(wrong_levels)
+    _assert(
+        any("scoring_v4.headline_levels must be exactly" in item for item in failures),
+        "wrong v4 level set passed",
+    )
+
+    wrong_mean = _validation_summary_with_v4()
+    wrong_mean["scoring_v4"]["agent_score"] += 0.001
+    failures, _warnings = _validate_fixture(wrong_mean)
+    _assert(
+        any("scoring_v4.agent_score mean invariant failed" in item for item in failures),
+        "perturbed v4 mean passed",
+    )
 
 
 def test_validator_warns_on_single_candidate_l2_without_failing():
@@ -2391,15 +2607,23 @@ TESTS = [
     test_legacy_missing_native_tool_calling_defaults_false,
     test_complete_run_has_agent_score,
     test_scorable_levels_and_version_contract,
+    test_v4_requires_exactly_its_five_scorable_levels,
+    test_v4_l4_null_does_not_block_and_mean_is_exact,
+    test_v4_exclusion_is_constant_when_l4_is_clean,
+    test_adding_v4_does_not_change_v2_or_v3_headline_bytes,
+    test_adding_v4_does_not_change_v2_or_v3_blocks,
     test_all_six_loaded_one_unscorable_is_incomplete,
     test_complete_six_with_l7_ignores_l7_in_headline,
     test_empty_results_are_unscorable_no_tasks,
     test_print_table_shows_partial_run_status,
     test_print_table_shows_l7_record_only_metrics_without_judges,
+    test_print_table_reports_all_versions_matrix_and_l4_fixture_context,
     test_task_spread_counts_scored_tasks,
     test_applied_metrics_counts_only_scored_in_score_metrics,
     test_v2_only_summary_is_still_readable,
     test_validator_accepts_v2_plus_v3_summary,
+    test_validator_accepts_v2_plus_v3_plus_v4_summary,
+    test_validator_rejects_wrong_v4_denominator_and_mean,
     test_validator_warns_on_single_candidate_l2_without_failing,
     test_validator_rejects_perturbed_v3_agent_score,
     test_validator_rejects_wrong_v3_in_score_metric_set,

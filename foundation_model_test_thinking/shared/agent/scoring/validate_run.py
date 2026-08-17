@@ -18,13 +18,25 @@ from pathlib import Path
 from typing import Any, Dict, List, Tuple
 
 if __package__:
-    from . import SCORING_VERSION, SCORING_VERSION_V3
-    from .aggregate import ALL_LEVELS, SCORABLE_LEVELS, safe_model_name
+    from . import SCORING_VERSION, SCORING_VERSION_V3, SCORING_VERSION_V4
+    from .aggregate import (
+        ALL_LEVELS,
+        SCORABLE_LEVELS,
+        V4_EXCLUDED_LEVELS,
+        V4_HEADLINE_LEVELS,
+        safe_model_name,
+    )
     from .level_spec import JUDGE_METRICS, LEVEL_SPECS, LEVEL_SPECS_V3
 else:
     sys.path.insert(0, str(Path(__file__).resolve().parent))
-    from __init__ import SCORING_VERSION, SCORING_VERSION_V3
-    from aggregate import ALL_LEVELS, SCORABLE_LEVELS, safe_model_name
+    from __init__ import SCORING_VERSION, SCORING_VERSION_V3, SCORING_VERSION_V4
+    from aggregate import (
+        ALL_LEVELS,
+        SCORABLE_LEVELS,
+        V4_EXCLUDED_LEVELS,
+        V4_HEADLINE_LEVELS,
+        safe_model_name,
+    )
     from level_spec import JUDGE_METRICS, LEVEL_SPECS, LEVEL_SPECS_V3
 
 
@@ -464,6 +476,95 @@ def validate_results_dir(results_dir: Path) -> Tuple[List[str], List[str]]:
                         failures.append(
                             f"scoring_v3.task_data.{name} required when join_needed is true"
                         )
+
+    # Historical v2-only and v2+v3 summaries remain readable. When v4 is
+    # present, its denominator is a literal version contract, not a data-driven
+    # decision, and its five-level mean is reconstructed independently.
+    v4 = summary.get("scoring_v4")
+    if v4 is not None:
+        if not isinstance(v4, dict):
+            failures.append("scoring_v4 must be an object")
+        else:
+            if not isinstance(v3, dict):
+                failures.append("scoring_v4 requires the scoring_v3 block")
+            if v4.get("scoring_version") != SCORING_VERSION_V4:
+                failures.append(
+                    f"scoring_v4.scoring_version mismatch: expected {SCORING_VERSION_V4!r}, "
+                    f"got {v4.get('scoring_version')!r}"
+                )
+            if v4.get("headline_levels") != list(V4_HEADLINE_LEVELS):
+                failures.append(
+                    "scoring_v4.headline_levels must be exactly "
+                    f"{list(V4_HEADLINE_LEVELS)!r}"
+                )
+            if v4.get("excluded_levels") != list(V4_EXCLUDED_LEVELS):
+                failures.append(
+                    "scoring_v4.excluded_levels must be exactly "
+                    f"{list(V4_EXCLUDED_LEVELS)!r}"
+                )
+
+            v4_by_level = v4.get("by_level")
+            if not isinstance(v4_by_level, dict):
+                failures.append("scoring_v4.by_level must be an object")
+                v4_by_level = {}
+            for level, result in v4_by_level.items():
+                if level not in ALL_LEVELS or not isinstance(result, dict):
+                    failures.append(f"scoring_v4 invalid level entry: {level!r}")
+                    continue
+                _check_score(result.get("score"), f"scoring_v4.{level}.score", failures)
+            if isinstance(v3, dict) and v4_by_level != v3.get("by_level"):
+                failures.append(
+                    "scoring_v4.by_level must preserve the full scoring_v3 level matrix"
+                )
+
+            v4_headline = v4.get("agent_score")
+            _check_score(v4_headline, "scoring_v4.agent_score", failures)
+            v4_status = v4.get("agent_score_status")
+            if v4_status not in {"complete", "incomplete"}:
+                failures.append(
+                    "scoring_v4.agent_score_status must be 'complete' or 'incomplete'"
+                )
+            v4_scores = [
+                (v4_by_level.get(level) or {}).get("score")
+                if isinstance(v4_by_level.get(level), dict)
+                else None
+                for level in V4_HEADLINE_LEVELS
+            ]
+            v4_scored = sum(_is_finite_score(score) for score in v4_scores)
+            v4_complete = v4_status == "complete"
+            v4_all_five = v4_scored == len(V4_HEADLINE_LEVELS)
+            if _is_finite_score(v4_headline) != v4_complete:
+                failures.append(
+                    "scoring_v4.agent_score must be finite if and only if status is complete"
+                )
+            if v4_complete != v4_all_five:
+                failures.append(
+                    "scoring_v4 status is complete if and only if all five headline levels have scores"
+                )
+            if v4.get("scored_levels") != v4_scored:
+                failures.append(
+                    f"scoring_v4.scored_levels must equal {v4_scored}"
+                )
+            if v4.get("required_levels") != len(V4_HEADLINE_LEVELS):
+                failures.append("scoring_v4.required_levels must equal 5")
+            if _is_finite_score(v4_headline) and v4_all_five:
+                reconstructed_v4 = sum(v4_scores) / len(v4_scores)
+                if abs(v4_headline - reconstructed_v4) >= 1e-9:
+                    failures.append(
+                        "scoring_v4.agent_score mean invariant failed: "
+                        f"got {v4_headline!r}, expected {reconstructed_v4!r}"
+                    )
+
+            denominators = summary.get("headline_denominators")
+            expected_denominators = {
+                SCORING_VERSION: list(SCORABLE_LEVELS),
+                SCORING_VERSION_V3: list(SCORABLE_LEVELS),
+                SCORING_VERSION_V4: list(V4_HEADLINE_LEVELS),
+            }
+            if denominators != expected_denominators:
+                failures.append(
+                    "headline_denominators must spell out the exact v2, v3, and v4 level sets"
+                )
 
     return failures, warnings
 

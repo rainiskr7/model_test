@@ -8,11 +8,27 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 
 if __package__:
-    from .aggregate import ALL_LEVELS, build_summary_from_loaded, safe_model_name
+    from .aggregate import (
+        ALL_LEVELS,
+        L4_FIXTURE_COVERAGE_NOTICE,
+        SCORABLE_LEVELS,
+        V4_HEADLINE_LEVELS,
+        build_summary_from_loaded,
+        safe_model_name,
+    )
+    from . import SCORING_VERSION, SCORING_VERSION_V3, SCORING_VERSION_V4
     from .level_spec import LEVEL_SPECS, LEVEL_SPECS_V3
 else:
     sys.path.insert(0, str(Path(__file__).resolve().parent))
-    from aggregate import ALL_LEVELS, build_summary_from_loaded, safe_model_name
+    from aggregate import (
+        ALL_LEVELS,
+        L4_FIXTURE_COVERAGE_NOTICE,
+        SCORABLE_LEVELS,
+        V4_HEADLINE_LEVELS,
+        build_summary_from_loaded,
+        safe_model_name,
+    )
+    from __init__ import SCORING_VERSION, SCORING_VERSION_V3, SCORING_VERSION_V4
     from level_spec import LEVEL_SPECS, LEVEL_SPECS_V3
 
 
@@ -57,6 +73,10 @@ def _cache_token(entry: Dict[str, Any]) -> str:
         f"({_fmt(entry.get('miss_rate'))}) buckets=e/ps/sm/qa/sig/ta/u:{compact}"
         f" miss_buckets=e/ps/sm/qa/sig/ta/u:{miss_compact}"
     )
+
+
+def _denominator_token(levels) -> str:
+    return "(" + ",".join(f'"{level}"' for level in levels) + ")"
 
 
 def _result_dir_from_args(args) -> Path:
@@ -135,7 +155,9 @@ def print_table(summary: Dict[str, Any], skipped_count: int) -> None:
     )
     required_levels = summary.get("required_levels", len(ALL_LEVELS) - 1)
     print(
-        f"{PREFIX} agent_score={_fmt(summary.get('agent_score'))} "
+        f"{PREFIX} version={SCORING_VERSION} "
+        f"denominator={_denominator_token(SCORABLE_LEVELS)} "
+        f"agent_score={_fmt(summary.get('agent_score'))} "
         f"status={summary.get('agent_score_status', 'unknown')} "
         f"scored_levels={scored_levels}/{required_levels}"
     )
@@ -153,10 +175,44 @@ def print_table(summary: Dict[str, Any], skipped_count: int) -> None:
                 f"score={_fmt(l6.get('score'))} {metrics}"
             )
         print(
-            f"{PREFIX} v3 agent_score={_fmt(v3.get('agent_score'))} "
+            f"{PREFIX} version={SCORING_VERSION_V3} "
+            f"denominator={_denominator_token(SCORABLE_LEVELS)} "
+            f"agent_score={_fmt(v3.get('agent_score'))} "
             f"status={v3.get('agent_score_status', 'unknown')} "
             f"scored_levels={v3.get('scored_levels')}/{v3.get('required_levels')}"
         )
+    v4 = summary.get("scoring_v4")
+    if isinstance(v4, dict):
+        print(
+            f"{PREFIX} version={SCORING_VERSION_V4} "
+            f"denominator={_denominator_token(V4_HEADLINE_LEVELS)} "
+            f"agent_score={_fmt(v4.get('agent_score'))} "
+            f"status={v4.get('agent_score_status', 'unknown')} "
+            f"scored_levels={v4.get('scored_levels')}/{v4.get('required_levels')}"
+        )
+
+        v3_by_level = (v3 or {}).get("by_level") or {}
+        v4_by_level = v4.get("by_level") or {}
+        for level in ALL_LEVELS:
+            v2_result = (summary.get("by_level") or {}).get(level)
+            v3_result = v3_by_level.get(level)
+            v4_result = v4_by_level.get(level)
+            if not any(isinstance(item, dict) for item in (v2_result, v3_result, v4_result)):
+                continue
+            cache = cache_by_level.get(level)
+            cache_token = (
+                f" {_cache_token(cache)}"
+                if level == "L4" and isinstance(cache, dict)
+                else ""
+            )
+            print(
+                f"{PREFIX} matrix {level} "
+                f"{SCORING_VERSION}={_fmt((v2_result or {}).get('score'))} "
+                f"{SCORING_VERSION_V3}={_fmt((v3_result or {}).get('score'))} "
+                f"{SCORING_VERSION_V4}={_fmt((v4_result or {}).get('score'))}"
+                f"{cache_token}"
+            )
+        print(f"{PREFIX} NOTE {L4_FIXTURE_COVERAGE_NOTICE}")
     cache_overall = (
         (summary.get("cache_miss_diagnostics") or {}).get("overall") or {}
     )
