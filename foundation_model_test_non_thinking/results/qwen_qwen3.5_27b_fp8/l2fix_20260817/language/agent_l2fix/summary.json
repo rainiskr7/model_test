@@ -463,5 +463,63 @@
     },
     "signature": "level in {L6,L7}; error is null; steps_taken == 0; completion_latency.count == 0; all token_usage totals are 0; tool_calls is empty; conversation_log.messages is non-empty",
     "detection_limit": "Cannot detect a swallowed exception that occurred after at least one successful generated step."
+  },
+  "possible_absorbed_request_timeout_diagnostics": {
+    "annotation_only": true,
+    "name": "possible absorbed request timeout",
+    "positive_count": 1,
+    "positives": [
+      {
+        "task_id": "L2-002",
+        "level": "L2",
+        "hidden_time": 251.01594351045787,
+        "request_timeout": 250.0
+      }
+    ],
+    "coverage": {
+      "total_tasks": 15,
+      "classifiable_tasks": 15,
+      "unclassifiable_tasks": 0,
+      "unclassifiable_reasons": {
+        "error_not_null": 0,
+        "missing_request_timeout": 0,
+        "missing_completion_latency": 0,
+        "missing_execution_time": 0
+      },
+      "reason_counts_may_overlap": true
+    },
+    "formula": "error is null and execution_time - (completion_latency.average * completion_latency.count) >= request_timeout",
+    "statement": "The positive count is a lower bound among classifiable tasks, not the number of absorbed request timeouts in the run.",
+    "false_positive_surface": "execution_time includes tool execution, so slow tools totalling one timeout can satisfy the formula without any failed request."
+  },
+  "l7_partial_coverage_diagnostics": {
+    "annotation_only": true,
+    "distribution": [],
+    "per_field": {},
+    "totals": {
+      "entries": 0,
+      "complete_entries": 0,
+      "partial_entries": 0,
+      "zero_entries": 0,
+      "fields_required": 0,
+      "fields_present": 0,
+      "field_hit_rate": null
+    },
+    "coverage": {
+      "tasks_total": 0,
+      "tasks_classifiable": 0,
+      "tasks_unclassifiable": 0,
+      "golden_entries_declared": 0,
+      "golden_entries_classifiable": 0,
+      "golden_entries_unclassifiable": 0,
+      "fields_declared": 0,
+      "fields_excluded_long_text": 0,
+      "fields_unresolved": 0,
+      "context_construction_failures": {
+        "count": 0
+      }
+    },
+    "eligibility_rule": "Uses the exact ResultFieldCoverage_det seeded-only resolver, field normalization, and value matcher; normalized non-numeric values longer than 80 characters are excluded, and entries with an unresolved field are unclassifiable.",
+    "statement": "ResultFieldCoverage_det is all-or-nothing per golden-fields entry; partial field hits shown here are discarded by its score."
   }
 }

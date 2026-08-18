@@ -2240,5 +2240,133 @@
     },
     "signature": "level in {L6,L7}; error is null; steps_taken == 0; completion_latency.count == 0; all token_usage totals are 0; tool_calls is empty; conversation_log.messages is non-empty",
     "detection_limit": "Cannot detect a swallowed exception that occurred after at least one successful generated step."
+  },
+  "possible_absorbed_request_timeout_diagnostics": {
+    "annotation_only": true,
+    "name": "possible absorbed request timeout",
+    "positive_count": 0,
+    "positives": [],
+    "coverage": {
+      "total_tasks": 91,
+      "classifiable_tasks": 90,
+      "unclassifiable_tasks": 1,
+      "unclassifiable_reasons": {
+        "error_not_null": 1,
+        "missing_request_timeout": 0,
+        "missing_completion_latency": 0,
+        "missing_execution_time": 0
+      },
+      "reason_counts_may_overlap": true
+    },
+    "formula": "error is null and execution_time - (completion_latency.average * completion_latency.count) >= request_timeout",
+    "statement": "The positive count is a lower bound among classifiable tasks, not the number of absorbed request timeouts in the run.",
+    "false_positive_surface": "execution_time includes tool execution, so slow tools totalling one timeout can satisfy the formula without any failed request."
+  },
+  "l7_partial_coverage_diagnostics": {
+    "annotation_only": true,
+    "distribution": [
+      {
+        "fields_required": 1,
+        "fields_present": 0,
+        "entry_count": 1
+      },
+      {
+        "fields_required": 2,
+        "fields_present": 0,
+        "entry_count": 2
+      },
+      {
+        "fields_required": 2,
+        "fields_present": 1,
+        "entry_count": 1
+      },
+      {
+        "fields_required": 3,
+        "fields_present": 0,
+        "entry_count": 1
+      },
+      {
+        "fields_required": 3,
+        "fields_present": 2,
+        "entry_count": 2
+      }
+    ],
+    "per_field": {
+      "documents[0].author": {
+        "required": 1,
+        "present": 0,
+        "hit_rate": 0.0
+      },
+      "documents[0].contents": {
+        "required": 1,
+        "present": 0,
+        "hit_rate": 0.0
+      },
+      "documents[0].play_time": {
+        "required": 1,
+        "present": 1,
+        "hit_rate": 1.0
+      },
+      "documents[0].title": {
+        "required": 2,
+        "present": 1,
+        "hit_rate": 0.5
+      },
+      "items[0].bloggername": {
+        "required": 1,
+        "present": 0,
+        "hit_rate": 0.0
+      },
+      "items[0].description": {
+        "required": 3,
+        "present": 0,
+        "hit_rate": 0.0
+      },
+      "items[0].title": {
+        "required": 4,
+        "present": 1,
+        "hit_rate": 0.25
+      },
+      "places[0].address": {
+        "required": 1,
+        "present": 1,
+        "hit_rate": 1.0
+      },
+      "places[0].category": {
+        "required": 1,
+        "present": 0,
+        "hit_rate": 0.0
+      },
+      "places[0].name": {
+        "required": 1,
+        "present": 1,
+        "hit_rate": 1.0
+      }
+    },
+    "totals": {
+      "entries": 7,
+      "complete_entries": 0,
+      "partial_entries": 3,
+      "zero_entries": 4,
+      "fields_required": 16,
+      "fields_present": 5,
+      "field_hit_rate": 0.3125
+    },
+    "coverage": {
+      "tasks_total": 10,
+      "tasks_classifiable": 7,
+      "tasks_unclassifiable": 3,
+      "golden_entries_declared": 10,
+      "golden_entries_classifiable": 7,
+      "golden_entries_unclassifiable": 3,
+      "fields_declared": 25,
+      "fields_excluded_long_text": 1,
+      "fields_unresolved": 0,
+      "context_construction_failures": {
+        "count": 0
+      }
+    },
+    "eligibility_rule": "Uses the exact ResultFieldCoverage_det seeded-only resolver, field normalization, and value matcher; normalized non-numeric values longer than 80 characters are excluded, and entries with an unresolved field are unclassifiable.",
+    "statement": "ResultFieldCoverage_det is all-or-nothing per golden-fields entry; partial field hits shown here are discarded by its score."
   }
 }

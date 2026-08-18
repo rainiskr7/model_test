@@ -216,7 +216,7 @@ results/<safe_model_name>/<timestamp>/
 
 최신 headline은 `agent_det_v4`의 `scoring_v4.agent_score`이며 분모는 정확히 `("L1","L2","L3","L5","L6")`인 레벨 점수의 동일 가중 평균이다. 다섯 레벨이 모두 채점 가능할 때만 숫자를 기록하고 하나라도 빠지거나 채점 불가이면 `null`(`incomplete`)이다. L4가 `null`이어도 v4를 막지 않지만, L4 자체는 계속 실행·채점되어 `by_level`과 출력 matrix에 남는다. 각 레벨 점수도 그 레벨에서 적용 가능한 `in_score=true` 지표의 동일 가중 평균이다.
 
-scorer는 매번 세 version을 함께 낸다: `agent_det_v2=("L1","L2","L3","L4","L5","L6")`, `agent_det_v3=("L1","L2","L3","L4","L5","L6")`, `agent_det_v4=("L1","L2","L3","L5","L6")`. v2와 v3 정의·블록은 동결돼 그대로 유지된다. 터미널에는 세 headline과 정확한 분모, v2/v3/v4의 전체 L1~L7 matrix가 함께 나오며 scalar headline만 단독으로 출력하지 않는다. summary의 `headline_denominators`, 세 `by_level` matrix, `l3_retry_inflation`, `l4_fixture_coverage`, `l5_ceiling`에도 같은 정보를 기록한다. L7은 실행하지만 기록 전용이고, `ContextRetention_det`·`ResultFieldCoverage_det` 두 결정론 지표와 L7 레벨 자체는 어느 headline에도 들어가지 않는다. 다섯 judge 지표는 현재 측정하지 않아 `judge_missing`으로 남으므로, 이 점수는 결정론적 부분집합만 나타낸다.
+scorer는 매번 세 version을 함께 낸다: `agent_det_v2=("L1","L2","L3","L4","L5","L6")`, `agent_det_v3=("L1","L2","L3","L4","L5","L6")`, `agent_det_v4=("L1","L2","L3","L5","L6")`. v2와 v3 정의·블록은 동결돼 그대로 유지된다. 터미널에는 세 headline과 정확한 분모, v2/v3/v4의 전체 L1~L7 matrix가 함께 나오며 scalar headline만 단독으로 출력하지 않는다. summary의 `headline_denominators`, 세 `by_level` matrix, `l3_retry_inflation`, `l4_fixture_coverage`, `l5_ceiling`에도 같은 정보를 기록한다. `possible_absorbed_request_timeout_diagnostics`와 `l7_partial_coverage_diagnostics`는 저장 필드만 읽는 annotate-only 블록이다. L7은 실행하지만 기록 전용이고, `ContextRetention_det`·`ResultFieldCoverage_det` 두 결정론 지표와 L7 레벨 자체는 어느 headline에도 들어가지 않는다. 다섯 judge 지표는 현재 측정하지 않아 `judge_missing`으로 남으므로, 이 점수는 결정론적 부분집합만 나타낸다.
 
 ##### 결과 보고 단위: 레벨 점수
 
@@ -251,7 +251,13 @@ composite의 허용 용도는 **같은 저장 run을 재채점했을 때 값이 
 - **cache miss는 annotate-only:** 저장 결과의 모든 실행 call을 `exact`/`presentation_sibling`/`semantic_mismatch`/`query_absent`/`signature_mismatch`/`tool_absent`/`unclassified`의 ordered partition으로 분류해 summary와 scorer 표에 표시하지만 relaxed fixture를 응답으로 주지 않는다. 결과 수·페이지·정렬은 반환 entity나 cardinality를 바꿀 수 있어 semantic이며, presentation으로 남은 것은 Aladin의 `cover`(표지 이미지 크기), `output`(XML/JSON 인코딩), `opt_result`(동일 상품의 부가 응답 필드)뿐이다. 수정된 4개 완주 런의 miss 177건은 presentation sibling 0건(0%), semantic mismatch 97건, query absent 80건이었다. 따라서 이전의 복구 가능 추정 69건(39.0%)은 0건으로 붕괴한다. 이 진단은 점수와 version을 바꾸지 않는다.
 - **fixture schema drift 위험(별도):** pinned catalog에 있는 fixture 4,543개 중 828개가 현재 signature hash와 달라 도달 불가다. `StockPrice_kis`는 6개 전부 도달 불가(0/6)다. 이는 miss 분류와 별개의 fixture 유지보수 위험이다.
 - **동일 가중 동결:** L2 포화를 근거로 현재 코호트에서 가중치를 역산하지 않는다. 이후 약한 모델은 여전히 L2에 실패할 수 있다. 레벨 동일 가중은 의도적으로 동결된 점수 정의이며 변경에는 version bump가 필요하다. L2의 실제 결함인 `available_tools` 누락은 별도 수정 사항이다.
-- **L7 승격 보류:** 결정 당시 `ResultFieldCoverage_det`는 모델별 10 task 중 2~3개에만 적용됐다. 2/10인 모델 4개는 8/10인 모델 3개보다 강한 근거가 아니다. seed-only 분모 수정만으로 자동 승격하지 않으며, 두 L7 지표가 모델 전반의 대부분 task에 적용되고 tool-call rate도 coverage가 성공 조건부가 아닐 만큼 높을 때 재검토한다.
+- **L7은 승격하지 않는다:** 아래의 0.000은 field coverage가 전혀 없다는 뜻이 아니라 golden-fields entry 하나를 완전히 덮은 경우가 없다는 뜻이다. 모든 모델이 같은 값인 레벨을 승격하면 모델을 하나도 분리하지 못한다. metric·`in_score`·분모는 그대로 두고 partial distribution만 annotate-only로 기록한다.
+
+##### L7 `ResultFieldCoverage_det`의 0.000 해석
+
+대표 8개 run 모두 `ResultFieldCoverage_det=0.000`이다. 정확한 현재 metric 경로(seed-only 응답 해석, 동일 normalization/value matcher)를 다시 적용하면 classifiable golden-fields entry 56개 중 complete는 0개지만 partial은 21개(37.5%)이고, 개별 eligible field는 128개 중 26개(20.3%)가 실제 답에 있다. 따라서 이 0은 **no coverage가 아니라 not complete coverage**다. `l7_partial_coverage_diagnostics`는 entry별 `(required, present)` 분포와 field별 hit rate를 보존하지만 기존 all-or-nothing 점수는 바꾸지 않는다.
+
+metric은 숫자가 아닌 normalized 값이 80자를 넘으면 long free text로 제외하며 대표 run에서 8개가 이 규칙으로 빠진다. 또 `seed_call_*` payload만 해석하므로 모델이 새로 호출해 받은 L7-002 응답은 대상이 아니다. 이 실제 규칙을 적용하면 더 넓게 refetch 응답까지 센 63 entry/144 field 근사와 달리 56/128이 된다. 현재 대표 run의 eligible `[0]` field에서 다른 배열 원소를 인용한 사례는 0개다. 짧은 identity field에 hit가 몰렸고 `description`·`category`·`contents`·`author`는 0회였으며, `address`는 8회 중 3회였다. 그러므로 장문 secondary field를 요약하는 답을 entry 전체 0으로 접는 구조가 핵심 원인이다.
 
 또한 L2는 `in_score` 지표가 1개뿐이고 L5는 20 task인 반면 L3/L4는 각 10 task이므로, `agent_score`를 표본 수나 정밀도로 가중한 평균으로 해석하면 안 된다.
 

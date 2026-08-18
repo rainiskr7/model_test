@@ -10,6 +10,10 @@ if __package__:
     from . import SCORING_VERSION, SCORING_VERSION_V3, SCORING_VERSION_V4
     from .cache_diagnostics import CACHE_MISS_RE, build_cache_diagnostics
     from .context import build_eval_context
+    from .extra_metrics import (
+        result_field_coverage_diagnostics,
+        result_field_coverage_entry_diagnostics,
+    )
     from .level_spec import (
         COMMON_RECORD_ONLY,
         JUDGE_METRICS,
@@ -26,6 +30,10 @@ else:
     from __init__ import SCORING_VERSION, SCORING_VERSION_V3, SCORING_VERSION_V4
     from cache_diagnostics import CACHE_MISS_RE, build_cache_diagnostics
     from context import build_eval_context
+    from extra_metrics import (
+        result_field_coverage_diagnostics,
+        result_field_coverage_entry_diagnostics,
+    )
     from level_spec import (
         COMMON_RECORD_ONLY,
         JUDGE_METRICS,
@@ -396,6 +404,224 @@ def _build_l5_ceiling(level_data: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+def _finite_number(value: Any) -> bool:
+    return (
+        isinstance(value, (int, float))
+        and not isinstance(value, bool)
+        and math.isfinite(float(value))
+    )
+
+
+def _build_possible_absorbed_request_timeouts(
+    loaded: Dict[str, Dict[str, Any]],
+) -> Dict[str, Any]:
+    positives = []
+    total_tasks = 0
+    classifiable_tasks = 0
+    unclassifiable_reasons = {
+        "error_not_null": 0,
+        "missing_request_timeout": 0,
+        "missing_completion_latency": 0,
+        "missing_execution_time": 0,
+    }
+
+    for level, data in loaded.items():
+        request_timeout = (data.get("metadata") or {}).get("request_timeout")
+        for task in _tasks(data):
+            if not isinstance(task, dict):
+                continue
+            total_tasks += 1
+            latency = task.get("completion_latency")
+            average = latency.get("average") if isinstance(latency, dict) else None
+            count = latency.get("count") if isinstance(latency, dict) else None
+            execution_time = task.get("execution_time")
+            reasons = []
+            if task.get("error") is not None:
+                reasons.append("error_not_null")
+            if not _finite_number(request_timeout):
+                reasons.append("missing_request_timeout")
+            if not (
+                isinstance(latency, dict)
+                and _finite_number(average)
+                and _finite_number(count)
+            ):
+                reasons.append("missing_completion_latency")
+            if not _finite_number(execution_time):
+                reasons.append("missing_execution_time")
+            if reasons:
+                for reason in reasons:
+                    unclassifiable_reasons[reason] += 1
+                continue
+
+            classifiable_tasks += 1
+            hidden_time = float(execution_time) - float(average) * float(count)
+            if hidden_time >= float(request_timeout):
+                positives.append(
+                    {
+                        "task_id": str(task.get("task_id") or "unknown-task"),
+                        "level": level,
+                        "hidden_time": hidden_time,
+                        "request_timeout": float(request_timeout),
+                    }
+                )
+
+    return {
+        "annotation_only": True,
+        "name": "possible absorbed request timeout",
+        "positive_count": len(positives),
+        "positives": positives,
+        "coverage": {
+            "total_tasks": total_tasks,
+            "classifiable_tasks": classifiable_tasks,
+            "unclassifiable_tasks": total_tasks - classifiable_tasks,
+            "unclassifiable_reasons": unclassifiable_reasons,
+            "reason_counts_may_overlap": True,
+        },
+        "formula": (
+            "error is null and execution_time - "
+            "(completion_latency.average * completion_latency.count) "
+            ">= request_timeout"
+        ),
+        "statement": (
+            "The positive count is a lower bound among classifiable tasks, not "
+            "the number of absorbed request timeouts in the run."
+        ),
+        "false_positive_surface": (
+            "execution_time includes tool execution, so slow tools totalling one "
+            "timeout can satisfy the formula without any failed request."
+        ),
+    }
+
+
+def _build_l7_partial_coverage(level_data: Dict[str, Any]) -> Dict[str, Any]:
+    distribution: Dict[tuple, int] = {}
+    per_field: Dict[str, Dict[str, int]] = {}
+    tasks_total = 0
+    tasks_classifiable = 0
+    entries_declared = 0
+    entries_classifiable = 0
+    fields_declared = 0
+    fields_excluded_long_text = 0
+    fields_unresolved = 0
+    context_failures = 0
+    first_context_error = None
+
+    for task in _tasks(level_data):
+        if not isinstance(task, dict):
+            continue
+        tasks_total += 1
+        golden_fields = task.get("golden_fields", []) or []
+        entries_declared += len(golden_fields)
+        fields_declared += sum(
+            len(entry.get("fields", []))
+            for entry in golden_fields
+            if isinstance(entry, dict)
+        )
+        try:
+            ctx = build_eval_context(task)
+            metric_diagnostics = result_field_coverage_diagnostics(ctx)
+            entries = result_field_coverage_entry_diagnostics(ctx)
+        except Exception as exc:
+            context_failures += 1
+            if first_context_error is None:
+                first_context_error = exc
+            continue
+
+        fields_excluded_long_text += metric_diagnostics.get(
+            "fields_excluded_long_text", 0
+        )
+        fields_unresolved += metric_diagnostics.get("fields_unresolved", 0)
+        if entries:
+            tasks_classifiable += 1
+        for entry in entries:
+            required = entry["fields_required"]
+            present = entry["fields_present"]
+            distribution[(required, present)] = (
+                distribution.get((required, present), 0) + 1
+            )
+            entries_classifiable += 1
+            for field in entry["fields"]:
+                name = field["field"]
+                field_entry = per_field.setdefault(
+                    name, {"required": 0, "present": 0}
+                )
+                field_entry["required"] += 1
+                field_entry["present"] += int(field["present"])
+
+    fields_required = sum(entry["required"] for entry in per_field.values())
+    fields_present = sum(entry["present"] for entry in per_field.values())
+    complete_entries = sum(
+        count
+        for (required, present), count in distribution.items()
+        if required == present
+    )
+    partial_entries = sum(
+        count
+        for (required, present), count in distribution.items()
+        if 0 < present < required
+    )
+    zero_entries = sum(
+        count
+        for (_required, present), count in distribution.items()
+        if present == 0
+    )
+    return {
+        "annotation_only": True,
+        "distribution": [
+            {
+                "fields_required": required,
+                "fields_present": present,
+                "entry_count": distribution[(required, present)],
+            }
+            for required, present in sorted(distribution)
+        ],
+        "per_field": {
+            name: {
+                **counts,
+                "hit_rate": counts["present"] / counts["required"],
+            }
+            for name, counts in sorted(per_field.items())
+        },
+        "totals": {
+            "entries": entries_classifiable,
+            "complete_entries": complete_entries,
+            "partial_entries": partial_entries,
+            "zero_entries": zero_entries,
+            "fields_required": fields_required,
+            "fields_present": fields_present,
+            "field_hit_rate": (
+                fields_present / fields_required if fields_required else None
+            ),
+        },
+        "coverage": {
+            "tasks_total": tasks_total,
+            "tasks_classifiable": tasks_classifiable,
+            "tasks_unclassifiable": tasks_total - tasks_classifiable,
+            "golden_entries_declared": entries_declared,
+            "golden_entries_classifiable": entries_classifiable,
+            "golden_entries_unclassifiable": (
+                entries_declared - entries_classifiable
+            ),
+            "fields_declared": fields_declared,
+            "fields_excluded_long_text": fields_excluded_long_text,
+            "fields_unresolved": fields_unresolved,
+            "context_construction_failures": _diagnostic_failures(
+                context_failures, first_context_error
+            ),
+        },
+        "eligibility_rule": (
+            "Uses the exact ResultFieldCoverage_det seeded-only resolver, field "
+            "normalization, and value matcher; normalized non-numeric values "
+            "longer than 80 characters are excluded, and entries with an "
+            "unresolved field are unclassifiable."
+        ),
+        "statement": (
+            "ResultFieldCoverage_det is all-or-nothing per golden-fields entry; "
+            "partial field hits shown here are discarded by its score."
+        ),
+    }
+
+
 def _average_metric(tasks: List[Dict[str, Any]], spec: MetricSpec) -> Dict[str, Any]:
     scores = []
     errors = []
@@ -743,5 +969,11 @@ def build_summary_from_loaded(
     )
     summary["swallowed_exception_diagnostics"] = (
         _build_swallowed_exception_diagnostics(loaded)
+    )
+    summary["possible_absorbed_request_timeout_diagnostics"] = (
+        _build_possible_absorbed_request_timeouts(loaded)
+    )
+    summary["l7_partial_coverage_diagnostics"] = _build_l7_partial_coverage(
+        loaded.get("L7", {})
     )
     return summary

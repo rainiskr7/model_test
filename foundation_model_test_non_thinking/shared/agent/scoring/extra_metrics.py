@@ -315,7 +315,7 @@ def _value_appears(value, final_response) -> bool:
     return bool(value_text and value_text in _normalized_text(response_text))
 
 
-def _result_field_coverage(ctx):
+def _result_field_coverage_analysis(ctx):
     golden_fields = ctx.task_schema.get("golden_fields", []) or []
     diagnostics = {
         "fields_required": sum(
@@ -325,12 +325,13 @@ def _result_field_coverage(ctx):
         "fields_excluded_long_text": 0,
         "fields_unresolved": 0,
     }
+    entry_diagnostics = []
     if not golden_fields:
-        return None, diagnostics
+        return None, diagnostics, entry_diagnostics
 
     resolved = _resolve_seeded_golden_fields(ctx, golden_fields)
     if resolved is None:
-        return None, diagnostics
+        return None, diagnostics, entry_diagnostics
 
     final_response = (getattr(ctx, "logs", {}) or {}).get("final_response", "")
     satisfied = 0
@@ -339,6 +340,7 @@ def _result_field_coverage(ctx):
         entry_judged = False
         entry_satisfied = True
         entry_unresolved = False
+        fields = []
         for field_name in golden_entry.get("fields", []):
             value = _field_value(response, field_name)
             if value is _MISSING:
@@ -351,17 +353,35 @@ def _result_field_coverage(ctx):
                     continue
             diagnostics["fields_checked"] += 1
             entry_judged = True
-            if not _value_appears(value, final_response):
+            present = _value_appears(value, final_response)
+            fields.append({"field": field_name, "present": present})
+            if not present:
                 entry_satisfied = False
 
         # An absent fixture value is unmeasurable benchmark data, not a model
         # miss. Exclude the whole declaration rather than turning it into zero.
         if entry_unresolved or not entry_judged:
             continue
+        entry_diagnostics.append(
+            {
+                "fields_required": len(fields),
+                "fields_present": sum(field["present"] for field in fields),
+                "fields": fields,
+            }
+        )
         judged += 1
         if entry_satisfied:
             satisfied += 1
-    return (satisfied / judged if judged else None), diagnostics
+    return (
+        satisfied / judged if judged else None,
+        diagnostics,
+        entry_diagnostics,
+    )
+
+
+def _result_field_coverage(ctx):
+    score, diagnostics, _entries = _result_field_coverage_analysis(ctx)
+    return score, diagnostics
 
 
 def result_field_coverage_det(ctx) -> Optional[float]:
@@ -373,6 +393,11 @@ def result_field_coverage_det(ctx) -> Optional[float]:
 
 def result_field_coverage_diagnostics(ctx):
     return _result_field_coverage(ctx)[1]
+
+
+def result_field_coverage_entry_diagnostics(ctx):
+    """Expose field hits without changing the entry-level coverage metric."""
+    return _result_field_coverage_analysis(ctx)[2]
 
 
 def _seeded_field_recall(ctx):

@@ -1089,6 +1089,148 @@ def test_l5_ceiling_diagnostic_is_score_and_headline_neutral():
     _assert_close(summary["scoring_v4"]["agent_score"], 0.34, "v4 headline")
 
 
+def _timeout_task(execution_time, latency_average=2.0, latency_count=2):
+    return {
+        "task_id": "timeout-probe",
+        "error": None,
+        "execution_time": execution_time,
+        "completion_latency": {
+            "average": latency_average,
+            "count": latency_count,
+        },
+    }
+
+
+def test_possible_absorbed_request_timeout_reports_positive():
+    diagnostic = aggregate._build_possible_absorbed_request_timeouts(
+        {
+            "L3": {
+                "metadata": {"request_timeout": 10},
+                "results": [_timeout_task(15.0)],
+            }
+        }
+    )
+    _assert(
+        diagnostic["positives"]
+        == [
+            {
+                "task_id": "timeout-probe",
+                "level": "L3",
+                "hidden_time": 11.0,
+                "request_timeout": 10.0,
+            }
+        ],
+        f"possible absorbed timeout was not reported: {diagnostic}",
+    )
+    _assert(
+        diagnostic["coverage"]["classifiable_tasks"] == 1,
+        "positive task was not classifiable",
+    )
+
+
+def test_possible_absorbed_request_timeout_ignores_below_timeout():
+    diagnostic = aggregate._build_possible_absorbed_request_timeouts(
+        {
+            "L2": {
+                "metadata": {"request_timeout": 10},
+                "results": [_timeout_task(13.0)],
+            }
+        }
+    )
+    _assert(diagnostic["positives"] == [], "below-timeout task was reported")
+    _assert(
+        diagnostic["coverage"]["classifiable_tasks"] == 1,
+        "below-timeout task must remain classifiable",
+    )
+
+
+def test_possible_absorbed_request_timeout_missing_fields_are_unclassifiable():
+    missing_timeout = _timeout_task(15.0)
+    missing_latency = _timeout_task(15.0)
+    missing_latency.pop("completion_latency")
+    diagnostic = aggregate._build_possible_absorbed_request_timeouts(
+        {
+            "L1": {"metadata": {}, "results": [missing_timeout]},
+            "L2": {
+                "metadata": {"request_timeout": 10},
+                "results": [missing_latency],
+            },
+        }
+    )
+    coverage = diagnostic["coverage"]
+    _assert(coverage["classifiable_tasks"] == 0, "missing fields became negatives")
+    _assert(coverage["unclassifiable_tasks"] == 2, "unclassifiable count mismatch")
+    _assert(
+        coverage["unclassifiable_reasons"]["missing_request_timeout"] == 1,
+        "missing timeout was not identified",
+    )
+    _assert(
+        coverage["unclassifiable_reasons"]["missing_completion_latency"] == 1,
+        "missing completion latency was not identified",
+    )
+
+
+def _l7_field_distribution(final_response):
+    ctx = _result_field_coverage_context(
+        final_response,
+        golden_fields=[
+            {"tool": "Catalog", "fields": ["price", "item[0].title"]}
+        ],
+        include_second=False,
+    )
+    task = {"golden_fields": ctx.task_schema["golden_fields"]}
+    original_context = aggregate.build_eval_context
+    aggregate.build_eval_context = lambda _task: ctx
+    try:
+        return aggregate._build_l7_partial_coverage({"results": [task]})
+    finally:
+        aggregate.build_eval_context = original_context
+
+
+def test_l7_partial_coverage_diagnostic_preserves_partial_entry():
+    diagnostic = _l7_field_distribution("Alpha Book is available.")
+    _assert(
+        diagnostic["distribution"]
+        == [{"fields_required": 2, "fields_present": 1, "entry_count": 1}],
+        f"partial entry collapsed to zero: {diagnostic['distribution']}",
+    )
+    _assert(diagnostic["totals"]["partial_entries"] == 1, "partial total missing")
+    _assert(diagnostic["totals"]["zero_entries"] == 0, "partial counted as zero")
+
+
+def test_l7_partial_coverage_diagnostic_reports_complete_entry():
+    diagnostic = _l7_field_distribution("Alpha Book costs 1,234 won.")
+    _assert(
+        diagnostic["distribution"]
+        == [{"fields_required": 2, "fields_present": 2, "entry_count": 1}],
+        f"complete entry was not reported: {diagnostic['distribution']}",
+    )
+    _assert(
+        diagnostic["totals"]["complete_entries"] == 1,
+        "complete total missing",
+    )
+
+
+def test_new_annotation_diagnostics_are_score_and_headline_neutral():
+    summary = _build_score_neutral_diagnostic_summary()
+    _assert(
+        summary["possible_absorbed_request_timeout_diagnostics"][
+            "annotation_only"
+        ]
+        is True,
+        "absorbed-timeout diagnostic missing",
+    )
+    _assert(
+        summary["l7_partial_coverage_diagnostics"]["annotation_only"] is True,
+        "L7 partial-coverage diagnostic missing",
+    )
+    for level, expected in zip(aggregate.SCORABLE_LEVELS, (0.1, 0.2, 0.3, 0.4, 0.5, 0.6)):
+        _assert_close(summary["by_level"][level]["score"], expected, f"{level} score")
+    _assert_close(summary["agent_score"], 0.35, "v2 headline")
+    _assert_close(summary["scoring_v3"]["agent_score"], 0.35, "v3 headline")
+    _assert_close(summary["scoring_v4"]["agent_score"], 0.34, "v4 headline")
+
+
 def test_new_diagnostics_round_trip_and_validate():
     summary = _validation_summary_with_v4()
     summary["l3_retry_inflation"] = aggregate._build_l3_retry_inflation(
@@ -3769,6 +3911,12 @@ TESTS = [
     test_l5_ceiling_reports_metric_producer_failure,
     test_l5_ceiling_distinguishes_all_context_failures_from_no_values,
     test_l5_ceiling_diagnostic_is_score_and_headline_neutral,
+    test_possible_absorbed_request_timeout_reports_positive,
+    test_possible_absorbed_request_timeout_ignores_below_timeout,
+    test_possible_absorbed_request_timeout_missing_fields_are_unclassifiable,
+    test_l7_partial_coverage_diagnostic_preserves_partial_entry,
+    test_l7_partial_coverage_diagnostic_reports_complete_entry,
+    test_new_annotation_diagnostics_are_score_and_headline_neutral,
     test_new_diagnostics_round_trip_and_validate,
     test_infrastructure_error_diagnostic_emits_both_bounds_without_rescoring,
     test_infrastructure_error_diagnostic_clean_level_has_zero_count_no_bounds,
