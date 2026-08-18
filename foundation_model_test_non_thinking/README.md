@@ -210,46 +210,38 @@ scorer는 매번 세 version을 함께 낸다: `agent_det_v2=("L1","L2","L3","L4
 
 ##### 결과 보고 단위: 레벨 점수
 
-코드와 저장 schema는 위의 `agent_det_v2`/`agent_det_v3`/`agent_det_v4` composite를 계속 계산·보존하지만, **모델 비교에서 composite를 결과로 보고하지 않는다.** 결과는 L1~L6 레벨 점수를 각각 제시한다. 동일 가중은 동일 영향력을 만들지 않기 때문이다. clean run을 우선한 7개 모델 대표 run에서 각 레벨의 모델 간 분산을 구하고, v4 분모의 다섯 레벨 분산 합으로 나눈 실측치는 다음과 같다. 평균 앞의 공통 계수 `(1/5)^2`는 모든 항에 같으므로 분산 점유율에서 상쇄된다.
+코드와 저장 schema는 위의 `agent_det_v2`/`agent_det_v3`/`agent_det_v4` composite를 계속 계산·보존하지만, **모델 비교에서 composite를 결과로 보고하지 않는다.** 결과는 L1~L6 레벨 점수를 각각 제시한다. 현재 대표 run 수, 레벨별 raw task 수, `in_score` metric 수, 최소·최대·spread, headline 분산 점유율, L2 분포, 반복 실험 spread, L5 상한, L7 상태와 모든 annotation 진단은 저장 산출물만 읽는 루트의 `./report_agent_levels.sh`가 계산한다. README에는 그 실측값을 복사하지 않는다.
 
-| 레벨 | 모델 간 spread | headline 분산 점유율 | metric 수 | task 수 |
-|---|---:|---:|---:|---:|
-| L6 | 0.599 | 79.3% | 2 | 15 |
-| L5 | 0.290 | 9.6% | 3 | 20 |
-| L1 | 0.165 | 5.2% | 3 | 11 |
-| L3 | 0.133 | 5.2% | 3 | 10 |
-| L2 | 0.067 | 0.8% | 1 | 15 |
+동일 가중은 동일 영향력을 만들지 않는다. 같은 계수로 평균해도 각 레벨이 composite 변동에 주는 영향은 그 레벨의 모델 간 분산에 비례하며, 현재 코호트의 분산 점유율은 report가 매번 다시 계산한다. 레벨의 척도도 서로 같지 않다. 구조적으로 압축된 상한, 포화한 선택 문제, 일반적인 정확도 범위, fixture coverage가 한 평균 안에 섞여 있으므로 수치가 같은 레벨끼리도 같은 능력 차이를 뜻하지 않는다. L4는 모델 능력과 분리되지 않는 fixture coverage를 측정하므로 v4 분모에서 제외됐다. 따라서 레벨 점수를 다시 평균해 단일 모델 점수나 순위를 만들지 않는다.
 
-따라서 동일 가중 composite의 변동은 약 80%가 L6에서 오고 나머지 레벨은 작은 섭동에 가깝다. 레벨의 척도도 서로 같지 않다. L5에는 검증된 구조적 상한 0.667이 있고, L2는 8개 모델 중 7개가 정확히 0.933으로 포화했으며, L1은 1.0까지 도달할 수 있다. L4는 모델 능력과 분리되지 않는 fixture coverage를 측정하므로 이미 v4 분모에서 제외됐다. 그러므로 레벨 점수를 다시 평균해 단일 모델 점수나 순위를 만들지 않는다.
+composite의 허용 용도는 **같은 저장 run을 재채점했을 때 값이 바뀌었는지 확인하는 drift detection**뿐이다. `check_results_fresh.sh`가 이 계약을 보호한다. 서로 다른 모델의 비교·정렬·ranking에는 사용하지 않는다. report는 완전한 L1~L6 run 중 task `error`가 없는 최신 run을 우선하고, clean run이 없는 모델도 가장 최근 run의 모든 레벨 점수를 유지하되 오염된 task와 레벨을 note에 표시한다. 동일 harness 조건의 완전 run 반복군을 자동 검출하며, L4·L6 각 셀에 단일 관측인지 반복군이 있는지를 표시한다.
 
-composite의 허용 용도는 **같은 저장 run을 재채점했을 때 값이 바뀌었는지 확인하는 drift detection**뿐이다. 현재 `check_results_fresh.sh`가 보호하는 대상이 이것이다. 서로 다른 모델의 비교·정렬·ranking에는 사용하지 않는다. 모델별 대표 run과 레벨 점수는 저장 summary를 수정하지 않는 루트의 `./report_agent_levels.sh`로 확인한다. 완전한 L1~L6 run 중 task `error`가 없는 최신 run을 우선하고, clean run이 없는 모델도 가장 최근 run의 모든 레벨 점수를 유지하되 오염된 task와 레벨을 note에 표시한다.
-
-`metadata.success_rate`는 정확도가 아니라 **생존 신호**(`final_response` 존재 AND `steps >= 1`)다. 측정된 두 모델의 모든 레벨에서 100%였지만 결정론 점수와 무관하므로 점수로 인용하지 않는다.
+`metadata.success_rate`는 정확도가 아니라 **생존 신호**(`final_response` 존재 AND `steps >= 1`)다. 결정론 점수와 무관하므로 모델 점수로 인용하지 않는다.
 
 현재 다음 레벨은 모델 간 깨끗한 비교 자료로 사용할 수 없다.
 
 | 레벨 | 알려진 결함 |
 |---|---|
-| L2 | runner의 task 변환이 원본 `available_tools`를 누락해 정답 tool만 노출한다. 4/4 모델이 1.000으로, 선택 정확도가 자명하다. |
-| L3 | miss는 response outcome으로 직접 점수화되지 않지만 retry-inflated call sequence로 전파된다. non-final miss 273건의 94.2%에서 다음 call이 나왔고, tool call을 낸 no miss class는 실행/golden call이 2.56/2.56(1.00x)인 반면 miss-before-last는 7.30/2.32(3.15x)였다. tool call을 전혀 내지 않은 2개 task는 별도 class(ratio `null`)다. FSM_strict은 1.000→0.019, ΔSteps_norm은 0.722→0.104로 내려가 레벨 영향은 크다. |
-| L4 | 4개 완주 런에서 78 call 중 30 miss(38.5%: presentation sibling 0, semantic mismatch 7, query absent 23)였다. Coverage/SourceEPR는 cache miss를 `success=False`로 취급해 fixture coverage와 모델 실패를 분리할 수 없으므로 v4 headline에서 제외한다. L4 점수와 miss count/rate/bucket은 matrix에서 나란히 보고한다. |
-| L5 | FallbackSR의 구조적 상한은 1.0이지만 AdaptiveRoutingScore와 EPR_CVR은 각각 0.5에 cap되어 레벨 상한이 `(1.0+0.5+0.5)/3=0.667`이다. runner가 첫 pass에서 fallback tool을 숨기고 실패 call 후 conversation을 reset한 두 번째 pass에서만 노출하며, 필수 주입 실패가 total call 분모에 남는다. |
-| L6 | v3에서 수정됐다. v2 L6는 방향이 뒤집힌 known-invalid 점수이므로 v2의 6레벨 평균을 순위에 쓰지 않는다. |
+| L2 | runner의 task 변환이 원본 `available_tools`를 누락해 정답 tool만 노출하므로 선택 정확도가 자명해질 수 있다. |
+| L3 | miss는 response outcome으로 직접 점수화되지 않지만 retry-inflated call sequence로 전파된다. `no_tool_calls_emitted`, `no_cache_miss`, `cache_miss_only_at_final_call`, `cache_miss_before_final_call`을 분리해 진단한다. |
+| L4 | Coverage/SourceEPR는 cache miss를 `success=False`로 취급해 fixture coverage와 모델 실패를 분리할 수 없다. 따라서 v4 headline에서 제외하고 점수와 miss bucket을 함께 본다. |
+| L5 | runner가 첫 pass에서 fallback tool을 숨기고 실패 call 뒤 reset한 다음 pass에서만 노출하며, 필수 주입 실패가 total-call 분모에 남는다. 그 결과 일부 metric의 구조적 상한이 압축된다. |
+| L6 | v3에서 polarity를 수정했다. v2 L6는 방향이 뒤집힌 known-invalid 점수이므로 v2 평균을 순위에 쓰지 않는다. |
 
-- **v4 고정 제외 규칙:** 다음 네 조건을 모두 만족한다고 frozen benchmark evidence로 확정된 레벨만 새 version의 headline에서 제외한다. (1) 모든 in-scope metric의 success/count가 call shape가 아니라 tool-response outcome에서 나온다. (2) pinned fixture set에서 그 outcome label 중 material share가 cache miss다. (3) level score를 miss process와 분리할 수 없다. (4) freeze 아래에서 miss를 수리할 수 없다. L4는 두 지표가 모두 성공한 distinct tool/required distinct tool이고 miss가 `success=False`이며, 측정 miss 177건 중 key-matching rule로 수리 가능한 것이 0건이어서 네 조건을 모두 만족한다. L3의 miss는 retry-inflated call sequence를 통해 level score에 크게 전파되지만, (1)은 miss의 전파 여부가 아니라 metric의 직접 input을 검사하므로 call shape metric인 L3는 (1)에 실패한다. L3를 빼면 headline 변화는 최대 0.019이고 6-model 순서가 같아 분모에 남긴다. L5는 측정 miss rate 2~12%에서 (2)와 (4)에 실패하고, L6 v3는 response payload가 아니라 refetch 발생 여부를 읽는다. 이 규칙은 `V4_HEADLINE_LEVELS` 상수의 문서화된 근거일 뿐 runtime auto-exclusion이 아니다. 채점 데이터에 따라 version 분모가 바뀌는 일은 없다.
-- **L5 0.667 상한은 annotate-only:** `AdaptiveRoutingScore`는 모델이 스스로 선택한 routing 속도가 아니라 harness가 강제한 reset second pass의 위치를 측정한다. 두 0.5-cap 지표를 0..1로 rescale해도 6-model 순서는 같지만 L5를 제외하면 순서가 바뀌므로 L5는 **제외하지 않는다**. 이 레벨은 실제 변별 신호를 가지며 scale만 압축돼 있다; summary는 task별 실측 최댓값과 구조적 상한을 병기하고 점수를 rescale·clamp하지 않는다.
-- **cache miss는 annotate-only:** 저장 결과의 모든 실행 call을 `exact`/`presentation_sibling`/`semantic_mismatch`/`query_absent`/`signature_mismatch`/`tool_absent`/`unclassified`의 ordered partition으로 분류해 summary와 scorer 표에 표시하지만 relaxed fixture를 응답으로 주지 않는다. 결과 수·페이지·정렬은 반환 entity나 cardinality를 바꿀 수 있어 semantic이며, presentation으로 남은 것은 Aladin의 `cover`(표지 이미지 크기), `output`(XML/JSON 인코딩), `opt_result`(동일 상품의 부가 응답 필드)뿐이다. 수정된 4개 완주 런의 miss 177건은 presentation sibling 0건(0%), semantic mismatch 97건, query absent 80건이었다. 따라서 이전의 복구 가능 추정 69건(39.0%)은 0건으로 붕괴한다. 이 진단은 점수와 version을 바꾸지 않는다.
-- **fixture schema drift 위험(별도):** pinned catalog에 있는 fixture 4,543개 중 828개가 현재 signature hash와 달라 도달 불가다. `StockPrice_kis`는 6개 전부 도달 불가(0/6)다. 이는 miss 분류와 별개의 fixture 유지보수 위험이다.
+- **v4 고정 제외 규칙:** 모든 in-scope metric의 success/count가 call shape가 아니라 tool-response outcome에서 나오고, pinned fixture의 outcome label에서 cache miss가 material하며, level score를 miss process와 분리할 수 없고, freeze 아래에서 miss를 수리할 수 없는 레벨만 새 version의 headline에서 제외한다. L4는 이 조건을 만족한다. L3는 call-shape metric이라 첫 조건을 만족하지 않고, L5는 fixture 문제와 구조적 상한 문제를 분리할 수 있으며, L6 v3는 response payload가 아니라 refetch 발생 여부를 읽는다. 이 규칙은 `V4_HEADLINE_LEVELS`의 문서화된 근거이며 runtime auto-exclusion이 아니다.
+- **L5 상한은 annotate-only:** `AdaptiveRoutingScore`는 모델이 스스로 선택한 routing 속도가 아니라 harness가 강제한 reset second pass의 위치를 측정한다. L5는 변별 신호를 가지되 scale이 압축돼 있다. summary와 report는 task별 실측 최댓값과 구조적 상한을 병기하고 점수를 rescale·clamp하지 않는다.
+- **cache miss는 annotate-only:** 저장 결과의 모든 실행 call을 `exact`/`presentation_sibling`/`semantic_mismatch`/`query_absent`/`signature_mismatch`/`tool_absent`/`unclassified`의 ordered partition으로 분류하지만 relaxed fixture를 응답으로 주지 않는다. 결과 수·페이지·정렬은 반환 entity나 cardinality를 바꿀 수 있어 semantic이며, presentation 차이는 응답 표현만 달라지는 경우로 제한한다. 현재 miss 수·비율·bucket은 report가 산출물에서 계산한다.
+- **fixture schema drift 위험(별도):** pinned catalog와 현재 signature hash가 다른 fixture는 도달 불가다. 이는 miss 분류와 별개의 fixture 유지보수 위험이며 catalog 크기와 영향 범위는 정적 README 수치로 관리하지 않는다.
 - **동일 가중 동결:** L2 포화를 근거로 현재 코호트에서 가중치를 역산하지 않는다. 이후 약한 모델은 여전히 L2에 실패할 수 있다. 레벨 동일 가중은 의도적으로 동결된 점수 정의이며 변경에는 version bump가 필요하다. L2의 실제 결함인 `available_tools` 누락은 별도 수정 사항이다.
-- **L7은 승격하지 않는다:** 아래의 0.000은 field coverage가 전혀 없다는 뜻이 아니라 golden-fields entry 하나를 완전히 덮은 경우가 없다는 뜻이다. 모든 모델이 같은 값인 레벨을 승격하면 모델을 하나도 분리하지 못한다. metric·`in_score`·분모는 그대로 두고 partial distribution만 annotate-only로 기록한다.
+- **L7은 승격하지 않는다:** 승격에는 모든 대표 run이 metric을 제공하고, 각 raw task가 metric에 적용 가능하며, 모델 간 분리 신호도 있어야 한다. `./report_agent_levels.sh`가 현재 산출물에서 이 조건과 결론을 계산한다. metric·`in_score`·분모는 그대로 두고 partial distribution만 annotate-only로 기록한다.
 
-##### L7 `ResultFieldCoverage_det`의 0.000 해석
+##### L7 `ResultFieldCoverage_det` 해석
 
-대표 8개 run 모두 `ResultFieldCoverage_det=0.000`이다. 정확한 현재 metric 경로(seed-only 응답 해석, 동일 normalization/value matcher)를 다시 적용하면 classifiable golden-fields entry 56개 중 complete는 0개지만 partial은 21개(37.5%)이고, 개별 eligible field는 128개 중 26개(20.3%)가 실제 답에 있다. 따라서 이 0은 **no coverage가 아니라 not complete coverage**다. `l7_partial_coverage_diagnostics`는 entry별 `(required, present)` 분포와 field별 hit rate를 보존하지만 기존 all-or-nothing 점수는 바꾸지 않는다.
+`ResultFieldCoverage_det`는 golden-fields entry의 required field를 모두 덮었을 때만 그 entry를 성공으로 센다. 따라서 partial field hit가 있어도 entry 점수는 실패일 수 있으며, **no coverage와 not complete coverage는 다르다.** 현재 대표 run에는 complete entry가 있는 관측도 있어 과거의 전 모델 동일값 주장은 더 이상 성립하지 않는다. 정확한 score 분포·spread·적용 가능 task 분포와 승격 판정은 report의 L7 블록이 매번 계산한다.
 
-metric은 숫자가 아닌 normalized 값이 80자를 넘으면 long free text로 제외하며 대표 run에서 8개가 이 규칙으로 빠진다. 또 `seed_call_*` payload만 해석하므로 모델이 새로 호출해 받은 L7-002 응답은 대상이 아니다. 이 실제 규칙을 적용하면 더 넓게 refetch 응답까지 센 63 entry/144 field 근사와 달리 56/128이 된다. 현재 대표 run의 eligible `[0]` field에서 다른 배열 원소를 인용한 사례는 0개다. 짧은 identity field에 hit가 몰렸고 `description`·`category`·`contents`·`author`는 0회였으며, `address`는 8회 중 3회였다. 그러므로 장문 secondary field를 요약하는 답을 entry 전체 0으로 접는 구조가 핵심 원인이다.
+metric은 seed payload만 해석하고 normalization/value matcher를 적용하며, 긴 free text와 unresolved field는 적용 대상에서 제외한다. `l7_partial_coverage_diagnostics`는 entry별 `(required, present)` 분포와 field hit를 보존하지만 기존 all-or-nothing 점수를 바꾸지 않는다. 장문 secondary field를 요약한 답이 entry 전체 실패로 접힐 수 있다는 구조적 한계 때문에, 완전 적용 가능성이 확보되기 전에는 모델 간 spread만으로 승격하지 않는다.
 
-또한 L2는 `in_score` 지표가 1개뿐이고 L5는 20 task인 반면 L3/L4는 각 10 task이므로, `agent_score`를 표본 수나 정밀도로 가중한 평균으로 해석하면 안 된다.
+레벨마다 `in_score` metric 수와 raw task 수가 다르므로 `agent_score`를 표본 수나 정밀도로 가중한 평균으로 해석하면 안 된다. 현재 수는 report에서 확인한다.
 
 기존 `L*.json`은 평가를 다시 실행하지 않고 재채점할 수 있다. `--results-dir`을 써도 vendored metric을 불러오려면 `MODEL_TEST_BASE`가 반드시 필요하다.
 

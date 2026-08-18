@@ -27,6 +27,7 @@ TIMEOUT_CONFIG_PATH = (
 RESULT_OBSERVABILITY_PATH = CUSTOM_DIR / "result_observability.py"
 RUNNER_PATH = CUSTOM_DIR / "run_gpustack_benchmark_with_logging.py"
 REPORT_SCRIPT = TREE_ROOT.parent / "report_agent_levels.sh"
+REPORT_SOURCE = TREE_ROOT.parent / "report_agent_levels.py"
 FRESH_RESULTS_SCRIPT = TREE_ROOT.parent / "check_results_fresh.sh"
 REPORT_LEVELS = ("L1", "L2", "L3", "L4", "L5", "L6")
 
@@ -3741,6 +3742,10 @@ def _write_level_report_fixture(
     score,
     error_level=None,
     error_task_id=None,
+    task_counts=None,
+    diagnostics=None,
+    l7_metric=None,
+    harness_overrides=None,
 ):
     results_dir = results_root / model / run_name / "language" / "agent_test"
     results_dir.mkdir(parents=True)
@@ -3753,10 +3758,18 @@ def _write_level_report_fixture(
         level: {"score": level_scores[level], "total": 1, "applied_metrics": 1}
         for level in REPORT_LEVELS
     }
+    if l7_metric is not None:
+        by_level["L7"] = {
+            "score": None,
+            "total": l7_metric["n_tasks"],
+            "applied_metrics": 0,
+            "metrics": {"ResultFieldCoverage_det": dict(l7_metric)},
+        }
     summary = {
         "model": model,
         "scoring_v4": {"by_level": by_level},
     }
+    summary.update(diagnostics or {})
     infrastructure_by_level = {
         level: {"infrastructure_error_task_count": 0, "tasks": []}
         for level in REPORT_LEVELS
@@ -3781,15 +3794,32 @@ def _write_level_report_fixture(
     (results_dir / "summary.json").write_text(
         json.dumps(summary), encoding="utf-8"
     )
-    for level in REPORT_LEVELS:
+    raw_levels = REPORT_LEVELS + (("L7",) if l7_metric is not None else ())
+    for level in raw_levels:
         task_id = error_task_id if level == error_level else f"{level}-001"
         error = "request timed out" if level == error_level else None
+        metadata = {
+            "timestamp": timestamp,
+            "model": model,
+            "request_timeout": 300,
+            "task_timeout": 600,
+            "max_retries": 2,
+            "max_tokens": 4096,
+            "native_tool_calling": True,
+            "sdk_max_retries": 0,
+            "openai_sdk_version": "test-sdk",
+        }
+        metadata.update(harness_overrides or {})
+        count = (task_counts or {}).get(level, 1)
         raw = {
-            "metadata": {
-                "timestamp": timestamp,
-                "request_timeout": 300,
-            },
-            "results": [{"task_id": task_id, "error": error}],
+            "metadata": metadata,
+            "results": [
+                {
+                    "task_id": task_id if index == 0 else f"{level}-{index + 1:03d}",
+                    "error": error if index == 0 else None,
+                }
+                for index in range(count)
+            ],
         }
         (results_dir / f"{level}.json").write_text(
             json.dumps(raw), encoding="utf-8"
@@ -3820,6 +3850,7 @@ def test_level_report_prefers_clean_run_over_newer_errored_run():
             0.999,
             error_level="L3",
             error_task_id="L3-003",
+            harness_overrides={"max_retries": 3},
         )
         exit_code, output = _run_level_report(results_root)
 
@@ -3892,10 +3923,172 @@ def test_level_report_has_no_composite_or_rank_field():
         )
 
 
+def test_level_report_context_has_no_hardcoded_measured_numbers():
+    source = REPORT_SOURCE.read_text(encoding="utf-8")
+    parsed = ast.parse(source)
+    _assert("LEVEL_CONTEXT" not in source, "hardcoded LEVEL_CONTEXT returned")
+    caveat_assignments = [
+        node
+        for node in parsed.body
+        if isinstance(node, ast.Assign)
+        and any(
+            isinstance(target, ast.Name) and target.id == "LEVEL_CAVEATS"
+            for target in node.targets
+        )
+    ]
+    _assert(len(caveat_assignments) == 1, "LEVEL_CAVEATS must have one literal assignment")
+    caveats = ast.literal_eval(caveat_assignments[0].value)
+    _assert(
+        all(re.search(r"\d", text) is None for text in caveats.values()),
+        "a measured number was embedded in a level caveat",
+    )
+
+
+def test_level_report_synthetic_model_changes_distributions_and_counts():
+    with tempfile.TemporaryDirectory() as temp_dir:
+        results_root = Path(temp_dir)
+        _write_level_report_fixture(
+            results_root,
+            "model-a",
+            "run",
+            "2026-01-01T00:00:00",
+            (0.1, 0.9, 0.3, 0.4, 0.5, 0.6),
+        )
+        first_exit, first_output = _run_level_report(results_root)
+        _write_level_report_fixture(
+            results_root,
+            "synthetic-model",
+            "run",
+            "2026-01-02T00:00:00",
+            (0.2, 0.8, 0.4, 0.5, 0.6, 0.7),
+            task_counts={"L2": 2},
+        )
+        second_exit, second_output = _run_level_report(results_root)
+
+    _assert(first_exit == second_exit == 0, "synthetic distribution report failed")
+    _assert("scores=0.900×1" in first_output, "baseline saturation missing")
+    _assert("scores=0.800×1, 0.900×1" in second_output, "saturation did not update")
+    _assert("1×1, 2×1" in second_output, "raw task-count distribution did not update")
+    _assert("PASS models=2" in second_output, "synthetic model count did not update")
+    _assert(first_output != second_output, "adding a model left the report unchanged")
+
+
+def test_level_report_repeat_spread_and_single_observation_markers():
+    with tempfile.TemporaryDirectory() as temp_dir:
+        results_root = Path(temp_dir)
+        _write_level_report_fixture(
+            results_root,
+            "repeat-model",
+            "first",
+            "2026-01-01T00:00:00",
+            (0.1, 0.2, 0.3, 0.1, 0.5, 0.2),
+        )
+        _write_level_report_fixture(
+            results_root,
+            "repeat-model",
+            "second",
+            "2026-01-02T00:00:00",
+            (0.2, 0.2, 0.3, 0.4, 0.5, 0.7),
+        )
+        _write_level_report_fixture(
+            results_root,
+            "single-model",
+            "only",
+            "2026-01-03T00:00:00",
+            0.6,
+        )
+        exit_code, output = _run_level_report(results_root)
+
+    _assert(exit_code == 0, "repeat report failed")
+    _assert("0.400[repeat:2]" in output, "repeat L4 cell was not marked")
+    _assert("0.700[repeat:2]" in output, "repeat L6 cell was not marked")
+    _assert(output.count("0.600[single]") >= 2, "single-run L4/L6 cells were not marked")
+    _assert(
+        "L4 model=repeat-model group=1 runs=2 min=0.100 max=0.400 spread=0.300"
+        in output,
+        "L4 repeat spread was not derived",
+    )
+    _assert(
+        "L6 model=repeat-model group=1 runs=2 min=0.200 max=0.700 spread=0.500"
+        in output,
+        "L6 repeat spread was not derived",
+    )
+
+
+def test_level_report_surfaces_all_previously_json_only_diagnostics():
+    diagnostics = {
+        "l3_retry_inflation": {"classes": {"retry": {"tasks": 3}}},
+        "l5_ceiling": {"level_ceiling": 0.625},
+        "swallowed_exception_diagnostics": {
+            "matching_task_count": 2,
+            "by_level": {"L6": {"matching_task_count": 2, "task_ids": ["L6-X"]}},
+        },
+        "possible_absorbed_request_timeout_diagnostics": {
+            "positive_count": 1,
+            "positives": [{"task_id": "L2-X", "hidden_time": 17.5}],
+        },
+        "l7_partial_coverage_diagnostics": {
+            "distribution": [{"fields_required": 5, "fields_present": 4, "entry_count": 1}],
+            "totals": {"entries": 1, "fields_required": 5, "fields_present": 4},
+            "coverage": {"tasks_total": 1, "tasks_classifiable": 1},
+        },
+    }
+    with tempfile.TemporaryDirectory() as temp_dir:
+        results_root = Path(temp_dir)
+        _write_level_report_fixture(
+            results_root,
+            "diagnostic-model",
+            "run",
+            "2026-01-01T00:00:00",
+            0.5,
+            diagnostics=diagnostics,
+        )
+        exit_code, output = _run_level_report(results_root)
+
+    _assert(exit_code == 0, "diagnostic report failed")
+    for key in diagnostics:
+        _assert(key in output, f"diagnostic remained JSON-only: {key}")
+    for expected in ('"tasks":3', '"level_ceiling":0.625', '"matching_task_count":2',
+                     '"hidden_time":17.5', '"fields_present":4'):
+        _assert(expected in output, f"non-zero diagnostic value missing: {expected}")
+
+
+def test_level_report_says_when_all_five_diagnostics_are_zero_or_absent():
+    diagnostics = {
+        "l3_retry_inflation": {"classes": {"retry": {"tasks": 0}}},
+        "l5_ceiling": {"level_ceiling": 0},
+        "swallowed_exception_diagnostics": {"matching_task_count": 0},
+        "possible_absorbed_request_timeout_diagnostics": {"positive_count": 0},
+        "l7_partial_coverage_diagnostics": {"totals": {"entries": 0}},
+    }
+    with tempfile.TemporaryDirectory() as temp_dir:
+        results_root = Path(temp_dir)
+        _write_level_report_fixture(
+            results_root,
+            "clean-model",
+            "run",
+            "2026-01-01T00:00:00",
+            0.5,
+            diagnostics=diagnostics,
+        )
+        exit_code, output = _run_level_report(results_root)
+
+    _assert(exit_code == 0, "clean diagnostic report failed")
+    _assert(
+        "clean-model 2026-01-01T00:00:00 diagnostics: all five zero/absent" in output,
+        "zero/absent diagnostics were silently omitted",
+    )
+
+
 TESTS = [
     test_level_report_prefers_clean_run_over_newer_errored_run,
     test_level_report_lists_model_with_only_errored_run_and_note,
     test_level_report_has_no_composite_or_rank_field,
+    test_level_report_context_has_no_hardcoded_measured_numbers,
+    test_level_report_synthetic_model_changes_distributions_and_counts,
+    test_level_report_repeat_spread_and_single_observation_markers,
+    test_level_report_surfaces_all_previously_json_only_diagnostics,
+    test_level_report_says_when_all_five_diagnostics_are_zero_or_absent,
     test_cache_classifier_produces_every_bucket_from_hand_built_pairs,
     test_cache_classifier_size_and_count_are_semantic,
     test_cache_classifier_presentation_fields_are_contract_pinned,
