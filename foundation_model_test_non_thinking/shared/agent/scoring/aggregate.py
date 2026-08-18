@@ -1,6 +1,7 @@
 """Aggregation policy for deterministic Ko-AgentBench agent scoring."""
 
 import math
+import re
 import sys
 from pathlib import Path
 from typing import Any, Dict, Iterable, List
@@ -77,6 +78,7 @@ L5_CEILING_NOTICE = (
     "models: the runner withholds fallback tools until a reset second pass "
     "(forcing a step gap) and injects one mandatory failed call."
 )
+ERROR_CLASS_RE = re.compile(r"\b([A-Z][A-Za-z0-9_]*(?:Error|Exception))\b")
 
 
 def _tasks(data: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -106,6 +108,143 @@ def _diagnostic_failures(count: int, first_error: Any) -> Dict[str, Any]:
     if first_error is not None:
         entry["error"] = f"{type(first_error).__name__}: {first_error}"
     return entry
+
+
+def _infrastructure_error_class(error: Any) -> str:
+    text = str(error)
+    matches = ERROR_CLASS_RE.findall(text)
+    if matches:
+        return matches[-1]
+    lowered = text.lower()
+    if "timed out" in lowered or "timeout" in lowered:
+        return "TimeoutError"
+    if "rate limit" in lowered:
+        return "RateLimitError"
+    if "connection" in lowered:
+        return "ConnectionError"
+    return "UnclassifiedHarnessError"
+
+
+def _data_with_tasks(data: Dict[str, Any], tasks: List[Dict[str, Any]]) -> Dict[str, Any]:
+    filtered = dict(data)
+    if isinstance(data.get("results"), list):
+        filtered["results"] = tasks
+    else:
+        filtered["tasks"] = tasks
+    return filtered
+
+
+def _build_infrastructure_error_diagnostics(
+    loaded: Dict[str, Dict[str, Any]],
+    reported_by_level: Dict[str, Dict[str, Any]],
+) -> Dict[str, Any]:
+    by_level = {}
+    total_error_tasks = 0
+    for level, data in loaded.items():
+        tasks = [task for task in _tasks(data) if isinstance(task, dict)]
+        error_tasks = [task for task in tasks if task.get("error") is not None]
+        total_error_tasks += len(error_tasks)
+        entry = {
+            "infrastructure_error_task_count": len(error_tasks),
+            "tasks": [
+                {
+                    "task_id": str(task.get("task_id") or "unknown-task"),
+                    "error_class": _infrastructure_error_class(task.get("error")),
+                }
+                for task in error_tasks
+            ],
+        }
+        if error_tasks:
+            surviving_tasks = [task for task in tasks if task.get("error") is None]
+            exclusion_result = _score_level_with_specs(
+                level,
+                _data_with_tasks(data, surviving_tasks),
+                LEVEL_SPECS_V3,
+            )
+            entry["score_bounds"] = {
+                "with_infrastructure_error_tasks_scored_as_zero": (
+                    (reported_by_level.get(level) or {}).get("score")
+                ),
+                "with_infrastructure_error_tasks_excluded": exclusion_result.get(
+                    "score"
+                ),
+            }
+        by_level[level] = entry
+    return {
+        "annotation_only": True,
+        "infrastructure_error_task_count": total_error_tasks,
+        "by_level": by_level,
+        "statement": (
+            "These are contamination-bound endpoints, not corrected scores: the "
+            "first is the reported level score with infrastructure-error tasks "
+            "scored as zero, and the second excludes those tasks. Neither endpoint "
+            "should be presented as the answer."
+        ),
+    }
+
+
+def _matches_seeded_only_zero_step_signature(task: Dict[str, Any]) -> bool:
+    latency = task.get("completion_latency")
+    token_usage = task.get("token_usage")
+    tool_calls = task.get("tool_calls")
+    conversation_log = task.get("conversation_log")
+    messages = (
+        conversation_log.get("messages")
+        if isinstance(conversation_log, dict)
+        else None
+    )
+    return (
+        "error" in task
+        and task.get("error") is None
+        and "steps_taken" in task
+        and task.get("steps_taken") == 0
+        and isinstance(latency, dict)
+        and latency.get("count") == 0
+        and isinstance(token_usage, dict)
+        and all(
+            token_usage.get(name) == 0
+            for name in ("prompt_tokens", "completion_tokens", "total_tokens")
+        )
+        and isinstance(tool_calls, list)
+        and not tool_calls
+        and isinstance(messages, list)
+        and bool(messages)
+    )
+
+
+def _build_swallowed_exception_diagnostics(
+    loaded: Dict[str, Dict[str, Any]],
+) -> Dict[str, Any]:
+    by_level = {}
+    total_matches = 0
+    for level in ("L6", "L7"):
+        matches = [
+            task
+            for task in _tasks(loaded.get(level, {}))
+            if isinstance(task, dict)
+            and _matches_seeded_only_zero_step_signature(task)
+        ]
+        total_matches += len(matches)
+        by_level[level] = {
+            "matching_task_count": len(matches),
+            "task_ids": [
+                str(task.get("task_id") or "unknown-task") for task in matches
+            ],
+        }
+    return {
+        "annotation_only": True,
+        "matching_task_count": total_matches,
+        "by_level": by_level,
+        "signature": (
+            "level in {L6,L7}; error is null; steps_taken == 0; "
+            "completion_latency.count == 0; all token_usage totals are 0; "
+            "tool_calls is empty; conversation_log.messages is non-empty"
+        ),
+        "detection_limit": (
+            "Cannot detect a swallowed exception that occurred after at least one "
+            "successful generated step."
+        ),
+    }
 
 
 def _build_l3_retry_inflation(level_data: Dict[str, Any]) -> Dict[str, Any]:
@@ -599,4 +738,10 @@ def build_summary_from_loaded(
         loaded.get("L3", {})
     )
     summary["l5_ceiling"] = _build_l5_ceiling(loaded.get("L5", {}))
+    summary["infrastructure_error_diagnostics"] = (
+        _build_infrastructure_error_diagnostics(v3_loaded, v3_by_level)
+    )
+    summary["swallowed_exception_diagnostics"] = (
+        _build_swallowed_exception_diagnostics(loaded)
+    )
     return summary

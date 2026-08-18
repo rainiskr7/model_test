@@ -10,6 +10,7 @@ PYTHON="$TREE_A/.venv/bin/python"
 TOTAL=0
 PASSED=0
 DRIFTED=0
+INVALID=0
 ERRORS=0
 UNSCORED=0
 
@@ -23,7 +24,7 @@ report_details() {
 
   while IFS= read -r line; do
     case "$line" in
-      *"[agent-scoring] DRIFT"*|*"[agent-scoring] error:"*)
+      *"[agent-scoring] DRIFT"*|*"[agent-scoring] FAIL"*|*"[agent-scoring] error:"*)
         results_log "$line"
         ;;
     esac
@@ -76,6 +77,10 @@ check_tree() {
       DRIFTED=$((DRIFTED + 1))
       results_log "DRIFT $tree_label $relative_dir"
       report_details "$output"
+    elif (( rc == 3 )); then
+      INVALID=$((INVALID + 1))
+      results_log "INVALID $tree_label $relative_dir"
+      report_details "$output"
     else
       ERRORS=$((ERRORS + 1))
       results_log "ERROR $tree_label $relative_dir (check error, exit=$rc)"
@@ -96,9 +101,9 @@ if (( UNSCORED != 0 )); then
   results_log "NOTE legacy pre-harness-fix runs are intentionally left unscored because they lack native_tool_calling and the fields current metrics require, so their numbers would not be comparable."
 fi
 
-if (( DRIFTED != 0 || ERRORS != 0 )); then
-  results_log "SUMMARY total=$TOTAL pass=$PASSED drift=$DRIFTED unscored=$UNSCORED errors=$ERRORS status=FAIL"
+if (( DRIFTED != 0 || INVALID != 0 || ERRORS != 0 )); then
+  results_log "SUMMARY total=$TOTAL pass=$PASSED drift=$DRIFTED invalid=$INVALID unscored=$UNSCORED errors=$ERRORS status=FAIL"
   exit 1
 fi
 
-results_log "SUMMARY total=$TOTAL pass=$PASSED drift=$DRIFTED unscored=$UNSCORED errors=$ERRORS status=PASS"
+results_log "SUMMARY total=$TOTAL pass=$PASSED drift=$DRIFTED invalid=$INVALID unscored=$UNSCORED errors=$ERRORS status=PASS"

@@ -49,6 +49,15 @@ HARNESS_INTEGRITY_FIELDS = (
     "max_retries",
     "native_tool_calling",
 )
+CROSS_LEVEL_HARNESS_FIELDS = (
+    "model",
+    "request_timeout",
+    "task_timeout",
+    "max_retries",
+    "max_tokens",
+    "sdk_max_retries",
+    "openai_sdk_version",
+)
 EXIT_CODE_HELP = """exit codes:
   0  results valid (warnings allowed)
   1  results invalid -- validation errors found
@@ -66,6 +75,23 @@ def _is_number(value: Any) -> bool:
 
 def _is_finite_score(value: Any) -> bool:
     return _is_number(value) and math.isfinite(value) and 0.0 <= value <= 1.0
+
+
+def _metadata_identity(metadata: Dict[str, Any], field: str) -> Tuple[str, str]:
+    if field not in metadata:
+        return ("absent", "")
+    return (
+        "present",
+        json.dumps(
+            metadata[field], ensure_ascii=False, sort_keys=True, separators=(",", ":")
+        ),
+    )
+
+
+def _metadata_value_for_message(metadata: Dict[str, Any], field: str) -> str:
+    if field not in metadata:
+        return "<absent>"
+    return json.dumps(metadata[field], ensure_ascii=False, sort_keys=True)
 
 
 def _results_dir_from_args(args) -> Path:
@@ -310,9 +336,11 @@ def validate_summary(
     if not isinstance(summary_native, bool):
         failures.append("summary native_tool_calling must be a boolean")
     raw_native: Dict[str, bool] = {}
+    raw_metadata: Dict[str, Dict[str, Any]] = {}
     legacy_levels: List[str] = []
     for level, data in raw_levels.items():
         metadata = data.get("metadata") or {}
+        raw_metadata[level] = metadata
         if not any(field in metadata for field in HARNESS_INTEGRITY_FIELDS):
             legacy_levels.append(level)
         if "native_tool_calling" not in metadata:
@@ -348,6 +376,22 @@ def validate_summary(
     if len(set(raw_native.values())) > 1:
         details = ", ".join(f"{level}={value}" for level, value in sorted(raw_native.items()))
         failures.append(f"native_tool_calling disagrees across raw levels: {details}")
+    for field in CROSS_LEVEL_HARNESS_FIELDS:
+        identities = {
+            _metadata_identity(metadata, field)
+            for metadata in raw_metadata.values()
+        }
+        # 모든 레벨에서 빠진 legacy 필드는 동일한 조건으로 취급한다. 일부
+        # 레벨에만 필드가 있는 경우에는 조건을 확인할 수 없으므로 불일치다.
+        if len(identities) <= 1:
+            continue
+        details = ", ".join(
+            f"{level}={_metadata_value_for_message(metadata, field)}"
+            for level, metadata in sorted(raw_metadata.items())
+        )
+        failures.append(
+            f"metadata.{field} disagrees across raw levels: {details}"
+        )
 
     headline = summary.get("agent_score")
     _check_score(headline, "agent_score", failures)

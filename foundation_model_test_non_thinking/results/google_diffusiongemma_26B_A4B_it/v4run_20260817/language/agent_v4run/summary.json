@@ -2180,5 +2180,65 @@
     },
     "level_ceiling": 0.6666666666666666,
     "statement": "AdaptiveRoutingScore and EPR_CVR are capped at 0.5 for schema-respecting models: the runner withholds fallback tools until a reset second pass (forcing a step gap) and injects one mandatory failed call."
+  },
+  "infrastructure_error_diagnostics": {
+    "annotation_only": true,
+    "infrastructure_error_task_count": 1,
+    "by_level": {
+      "L1": {
+        "infrastructure_error_task_count": 0,
+        "tasks": []
+      },
+      "L2": {
+        "infrastructure_error_task_count": 0,
+        "tasks": []
+      },
+      "L3": {
+        "infrastructure_error_task_count": 1,
+        "tasks": [
+          {
+            "task_id": "L3-010",
+            "error_class": "BadRequestError"
+          }
+        ],
+        "score_bounds": {
+          "with_infrastructure_error_tasks_scored_as_zero": 0.6555555555555556,
+          "with_infrastructure_error_tasks_excluded": 0.7283950617283951
+        }
+      },
+      "L4": {
+        "infrastructure_error_task_count": 0,
+        "tasks": []
+      },
+      "L5": {
+        "infrastructure_error_task_count": 0,
+        "tasks": []
+      },
+      "L6": {
+        "infrastructure_error_task_count": 0,
+        "tasks": []
+      },
+      "L7": {
+        "infrastructure_error_task_count": 0,
+        "tasks": []
+      }
+    },
+    "statement": "These are contamination-bound endpoints, not corrected scores: the first is the reported level score with infrastructure-error tasks scored as zero, and the second excludes those tasks. Neither endpoint should be presented as the answer."
+  },
+  "swallowed_exception_diagnostics": {
+    "annotation_only": true,
+    "matching_task_count": 0,
+    "by_level": {
+      "L6": {
+        "matching_task_count": 0,
+        "task_ids": []
+      },
+      "L7": {
+        "matching_task_count": 0,
+        "task_ids": []
+      }
+    },
+    "signature": "level in {L6,L7}; error is null; steps_taken == 0; completion_latency.count == 0; all token_usage totals are 0; tool_calls is empty; conversation_log.messages is non-empty",
+    "detection_limit": "Cannot detect a swallowed exception that occurred after at least one successful generated step."
   }
 }

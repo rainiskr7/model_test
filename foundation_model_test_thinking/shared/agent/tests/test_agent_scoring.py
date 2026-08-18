@@ -27,6 +27,7 @@ TIMEOUT_CONFIG_PATH = (
 RESULT_OBSERVABILITY_PATH = CUSTOM_DIR / "result_observability.py"
 RUNNER_PATH = CUSTOM_DIR / "run_gpustack_benchmark_with_logging.py"
 REPORT_SCRIPT = TREE_ROOT.parent / "report_agent_levels.sh"
+FRESH_RESULTS_SCRIPT = TREE_ROOT.parent / "check_results_fresh.sh"
 REPORT_LEVELS = ("L1", "L2", "L3", "L4", "L5", "L6")
 
 
@@ -1110,6 +1111,152 @@ def test_new_diagnostics_round_trip_and_validate():
         "L5 diagnostic did not survive JSON round-trip",
     )
     _assert(not failures, f"new diagnostic blocks failed validation: {failures}")
+
+
+def _build_infrastructure_diagnostic_summary():
+    original_score_level = aggregate.score_level
+    original_score_with_specs = aggregate._score_level_with_specs
+    original_prepare_v3 = aggregate.prepare_v3_loaded
+
+    def fake_level(_level, data, *_args):
+        scores = [
+            task["synthetic_score"]
+            for task in data.get("results", [])
+            if isinstance(task, dict) and "synthetic_score" in task
+        ]
+        return {
+            "total": len(data.get("results", [])),
+            "score": sum(scores) / len(scores) if scores else None,
+            "applied_metrics": 1 if scores else 0,
+            "metrics": {},
+        }
+
+    aggregate.score_level = fake_level
+    aggregate._score_level_with_specs = fake_level
+    aggregate.prepare_v3_loaded = lambda loaded: (
+        loaded,
+        {
+            "golden_fields_source": "artifact",
+            "join_needed": False,
+            "benchmark_sha": None,
+            "task_file": None,
+            "task_file_sha256": None,
+            "tasks_joined": 0,
+        },
+    )
+    loaded = {
+        "L1": {
+            "results": [
+                {"task_id": "L1-live", "error": None, "synthetic_score": 1.0},
+                {
+                    "task_id": "L1-dead",
+                    "error": "LLM call failed: TimeoutError: request timed out",
+                    "synthetic_score": 0.0,
+                },
+            ]
+        },
+        "L2": {
+            "results": [
+                {"task_id": "L2-live", "error": None, "synthetic_score": 0.4}
+            ]
+        },
+    }
+    try:
+        return aggregate.build_summary_from_loaded(
+            loaded, Path("/tmp/results/model/run/language/agent")
+        )
+    finally:
+        aggregate.score_level = original_score_level
+        aggregate._score_level_with_specs = original_score_with_specs
+        aggregate.prepare_v3_loaded = original_prepare_v3
+
+
+def test_infrastructure_error_diagnostic_emits_both_bounds_without_rescoring():
+    summary = _build_infrastructure_diagnostic_summary()
+    diagnostic = summary["infrastructure_error_diagnostics"]["by_level"]["L1"]
+    bounds = diagnostic["score_bounds"]
+    _assert_close(summary["scoring_v4"]["by_level"]["L1"]["score"], 0.5, "reported L1 score")
+    _assert_close(
+        bounds["with_infrastructure_error_tasks_scored_as_zero"],
+        0.5,
+        "as-scored bound",
+    )
+    _assert_close(
+        bounds["with_infrastructure_error_tasks_excluded"],
+        1.0,
+        "exclusion bound",
+    )
+    _assert(
+        diagnostic["tasks"]
+        == [{"task_id": "L1-dead", "error_class": "TimeoutError"}],
+        f"infrastructure error task identity missing: {diagnostic}",
+    )
+
+
+def test_infrastructure_error_diagnostic_clean_level_has_zero_count_no_bounds():
+    diagnostic = _build_infrastructure_diagnostic_summary()[
+        "infrastructure_error_diagnostics"
+    ]["by_level"]["L2"]
+    _assert(diagnostic["infrastructure_error_task_count"] == 0, "clean L2 count is not zero")
+    _assert(diagnostic["tasks"] == [], "clean L2 lists error tasks")
+    _assert("score_bounds" not in diagnostic, "clean L2 emitted contamination bounds")
+
+
+def _seeded_only_zero_step_task(task_id="L6-seeded-only"):
+    return {
+        "task_id": task_id,
+        "error": None,
+        "steps_taken": 0,
+        "completion_latency": {"count": 0},
+        "token_usage": {
+            "prompt_tokens": 0,
+            "completion_tokens": 0,
+            "total_tokens": 0,
+        },
+        "tool_calls": [],
+        "conversation_log": {
+            "messages": [
+                {"role": "user", "content": "seeded prompt"},
+                {"role": "tool", "content": {"seeded": True}},
+            ]
+        },
+    }
+
+
+def test_swallowed_exception_detector_fires_on_seeded_only_zero_step_task():
+    diagnostic = aggregate._build_swallowed_exception_diagnostics(
+        {"L6": {"results": [_seeded_only_zero_step_task()]}}
+    )
+    _assert(diagnostic["matching_task_count"] == 1, "seeded-only signature was missed")
+    _assert(
+        diagnostic["by_level"]["L6"]
+        == {"matching_task_count": 1, "task_ids": ["L6-seeded-only"]},
+        f"seeded-only task identity missing: {diagnostic}",
+    )
+    _assert(
+        "after at least one successful generated step" in diagnostic["detection_limit"],
+        "detector limitation was hidden",
+    )
+
+
+def test_swallowed_exception_detector_ignores_generated_zero_tool_call_l6_task():
+    task = _seeded_only_zero_step_task("L6-generated")
+    task.update(
+        {
+            "steps_taken": 1,
+            "completion_latency": {"count": 1},
+            "token_usage": {
+                "prompt_tokens": 100,
+                "completion_tokens": 20,
+                "total_tokens": 120,
+            },
+        }
+    )
+    diagnostic = aggregate._build_swallowed_exception_diagnostics(
+        {"L6": {"results": [task]}}
+    )
+    _assert(diagnostic["matching_task_count"] == 0, "genuine zero-tool-call L6 was flagged")
+    _assert(diagnostic["by_level"]["L6"]["task_ids"] == [], "false-positive task ID emitted")
 
 
 def test_validator_warns_above_cache_threshold_without_failing():
@@ -3045,6 +3192,34 @@ def test_score_run_check_matching_summary_exits_0_without_writes():
         _assert(sidecar.read_bytes() == sidecar_before, "check modified the sidecar")
 
 
+def test_score_run_check_matching_but_invalid_exits_3_without_writes():
+    with tempfile.TemporaryDirectory() as temp_dir:
+        results_dir = Path(temp_dir)
+        candidate = _scoring_candidate()
+        candidate["scoring_version"] = "invalid-but-matching"
+        _write_validation_fixture(results_dir, candidate)
+        summary_path = results_dir / "summary.json"
+        before = summary_path.read_bytes()
+
+        exit_code, output = _run_score_candidate(results_dir, candidate, "--check")
+
+        _assert(exit_code == 3, f"matching-invalid check exited {exit_code}, expected 3")
+        _assert("FAIL scoring_version mismatch" in output, "validation reason was hidden")
+        _assert("matches computed summary but validation failed" in output, "invalid match category missing")
+        _assert("DRIFT" not in output, "matching-invalid summary was mislabeled as drift")
+        _assert(summary_path.read_bytes() == before, "matching-invalid check modified summary.json")
+
+
+def test_results_fresh_maps_invalid_check_and_keeps_failure_details():
+    source = FRESH_RESULTS_SCRIPT.read_text(encoding="utf-8")
+    _assert("elif (( rc == 3 ))" in source, "freshness wrapper does not map exit 3")
+    _assert('results_log "INVALID ' in source, "freshness wrapper hides INVALID category")
+    _assert(
+        '*"[agent-scoring] FAIL"*' in source,
+        "freshness detail filter still suppresses validation failures",
+    )
+
+
 def test_score_run_check_drift_exits_1_with_path_without_writes():
     with tempfile.TemporaryDirectory() as temp_dir:
         results_dir = Path(temp_dir)
@@ -3211,6 +3386,45 @@ def test_validator_rejects_native_tool_calling_disagreement():
     _assert(
         any("disagrees across raw levels" in item for item in failures),
         "native tool calling disagreement passed",
+    )
+
+
+def test_validator_rejects_cross_level_harness_disagreement():
+    values = {
+        "model": ("model-a", "model-b"),
+        "request_timeout": (60, 61),
+        "task_timeout": (300, 301),
+        "max_retries": (2, 3),
+        "max_tokens": (4096, 8192),
+        "sdk_max_retries": (0, 1),
+        "openai_sdk_version": ("2.54.0", "2.55.0"),
+    }
+    for field, (common_value, mismatched_value) in values.items():
+        with tempfile.TemporaryDirectory() as temp_dir:
+            results_dir = Path(temp_dir)
+            summary = _validation_summary()
+            _write_validation_fixture(results_dir, summary)
+            for level in summary["by_level"]:
+                level_path = results_dir / f"{level}.json"
+                raw = json.loads(level_path.read_text(encoding="utf-8"))
+                raw["metadata"][field] = common_value
+                if level == "L2":
+                    raw["metadata"][field] = mismatched_value
+                level_path.write_text(json.dumps(raw), encoding="utf-8")
+
+            failures, _warnings = validate_run.validate_results_dir(results_dir)
+
+        _assert(
+            any(f"metadata.{field} disagrees across raw levels" in item for item in failures),
+            f"cross-level {field} disagreement passed: {failures}",
+        )
+
+
+def test_validator_accepts_uniform_absence_of_extended_harness_fields():
+    failures, _warnings = _validate_fixture(_validation_summary())
+    _assert(
+        not failures,
+        f"uniformly absent extended harness metadata was rejected: {failures}",
     )
 
 
@@ -3401,6 +3615,27 @@ def _write_level_report_fixture(
         "model": model,
         "scoring_v4": {"by_level": by_level},
     }
+    infrastructure_by_level = {
+        level: {"infrastructure_error_task_count": 0, "tasks": []}
+        for level in REPORT_LEVELS
+    }
+    if error_level is not None:
+        error_score = level_scores[error_level]
+        infrastructure_by_level[error_level] = {
+            "infrastructure_error_task_count": 1,
+            "tasks": [
+                {"task_id": error_task_id, "error_class": "TimeoutError"}
+            ],
+            "score_bounds": {
+                "with_infrastructure_error_tasks_scored_as_zero": error_score,
+                "with_infrastructure_error_tasks_excluded": min(1.0, error_score + 0.1),
+            },
+        }
+    summary["infrastructure_error_diagnostics"] = {
+        "annotation_only": True,
+        "infrastructure_error_task_count": int(error_level is not None),
+        "by_level": infrastructure_by_level,
+    }
     (results_dir / "summary.json").write_text(
         json.dumps(summary), encoding="utf-8"
     )
@@ -3470,6 +3705,10 @@ def test_level_report_lists_model_with_only_errored_run_and_note():
     _assert(exit_code == 0, "errored-only model made the report fail")
     _assert("model-only-error" in output, "errored-only model was omitted")
     _assert("L5 L5-007 infra death" in output, "infrastructure death note missing")
+    _assert(
+        "L5[as-zero=0.222,exclude=0.322]" in output,
+        "affected-level contamination bounds were not surfaced",
+    )
 
 
 def test_level_report_has_no_composite_or_rank_field():
@@ -3531,6 +3770,10 @@ TESTS = [
     test_l5_ceiling_distinguishes_all_context_failures_from_no_values,
     test_l5_ceiling_diagnostic_is_score_and_headline_neutral,
     test_new_diagnostics_round_trip_and_validate,
+    test_infrastructure_error_diagnostic_emits_both_bounds_without_rescoring,
+    test_infrastructure_error_diagnostic_clean_level_has_zero_count_no_bounds,
+    test_swallowed_exception_detector_fires_on_seeded_only_zero_step_task,
+    test_swallowed_exception_detector_ignores_generated_zero_tool_call_l6_task,
     test_validator_warns_above_cache_threshold_without_failing,
     test_runner_request_timeout_parse_default_and_override,
     test_runner_max_retries_parse_default_and_override,
@@ -3636,6 +3879,8 @@ TESTS = [
     test_contract_error_metric_validates_and_publishes,
     test_score_run_dry_run_writes_nothing_for_clean_and_rejected_summaries,
     test_score_run_check_matching_summary_exits_0_without_writes,
+    test_score_run_check_matching_but_invalid_exits_3_without_writes,
+    test_results_fresh_maps_invalid_check_and_keeps_failure_details,
     test_score_run_check_drift_exits_1_with_path_without_writes,
     test_score_run_check_missing_summary_exits_2,
     test_score_run_check_collapses_wholly_absent_subtree,
@@ -3649,6 +3894,8 @@ TESTS = [
     test_validator_rejects_partial_in_score_metric,
     test_validator_rejects_not_applicable_numeric_score,
     test_validator_rejects_native_tool_calling_disagreement,
+    test_validator_rejects_cross_level_harness_disagreement,
+    test_validator_accepts_uniform_absence_of_extended_harness_fields,
     test_validator_rejects_headline_status_mismatch_both_directions,
     test_validator_rejects_perturbed_agent_score,
     test_arg_f1_det_or_skip,

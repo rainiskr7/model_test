@@ -33,6 +33,7 @@ class Run:
     scores: tuple[float, ...]
     request_timeout: object
     deaths: tuple[tuple[str, str], ...]
+    contamination_bounds: tuple[tuple[str, object, object], ...]
 
     @property
     def clean(self) -> bool:
@@ -42,6 +43,16 @@ class Run:
     def note(self) -> str:
         return "; ".join(
             f"{level} {task_id} infra death" for level, task_id in self.deaths
+        )
+
+    @property
+    def bounds_text(self) -> str:
+        def render(value: object) -> str:
+            return f"{float(value):.3f}" if _is_score(value) else "null"
+
+        return "; ".join(
+            f"{level}[as-zero={render(as_zero)},exclude={render(excluded)}]"
+            for level, as_zero, excluded in self.contamination_bounds
         )
 
 
@@ -83,6 +94,25 @@ def _load_run(summary_path: Path) -> Run | None:
     timestamps = []
     request_timeout = None
     deaths = []
+    contamination_bounds = []
+    error_by_level = (
+        (summary.get("infrastructure_error_diagnostics") or {}).get("by_level")
+        or {}
+    )
+    for level in LEVELS:
+        diagnostic = error_by_level.get(level) or {}
+        bounds = diagnostic.get("score_bounds") or {}
+        if diagnostic.get("infrastructure_error_task_count", 0) <= 0:
+            continue
+        if not isinstance(bounds, dict):
+            continue
+        contamination_bounds.append(
+            (
+                level,
+                bounds.get("with_infrastructure_error_tasks_scored_as_zero"),
+                bounds.get("with_infrastructure_error_tasks_excluded"),
+            )
+        )
     level_paths = sorted(
         summary_path.parent.glob("L*.json"),
         key=lambda path: int(path.stem[1:]) if path.stem[1:].isdigit() else 10_000,
@@ -116,6 +146,7 @@ def _load_run(summary_path: Path) -> Run | None:
         scores=tuple(float(score) for score in scores),
         request_timeout=request_timeout,
         deaths=tuple(deaths),
+        contamination_bounds=tuple(contamination_bounds),
     )
 
 
@@ -145,7 +176,7 @@ def print_report(runs: Sequence[Run]) -> None:
     header = (
         f"{'model':<{model_width}}  {'run_timestamp':<20}  "
         f"{'L1':>5}  {'L2':>5}  {'L3':>5}  {'L4':>5}  {'L5':>5}  {'L6':>5}  "
-        f"{'request_timeout':>15}  note"
+        f"{'request_timeout':>15}  contamination_bounds(as-zero/exclude)  note"
     )
     _log(header)
     for run in runs:
@@ -153,7 +184,7 @@ def print_report(runs: Sequence[Run]) -> None:
         scores = "  ".join(f"{score:5.3f}" for score in run.scores)
         row = (
             f"{run.model:<{model_width}}  {run.timestamp:<20}  {scores}  "
-            f"{timeout:>15}  {run.note}"
+            f"{timeout:>15}  {run.bounds_text or '-'}  {run.note}"
         )
         _log(row.rstrip())
 

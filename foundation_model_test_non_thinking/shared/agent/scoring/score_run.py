@@ -40,9 +40,10 @@ else:
 PREFIX = "[agent-scoring]"
 MAX_DRIFT_LINES = 40
 EXIT_CODE_HELP = """exit codes:
-  0  summary produced and publishable, or --check found no drift
+  0  summary produced and publishable, or --check matched and validated
   1  scoring completed but the summary is unusable, or --check found drift
-  2  invocation, configuration, input-reading, or internal error"""
+  2  invocation, configuration, input-reading, or internal error
+  3  --check matched the stored summary, but validation failed"""
 DETERMINISTIC_METRICS = {
     spec.name
     for level_specs in (LEVEL_SPECS, LEVEL_SPECS_V3)
@@ -382,6 +383,12 @@ def main(argv=None) -> int:
             if differences:
                 _print_differences(differences)
                 return 1
+            if failures:
+                print(
+                    f"{PREFIX} CHECK summary.json matches computed summary "
+                    "but validation failed"
+                )
+                return 3
             print(f"{PREFIX} CHECK summary.json matches computed summary")
             return 0
         if failures:
