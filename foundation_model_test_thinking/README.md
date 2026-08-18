@@ -218,6 +218,22 @@ results/<safe_model_name>/<timestamp>/
 
 scorer는 매번 세 version을 함께 낸다: `agent_det_v2=("L1","L2","L3","L4","L5","L6")`, `agent_det_v3=("L1","L2","L3","L4","L5","L6")`, `agent_det_v4=("L1","L2","L3","L5","L6")`. v2와 v3 정의·블록은 동결돼 그대로 유지된다. 터미널에는 세 headline과 정확한 분모, v2/v3/v4의 전체 L1~L7 matrix가 함께 나오며 scalar headline만 단독으로 출력하지 않는다. summary의 `headline_denominators`, 세 `by_level` matrix, `l3_retry_inflation`, `l4_fixture_coverage`, `l5_ceiling`에도 같은 정보를 기록한다. L7은 실행하지만 기록 전용이고, `ContextRetention_det`·`ResultFieldCoverage_det` 두 결정론 지표와 L7 레벨 자체는 어느 headline에도 들어가지 않는다. 다섯 judge 지표는 현재 측정하지 않아 `judge_missing`으로 남으므로, 이 점수는 결정론적 부분집합만 나타낸다.
 
+##### 결과 보고 단위: 레벨 점수
+
+코드와 저장 schema는 위의 `agent_det_v2`/`agent_det_v3`/`agent_det_v4` composite를 계속 계산·보존하지만, **모델 비교에서 composite를 결과로 보고하지 않는다.** 결과는 L1~L6 레벨 점수를 각각 제시한다. 동일 가중은 동일 영향력을 만들지 않기 때문이다. clean run을 우선한 7개 모델 대표 run에서 각 레벨의 모델 간 분산을 구하고, v4 분모의 다섯 레벨 분산 합으로 나눈 실측치는 다음과 같다. 평균 앞의 공통 계수 `(1/5)^2`는 모든 항에 같으므로 분산 점유율에서 상쇄된다.
+
+| 레벨 | 모델 간 spread | headline 분산 점유율 | metric 수 | task 수 |
+|---|---:|---:|---:|---:|
+| L6 | 0.599 | 79.3% | 2 | 15 |
+| L5 | 0.290 | 9.6% | 3 | 20 |
+| L1 | 0.165 | 5.2% | 3 | 11 |
+| L3 | 0.133 | 5.2% | 3 | 10 |
+| L2 | 0.067 | 0.8% | 1 | 15 |
+
+따라서 동일 가중 composite의 변동은 약 80%가 L6에서 오고 나머지 레벨은 작은 섭동에 가깝다. 레벨의 척도도 서로 같지 않다. L5에는 검증된 구조적 상한 0.667이 있고, L2는 8개 모델 중 7개가 정확히 0.933으로 포화했으며, L1은 1.0까지 도달할 수 있다. L4는 모델 능력과 분리되지 않는 fixture coverage를 측정하므로 이미 v4 분모에서 제외됐다. 그러므로 레벨 점수를 다시 평균해 단일 모델 점수나 순위를 만들지 않는다.
+
+composite의 허용 용도는 **같은 저장 run을 재채점했을 때 값이 바뀌었는지 확인하는 drift detection**뿐이다. 현재 `check_results_fresh.sh`가 보호하는 대상이 이것이다. 서로 다른 모델의 비교·정렬·ranking에는 사용하지 않는다. 모델별 대표 run과 레벨 점수는 저장 summary를 수정하지 않는 루트의 `./report_agent_levels.sh`로 확인한다. 완전한 L1~L6 run 중 task `error`가 없는 최신 run을 우선하고, clean run이 없는 모델도 가장 최근 run의 모든 레벨 점수를 유지하되 오염된 task와 레벨을 note에 표시한다.
+
 `metadata.success_rate`는 정확도가 아니라 **생존 신호**(`final_response` 존재 AND `steps >= 1`)다. 측정된 두 모델의 모든 레벨에서 100%였지만 결정론 점수와 무관하므로 점수로 인용하지 않는다.
 
 현재 다음 레벨은 모델 간 깨끗한 비교 자료로 사용할 수 없다.

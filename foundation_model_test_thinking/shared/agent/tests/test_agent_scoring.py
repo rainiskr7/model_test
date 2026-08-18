@@ -10,6 +10,8 @@ import importlib.util
 import io
 import json
 import os
+import re
+import subprocess
 import sys
 import tempfile
 from pathlib import Path
@@ -24,6 +26,8 @@ TIMEOUT_CONFIG_PATH = (
 )
 RESULT_OBSERVABILITY_PATH = CUSTOM_DIR / "result_observability.py"
 RUNNER_PATH = CUSTOM_DIR / "run_gpustack_benchmark_with_logging.py"
+REPORT_SCRIPT = TREE_ROOT.parent / "report_agent_levels.sh"
+REPORT_LEVELS = ("L1", "L2", "L3", "L4", "L5", "L6")
 
 
 def _load_module(name):
@@ -3373,7 +3377,144 @@ def test_adapter_config_keys_do_not_collide_with_call_site():
     _assert(not clash, f"adapter_config 키가 호출부 인자와 충돌: {sorted(clash)}")
 
 
+def _write_level_report_fixture(
+    results_root,
+    model,
+    run_name,
+    timestamp,
+    score,
+    error_level=None,
+    error_task_id=None,
+):
+    results_dir = results_root / model / run_name / "language" / "agent_test"
+    results_dir.mkdir(parents=True)
+    level_scores = (
+        dict(zip(REPORT_LEVELS, score))
+        if isinstance(score, (tuple, list))
+        else dict.fromkeys(REPORT_LEVELS, score)
+    )
+    by_level = {
+        level: {"score": level_scores[level], "total": 1, "applied_metrics": 1}
+        for level in REPORT_LEVELS
+    }
+    summary = {
+        "model": model,
+        "scoring_v4": {"by_level": by_level},
+    }
+    (results_dir / "summary.json").write_text(
+        json.dumps(summary), encoding="utf-8"
+    )
+    for level in REPORT_LEVELS:
+        task_id = error_task_id if level == error_level else f"{level}-001"
+        error = "request timed out" if level == error_level else None
+        raw = {
+            "metadata": {
+                "timestamp": timestamp,
+                "request_timeout": 300,
+            },
+            "results": [{"task_id": task_id, "error": error}],
+        }
+        (results_dir / f"{level}.json").write_text(
+            json.dumps(raw), encoding="utf-8"
+        )
+
+
+def _run_level_report(results_root):
+    completed = subprocess.run(
+        [str(REPORT_SCRIPT), "--results-root", str(results_root)],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    return completed.returncode, completed.stdout + completed.stderr
+
+
+def test_level_report_prefers_clean_run_over_newer_errored_run():
+    with tempfile.TemporaryDirectory() as temp_dir:
+        results_root = Path(temp_dir)
+        _write_level_report_fixture(
+            results_root, "model-a", "clean", "2026-01-01T00:00:00", 0.111
+        )
+        _write_level_report_fixture(
+            results_root,
+            "model-a",
+            "errored",
+            "2026-02-01T00:00:00",
+            0.999,
+            error_level="L3",
+            error_task_id="L3-003",
+        )
+        exit_code, output = _run_level_report(results_root)
+
+    _assert(exit_code == 0, "level report failed")
+    _assert("2026-01-01T00:00:00" in output, "clean run was not selected")
+    _assert("0.111" in output, "clean run scores were not printed")
+    _assert("0.999" not in output, "newer errored run incorrectly won selection")
+    _assert("infra death" not in output, "unselected run contaminated the note")
+
+
+def test_level_report_lists_model_with_only_errored_run_and_note():
+    with tempfile.TemporaryDirectory() as temp_dir:
+        results_root = Path(temp_dir)
+        _write_level_report_fixture(
+            results_root,
+            "model-only-error",
+            "errored",
+            "2026-03-01T00:00:00",
+            0.222,
+            error_level="L5",
+            error_task_id="L5-007",
+        )
+        exit_code, output = _run_level_report(results_root)
+
+    _assert(exit_code == 0, "errored-only model made the report fail")
+    _assert("model-only-error" in output, "errored-only model was omitted")
+    _assert("L5 L5-007 infra death" in output, "infrastructure death note missing")
+
+
+def test_level_report_has_no_composite_or_rank_field():
+    # These nonuniform scores make each row's mean distinct from every level score.
+    fixture_scores = {
+        "model-a": (0.100, 0.200, 0.300, 0.400, 0.500, 0.600),
+        "model-b": (0.200, 0.300, 0.400, 0.500, 0.600, 0.700),
+    }
+    with tempfile.TemporaryDirectory() as temp_dir:
+        results_root = Path(temp_dir)
+        for model, scores in fixture_scores.items():
+            _write_level_report_fixture(
+                results_root, model, "clean", "2026-01-01T00:00:00", scores
+            )
+        exit_code, output = _run_level_report(results_root)
+
+    _assert(exit_code == 0, "level report failed")
+    lowered = output.lower()
+    for forbidden in ("agent_score", "composite", "rank"):
+        _assert(forbidden not in lowered, f"forbidden report field returned: {forbidden}")
+    rows_by_model = {
+        line.split()[1]: line
+        for line in output.splitlines()
+        if len(line.split()) > 1 and line.split()[1] in fixture_scores
+    }
+    _assert(set(rows_by_model) == set(fixture_scores), "fixture data rows missing")
+    for model, scores in fixture_scores.items():
+        expected_mean = float(f"{sum(scores) / len(scores):.3f}")
+        printed_numbers = [
+            float(value)
+            for value in re.findall(
+                r"(?<![\w.])[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?(?![\w.])",
+                rows_by_model[model],
+            )
+        ]
+        _assert(
+            expected_mean not in printed_numbers,
+            f"unlabelled composite returned for {model}: {expected_mean:.3f}",
+        )
+
+
 TESTS = [
+    test_level_report_prefers_clean_run_over_newer_errored_run,
+    test_level_report_lists_model_with_only_errored_run_and_note,
+    test_level_report_has_no_composite_or_rank_field,
     test_cache_classifier_produces_every_bucket_from_hand_built_pairs,
     test_cache_classifier_size_and_count_are_semantic,
     test_cache_classifier_presentation_fields_are_contract_pinned,
