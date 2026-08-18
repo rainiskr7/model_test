@@ -1,0 +1,434 @@
+#!/usr/bin/env python3
+"""FunctionChat-Bench의 exact-match 가능 항목을 OpenAI-compatible 모델로 실행한다."""
+
+import argparse
+import importlib.util
+import json
+import os
+import queue
+import sys
+import tempfile
+import threading
+import time
+import types
+from collections import Counter
+from datetime import datetime
+from pathlib import Path
+from typing import Any, Dict, Iterable, List, Mapping, Optional, Tuple
+
+
+SOURCE_COMMIT = "5ddb0b5bb37d6423e1f3381ef693cda811a7847e"
+CALL = "call"
+
+
+def _env_flag(name: str) -> bool:
+    return os.environ.get(name, "").strip().lower() in ("1", "true", "yes")
+
+
+def _load_jsonl(path: Path) -> List[Dict[str, Any]]:
+    with path.open("r", encoding="utf-8") as handle:
+        return [json.loads(line) for line in handle if line.strip()]
+
+
+def expand_singlecall(path: Path, system_prompt: str) -> List[Dict[str, Any]]:
+    """원본 SingleCallPayloadCreator와 같은 query × tool-set 순서로 펼친다."""
+    items: List[Dict[str, Any]] = []
+    for source_line, record in enumerate(_load_jsonl(path), start=1):
+        for query_index, query in enumerate(record["query"]):
+            ground_truth = json.loads(record["ground_truth"][query_index]["content"])
+            acceptable = record["acceptable_arguments"][query_index]["content"]
+            for tool_variant in record["tools"]:
+                tools_type = tool_variant["type"]
+                items.append(
+                    {
+                        "item_id": (
+                            f"singlecall:{source_line}:{query['serial_num']}:{tools_type}"
+                        ),
+                        "dataset": "singlecall",
+                        "source_line": source_line,
+                        "query_index": query_index,
+                        "serial_num": query["serial_num"],
+                        "tools_type": tools_type,
+                        "type_of_output": CALL,
+                        "messages": [
+                            {"role": "system", "content": system_prompt},
+                            {"role": "user", "content": query["content"]},
+                        ],
+                        "tools": tool_variant["content"],
+                        "ground_truth": ground_truth,
+                        "acceptable_arguments": acceptable,
+                    }
+                )
+    return items
+
+
+def expand_call_decision(path: Path) -> List[Dict[str, Any]]:
+    items: List[Dict[str, Any]] = []
+    for source_line, record in enumerate(_load_jsonl(path), start=1):
+        items.append(
+            {
+                "item_id": f"call_decision:{record['serial_num']}",
+                "dataset": "call_decision",
+                "source_line": source_line,
+                "serial_num": record["serial_num"],
+                "category": record.get("category"),
+                "type_of_output": record["type_of_output"],
+                "messages": record["input_messages"],
+                "tools": record["input_tools"],
+                "ground_truth": record["ground_truth"],
+                "acceptable_arguments": record.get("acceptable_arguments"),
+            }
+        )
+    return items
+
+
+def _load_module(name: str, path: Path):
+    spec = importlib.util.spec_from_file_location(name, path)
+    if spec is None or spec.loader is None:
+        raise ImportError(f"cannot load {name} from {path}")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+def load_shared_adapter(base_dir: Path):
+    """shared adapter를 Ko-AgentBench의 최소 interface package 위에서 직접 로드한다."""
+    koa_dir = base_dir / "data" / "Ko-AgentBench"
+    shared_custom = base_dir / "shared" / "agent" / "gpustack_custom"
+    required = (
+        koa_dir / "bench" / "adapters" / "base_adapter.py",
+        koa_dir / "bench" / "observability.py",
+        shared_custom / "tool_call_parser.py",
+        shared_custom / "openai_compat_adapter.py",
+    )
+    missing = [str(path) for path in required if not path.is_file()]
+    if missing:
+        raise FileNotFoundError(f"adapter dependencies missing: {missing}")
+
+    # bench/adapters/__init__.py는 optional provider를 import하므로 실행하지 않는다.
+    bench_package = types.ModuleType("bench")
+    bench_package.__path__ = [str(koa_dir / "bench")]
+    adapters_package = types.ModuleType("bench.adapters")
+    adapters_package.__path__ = [str(koa_dir / "bench" / "adapters")]
+    sys.modules["bench"] = bench_package
+    sys.modules["bench.adapters"] = adapters_package
+    _load_module(
+        "bench.adapters.base_adapter", koa_dir / "bench" / "adapters" / "base_adapter.py"
+    )
+    _load_module("bench.observability", koa_dir / "bench" / "observability.py")
+    _load_module("bench.adapters.tool_call_parser", shared_custom / "tool_call_parser.py")
+    adapter_module = _load_module(
+        "bench.adapters.functionchat_openai_compat_adapter",
+        shared_custom / "openai_compat_adapter.py",
+    )
+    return adapter_module.OpenAICompatAdapter
+
+
+def _call_with_budget(adapter: Any, item: Mapping[str, Any], timeout: float):
+    result_queue: queue.Queue = queue.Queue(maxsize=1)
+
+    def invoke() -> None:
+        try:
+            result_queue.put(
+                (True, adapter.chat_completion(item["messages"], tools=item["tools"]))
+            )
+        except BaseException as exc:  # 호출 thread의 예외를 main thread로 전달한다.
+            result_queue.put((False, exc))
+
+    worker = threading.Thread(target=invoke, daemon=True)
+    worker.start()
+    worker.join(timeout)
+    if worker.is_alive():
+        raise TimeoutError(f"task timeout after {timeout:.3f}s remaining budget")
+    ok, value = result_queue.get_nowait()
+    if not ok:
+        raise value
+    return value
+
+
+def run_measured_item(
+    adapter: Any,
+    item: Mapping[str, Any],
+    task_timeout: float,
+    max_retries: int,
+) -> Dict[str, Any]:
+    started = time.monotonic()
+    deadline = started + task_timeout
+    errors: List[str] = []
+    response = None
+    completion_latency = 0.0
+    attempts = 0
+
+    for _ in range(max_retries):
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            errors.append(f"TimeoutError: task timeout after {task_timeout}s")
+            break
+        attempts += 1
+        attempt_started = time.monotonic()
+        try:
+            response = _call_with_budget(adapter, item, remaining)
+            completion_latency = time.monotonic() - attempt_started
+            break
+        except Exception as exc:
+            errors.append(f"{type(exc).__name__}: {exc}")
+            if isinstance(exc, TimeoutError):
+                break
+
+    execution_time = time.monotonic() - started
+    message = response.get("message", {}) if isinstance(response, dict) else {}
+    tool_calls = message.get("tool_calls", []) if isinstance(message, dict) else []
+    model_output = {"tool_calls": tool_calls}
+    return {
+        **dict(item),
+        "evaluation_status": "measured",
+        "model_output": model_output,
+        "raw_response": response,
+        "exact_match": None,
+        "attempts": attempts,
+        "error": errors[-1] if response is None and errors else None,
+        "attempt_errors": errors,
+        "execution_time": execution_time,
+        "latency_seconds": execution_time,
+        "completion_latency": {
+            "average": completion_latency,
+            "min": completion_latency,
+            "max": completion_latency,
+            "count": 1 if response is not None else 0,
+            "unit": "seconds",
+        },
+        "finish_reason": response.get("finish_reason") if isinstance(response, dict) else None,
+        "last_finish_reason": response.get("finish_reason") if isinstance(response, dict) else None,
+        "token_usage": response.get("usage") if isinstance(response, dict) else None,
+    }
+
+
+def not_measured_item(item: Mapping[str, Any]) -> Dict[str, Any]:
+    return {
+        **dict(item),
+        "evaluation_status": "not_measured",
+        "model_output": None,
+        "raw_response": None,
+        "exact_match": None,
+        "attempts": 0,
+        "error": None,
+        "attempt_errors": [],
+        "execution_time": 0.0,
+        "latency_seconds": 0.0,
+        "completion_latency": {
+            "average": 0.0,
+            "min": 0.0,
+            "max": 0.0,
+            "count": 0,
+            "unit": "seconds",
+        },
+        "finish_reason": None,
+        "last_finish_reason": None,
+        "token_usage": None,
+    }
+
+
+def _preflight_model(adapter: Any, model: str, request_timeout: float) -> None:
+    response = adapter.client.models.list(timeout=min(request_timeout, 5.0))
+    available = [entry.id for entry in response.data]
+    if model not in available:
+        raise RuntimeError(
+            f"MODEL={model!r} is absent from /models; available model ids: {available}"
+        )
+    print(f"[functionchat] preflight OK: MODEL={model}")
+
+
+def _metadata(args: argparse.Namespace, adapter: Any, dataset: str) -> Dict[str, Any]:
+    return {
+        "timestamp": datetime.now().isoformat(),
+        "model": args.model,
+        "dataset": dataset,
+        "request_timeout": args.request_timeout,
+        "task_timeout": args.task_timeout,
+        "max_retries": args.max_retries,
+        "max_tokens": args.max_tokens,
+        "native_tool_calling": args.native_tool_calling,
+        "sdk_max_retries": adapter.sdk_max_retries,
+        "openai_sdk_version": adapter.openai_sdk_version,
+    }
+
+
+def _write_atomic(path: Path, data: Mapping[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, temp_name = tempfile.mkstemp(prefix=f".{path.name}.", dir=str(path.parent))
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            json.dump(data, handle, ensure_ascii=False, indent=2)
+            handle.write("\n")
+        os.replace(temp_name, path)
+    except Exception:
+        try:
+            os.unlink(temp_name)
+        except FileNotFoundError:
+            pass
+        raise
+
+
+def _safe_model_name(model: str) -> str:
+    return model.replace("/", "_").replace("-", "_").replace(":", "_")
+
+
+def _timestamp(base_dir: Path) -> str:
+    value = os.environ.get("EVAL_TIMESTAMP")
+    if value:
+        return value
+    session_file = base_dir / ".eval_session"
+    if session_file.is_file():
+        value = session_file.read_text(encoding="utf-8").strip()
+    return value or datetime.now().strftime("%Y%m%d_%H%M%S")
+
+
+def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--model", required=True)
+    parser.add_argument(
+        "--base-url", default="http://172.16.1.81:18090/v1/chat/completions"
+    )
+    parser.add_argument("--track-name", default="functionchat")
+    parser.add_argument("--request-timeout", type=float, default=60.0)
+    parser.add_argument("--task-timeout", type=float, default=120.0)
+    parser.add_argument("--max-retries", type=int, default=2)
+    parser.add_argument("--max-tokens", type=int, default=16384)
+    parser.add_argument(
+        "--native-tool-calling",
+        action="store_true",
+        default=_env_flag("AGENT_NATIVE_TOOL_CALLING"),
+    )
+    return parser.parse_args(argv)
+
+
+def _validate_args(args: argparse.Namespace) -> None:
+    if args.request_timeout <= 0 or args.task_timeout <= 0:
+        raise ValueError("request/task timeouts must be positive")
+    if args.task_timeout <= args.request_timeout:
+        raise ValueError("task timeout must be greater than request timeout")
+    if args.max_retries < 1:
+        raise ValueError("max retries must be at least 1")
+    if args.max_tokens < 1:
+        raise ValueError("max tokens must be at least 1")
+
+
+def main(argv: Optional[List[str]] = None) -> int:
+    try:
+        args = parse_args(argv)
+        _validate_args(args)
+        base_dir = Path(
+            os.environ.get("MODEL_TEST_BASE") or Path(__file__).resolve().parents[3]
+        ).resolve()
+        os.environ.setdefault("MODEL_TEST_BASE", str(base_dir))
+        bench_dir = base_dir / "data" / "FunctionChat-Bench"
+        data_dir = bench_dir / "data"
+        if not data_dir.is_dir():
+            raise FileNotFoundError(f"FunctionChat-Bench data not found: {data_dir}")
+
+        adapter_class = load_shared_adapter(base_dir)
+        adapter = adapter_class(
+            args.model,
+            base_url=args.base_url,
+            timeout=args.request_timeout,
+            max_tokens=args.max_tokens,
+            temperature=0.0,
+            native_tool_calling=args.native_tool_calling,
+        )
+        _preflight_model(adapter, args.model, args.request_timeout)
+
+        system_prompt = (data_dir / "system_prompt.txt").read_text(encoding="utf-8").strip()
+        datasets = {
+            "singlecall": expand_singlecall(
+                data_dir / "FunctionChat-Singlecall.jsonl", system_prompt
+            ),
+            "call_decision": expand_call_decision(
+                data_dir / "FunctionChat-CallDecision.jsonl"
+            ),
+        }
+        timestamp = _timestamp(base_dir)
+        results_dir = (
+            base_dir
+            / "results"
+            / _safe_model_name(args.model)
+            / timestamp
+            / "language"
+            / args.track_name
+        )
+
+        raw_outputs: Dict[str, Dict[str, Any]] = {}
+        for dataset, items in datasets.items():
+            before_unparsed = adapter.unparsed_tool_call_candidates
+            results = []
+            for index, item in enumerate(items, start=1):
+                if item["type_of_output"] == CALL:
+                    result = run_measured_item(
+                        adapter, item, args.task_timeout, args.max_retries
+                    )
+                else:
+                    result = not_measured_item(item)
+                results.append(result)
+                if index % 25 == 0 or index == len(items):
+                    print(f"[functionchat] {dataset}: {index}/{len(items)}")
+
+            metadata = _metadata(args, adapter, dataset)
+            measured = sum(item["type_of_output"] == CALL for item in items)
+            metadata.update(
+                {
+                    "total_items": len(items),
+                    "measured_items": measured,
+                    "not_measured_items": len(items) - measured,
+                    "unparsed_tool_call_candidates": (
+                        adapter.unparsed_tool_call_candidates - before_unparsed
+                    ),
+                }
+            )
+            raw_outputs[dataset] = {"metadata": metadata, "results": results}
+
+        # 모든 dataset이 끝난 뒤 기록해 interrupt 시 partial run을 완전 run처럼 보이지 않게 한다.
+        for dataset, raw in raw_outputs.items():
+            _write_atomic(results_dir / f"{dataset}.json", raw)
+
+        decision_types = Counter(
+            item["type_of_output"] for item in datasets["call_decision"]
+        )
+        dialog_count = len(_load_jsonl(data_dir / "FunctionChat-Dialog.jsonl"))
+        coverage = {
+            "source": {
+                "repository": "kakao/FunctionChat-Bench",
+                "commit": SOURCE_COMMIT,
+            },
+            "datasets": {
+                "singlecall": {
+                    "source_lines": 25,
+                    "expanded_items": len(datasets["singlecall"]),
+                    "measured_items": len(datasets["singlecall"]),
+                },
+                "call_decision": {
+                    "source_lines": len(datasets["call_decision"]),
+                    "measured_items": decision_types[CALL],
+                },
+                "dialog": {
+                    "source_records": dialog_count,
+                    "measured_items": 0,
+                },
+            },
+            "not_measured": {
+                "call_decision": {
+                    "relevance": decision_types["relevance"],
+                    "slot": decision_types["slot"],
+                },
+                "dialog": {"multi_turn": dialog_count},
+            },
+        }
+        _write_atomic(results_dir / "coverage.json", coverage)
+        print(f"[functionchat] raw artifacts written to {results_dir}")
+        return 0
+    except Exception as exc:
+        print(f"[functionchat] ERROR: {type(exc).__name__}: {exc}", file=sys.stderr)
+        return 2
+
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 두 평가 트리의 agent 공용 코드 동기화와 회귀 테스트를 한 번에 확인한다.
+# 두 평가 트리의 agent/functionchat/taubench 공용 코드 동기화와 회귀 테스트를 확인한다.
 
 set -uo pipefail
 
@@ -38,7 +38,11 @@ run_test() {
   local rc
 
   tree_log "RUN $tree_label/$test_path"
-  output="$(MODEL_TEST_BASE="$tree_dir" "$PYTHON" "$tree_dir/$test_path" 2>&1)"
+  output="$(
+    MODEL_TEST_BASE="$tree_dir" \
+    FUNCTIONCHAT_BENCH_DIR="${FUNCTIONCHAT_BENCH_DIR:-}" \
+    "$PYTHON" "$tree_dir/$test_path" 2>&1
+  )"
   rc=$?
   while IFS= read -r line; do
     tree_log "$tree_label $line"
@@ -66,6 +70,12 @@ assert_same "shared/agent/gpustack_custom/tool_call_parser.py" \
 assert_same "shared/agent/tests/test_tool_call_parser.py" \
   "$TREE_A/shared/agent/tests/test_tool_call_parser.py" \
   "$TREE_B/shared/agent/tests/test_tool_call_parser.py"
+assert_same "shared/functionchat/" \
+  "$TREE_A/shared/functionchat" \
+  "$TREE_B/shared/functionchat"
+assert_same "shared/taubench/" \
+  "$TREE_A/shared/taubench" \
+  "$TREE_B/shared/taubench"
 
 for tree_label in A B; do
   if [[ "$tree_label" == "A" ]]; then
@@ -75,6 +85,9 @@ for tree_label in A B; do
   fi
   run_test "$tree_label" "$tree_dir" "shared/agent/tests/test_agent_scoring.py"
   run_test "$tree_label" "$tree_dir" "shared/agent/tests/test_tool_call_parser.py"
+  FUNCTIONCHAT_BENCH_DIR="$TREE_A/data/FunctionChat-Bench" \
+    run_test "$tree_label" "$tree_dir" "shared/functionchat/tests/test_functionchat_scoring.py"
+  run_test "$tree_label" "$tree_dir" "shared/taubench/tests/test_taubench_scoring.py"
   run_test "$tree_label" "$tree_dir" "configs/tests/test_load_model_config.py"
 done
 

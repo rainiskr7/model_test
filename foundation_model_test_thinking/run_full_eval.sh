@@ -134,26 +134,29 @@ for track in $TRACKS; do
   case "$track" in
     harness)    run_track harness    bash "$TRACK_BASE/harness/run_harness.sh" "$MODEL" "$TOKENIZER" "$BASE_URL_CHAT" ;;
     nlu)        run_track nlu        bash "$TRACK_BASE/nlu/run_nlu.sh" --model "$MODEL" --endpoint "$BASE_URL_CHAT" ;;
-    agent)
-      AGENT_TRACK_INCLUDED=1
-      run_track agent bash "$TRACK_BASE/agent/run_gpustack_custom.sh" "$MODEL" "$BASE_URL_CHAT"
-      AGENT_TRACK_RC=$LAST_TRACK_RC
-      ;;
+    # Ko-AgentBench entry point disabled: fixture-cache miss rate is 64-69% on
+    # L3/L4, making the multi-step levels unusable; see README.
+    # agent)
+    #   AGENT_TRACK_INCLUDED=1
+    #   run_track agent bash "$TRACK_BASE/agent/run_gpustack_custom.sh" "$MODEL" "$BASE_URL_CHAT"
+    #   AGENT_TRACK_RC=$LAST_TRACK_RC
+    #   ;;
     multimodal) run_track multimodal bash "$TRACK_BASE/multimodal/run_all.sh" "$MODEL" "$BASE_URL_V1" ;;
     *) echo "[full_eval] WARN: unknown track '$track' (configs/models/$MODEL_CONFIG.yaml)" ;;
   esac
 done
 
-if (( AGENT_TRACK_INCLUDED && AGENT_TRACK_RC == 0 )); then
-  run_track agent-validate \
-    python "$SCRIPT_DIR/shared/agent/scoring/validate_run.py" \
-    --model "$MODEL" \
-    --timestamp "$EVAL_TIMESTAMP" \
-    --track "${AGENT_TRACK_NAME:-agent}"
-elif (( AGENT_TRACK_INCLUDED )); then
-  echo "[full_eval] SKIP: agent validation skipped because agent track failed (rc=$AGENT_TRACK_RC)" \
-    | tee -a "$LOG_DIR/_master.log"
-fi
+# Ko-AgentBench dispatch above is disabled, so its validator entry point is too.
+# if (( AGENT_TRACK_INCLUDED && AGENT_TRACK_RC == 0 )); then
+#   run_track agent-validate \
+#     python "$SCRIPT_DIR/shared/agent/scoring/validate_run.py" \
+#     --model "$MODEL" \
+#     --timestamp "$EVAL_TIMESTAMP" \
+#     --track "${AGENT_TRACK_NAME:-agent}"
+# elif (( AGENT_TRACK_INCLUDED )); then
+#   echo "[full_eval] SKIP: agent validation skipped because agent track failed (rc=$AGENT_TRACK_RC)" \
+#     | tee -a "$LOG_DIR/_master.log"
+# fi
 
 echo "[full_eval] DONE @ $(date +%H:%M:%S)" | tee -a "$LOG_DIR/_master.log"
 

@@ -1,0 +1,349 @@
+#!/usr/bin/env python3
+"""tau2-bench의 upstream reward records를 ``summary.json``으로 변환한다."""
+
+import argparse
+import json
+import os
+import sys
+import tempfile
+from collections import Counter
+from pathlib import Path
+from typing import Any, Iterable, Mapping, Optional
+
+
+SCORING_VERSION = "taubench_state_v1"
+JUDGE_BASES = frozenset({"NL_ASSERTION", "COMMUNICATE"})
+PROGRAMMATIC_BASES = frozenset({"DB", "ENV_ASSERTION", "ACTION"})
+DECLARED_INVENTORY = {
+    "telecom": {
+        "total_records": 4592,
+        "reward_basis_counts": {"ENV_ASSERTION": 4524, "ACTION+ENV_ASSERTION": 66},
+    },
+    "banking_knowledge": {
+        "total_records": 98,
+        "reward_component_counts": {"DB": 88, "ACTION": 9},
+    },
+    "retail": {"total_records": 116},
+    "airline": {"total_records": 52},
+}
+
+
+def safe_model_name(model: str) -> str:
+    return model.replace("/", "_").replace("-", "_").replace(":", "_")
+
+
+def classify_reward_basis(basis: Iterable[str]) -> tuple[str, Optional[str]]:
+    values = frozenset(str(value) for value in basis)
+    if values & JUDGE_BASES:
+        return "not_measured", "llm_judge_required"
+    if not values:
+        return "not_measured", "reward_basis_missing"
+    if not values <= PROGRAMMATIC_BASES:
+        return "not_measured", "unsupported_reward_basis"
+    return "measured", None
+
+
+def _task_basis(task: Mapping[str, Any]) -> list[str]:
+    criteria = task.get("evaluation_criteria") or {}
+    return sorted(str(value) for value in criteria.get("reward_basis") or [])
+
+
+def _successful_call_observability(simulations: Iterable[Mapping[str, Any]]) -> dict[str, Any]:
+    latencies: list[float] = []
+    for simulation in simulations:
+        for message in simulation.get("messages") or []:
+            value = message.get("generation_time_seconds")
+            if message.get("role") == "assistant" and isinstance(value, (int, float)):
+                latencies.append(float(value))
+    return {
+        "successful_calls": len(latencies),
+        "latency_seconds": {
+            "average": sum(latencies) / len(latencies) if latencies else None,
+            "min": min(latencies) if latencies else None,
+            "max": max(latencies) if latencies else None,
+        },
+        "failed_request_attempts": None,
+        "absorbed_timeouts": None,
+    }
+
+
+def _validate_upstream_integrity(
+    raw: Mapping[str, Any], manifest: Mapping[str, Any]
+) -> dict[str, Any]:
+    """Upstream results.info에 실제로 보존된 실행 설정을 대조한다."""
+    info = raw.get("info") or {}
+    agent = info.get("agent_info") or {}
+    user = info.get("user_info") or {}
+    args = agent.get("llm_args") or {}
+    integrity = manifest.get("harness_integrity") or {}
+    expected = {
+        "agent_implementation": "llm_agent_solo",
+        "user_implementation": "dummy_user",
+        "agent_model": integrity.get("model_sent_to_litellm"),
+        "request_timeout": integrity.get("request_timeout"),
+        "litellm_num_retries": 0,
+        "max_tokens": integrity.get("max_tokens"),
+    }
+    observed = {
+        "agent_implementation": agent.get("implementation"),
+        "user_implementation": user.get("implementation"),
+        "agent_model": agent.get("llm"),
+        "request_timeout": args.get("timeout"),
+        "litellm_num_retries": args.get("num_retries"),
+        "max_tokens": args.get("max_tokens"),
+    }
+    if observed != expected:
+        raise ValueError(
+            f"upstream results.info integrity mismatch: expected={expected}, observed={observed}"
+        )
+    if "temperature" in args:
+        raise ValueError("upstream results show that temperature was sent")
+    return {
+        **observed,
+        "temperature_sent": False,
+        "source": "tau2 results.info.agent_info/user_info",
+    }
+
+
+def score_domain(
+    domain: str,
+    raw: Optional[Mapping[str, Any]],
+    runnable_tasks: int,
+    unavailable_reason: Optional[str] = None,
+) -> dict[str, Any]:
+    if runnable_tasks == 0:
+        return {
+            "status": "not_measured",
+            "reason": unavailable_reason or "zero runnable tasks",
+            "pass_rate": None,
+            "runnable_tasks": 0,
+            "result_records": 0,
+            "measured": 0,
+            "passed": 0,
+            "failed": 0,
+            "task_results": [],
+        }
+    if raw is None:
+        raise ValueError(f"missing upstream results for runnable domain {domain}")
+
+    tasks = {str(task["id"]): task for task in raw.get("tasks") or []}
+    task_results: list[dict[str, Any]] = []
+    passed = failed = measured = 0
+    not_measured = Counter()
+    simulations = list(raw.get("simulations") or [])
+    for simulation in simulations:
+        task_id = str(simulation.get("task_id"))
+        basis = _task_basis(tasks.get(task_id) or {})
+        status, reason = classify_reward_basis(basis)
+        reward_info = simulation.get("reward_info") or {}
+        reward = reward_info.get("reward")
+        record: dict[str, Any] = {
+            "task_id": task_id,
+            "reward_basis": basis,
+            "evaluation_status": status,
+            "upstream_reward": reward,
+            "termination_reason": simulation.get("termination_reason"),
+        }
+        if status != "measured":
+            record["not_measured_reason"] = reason
+            not_measured[str(reason)] += 1
+        elif not isinstance(reward, (int, float)):
+            record["evaluation_status"] = "not_measured"
+            record["not_measured_reason"] = "upstream_reward_missing"
+            not_measured["upstream_reward_missing"] += 1
+        else:
+            # upstream reward만 사용하며 environment state를 재계산하지 않는다.
+            did_pass = float(reward) == 1.0
+            record["passed"] = did_pass
+            measured += 1
+            if did_pass:
+                passed += 1
+            else:
+                failed += 1
+        task_results.append(record)
+
+    terminations = Counter(str(sim.get("termination_reason")) for sim in simulations)
+    return {
+        "status": "measured" if measured else "not_measured",
+        "reason": None if measured else "no upstream records had a runnable numeric reward",
+        "pass_rate": passed / measured if measured else None,
+        "pass_rate_source": "tau2 results.simulations[].reward_info.reward",
+        "runnable_tasks": runnable_tasks,
+        "result_records": len(simulations),
+        "measured": measured,
+        "passed": passed,
+        "failed": failed,
+        "not_measured_result_records": dict(sorted(not_measured.items())),
+        "termination_reasons": dict(sorted(terminations.items())),
+        "request_observability": _successful_call_observability(simulations),
+        "task_results": task_results,
+    }
+
+
+def build_summary(
+    raw_by_domain: Mapping[str, Mapping[str, Any]],
+    manifest: Mapping[str, Any],
+    track: str,
+) -> dict[str, Any]:
+    if manifest.get("status") != "completed":
+        raise ValueError("run manifest is not completed")
+    split = dict(manifest.get("split") or {})
+    task_ids = list(split.get("task_ids") or [])
+    runnable_task_count = split.get("runnable_task_count")
+    if runnable_task_count != len(task_ids):
+        raise ValueError(
+            "split runnable_task_count disagrees with task_ids: "
+            f"{runnable_task_count} != {len(task_ids)}"
+        )
+    not_measured_tasks = list(split.get("not_measured_tasks") or [])
+    not_measured_task_count = split.get("not_measured_task_count")
+    if not_measured_task_count != len(not_measured_tasks):
+        raise ValueError(
+            "split not_measured_task_count disagrees with not_measured_tasks: "
+            f"{not_measured_task_count} != {len(not_measured_tasks)}"
+        )
+    if split.get("task_count") != runnable_task_count + not_measured_task_count:
+        raise ValueError("split task_count disagrees with runnable/not-measured counts")
+    if not split.get("name"):
+        raise ValueError("split name is missing")
+    telecom_raw = raw_by_domain.get("telecom")
+    upstream_task_ids = sorted(
+        str(task["id"]) for task in (telecom_raw or {}).get("tasks") or []
+    )
+    if sorted(str(value) for value in task_ids) != upstream_task_ids:
+        raise ValueError(
+            "manifest split ids disagree with tasks actually loaded by tau2: "
+            f"manifest={len(task_ids)}, upstream={len(upstream_task_ids)}"
+        )
+
+    domain_scope = manifest.get("domain_scope") or {}
+    domains = {
+        "telecom": score_domain(
+            "telecom", telecom_raw, int(runnable_task_count or 0)
+        ),
+        "banking_knowledge": score_domain(
+            "banking_knowledge",
+            None,
+            0,
+            (domain_scope.get("banking_knowledge") or {}).get("reason")
+            or "banking_knowledge has no supported no-user mode",
+        ),
+        "retail": score_domain("retail", None, 0, "LLM judge required"),
+        "airline": score_domain("airline", None, 0, "LLM judge required"),
+    }
+    measured = sum(entry["measured"] for entry in domains.values())
+    passed = sum(entry["passed"] for entry in domains.values())
+    failed = sum(entry["failed"] for entry in domains.values())
+    harness_integrity = dict(manifest.get("harness_integrity") or {})
+    harness_integrity["upstream_result_evidence"] = _validate_upstream_integrity(
+        telecom_raw or {}, manifest
+    )
+    harness_integrity["manifest_only_not_in_upstream_info"] = [
+        "task_timeout",
+        "framework_max_retries",
+        "max_concurrency",
+        "package_versions",
+    ]
+    return {
+        "benchmark": "sierra-research/tau2-bench (state/action, no user simulator)",
+        "model": manifest.get("model"),
+        "track": track,
+        "scoring_version": SCORING_VERSION,
+        "score_provenance": "upstream tau2 reward_info.reward; no local reward recomputation",
+        "harness_integrity": harness_integrity,
+        "split": split,
+        "overall": {
+            "pass_rate": passed / measured if measured else None,
+            "measured": measured,
+            "passed": passed,
+            "failed": failed,
+        },
+        "by_domain": domains,
+        "not_measured": {
+            "selected_split": {
+                "count": int(not_measured_task_count or 0),
+                "reason": "chosen split tasks whose reward basis is not judge-free",
+                "tasks": not_measured_tasks,
+            },
+            "banking_knowledge": {
+                "count": DECLARED_INVENTORY["banking_knowledge"]["total_records"],
+                "reason": "judge-free rewards exist, but the domain rejects no-user solo mode",
+            },
+            "retail": {
+                "count": DECLARED_INVENTORY["retail"]["total_records"],
+                "reason": "NL_ASSERTION reward basis requires an LLM judge",
+            },
+            "airline": {
+                "count": DECLARED_INVENTORY["airline"]["total_records"],
+                "reason": "COMMUNICATE reward basis is outside this no-judge track",
+            },
+        },
+        "source_inventory": DECLARED_INVENTORY,
+        "source": dict(manifest.get("source") or {}),
+    }
+
+
+def _load(path: Path) -> dict[str, Any]:
+    with path.open("r", encoding="utf-8") as handle:
+        data = json.load(handle)
+    if not isinstance(data, dict):
+        raise ValueError(f"expected JSON object: {path}")
+    return data
+
+
+def _write_atomic(path: Path, data: Mapping[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, temp_name = tempfile.mkstemp(prefix=f".{path.name}.", dir=str(path.parent))
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            json.dump(data, handle, ensure_ascii=False, indent=2)
+            handle.write("\n")
+        os.replace(temp_name, path)
+    except Exception:
+        try:
+            os.unlink(temp_name)
+        except FileNotFoundError:
+            pass
+        raise
+
+
+def _results_dir(args: argparse.Namespace) -> Path:
+    if args.results_dir:
+        return args.results_dir.resolve()
+    base = Path(os.environ.get("MODEL_TEST_BASE") or Path(__file__).resolve().parents[3])
+    timestamp = args.timestamp or os.environ.get("EVAL_TIMESTAMP")
+    if not args.model or not timestamp:
+        raise ValueError("--model and --timestamp (or EVAL_TIMESTAMP) are required")
+    return base / "results" / safe_model_name(args.model) / timestamp / "language" / args.track
+
+
+def parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--model")
+    parser.add_argument("--timestamp")
+    parser.add_argument("--track", default="taubench")
+    parser.add_argument("--results-dir", type=Path)
+    parser.add_argument("--dry-run", action="store_true")
+    return parser.parse_args(argv)
+
+
+def main(argv: Optional[list[str]] = None) -> int:
+    try:
+        args = parse_args(argv)
+        results_dir = _results_dir(args)
+        manifest = _load(results_dir / "run_manifest.json")
+        raw = {"telecom": _load(results_dir / "upstream" / "telecom" / "results.json")}
+        summary = build_summary(raw, manifest, args.track)
+        if args.dry_run:
+            print(json.dumps(summary, ensure_ascii=False, indent=2))
+        else:
+            _write_atomic(results_dir / "summary.json", summary)
+            print(f"[taubench/score] wrote {results_dir / 'summary.json'}")
+        return 0
+    except Exception as exc:
+        print(f"[taubench/score] ERROR: {type(exc).__name__}: {exc}", file=sys.stderr)
+        return 2
+
+
+if __name__ == "__main__":
+    sys.exit(main())
