@@ -15,12 +15,15 @@ from typing import Sequence
 LOG_PREFIX = "[agent-levels]"
 LEVELS = ("L1", "L2", "L3", "L4", "L5", "L6")
 LEVEL_CONTEXT = {
-    "L1": (11, 3, "none known"),
-    "L2": (15, 1, "saturated (~0.93; 7/8 models score 0.933)"),
-    "L3": (10, 3, "cache-miss propagation via retry inflation"),
-    "L4": (10, 2, "excluded; measures fixture coverage"),
-    "L5": (20, 3, "structural ceiling 0.667"),
-    "L6": (15, 2, "polarity corrected in v3"),
+    # caveat 뒤의 repeat spread 는 동일 조건 3회 반복 실측치다
+    # (qwen_qwen3.5_35b_a3b_fp8, request_timeout=120/task_timeout=600, 2026-08-17~18).
+    # 서빙 계층이 greedy 에서도 출력을 바꾸므로 spread 가 큰 레벨은 단일 run 비교에 쓰지 않는다.
+    "L1": (11, 3, "repeat spread 0.000"),
+    "L2": (15, 1, "saturated (9 models: 7x0.933, 2x0.867); repeat spread 0.000"),
+    "L3": (10, 3, "cache-miss propagation via retry inflation; repeat spread 0.000"),
+    "L4": (10, 2, "excluded; measures fixture coverage; repeat spread 0.123 - not single-run comparable"),
+    "L5": (20, 3, "structural ceiling 0.667; repeat spread 0.022"),
+    "L6": (15, 2, "polarity corrected in v3; repeat spread 0.065 - not single-run comparable"),
 }
 
 
