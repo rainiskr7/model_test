@@ -77,8 +77,11 @@ def _validate_upstream_integrity(
     args = agent.get("llm_args") or {}
     integrity = manifest.get("harness_integrity") or {}
     expected = {
-        "agent_implementation": "llm_agent_solo",
-        "user_implementation": "dummy_user",
+        # 하드코딩하지 않는다 — 매니페스트가 기록한 모드에서 파생시킨다.
+        # (2026-08-19: solo 로 고정돼 있어 standard 모드 런의 채점이 통째로 막혔다.
+        #  런은 정상 완주했는데 채점기가 거부했다.)
+        "agent_implementation": integrity.get("agent_implementation", "llm_agent_solo"),
+        "user_implementation": integrity.get("user_implementation", "dummy_user"),
         "agent_model": integrity.get("model_sent_to_litellm"),
         "request_timeout": integrity.get("request_timeout"),
         "litellm_num_retries": 0,
@@ -245,7 +248,14 @@ def build_summary(
         "package_versions",
     ]
     return {
-        "benchmark": "sierra-research/tau2-bench (state/action, no user simulator)",
+        # 모드에 따라 다른 것을 잰다. solo 는 상류가 "Advanced: Ablation Studies" 로
+        # 문서화한 사용자 없는 변형이고, standard 는 실제 tau2 프로토콜(3자)이다.
+        # 라벨을 고정하면 ablation 결과가 정식 결과로 읽힌다.
+        "benchmark": (
+            "sierra-research/tau2-bench (state/action, no user simulator — upstream solo ablation)"
+            if (manifest.get("harness_integrity") or {}).get("mode", "solo") == "solo"
+            else "sierra-research/tau2-bench (state/action, agent-user-tools)"
+        ),
         "model": manifest.get("model"),
         "track": track,
         "scoring_version": SCORING_VERSION,

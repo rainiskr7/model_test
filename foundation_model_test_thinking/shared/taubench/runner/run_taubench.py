@@ -310,6 +310,21 @@ def main(argv: Optional[list[str]] = None) -> int:
             },
             "harness_integrity": {
                 "architecture": "upstream_tau2_framework",
+                # 채점기의 무결성 대조는 이 값에서 기대 구현명을 파생시킨다.
+                # 매니페스트는 "우리가 무엇을 돌렸다고 주장하는가", upstream results.info 는
+                # "실제로 무엇이 돌았는가" 다 — 둘을 대조하는 것이 검사의 요지다.
+                "mode": args.mode,
+                "agent_implementation": (
+                    "llm_agent_solo" if args.mode == "solo" else "llm_agent"
+                ),
+                "user_implementation": (
+                    "dummy_user" if args.mode == "solo" else "user_simulator"
+                ),
+                "user_model_sent_to_litellm": (
+                    None
+                    if args.mode == "solo"
+                    else f"openai/{args.user_model or args.model}"
+                ),
                 "provider": "litellm_openai_compatible",
                 "model_requested": args.model,
                 "model_sent_to_litellm": f"openai/{args.model}",
