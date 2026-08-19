@@ -33,6 +33,11 @@ fi
 "$TAU2_VENV/bin/python" -m pip install audioop-lts
 "$TAU2_VENV/bin/python" -m pip install "$TAU2_DIR"
 
+# 업스트림 버그: build.py 가 DummyUser 를 받을 수 없는 kwargs 로 생성해 solo 모드가 전부 죽는다.
+# clone 은 건드리지 않고(SHA 핀 유지) 설치본만 고친다. 자세한 근거는 patch_dummy_user.py 참조.
+SITE_PACKAGES="$("$TAU2_VENV/bin/python" -c 'import tau2,pathlib;print(pathlib.Path(tau2.__file__).parent)')"
+"$TAU2_VENV/bin/python" "$SCRIPT_DIR/patch_dummy_user.py" "$SITE_PACKAGES/user/user_simulator.py"
+
 echo "[taubench/install] pin tau2-bench @ $TAU2_BENCH_SHA"
 echo "[taubench/install] isolated venv: $TAU2_VENV"
 echo "[taubench/install] done"
