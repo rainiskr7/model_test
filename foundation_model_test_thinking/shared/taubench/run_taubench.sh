@@ -12,10 +12,18 @@ BASE_URL="${2:-http://172.16.1.81:18090/v1/chat/completions}"
 TRACK_NAME="${AGENT_TRACK_NAME:-taubench}"
 TAU_PY="${TAU_PY:-$BASE_DIR/.venv-taubench/bin/python}"
 
+# .env 는 **기본값**이지 덮어쓰기가 아니다. 호출자가 이미 export 한 값이 이긴다.
+# (예전엔 무조건 source 해서, 다른 엔드포인트를 향해 export 한 키를 조용히 덮어썼다.
+#  2026-08-19 에 7번 서버 런이 8번 키로 나가 401 로 죽었다.)
+_CALLER_OPENAI_API_KEY="${OPENAI_API_KEY:-}"
 if [ -f "$BASE_DIR/.env" ]; then
   # shellcheck disable=SC1091
   source "$BASE_DIR/.env"
 fi
+if [ -n "$_CALLER_OPENAI_API_KEY" ]; then
+  OPENAI_API_KEY="$_CALLER_OPENAI_API_KEY"
+fi
+unset _CALLER_OPENAI_API_KEY
 export OPENAI_API_KEY="${OPENAI_API_KEY:-EMPTY}"
 
 if [ ! -x "$TAU_PY" ]; then
