@@ -156,6 +156,47 @@ def test_singlecall_expansion_count_from_real_data():
     )
 
 
+
+# --- 발행 게이트 ---
+# 2026-08-19 에 gemma 런이 401 로 전 항목 실패했는데 파이프라인이 성공처럼 보였다.
+# 인증 실패로 인한 전멸과 "모델이 정말 0점" 은 요약만 봐서는 구분되지 않으므로 막는다.
+
+
+def _fc_summary(singlecall_measured=500, decision_measured=100, passed=553, native=True):
+    measured = singlecall_measured + decision_measured
+    return {
+        "native_tool_calling": native,
+        "overall": {"measured": measured, "passed": passed},
+        "by_dataset": {
+            "singlecall": {"measured": singlecall_measured},
+            "call_decision": {"measured": decision_measured},
+        },
+    }
+
+
+def test_healthy_run_is_publishable():
+    failures, warnings = score.validate_summary(_fc_summary())
+    _assert(failures == [], f"healthy run should pass, got {failures}")
+    _assert(warnings == [], f"healthy run should not warn, got {warnings}")
+
+
+def test_total_failure_blocks_publish():
+    failures, _ = score.validate_summary(_fc_summary(passed=0))
+    _assert(any("전부 실패" in f for f in failures), f"expected total-failure gate, got {failures}")
+
+
+def test_partial_run_blocks_publish():
+    failures, _ = score.validate_summary(_fc_summary(singlecall_measured=250))
+    _assert(any("부분 실행" in f for f in failures), f"expected partial-run gate, got {failures}")
+
+
+def test_text_mode_warns_but_publishes():
+    """텍스트 모드 점수는 유효하지만 native 런과 비교하면 안 된다 — 경고이지 실패가 아니다."""
+    failures, warnings = score.validate_summary(_fc_summary(native=False))
+    _assert(failures == [], f"text mode should still publish, got {failures}")
+    _assert(any("native_tool_calling" in w for w in warnings), f"expected warning, got {warnings}")
+
+
 TESTS = [
     test_three_acceptable_argument_sentinels_are_empty,
     test_hallucinated_argument_key_fails,
@@ -164,6 +205,10 @@ TESTS = [
     test_wrong_function_name_fails_before_arguments,
     test_non_call_items_are_not_measured_not_failures,
     test_singlecall_expansion_count_from_real_data,
+    test_healthy_run_is_publishable,
+    test_total_failure_blocks_publish,
+    test_partial_run_blocks_publish,
+    test_text_mode_warns_but_publishes,
 ]
 
 

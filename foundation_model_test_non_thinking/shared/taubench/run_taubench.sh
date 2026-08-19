@@ -49,6 +49,7 @@ RUN_ARGS=(
   --base-url "$BASE_URL"
   --track-name "$TRACK_NAME"
   --split "${TAUBENCH_SPLIT:-test}"
+  --mode "${TAUBENCH_MODE:-solo}"
   --request-timeout "${AGENT_REQUEST_TIMEOUT:-60}"
   --task-timeout "${AGENT_TASK_TIMEOUT:-600}"
   --max-retries "${AGENT_MAX_RETRIES:-0}"

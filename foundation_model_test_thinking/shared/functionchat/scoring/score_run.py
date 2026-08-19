@@ -179,6 +179,60 @@ def parse_args(argv: List[str] = None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
+# 데이터셋별 기대 항목 수. FunctionChat-Bench @ 5ddb0b5 의 고정 크기다
+# (singlecall = 25줄 x 4질의 x 5툴셋, call_decision 의 call 유형 = 100).
+# 부분 실행을 완주로 착각하지 않기 위한 앵커다.
+EXPECTED_MEASURED = {"singlecall": 500, "call_decision": 100}
+
+EXIT_CODE_HELP = """exit codes:
+  0  summary produced and publishable
+  1  scoring completed but the summary is unusable (nothing measured / incomplete / total failure)
+  2  invocation, configuration, input-reading, or internal error"""
+
+
+def validate_summary(summary: dict) -> tuple:
+    """발행 가능 여부를 판정한다. (failures, warnings) 를 돌려준다.
+
+    failures 가 비어있지 않으면 그 요약은 점수로 읽으면 안 된다. 채점 자체가 성공해도
+    (예: 인증 실패로 전 항목이 죽었는데 형식상 600건이 '측정' 된 경우) 여기서 잡는다.
+    """
+    failures = []
+    warnings = []
+
+    overall = summary.get("overall") or {}
+    measured = overall.get("measured")
+    passed = overall.get("passed")
+
+    if not measured:
+        failures.append("overall.measured 가 0 이다 — 측정된 항목이 없다")
+    elif passed == 0:
+        # 인증 실패/엔드포인트 오류의 전형적 서명. 진짜 0점과 구분이 안 되므로 발행을 막는다.
+        failures.append(
+            f"측정 {measured}건이 전부 실패했다 (passed=0) — 모델 성능이 아니라 "
+            "인프라 장애일 가능성이 높다"
+        )
+
+    for name, expected in EXPECTED_MEASURED.items():
+        entry = (summary.get("by_dataset") or {}).get(name)
+        if entry is None:
+            failures.append(f"by_dataset.{name} 이 없다")
+            continue
+        got = entry.get("measured")
+        if got != expected:
+            failures.append(
+                f"by_dataset.{name}.measured = {got}, 기대값 {expected} — 부분 실행이다"
+            )
+
+    if summary.get("native_tool_calling") is not True:
+        # 텍스트 모드는 조용한 성능 저하 경로다. 점수는 유효하지만 다른 런과 비교하면 안 된다.
+        warnings.append(
+            "native_tool_calling 이 True 가 아니다 — 프롬프트 주입 경로로 측정됐다. "
+            "native 런과 직접 비교하지 말 것"
+        )
+
+    return failures, warnings
+
+
 def main(argv: List[str] = None) -> int:
     try:
         args = parse_args(argv)
@@ -197,9 +251,23 @@ def main(argv: List[str] = None) -> int:
             f"accuracy={overall['accuracy']:.6f}; "
             f"not_measured={summary['not_measured']['total_items']}"
         )
+        failures, warnings = validate_summary(summary)
+        for warning in warnings:
+            print(f"[functionchat-scoring] WARN: {warning}", file=sys.stderr)
+        for failure in failures:
+            print(f"[functionchat-scoring] FAIL: {failure}", file=sys.stderr)
+
         if not args.dry_run:
+            # 발행 불가여도 산출물은 남긴다 — 진단에 필요하다. 종료코드로만 막는다.
             _write_atomic(results_dir / "summary.json", summary)
             print(f"[functionchat-scoring] wrote {results_dir / 'summary.json'}")
+
+        if failures:
+            print(
+                f"[functionchat-scoring] NOT PUBLISHABLE: {len(failures)}건의 검증 실패",
+                file=sys.stderr,
+            )
+            return 1
         return 0
     except Exception as exc:
         print(f"[functionchat-scoring] ERROR: {type(exc).__name__}: {exc}", file=sys.stderr)

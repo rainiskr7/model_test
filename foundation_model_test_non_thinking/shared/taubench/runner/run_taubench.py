@@ -136,13 +136,23 @@ def build_upstream_command(
         "--domain",
         "telecom",
         "--agent",
-        "llm_agent_solo",
+        "llm_agent_solo" if args.mode == "solo" else "llm_agent",
         "--agent-llm",
         f"openai/{args.model}",
         "--agent-llm-args",
         json.dumps(llm_args, separators=(",", ":")),
         "--user",
-        "dummy_user",
+        "dummy_user" if args.mode == "solo" else "user_simulator",
+        *(
+            []
+            if args.mode == "solo"
+            else [
+                "--user-llm",
+                f"openai/{args.user_model or args.model}",
+                "--user-llm-args",
+                json.dumps(llm_args, separators=(",", ":")),
+            ]
+        ),
         "--task-split-name",
         args.split,
         "--task-ids",
@@ -205,6 +215,13 @@ def _timestamp(base_dir: Path) -> str:
 def parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--model", required=True)
+    # solo: 상류가 "Advanced: Ablation Studies" 로 문서화한 사용자 없는 변형.
+    # standard: 실제 tau2 프로토콜(에이전트-사용자-툴 3자). test 분할 보상은 어느 쪽이든
+    #   DB/ENV_ASSERTION/ACTION 기반이라 판정 모델이 필요 없다 — 사용자 시뮬레이터는
+    #   판정자가 아니다.
+    parser.add_argument("--mode", choices=("solo", "standard"), default="solo")
+    # standard 모드의 사용자 시뮬레이터 모델. 생략하면 에이전트와 같은 모델을 쓴다.
+    parser.add_argument("--user-model", default=None)
     parser.add_argument(
         "--base-url", default="http://172.16.1.81:18090/v1/chat/completions"
     )

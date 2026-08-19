@@ -228,3 +228,68 @@ class TauBenchScoringTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class PublishGateTest(unittest.TestCase):
+    """발행 게이트. 2026-08-19 에 telecom 40/40 이 infrastructure_error 로 죽었는데도
+    파이프라인 전체가 exit 0 으로 성공처럼 보인 사고를 막는다."""
+
+    def _summary(self, telecom):
+        return {
+            "overall": {"pass_rate": None, "measured": 0},
+            "by_domain": {"telecom": telecom},
+        }
+
+    def test_all_infrastructure_errors_blocks_publish(self):
+        failures, _ = scorer.validate_summary(
+            self._summary(
+                {
+                    "status": "not_measured",
+                    "reason": "no upstream records had a runnable numeric reward",
+                    "runnable_tasks": 40,
+                    "measured": 0,
+                    "termination_reasons": {"infrastructure_error": 40},
+                }
+            )
+        )
+        self.assertTrue(failures)
+        self.assertTrue(any("infrastructure_error" in f for f in failures))
+
+    def test_out_of_scope_domains_are_not_failures(self):
+        """retail/airline 은 판정 모델이 없어 의도적으로 비운다. 장애가 아니다."""
+        failures, _ = scorer.validate_summary(
+            {
+                "overall": {"pass_rate": 0.5, "measured": 40},
+                "by_domain": {
+                    "telecom": {
+                        "status": "measured",
+                        "runnable_tasks": 40,
+                        "measured": 40,
+                        "termination_reasons": {},
+                    },
+                    "retail": {
+                        "status": "not_measured",
+                        "reason": "LLM judge required",
+                        "runnable_tasks": 0,
+                        "measured": 0,
+                    },
+                },
+            }
+        )
+        self.assertEqual(failures, [])
+
+    def test_partial_coverage_blocks_publish(self):
+        failures, _ = scorer.validate_summary(
+            {
+                "overall": {"pass_rate": 0.5, "measured": 20},
+                "by_domain": {
+                    "telecom": {
+                        "status": "measured",
+                        "runnable_tasks": 40,
+                        "measured": 20,
+                        "termination_reasons": {},
+                    }
+                },
+            }
+        )
+        self.assertTrue(any("부분 실행" in f for f in failures))

@@ -327,6 +327,57 @@ def parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
+EXIT_CODE_HELP = """exit codes:
+  0  summary produced and publishable
+  1  scoring completed but the summary is unusable (nothing measured / incomplete coverage)
+  2  invocation, configuration, input-reading, or internal error"""
+
+
+def validate_summary(summary: dict) -> tuple:
+    """발행 가능 여부를 판정한다. (failures, warnings) 를 돌려준다.
+
+    tau2 는 시뮬레이션이 인프라 오류로 죽어도 "Successfully completed all simulations!"
+    를 찍고 0 으로 나간다. 2026-08-19 에 telecom test 40/40 이 infrastructure_error 로
+    끝났는데도 전체 파이프라인이 성공으로 보였다. 그 구멍을 여기서 막는다.
+    """
+    failures = []
+    warnings = []
+
+    overall = summary.get("overall") or {}
+    if overall.get("pass_rate") is None or not overall.get("measured"):
+        failures.append(
+            "overall.pass_rate 가 없다 — 보상값을 낸 태스크가 하나도 없다"
+        )
+
+    for domain, entry in (summary.get("by_domain") or {}).items():
+        if not isinstance(entry, dict):
+            continue
+        runnable = entry.get("runnable_tasks")
+        measured = entry.get("measured")
+        if not runnable:
+            # 실행 범위 밖 도메인이다 (retail/airline 은 판정 모델 필요, banking_knowledge 는
+            # solo 모드를 거부한다). 의도적 미측정이지 장애가 아니다 — 게이트 대상이 아니다.
+            continue
+        if entry.get("status") == "not_measured":
+            failures.append(
+                f"by_domain.{domain}.status = not_measured "
+                f"({entry.get('reason') or '사유 미기록'})"
+            )
+        elif runnable and measured != runnable:
+            failures.append(
+                f"by_domain.{domain}: {runnable}건 중 {measured}건만 측정됐다 — 부분 실행이다"
+            )
+
+        infra = (entry.get("termination_reasons") or {}).get("infrastructure_error")
+        if infra:
+            failures.append(
+                f"by_domain.{domain}: infrastructure_error {infra}건 — 모델 실패가 아니라 "
+                "하네스/서빙 장애다"
+            )
+
+    return failures, warnings
+
+
 def main(argv: Optional[list[str]] = None) -> int:
     try:
         args = parse_args(argv)
@@ -334,11 +385,25 @@ def main(argv: Optional[list[str]] = None) -> int:
         manifest = _load(results_dir / "run_manifest.json")
         raw = {"telecom": _load(results_dir / "upstream" / "telecom" / "results.json")}
         summary = build_summary(raw, manifest, args.track)
+        failures, warnings = validate_summary(summary)
+        for warning in warnings:
+            print(f"[taubench/score] WARN: {warning}", file=sys.stderr)
+        for failure in failures:
+            print(f"[taubench/score] FAIL: {failure}", file=sys.stderr)
+
         if args.dry_run:
             print(json.dumps(summary, ensure_ascii=False, indent=2))
         else:
+            # 발행 불가여도 산출물은 남긴다 — 진단에 필요하다. 종료코드로만 막는다.
             _write_atomic(results_dir / "summary.json", summary)
             print(f"[taubench/score] wrote {results_dir / 'summary.json'}")
+
+        if failures:
+            print(
+                f"[taubench/score] NOT PUBLISHABLE: {len(failures)}건의 검증 실패",
+                file=sys.stderr,
+            )
+            return 1
         return 0
     except Exception as exc:
         print(f"[taubench/score] ERROR: {type(exc).__name__}: {exc}", file=sys.stderr)
