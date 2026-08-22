@@ -114,7 +114,19 @@ print(f'[full_eval] preflight OK: MODEL=$MODEL 응답 확인')
   exit 1
 fi
 
-export EVAL_TIMESTAMP="$(cat .eval_session)"
+# 평가 세션 타임스탬프. 모든 트랙이 **같은** 값을 써야 결과가 한 디렉토리에 모인다.
+# 우선순위: 호출자가 export 한 값 > .eval_session 파일 > 새로 생성.
+# (예전에는 .eval_session 을 무조건 cat 했다. 파일이 없으면 빈 문자열이 되고 검증도
+#  없어서, LOG_DIR 이 logs/ 가 되고 각 트랙이 제각각 타임스탬프를 만들어 결과가
+#  서로 다른 디렉토리로 갈라졌다. 2026-08-23 에 실제로 발생했다.)
+if [ -z "${EVAL_TIMESTAMP:-}" ] && [ -f .eval_session ]; then
+  EVAL_TIMESTAMP="$(cat .eval_session)"
+fi
+if [ -z "${EVAL_TIMESTAMP:-}" ]; then
+  EVAL_TIMESTAMP="$(date +%Y%m%d_%H%M%S)"
+  echo "[full_eval] EVAL_TIMESTAMP 미지정 — 새로 생성: $EVAL_TIMESTAMP" >&2
+fi
+export EVAL_TIMESTAMP
 
 # harness 동시성 (run_harness.sh 의 num_concurrent)
 export NUM_CONCURRENT="${NUM_CONCURRENT:-8}"
