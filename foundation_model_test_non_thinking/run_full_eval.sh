@@ -10,9 +10,18 @@ cd "$SCRIPT_DIR"
 # (이전 run 에서 wrapper 죽은 뒤 ko-agentbench 자식이 살아남아 결과 폴더 오염시킨 사례 있음)
 # 자기 자신을 setsid 로 재실행해 새 session leader 가 되게 만든 뒤,
 # trap 에서 같은 session 의 모든 process 를 process group kill 로 일괄 종료.
+# setsid 는 리눅스 util-linux 도구다. macOS 에는 없다 — 없으면 재실행을 건너뛴다.
+# 건너뛰면 우리는 세션/그룹 리더가 아니므로 아래 cleanup 의 그룹 kill 을 반드시
+# 비활성화해야 한다. 그러지 않으면 호출한 셸과 형제 프로세스까지 죽인다.
 if [ -z "${_FULL_EVAL_REEXEC:-}" ]; then
-  export _FULL_EVAL_REEXEC=1
-  exec setsid -w bash "$0" "$@"
+  if command -v setsid >/dev/null 2>&1; then
+    export _FULL_EVAL_REEXEC=1
+    exec setsid -w bash "$0" "$@"
+  else
+    echo "[full_eval] WARN: setsid 없음 (macOS 등) — 세션 리더 재실행을 건너뜁니다." >&2
+    echo "[full_eval] WARN: 부모가 죽어도 자식 프로세스가 살아남을 수 있습니다." >&2
+    echo "[full_eval] WARN: 정식 평가는 리눅스에서 실행하세요." >&2
+  fi
 fi
 PGID="$(ps -o pgid= $$ | tr -d ' ')"
 cleanup() {
@@ -20,6 +29,16 @@ cleanup() {
   trap - INT TERM EXIT  # 재진입 방지
   echo "[full_eval] trap: cleanup pgid=$PGID sig=$sig" | tee -a "${LOG_DIR:-/tmp}/_master.log" 2>/dev/null
   # 자기 자신($$)을 제외한 process group 멤버에만 시그널 → trap 함수가 KILL 라인까지 도달 보장.
+  # 우리가 그룹 리더일 때만 그룹 전체를 죽인다 (setsid 재실행에 성공한 경우).
+  # 리더가 아니면 이 그룹은 호출자의 것이므로 건드리면 안 된다.
+  if [ "$PGID" != "$$" ]; then
+    echo "[full_eval] cleanup: 그룹 리더가 아니므로 그룹 kill 을 건너뜁니다 (pgid=$PGID self=$$)" >&2
+    case "$sig" in
+      INT)  exit 130 ;;
+      TERM) exit 143 ;;
+    esac
+    return
+  fi
   local victims
   victims=$(pgrep -g "$PGID" 2>/dev/null | awk -v self="$$" '$0 != self { print }' | tr '\n' ' ')
   if [ -n "$victims" ]; then
@@ -58,7 +77,11 @@ MODEL_CONFIG="$1"
 # yaml → env 변수 (MODEL, TOKENIZER, MODEL_CLASS, BASE_URL_CHAT, BASE_URL_V1, TRACKS)
 # shellcheck disable=SC1090
 CONFIG_SHELL="$(python "$SCRIPT_DIR/configs/load_model_config.py" "$MODEL_CONFIG")" || exit $?
-source <(printf '%s\n' "$CONFIG_SHELL")
+# eval 을 쓴다. macOS 기본 bash 3.2.57 에서는 `source <(...)` 가 변수를 설정하지
+# 못하고 **조용히 실패**한다 (에러 없이 미설정). 리눅스 bash 4/5 에서는 동작하므로
+# 정식 평가 환경에서는 드러나지 않았다. CONFIG_SHELL 은 우리 load_model_config.py 가
+# 만든 export 문이므로 eval 이 안전하다.
+eval "$CONFIG_SHELL"
 unset CONFIG_SHELL
 echo "[full_eval] config=$MODEL_CONFIG → MODEL=$MODEL CLASS=$MODEL_CLASS"
 

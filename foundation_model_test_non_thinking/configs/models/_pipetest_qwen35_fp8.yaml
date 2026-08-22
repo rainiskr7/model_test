@@ -1,0 +1,17 @@
+# 파이프라인 배선 실측용 임시 config (평가용 아님).
+# run_full_eval.sh 가 functionchat / taubench 디스패치를 실제로 호출하는지 확인한다.
+# 실서버(192.168.0.8)를 가리키고 두 트랙만 돌린다.
+model: qwen_qwen3.5_35b_a3b_fp8
+tokenizer_path: /home/rainis/Desktop/workplace/models/Qwen_Qwen3.5_35B_A3B_FP8
+class: vsm
+
+endpoint:
+  chat: http://192.168.0.8:18023/v1/chat/completions
+  v1: http://192.168.0.8:18023/v1
+
+tracks:
+  - functionchat
+  - taubench
+
+agent:
+  native_tool_calling: true
