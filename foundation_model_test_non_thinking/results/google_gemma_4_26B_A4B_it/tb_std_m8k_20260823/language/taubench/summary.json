@@ -1,0 +1,633 @@
+{
+  "benchmark": "sierra-research/tau2-bench (state/action, agent-user-tools)",
+  "model": "google_gemma_4_26b_a4b_it",
+  "track": "taubench",
+  "scoring_version": "taubench_state_v1",
+  "score_provenance": "upstream tau2 reward_info.reward; no local reward recomputation",
+  "harness_integrity": {
+    "architecture": "upstream_tau2_framework",
+    "mode": "standard",
+    "agent_implementation": "llm_agent",
+    "user_implementation": "user_simulator",
+    "user_model_sent_to_litellm": "openai/google_gemma_4_26b_a4b_it",
+    "provider": "litellm_openai_compatible",
+    "model_requested": "google_gemma_4_26b_a4b_it",
+    "model_sent_to_litellm": "openai/google_gemma_4_26b_a4b_it",
+    "api_base": "http://192.168.0.7:18023/v1",
+    "api_key_source": "OPENAI_API_KEY environment variable",
+    "request_timeout": 600.0,
+    "task_timeout": 5400.0,
+    "framework_max_retries": 0,
+    "litellm_num_retries": 0,
+    "max_tokens": 8192,
+    "temperature_sent": false,
+    "serving_profile_applied": false,
+    "serving_profile_observable": false,
+    "max_concurrency": 1,
+    "max_steps": 100,
+    "tau2_version": "1.0.1",
+    "litellm_version": "1.82.6",
+    "openai_sdk_version": "3.2.0",
+    "successful_request_logs": true,
+    "failed_request_attempts_observable": false,
+    "absorbed_timeout_counter_observable": false,
+    "upstream_result_evidence": {
+      "agent_implementation": "llm_agent",
+      "user_implementation": "user_simulator",
+      "agent_model": "openai/google_gemma_4_26b_a4b_it",
+      "request_timeout": 600.0,
+      "litellm_num_retries": 0,
+      "max_tokens": 8192,
+      "temperature_sent": false,
+      "source": "tau2 results.info.agent_info/user_info"
+    },
+    "manifest_only_not_in_upstream_info": [
+      "task_timeout",
+      "framework_max_retries",
+      "max_concurrency",
+      "package_versions"
+    ]
+  },
+  "split": {
+    "domain": "telecom",
+    "name": "test",
+    "source": "data/tau2/domains/telecom/split_tasks.json",
+    "task_count": 40,
+    "runnable_task_count": 40,
+    "task_ids": [
+      "[mms_issue]airplane_mode_on|bad_network_preference|bad_wifi_calling|break_apn_mms_setting|break_app_both_permissions|unseat_sim_card|user_abroad_roaming_enabled_off[PERSONA:Hard]",
+      "[mms_issue]airplane_mode_on|bad_network_preference|bad_wifi_calling|break_apn_mms_setting|break_app_sms_permission|data_mode_off|data_usage_exceeded|unseat_sim_card|user_abroad_roaming_disabled_on[PERSONA:None]",
+      "[mms_issue]airplane_mode_on|bad_network_preference|bad_wifi_calling|break_apn_mms_setting|break_app_storage_permission|data_mode_off|data_usage_exceeded|unseat_sim_card|user_abroad_roaming_disabled_on[PERSONA:Easy]",
+      "[mms_issue]airplane_mode_on|bad_network_preference|break_app_both_permissions|data_usage_exceeded|unseat_sim_card|user_abroad_roaming_disabled_on[PERSONA:Hard]",
+      "[mms_issue]airplane_mode_on|bad_network_preference|break_app_storage_permission|data_mode_off|user_abroad_roaming_enabled_off[PERSONA:Easy]",
+      "[mms_issue]airplane_mode_on|bad_wifi_calling|break_app_both_permissions|data_mode_off|data_usage_exceeded|unseat_sim_card|user_abroad_roaming_enabled_off[PERSONA:None]",
+      "[mms_issue]airplane_mode_on|bad_wifi_calling|user_abroad_roaming_enabled_off[PERSONA:Easy]",
+      "[mms_issue]airplane_mode_on|break_app_both_permissions[PERSONA:Hard]",
+      "[mms_issue]airplane_mode_on|break_app_both_permissions|data_usage_exceeded|user_abroad_roaming_disabled_off[PERSONA:None]",
+      "[mms_issue]bad_network_preference|bad_wifi_calling|break_app_sms_permission|data_mode_off|data_usage_exceeded|unseat_sim_card|user_abroad_roaming_enabled_off[PERSONA:Easy]",
+      "[mms_issue]bad_network_preference|break_app_both_permissions[PERSONA:Easy]",
+      "[mms_issue]bad_network_preference|break_app_sms_permission|user_abroad_roaming_disabled_on[PERSONA:Hard]",
+      "[mms_issue]bad_network_preference|data_mode_off|user_abroad_roaming_disabled_on[PERSONA:None]",
+      "[mms_issue]bad_wifi_calling|break_apn_mms_setting|break_app_both_permissions|data_mode_off|data_usage_exceeded|user_abroad_roaming_disabled_off[PERSONA:None]",
+      "[mms_issue]break_apn_mms_setting|user_abroad_roaming_enabled_off[PERSONA:Hard]",
+      "[mms_issue]break_app_sms_permission|data_mode_off[PERSONA:None]",
+      "[mobile_data_issue]airplane_mode_on|bad_network_preference|bad_vpn|data_mode_off|data_saver_mode_on|data_usage_exceeded|user_abroad_roaming_enabled_off[PERSONA:Easy]",
+      "[mobile_data_issue]airplane_mode_on|bad_network_preference|data_mode_off|data_saver_mode_on[PERSONA:Hard]",
+      "[mobile_data_issue]airplane_mode_on|data_mode_off|data_saver_mode_on|data_usage_exceeded|user_abroad_roaming_enabled_off[PERSONA:Hard]",
+      "[mobile_data_issue]airplane_mode_on|data_saver_mode_on|user_abroad_roaming_disabled_on[PERSONA:None]",
+      "[mobile_data_issue]bad_network_preference|bad_vpn|data_mode_off|data_saver_mode_on|data_usage_exceeded|user_abroad_roaming_enabled_off[PERSONA:Easy]",
+      "[mobile_data_issue]bad_network_preference|bad_vpn|data_saver_mode_on|data_usage_exceeded|user_abroad_roaming_disabled_off[PERSONA:Easy]",
+      "[mobile_data_issue]bad_network_preference|bad_vpn|user_abroad_roaming_disabled_off[PERSONA:Hard]",
+      "[mobile_data_issue]bad_vpn|data_mode_off|data_usage_exceeded|user_abroad_roaming_disabled_off[PERSONA:None]",
+      "[mobile_data_issue]data_saver_mode_on|user_abroad_roaming_enabled_off[PERSONA:Easy]",
+      "[service_issue]airplane_mode_on|break_apn_settings|contract_end_suspension|lock_sim_card_pin[PERSONA:None]",
+      "[service_issue]airplane_mode_on|break_apn_settings|contract_end_suspension|lock_sim_card_pin|unseat_sim_card[PERSONA:Easy]",
+      "[service_issue]airplane_mode_on|break_apn_settings|lock_sim_card_pin|overdue_bill_suspension[PERSONA:Hard]",
+      "[service_issue]airplane_mode_on|break_apn_settings|lock_sim_card_pin|unseat_sim_card[PERSONA:None]",
+      "[service_issue]airplane_mode_on|break_apn_settings|overdue_bill_suspension[PERSONA:None]",
+      "[service_issue]airplane_mode_on|contract_end_suspension|lock_sim_card_pin|unseat_sim_card[PERSONA:Hard]",
+      "[service_issue]airplane_mode_on|lock_sim_card_pin[PERSONA:Easy]",
+      "[service_issue]airplane_mode_on|lock_sim_card_pin|overdue_bill_suspension[PERSONA:Easy]",
+      "[service_issue]airplane_mode_on|overdue_bill_suspension[PERSONA:None]",
+      "[service_issue]break_apn_settings|contract_end_suspension|lock_sim_card_pin[PERSONA:Hard]",
+      "[service_issue]break_apn_settings|contract_end_suspension|lock_sim_card_pin|unseat_sim_card[PERSONA:Hard]",
+      "[service_issue]break_apn_settings|lock_sim_card_pin[PERSONA:None]",
+      "[service_issue]break_apn_settings|lock_sim_card_pin|overdue_bill_suspension[PERSONA:Easy]",
+      "[service_issue]contract_end_suspension|unseat_sim_card[PERSONA:Hard]",
+      "[service_issue]overdue_bill_suspension|unseat_sim_card[PERSONA:Easy]"
+    ],
+    "not_measured_task_count": 0,
+    "not_measured_tasks": []
+  },
+  "overall": {
+    "pass_rate": 0.2894736842105263,
+    "measured": 38,
+    "passed": 11,
+    "failed": 27
+  },
+  "by_domain": {
+    "telecom": {
+      "status": "measured",
+      "reason": null,
+      "pass_rate": 0.2894736842105263,
+      "pass_rate_source": "tau2 results.simulations[].reward_info.reward",
+      "runnable_tasks": 40,
+      "result_records": 40,
+      "measured": 38,
+      "passed": 11,
+      "failed": 27,
+      "not_measured_result_records": {
+        "upstream_reward_missing": 2
+      },
+      "termination_reasons": {
+        "infrastructure_error": 2,
+        "max_steps": 5,
+        "too_many_errors": 1,
+        "user_stop": 32
+      },
+      "request_observability": {
+        "successful_calls": 779,
+        "latency_seconds": {
+          "average": 5.86038140270773,
+          "min": 0.6371492909966037,
+          "max": 374.2550111669116
+        },
+        "failed_request_attempts": null,
+        "absorbed_timeouts": null
+      },
+      "task_results": [
+        {
+          "task_id": "[mobile_data_issue]data_saver_mode_on|user_abroad_roaming_enabled_off[PERSONA:Easy]",
+          "reward_basis": [
+            "ENV_ASSERTION"
+          ],
+          "evaluation_status": "measured",
+          "upstream_reward": 0.0,
+          "termination_reason": "max_steps",
+          "passed": false
+        },
+        {
+          "task_id": "[mobile_data_issue]airplane_mode_on|data_saver_mode_on|user_abroad_roaming_disabled_on[PERSONA:None]",
+          "reward_basis": [
+            "ENV_ASSERTION"
+          ],
+          "evaluation_status": "measured",
+          "upstream_reward": 1.0,
+          "termination_reason": "user_stop",
+          "passed": true
+        },
+        {
+          "task_id": "[mobile_data_issue]bad_network_preference|bad_vpn|user_abroad_roaming_disabled_off[PERSONA:Hard]",
+          "reward_basis": [
+            "ENV_ASSERTION"
+          ],
+          "evaluation_status": "measured",
+          "upstream_reward": 0.0,
+          "termination_reason": "user_stop",
+          "passed": false
+        },
+        {
+          "task_id": "[mobile_data_issue]airplane_mode_on|bad_network_preference|data_mode_off|data_saver_mode_on[PERSONA:Hard]",
+          "reward_basis": [
+            "ENV_ASSERTION"
+          ],
+          "evaluation_status": "measured",
+          "upstream_reward": 0.0,
+          "termination_reason": "max_steps",
+          "passed": false
+        },
+        {
+          "task_id": "[mobile_data_issue]bad_vpn|data_mode_off|data_usage_exceeded|user_abroad_roaming_disabled_off[PERSONA:None]",
+          "reward_basis": [
+            "ENV_ASSERTION"
+          ],
+          "evaluation_status": "measured",
+          "upstream_reward": 0.0,
+          "termination_reason": "user_stop",
+          "passed": false
+        },
+        {
+          "task_id": "[mobile_data_issue]airplane_mode_on|data_mode_off|data_saver_mode_on|data_usage_exceeded|user_abroad_roaming_enabled_off[PERSONA:Hard]",
+          "reward_basis": [
+            "ENV_ASSERTION"
+          ],
+          "evaluation_status": "measured",
+          "upstream_reward": 0.0,
+          "termination_reason": "user_stop",
+          "passed": false
+        },
+        {
+          "task_id": "[mobile_data_issue]bad_network_preference|bad_vpn|data_saver_mode_on|data_usage_exceeded|user_abroad_roaming_disabled_off[PERSONA:Easy]",
+          "reward_basis": [
+            "ENV_ASSERTION"
+          ],
+          "evaluation_status": "measured",
+          "upstream_reward": 0.0,
+          "termination_reason": "max_steps",
+          "passed": false
+        },
+        {
+          "task_id": "[mobile_data_issue]bad_network_preference|bad_vpn|data_mode_off|data_saver_mode_on|data_usage_exceeded|user_abroad_roaming_enabled_off[PERSONA:Easy]",
+          "reward_basis": [
+            "ENV_ASSERTION"
+          ],
+          "evaluation_status": "measured",
+          "upstream_reward": 0.0,
+          "termination_reason": "user_stop",
+          "passed": false
+        },
+        {
+          "task_id": "[mobile_data_issue]airplane_mode_on|bad_network_preference|bad_vpn|data_mode_off|data_saver_mode_on|data_usage_exceeded|user_abroad_roaming_enabled_off[PERSONA:Easy]",
+          "reward_basis": [
+            "ENV_ASSERTION"
+          ],
+          "evaluation_status": "measured",
+          "upstream_reward": 0.0,
+          "termination_reason": "user_stop",
+          "passed": false
+        },
+        {
+          "task_id": "[service_issue]airplane_mode_on|lock_sim_card_pin[PERSONA:Easy]",
+          "reward_basis": [
+            "ACTION",
+            "ENV_ASSERTION"
+          ],
+          "evaluation_status": "measured",
+          "upstream_reward": 1.0,
+          "termination_reason": "user_stop",
+          "passed": true
+        },
+        {
+          "task_id": "[service_issue]airplane_mode_on|overdue_bill_suspension[PERSONA:None]",
+          "reward_basis": [
+            "ENV_ASSERTION"
+          ],
+          "evaluation_status": "measured",
+          "upstream_reward": 1.0,
+          "termination_reason": "user_stop",
+          "passed": true
+        },
+        {
+          "task_id": "[service_issue]overdue_bill_suspension|unseat_sim_card[PERSONA:Easy]",
+          "reward_basis": [
+            "ENV_ASSERTION"
+          ],
+          "evaluation_status": "measured",
+          "upstream_reward": 1.0,
+          "termination_reason": "user_stop",
+          "passed": true
+        },
+        {
+          "task_id": "[service_issue]contract_end_suspension|unseat_sim_card[PERSONA:Hard]",
+          "reward_basis": [
+            "ACTION",
+            "ENV_ASSERTION"
+          ],
+          "evaluation_status": "measured",
+          "upstream_reward": 1.0,
+          "termination_reason": "user_stop",
+          "passed": true
+        },
+        {
+          "task_id": "[service_issue]break_apn_settings|lock_sim_card_pin[PERSONA:None]",
+          "reward_basis": [
+            "ACTION",
+            "ENV_ASSERTION"
+          ],
+          "evaluation_status": "measured",
+          "upstream_reward": 1.0,
+          "termination_reason": "user_stop",
+          "passed": true
+        },
+        {
+          "task_id": "[service_issue]airplane_mode_on|lock_sim_card_pin|overdue_bill_suspension[PERSONA:Easy]",
+          "reward_basis": [
+            "ACTION",
+            "ENV_ASSERTION"
+          ],
+          "evaluation_status": "measured",
+          "upstream_reward": 0.0,
+          "termination_reason": "user_stop",
+          "passed": false
+        },
+        {
+          "task_id": "[service_issue]airplane_mode_on|break_apn_settings|overdue_bill_suspension[PERSONA:None]",
+          "reward_basis": [
+            "ENV_ASSERTION"
+          ],
+          "evaluation_status": "measured",
+          "upstream_reward": 0.0,
+          "termination_reason": "user_stop",
+          "passed": false
+        },
+        {
+          "task_id": "[service_issue]break_apn_settings|lock_sim_card_pin|overdue_bill_suspension[PERSONA:Easy]",
+          "reward_basis": [
+            "ACTION",
+            "ENV_ASSERTION"
+          ],
+          "evaluation_status": "measured",
+          "upstream_reward": 1.0,
+          "termination_reason": "user_stop",
+          "passed": true
+        },
+        {
+          "task_id": "[service_issue]break_apn_settings|contract_end_suspension|lock_sim_card_pin[PERSONA:Hard]",
+          "reward_basis": [
+            "ACTION",
+            "ENV_ASSERTION"
+          ],
+          "evaluation_status": "measured",
+          "upstream_reward": 1.0,
+          "termination_reason": "user_stop",
+          "passed": true
+        },
+        {
+          "task_id": "[service_issue]airplane_mode_on|break_apn_settings|lock_sim_card_pin|unseat_sim_card[PERSONA:None]",
+          "reward_basis": [
+            "ACTION",
+            "ENV_ASSERTION"
+          ],
+          "evaluation_status": "measured",
+          "upstream_reward": 1.0,
+          "termination_reason": "user_stop",
+          "passed": true
+        },
+        {
+          "task_id": "[service_issue]airplane_mode_on|contract_end_suspension|lock_sim_card_pin|unseat_sim_card[PERSONA:Hard]",
+          "reward_basis": [
+            "ACTION",
+            "ENV_ASSERTION"
+          ],
+          "evaluation_status": "measured",
+          "upstream_reward": 0.0,
+          "termination_reason": "user_stop",
+          "passed": false
+        },
+        {
+          "task_id": "[service_issue]airplane_mode_on|break_apn_settings|lock_sim_card_pin|overdue_bill_suspension[PERSONA:Hard]",
+          "reward_basis": [
+            "ACTION",
+            "ENV_ASSERTION"
+          ],
+          "evaluation_status": "measured",
+          "upstream_reward": 1.0,
+          "termination_reason": "user_stop",
+          "passed": true
+        },
+        {
+          "task_id": "[service_issue]airplane_mode_on|break_apn_settings|contract_end_suspension|lock_sim_card_pin[PERSONA:None]",
+          "reward_basis": [
+            "ACTION",
+            "ENV_ASSERTION"
+          ],
+          "evaluation_status": "measured",
+          "upstream_reward": 1.0,
+          "termination_reason": "user_stop",
+          "passed": true
+        },
+        {
+          "task_id": "[service_issue]break_apn_settings|contract_end_suspension|lock_sim_card_pin|unseat_sim_card[PERSONA:Hard]",
+          "reward_basis": [
+            "ACTION",
+            "ENV_ASSERTION"
+          ],
+          "evaluation_status": "measured",
+          "upstream_reward": 0.0,
+          "termination_reason": "user_stop",
+          "passed": false
+        },
+        {
+          "task_id": "[service_issue]airplane_mode_on|break_apn_settings|contract_end_suspension|lock_sim_card_pin|unseat_sim_card[PERSONA:Easy]",
+          "reward_basis": [
+            "ACTION",
+            "ENV_ASSERTION"
+          ],
+          "evaluation_status": "measured",
+          "upstream_reward": 0.0,
+          "termination_reason": "user_stop",
+          "passed": false
+        },
+        {
+          "task_id": "[mms_issue]airplane_mode_on|break_app_both_permissions[PERSONA:Hard]",
+          "reward_basis": [
+            "ENV_ASSERTION"
+          ],
+          "evaluation_status": "measured",
+          "upstream_reward": 0.0,
+          "termination_reason": "user_stop",
+          "passed": false
+        },
+        {
+          "task_id": "[mms_issue]break_app_sms_permission|data_mode_off[PERSONA:None]",
+          "reward_basis": [
+            "ENV_ASSERTION"
+          ],
+          "evaluation_status": "measured",
+          "upstream_reward": 0.0,
+          "termination_reason": "user_stop",
+          "passed": false
+        },
+        {
+          "task_id": "[mms_issue]break_apn_mms_setting|user_abroad_roaming_enabled_off[PERSONA:Hard]",
+          "reward_basis": [
+            "ENV_ASSERTION"
+          ],
+          "evaluation_status": "measured",
+          "upstream_reward": 0.0,
+          "termination_reason": "user_stop",
+          "passed": false
+        },
+        {
+          "task_id": "[mms_issue]bad_network_preference|break_app_both_permissions[PERSONA:Easy]",
+          "reward_basis": [
+            "ENV_ASSERTION"
+          ],
+          "evaluation_status": "measured",
+          "upstream_reward": 0.0,
+          "termination_reason": "user_stop",
+          "passed": false
+        },
+        {
+          "task_id": "[mms_issue]airplane_mode_on|bad_wifi_calling|user_abroad_roaming_enabled_off[PERSONA:Easy]",
+          "reward_basis": [
+            "ENV_ASSERTION"
+          ],
+          "evaluation_status": "measured",
+          "upstream_reward": 0.0,
+          "termination_reason": "max_steps",
+          "passed": false
+        },
+        {
+          "task_id": "[mms_issue]bad_network_preference|data_mode_off|user_abroad_roaming_disabled_on[PERSONA:None]",
+          "reward_basis": [
+            "ENV_ASSERTION"
+          ],
+          "evaluation_status": "measured",
+          "upstream_reward": 0.0,
+          "termination_reason": "max_steps",
+          "passed": false
+        },
+        {
+          "task_id": "[mms_issue]bad_network_preference|break_app_sms_permission|user_abroad_roaming_disabled_on[PERSONA:Hard]",
+          "reward_basis": [
+            "ENV_ASSERTION"
+          ],
+          "evaluation_status": "measured",
+          "upstream_reward": 0.0,
+          "termination_reason": "user_stop",
+          "passed": false
+        },
+        {
+          "task_id": "[mms_issue]airplane_mode_on|break_app_both_permissions|data_usage_exceeded|user_abroad_roaming_disabled_off[PERSONA:None]",
+          "reward_basis": [
+            "ENV_ASSERTION"
+          ],
+          "evaluation_status": "not_measured",
+          "upstream_reward": null,
+          "termination_reason": "infrastructure_error",
+          "not_measured_reason": "upstream_reward_missing"
+        },
+        {
+          "task_id": "[mms_issue]airplane_mode_on|bad_network_preference|break_app_storage_permission|data_mode_off|user_abroad_roaming_enabled_off[PERSONA:Easy]",
+          "reward_basis": [
+            "ENV_ASSERTION"
+          ],
+          "evaluation_status": "measured",
+          "upstream_reward": 0.0,
+          "termination_reason": "user_stop",
+          "passed": false
+        },
+        {
+          "task_id": "[mms_issue]airplane_mode_on|bad_network_preference|break_app_both_permissions|data_usage_exceeded|unseat_sim_card|user_abroad_roaming_disabled_on[PERSONA:Hard]",
+          "reward_basis": [
+            "ENV_ASSERTION"
+          ],
+          "evaluation_status": "measured",
+          "upstream_reward": 0.0,
+          "termination_reason": "user_stop",
+          "passed": false
+        },
+        {
+          "task_id": "[mms_issue]bad_wifi_calling|break_apn_mms_setting|break_app_both_permissions|data_mode_off|data_usage_exceeded|user_abroad_roaming_disabled_off[PERSONA:None]",
+          "reward_basis": [
+            "ENV_ASSERTION"
+          ],
+          "evaluation_status": "measured",
+          "upstream_reward": 0.0,
+          "termination_reason": "user_stop",
+          "passed": false
+        },
+        {
+          "task_id": "[mms_issue]airplane_mode_on|bad_wifi_calling|break_app_both_permissions|data_mode_off|data_usage_exceeded|unseat_sim_card|user_abroad_roaming_enabled_off[PERSONA:None]",
+          "reward_basis": [
+            "ENV_ASSERTION"
+          ],
+          "evaluation_status": "measured",
+          "upstream_reward": 0.0,
+          "termination_reason": "too_many_errors",
+          "passed": false
+        },
+        {
+          "task_id": "[mms_issue]airplane_mode_on|bad_network_preference|bad_wifi_calling|break_apn_mms_setting|break_app_both_permissions|unseat_sim_card|user_abroad_roaming_enabled_off[PERSONA:Hard]",
+          "reward_basis": [
+            "ENV_ASSERTION"
+          ],
+          "evaluation_status": "measured",
+          "upstream_reward": 0.0,
+          "termination_reason": "user_stop",
+          "passed": false
+        },
+        {
+          "task_id": "[mms_issue]bad_network_preference|bad_wifi_calling|break_app_sms_permission|data_mode_off|data_usage_exceeded|unseat_sim_card|user_abroad_roaming_enabled_off[PERSONA:Easy]",
+          "reward_basis": [
+            "ENV_ASSERTION"
+          ],
+          "evaluation_status": "measured",
+          "upstream_reward": 0.0,
+          "termination_reason": "user_stop",
+          "passed": false
+        },
+        {
+          "task_id": "[mms_issue]airplane_mode_on|bad_network_preference|bad_wifi_calling|break_apn_mms_setting|break_app_sms_permission|data_mode_off|data_usage_exceeded|unseat_sim_card|user_abroad_roaming_disabled_on[PERSONA:None]",
+          "reward_basis": [
+            "ENV_ASSERTION"
+          ],
+          "evaluation_status": "measured",
+          "upstream_reward": 0.0,
+          "termination_reason": "user_stop",
+          "passed": false
+        },
+        {
+          "task_id": "[mms_issue]airplane_mode_on|bad_network_preference|bad_wifi_calling|break_apn_mms_setting|break_app_storage_permission|data_mode_off|data_usage_exceeded|unseat_sim_card|user_abroad_roaming_disabled_on[PERSONA:Easy]",
+          "reward_basis": [
+            "ENV_ASSERTION"
+          ],
+          "evaluation_status": "not_measured",
+          "upstream_reward": null,
+          "termination_reason": "infrastructure_error",
+          "not_measured_reason": "upstream_reward_missing"
+        }
+      ]
+    },
+    "banking_knowledge": {
+      "status": "not_measured",
+      "reason": "banking_knowledge environment rejects solo mode",
+      "pass_rate": null,
+      "runnable_tasks": 0,
+      "result_records": 0,
+      "measured": 0,
+      "passed": 0,
+      "failed": 0,
+      "task_results": []
+    },
+    "retail": {
+      "status": "not_measured",
+      "reason": "LLM judge required",
+      "pass_rate": null,
+      "runnable_tasks": 0,
+      "result_records": 0,
+      "measured": 0,
+      "passed": 0,
+      "failed": 0,
+      "task_results": []
+    },
+    "airline": {
+      "status": "not_measured",
+      "reason": "LLM judge required",
+      "pass_rate": null,
+      "runnable_tasks": 0,
+      "result_records": 0,
+      "measured": 0,
+      "passed": 0,
+      "failed": 0,
+      "task_results": []
+    }
+  },
+  "not_measured": {
+    "selected_split": {
+      "count": 0,
+      "reason": "chosen split tasks whose reward basis is not judge-free",
+      "tasks": []
+    },
+    "banking_knowledge": {
+      "count": 98,
+      "reason": "judge-free rewards exist, but the domain rejects no-user solo mode"
+    },
+    "retail": {
+      "count": 116,
+      "reason": "NL_ASSERTION reward basis requires an LLM judge"
+    },
+    "airline": {
+      "count": 52,
+      "reason": "COMMUNICATE reward basis is outside this no-judge track"
+    }
+  },
+  "source_inventory": {
+    "telecom": {
+      "total_records": 4592,
+      "reward_basis_counts": {
+        "ENV_ASSERTION": 4524,
+        "ACTION+ENV_ASSERTION": 66
+      }
+    },
+    "banking_knowledge": {
+      "total_records": 98,
+      "reward_component_counts": {
+        "DB": 88,
+        "ACTION": 9
+      }
+    },
+    "retail": {
+      "total_records": 116
+    },
+    "airline": {
+      "total_records": 52
+    }
+  },
+  "source": {
+    "repository": "sierra-research/tau2-bench",
+    "commit": "c3398666e6559e3a063da3fc04b5acf7f941464e",
+    "license": "MIT"
+  }
+}
