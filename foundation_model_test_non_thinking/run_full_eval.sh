@@ -142,6 +142,13 @@ for track in $TRACKS; do
     #   AGENT_TRACK_RC=$LAST_TRACK_RC
     #   ;;
     multimodal) run_track multimodal bash "$TRACK_BASE/multimodal/run_all.sh" "$MODEL" "$BASE_URL_V1" ;;
+    # Ko-AgentBench 대체 축 두 개. 각 러너의 채점기가 발행 게이트를 들고 있어
+    # (측정 0건 / 부분 실행 / infrastructure_error) exit 1 로 나가면 run_track 이
+    # TRACK_FAILURES 에 기록한다 — 실패한 측정이 조용히 성공으로 지나가지 않는다.
+    functionchat)
+      run_track functionchat bash "$TRACK_BASE/functionchat/run_functionchat.sh" "$MODEL" "$BASE_URL_CHAT" ;;
+    taubench)
+      run_track taubench     bash "$TRACK_BASE/taubench/run_taubench.sh" "$MODEL" "$BASE_URL_CHAT" ;;
     *) echo "[full_eval] WARN: unknown track '$track' (configs/models/$MODEL_CONFIG.yaml)" ;;
   esac
 done
