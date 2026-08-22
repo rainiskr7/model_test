@@ -1,5 +1,5 @@
 {
-  "benchmark": "sierra-research/tau2-bench (state/action, no user simulator)",
+  "benchmark": "sierra-research/tau2-bench (state/action, no user simulator — upstream solo ablation)",
   "model": "qwen_qwen3.5_35b_a3b_fp8",
   "track": "taubench",
   "scoring_version": "taubench_state_v1",
@@ -107,6 +107,16 @@
       "reason": "no upstream records had a runnable numeric reward",
       "pass_rate": null,
       "pass_rate_source": "tau2 results.simulations[].reward_info.reward",
+      "pass_rate_strict": null,
+      "pass_rate_strict_denominator": 0,
+      "pass_rate_strict_reason": "환경 귀책 오류가 있어 계산하지 않는다: {'BadRequestError': 40}",
+      "pass_rate_strict_definition": "passed / (measured + 모델 귀책 미완주). upstream pass_rate 와 달리 모델이 스스로 망가져 못 끝낸 태스크를 실패로 센다. 환경 귀책 오류가 있으면 null.",
+      "incompletion_attribution": {
+        "model": {},
+        "environment": {
+          "BadRequestError": 40
+        }
+      },
       "runnable_tasks": 40,
       "result_records": 40,
       "measured": 0,

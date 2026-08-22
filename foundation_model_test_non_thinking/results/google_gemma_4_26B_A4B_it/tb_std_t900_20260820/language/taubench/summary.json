@@ -111,6 +111,19 @@
       "reason": null,
       "pass_rate": 0.4074074074074074,
       "pass_rate_source": "tau2 results.simulations[].reward_info.reward",
+      "pass_rate_strict": null,
+      "pass_rate_strict_denominator": 30,
+      "pass_rate_strict_reason": "환경 귀책 오류가 있어 계산하지 않는다: {'APIError': 9, 'InternalServerError': 1}",
+      "pass_rate_strict_definition": "passed / (measured + 모델 귀책 미완주). upstream pass_rate 와 달리 모델이 스스로 망가져 못 끝낸 태스크를 실패로 센다. 환경 귀책 오류가 있으면 null.",
+      "incompletion_attribution": {
+        "model": {
+          "ContextWindowExceededError": 3
+        },
+        "environment": {
+          "APIError": 9,
+          "InternalServerError": 1
+        }
+      },
       "runnable_tasks": 40,
       "result_records": 40,
       "measured": 27,

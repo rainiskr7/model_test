@@ -166,11 +166,43 @@ def score_domain(
         task_results.append(record)
 
     terminations = Counter(str(sim.get("termination_reason")) for sim in simulations)
+    model_attr, env_attr = _classify_incompletions(simulations)
+
+    # pass_rate_strict: 모델 귀책 미완주를 실패로 세는 분모. 서빙 의사결정용이다
+    # ("이 모델을 붙이면 몇 %가 실제로 끝나는가"). upstream 의 pass_rate 를 덮어쓰지
+    # 않는다 — 두 숫자는 서로 다른 질문에 답한다.
+    #
+    # 환경 귀책 오류가 하나라도 있으면 계산하지 않는다. 그 런은 모델과 무관한 이유로
+    # 커버리지가 깨진 것이라 strict 분모가 의미를 갖지 않는다.
+    strict_denominator = measured + sum(model_attr.values())
+    if sum(env_attr.values()):
+        pass_rate_strict = None
+        strict_reason = (
+            "환경 귀책 오류가 있어 계산하지 않는다: " + str(dict(sorted(env_attr.items())))
+        )
+    elif strict_denominator:
+        pass_rate_strict = passed / strict_denominator
+        strict_reason = None
+    else:
+        pass_rate_strict = None
+        strict_reason = "완주한 시뮬레이션이 없다"
+
     return {
         "status": "measured" if measured else "not_measured",
         "reason": None if measured else "no upstream records had a runnable numeric reward",
         "pass_rate": passed / measured if measured else None,
         "pass_rate_source": "tau2 results.simulations[].reward_info.reward",
+        "pass_rate_strict": pass_rate_strict,
+        "pass_rate_strict_denominator": strict_denominator,
+        "pass_rate_strict_reason": strict_reason,
+        "pass_rate_strict_definition": (
+            "passed / (measured + 모델 귀책 미완주). upstream pass_rate 와 달리 모델이 "
+            "스스로 망가져 못 끝낸 태스크를 실패로 센다. 환경 귀책 오류가 있으면 null."
+        ),
+        "incompletion_attribution": {
+            "model": dict(sorted(model_attr.items())),
+            "environment": dict(sorted(env_attr.items())),
+        },
         "runnable_tasks": runnable_tasks,
         "result_records": len(simulations),
         "measured": measured,
@@ -341,6 +373,39 @@ EXIT_CODE_HELP = """exit codes:
   0  summary produced and publishable
   1  scoring completed but the summary is unusable (nothing measured / incomplete coverage)
   2  invocation, configuration, input-reading, or internal error"""
+
+
+# tau2 는 완주하지 못한 시뮬레이션을 원인과 무관하게 전부 termination_reason=
+# "infrastructure_error" 로 묶는다. 그래서 서버 장애와 "모델이 스스로 망가진 것" 이
+# 구분되지 않는다. 구조화된 info.error_type 으로 갈라낸다.
+#
+# **화이트리스트다.** 여기 없는 유형은 전부 환경 귀책으로 남긴다 — 오분류가 없는
+# 모델 결함을 만들어내는 방향으로는 절대 기울지 않게 한다.
+#
+# 2026-08 실측에서 관측된 error_type 전체와 귀책 판단:
+#   ContextWindowExceededError  5x   모델 — 스스로 장황해져 자기 컨텍스트를 넘겼다
+#   TypeError                  40x   하네스 — 상류 DummyUser 생성자 불일치
+#   BadRequestError            40x   서빙 — system 전용 요청 거부
+#   InternalServerError        40x   서버 5xx
+#   Timeout                    21x   환경 — 모델이 느린 탓일 수도 있으나 서버 부하와
+#                                    구분할 수 없으므로 모델에 귀책시키지 않는다
+#   APIError                    9x   환경
+MODEL_ATTRIBUTABLE_ERROR_TYPES = frozenset({"ContextWindowExceededError"})
+
+
+def _classify_incompletions(simulations) -> tuple:
+    """완주 실패를 (모델 귀책, 환경 귀책) 으로 가른다."""
+    model_attr = Counter()
+    env_attr = Counter()
+    for sim in simulations:
+        if str(sim.get("termination_reason")) != "infrastructure_error":
+            continue
+        etype = str(((sim.get("info") or {}).get("error_type")) or "unknown")
+        if etype in MODEL_ATTRIBUTABLE_ERROR_TYPES:
+            model_attr[etype] += 1
+        else:
+            env_attr[etype] += 1
+    return model_attr, env_attr
 
 
 def validate_summary(summary: dict) -> tuple:
