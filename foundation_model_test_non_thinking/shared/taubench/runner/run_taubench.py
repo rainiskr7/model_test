@@ -220,7 +220,16 @@ def parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
     #   DB/ENV_ASSERTION/ACTION 기반이라 판정 모델이 필요 없다 — 사용자 시뮬레이터는
     #   판정자가 아니다.
     parser.add_argument("--mode", choices=("solo", "standard"), default="solo")
-    # standard 모드의 사용자 시뮬레이터 모델. 생략하면 에이전트와 같은 모델을 쓴다.
+    # standard 모드의 사용자 시뮬레이터 모델. **필수다.**
+    #
+    # 예전엔 생략하면 에이전트와 같은 모델을 썼다. 그 결과 모델 비교가 오염됐다 —
+    # qwen 런은 qwen 이 사용자를, gemma 런은 gemma 가 사용자를 연기해서 두 런의
+    # 환경이 서로 달랐다. 사용자 시뮬레이터가 약하면 과제가 쉬워질 수도 어려워질
+    # 수도 있어 방향조차 알 수 없다. 2026-08-23 에 발견.
+    #
+    # 상류 기본값은 고정 3자 모델이다 (config.py:17 DEFAULT_LLM_USER =
+    # "gpt-4.1-2025-04-14"). 후보 모델을 사용자로 쓰는 것은 상류 설계가 아니다.
+    # 조용한 기본값 대신 운영자가 명시적으로 고르게 한다.
     parser.add_argument("--user-model", default=None)
     parser.add_argument(
         "--base-url", default="http://172.16.1.81:18090/v1/chat/completions"
@@ -247,6 +256,12 @@ def _validate_args(args: argparse.Namespace) -> None:
         raise ValueError("taubench requires max_retries=0 for visible, comparable runs")
     if not args.split:
         raise ValueError("split name must not be empty")
+    if args.mode == "standard" and not args.user_model:
+        raise SystemExit(
+            "standard 모드에는 --user-model 이 필요합니다 (TAUBENCH_USER_MODEL).\n"
+            "  생략하면 후보 모델이 사용자 시뮬레이터를 겸해 모델 간 비교가 오염됩니다.\n"
+            "  모든 후보에 대해 **같은** 사용자 모델을 지정하세요."
+        )
     if args.max_tokens < 1 or args.max_concurrency < 1 or args.max_steps < 1:
         raise ValueError("max tokens/concurrency/steps must be positive")
 
