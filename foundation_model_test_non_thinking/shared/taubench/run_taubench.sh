@@ -25,6 +25,12 @@ if [ -n "$_CALLER_OPENAI_API_KEY" ]; then
 fi
 unset _CALLER_OPENAI_API_KEY
 export OPENAI_API_KEY="${OPENAI_API_KEY:-EMPTY}"
+# .env 를 source 하면 셸 변수만 설정된다 — export 하지 않으면 파이썬 하위
+# 프로세스가 보지 못한다. 러너가 os.environ 에서 읽으므로 반드시 내보낸다.
+# (2026-08-23: 이걸 빠뜨려 외부 사용자 시뮬레이터 스모크가 키 없음으로 죽었다.)
+if [ -n "${TAUBENCH_USER_API_KEY:-}" ]; then
+  export TAUBENCH_USER_API_KEY
+fi
 
 if [ ! -x "$TAU_PY" ]; then
   echo "ERROR: isolated tau2 venv 없음: $TAU_PY. 먼저 install.sh 실행." >&2

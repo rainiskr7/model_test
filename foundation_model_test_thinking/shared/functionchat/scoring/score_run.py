@@ -16,8 +16,10 @@ else:
     from exact_match import CALL, exact_match
 
 
-SCORING_VERSION = "functionchat_exact_v1"
-RAW_DATASETS = ("singlecall", "call_decision")
+SCORING_VERSION = "functionchat_exact_v2"  # v1=600항목, v2=670항목(dialog call 70턴 추가)
+# dialog 는 45개 시나리오를 200개 평가 턴으로 펼친 것이다 (상류도 턴 단위로 평가한다).
+# 그중 call 70턴만 exact-match 로 채점되고 나머지 130턴은 판정 모델이 필요하다.
+RAW_DATASETS = ("singlecall", "call_decision", "dialog")
 INTEGRITY_FIELDS = (
     "model",
     "request_timeout",
@@ -182,7 +184,7 @@ def parse_args(argv: List[str] = None) -> argparse.Namespace:
 # 데이터셋별 기대 항목 수. FunctionChat-Bench @ 5ddb0b5 의 고정 크기다
 # (singlecall = 25줄 x 4질의 x 5툴셋, call_decision 의 call 유형 = 100).
 # 부분 실행을 완주로 착각하지 않기 위한 앵커다.
-EXPECTED_MEASURED = {"singlecall": 500, "call_decision": 100}
+EXPECTED_MEASURED = {"singlecall": 500, "call_decision": 100, "dialog": 70}
 
 EXIT_CODE_HELP = """exit codes:
   0  summary produced and publishable

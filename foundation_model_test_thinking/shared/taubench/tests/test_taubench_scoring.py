@@ -179,9 +179,11 @@ class TauBenchScoringTests(unittest.TestCase):
     def test_upstream_task_ids_exactly_match_summary_task_ids(self):
         ids = ["first", "second", "third"]
         args = runner.parse_args(["--model", "test/model", "--split", "test"])
+        llm_args = runner.build_litellm_args("http://host/v1", 60.0, 16384)
         command = runner.build_upstream_command(
             args,
-            runner.build_litellm_args("http://host/v1", 60.0, 16384),
+            llm_args,
+            llm_args,  # user_llm_args — solo 모드라 사용되지 않는다
             Path("upstream"),
             ids,
         )

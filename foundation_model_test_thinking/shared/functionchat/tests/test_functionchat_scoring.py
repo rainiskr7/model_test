@@ -162,14 +162,18 @@ def test_singlecall_expansion_count_from_real_data():
 # 인증 실패로 인한 전멸과 "모델이 정말 0점" 은 요약만 봐서는 구분되지 않으므로 막는다.
 
 
-def _fc_summary(singlecall_measured=500, decision_measured=100, passed=553, native=True):
-    measured = singlecall_measured + decision_measured
+def _fc_summary(
+    singlecall_measured=500, decision_measured=100, dialog_measured=70,
+    passed=553, native=True,
+):
+    measured = singlecall_measured + decision_measured + dialog_measured
     return {
         "native_tool_calling": native,
         "overall": {"measured": measured, "passed": passed},
         "by_dataset": {
             "singlecall": {"measured": singlecall_measured},
             "call_decision": {"measured": decision_measured},
+            "dialog": {"measured": dialog_measured},
         },
     }
 

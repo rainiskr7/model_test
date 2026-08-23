@@ -82,6 +82,47 @@ def expand_call_decision(path: Path) -> List[Dict[str, Any]]:
     return items
 
 
+
+def expand_dialog(path: Path, system_prompt: str) -> List[Dict[str, Any]]:
+    """Dialog 45개 시나리오를 평가 턴 단위로 펼친다 (총 200턴).
+
+    상류도 시나리오가 아니라 턴 단위로 평가한다 (src/payload_creator.py 가 turns 를
+    순회한다). 각 턴은 query 에 그 시점까지의 대화 이력을 통째로 들고 있어서
+    singlecall/call_decision 과 같은 모양이다 — messages + tools + ground_truth.
+
+    턴 유형 분포 (핀 데이터 실측): call 70 / completion 71 / slot 36 / relevance 23.
+    call 70턴만 exact-match 로 결정론적 채점이 가능하고 나머지 130턴은 판정 모델이
+    필요하다. 여기서는 전부 항목으로 만들되 call 이 아닌 것은 상위 루프가
+    not_measured 로 처리한다 (singlecall/call_decision 과 같은 규칙).
+    """
+    items: List[Dict[str, Any]] = []
+    for source_line, record in enumerate(_load_jsonl(path), start=1):
+        tools = record["tools"]
+        for turn in record["turns"]:
+            messages = list(turn["query"])
+            # 상류는 system prompt 를 대화 앞에 붙인다. query 가 이미 system 으로
+            # 시작하면 중복해서 넣지 않는다.
+            if not messages or messages[0].get("role") != "system":
+                messages = [{"role": "system", "content": system_prompt}] + messages
+            items.append(
+                {
+                    "item_id": f"dialog:{turn['serial_num']}",
+                    "dataset": "dialog",
+                    "source_line": source_line,
+                    "serial_num": turn["serial_num"],
+                    "category": None,
+                    "dialog_num": record.get("dialog_num"),
+                    "turn_num": turn.get("turn_num"),
+                    "type_of_output": turn["type_of_output"],
+                    "messages": messages,
+                    "tools": tools,
+                    "ground_truth": turn["ground_truth"],
+                    "acceptable_arguments": turn.get("acceptable_arguments"),
+                }
+            )
+    return items
+
+
 def _load_module(name: str, path: Path):
     spec = importlib.util.spec_from_file_location(name, path)
     if spec is None or spec.loader is None:
@@ -345,6 +386,9 @@ def main(argv: Optional[List[str]] = None) -> int:
             ),
             "call_decision": expand_call_decision(
                 data_dir / "FunctionChat-CallDecision.jsonl"
+            ),
+            "dialog": expand_dialog(
+                data_dir / "FunctionChat-Dialog.jsonl", system_prompt
             ),
         }
         timestamp = _timestamp(base_dir)

@@ -30,6 +30,17 @@ def normalize_api_base(base_url: str) -> str:
     return value[: -len(suffix)] if value.endswith(suffix) else value
 
 
+
+def litellm_model_name(model: str) -> str:
+    """litellm provider 접두사를 붙인다. 이미 있으면 덧붙이지 않는다.
+
+    로컬 서빙 모델은 'qwen_qwen3.5_35b_a3b_fp8' 처럼 접두사가 없어 'openai/' 가 필요하다.
+    반면 OpenRouter 모델명은 'openai/gpt-4.1-mini' 처럼 이미 provider 를 포함한다.
+    무조건 붙이면 'openai/openai/gpt-4.1-mini' 가 된다 (2026-08-23 실제로 발생).
+    """
+    return model if "/" in model else f"openai/{model}"
+
+
 def build_litellm_args(
     api_base: str, request_timeout: float, max_tokens: int
 ) -> dict[str, Any]:
@@ -123,6 +134,7 @@ def resolve_task_split(
 def build_upstream_command(
     args: argparse.Namespace,
     llm_args: Mapping[str, Any],
+    user_llm_args: Mapping[str, Any],
     upstream_dir: Path,
     task_ids: Iterable[str],
 ) -> list[str]:
@@ -138,7 +150,7 @@ def build_upstream_command(
         "--agent",
         "llm_agent_solo" if args.mode == "solo" else "llm_agent",
         "--agent-llm",
-        f"openai/{args.model}",
+        litellm_model_name(args.model),
         "--agent-llm-args",
         json.dumps(llm_args, separators=(",", ":")),
         "--user",
@@ -148,7 +160,7 @@ def build_upstream_command(
             if args.mode == "solo"
             else [
                 "--user-llm",
-                f"openai/{args.user_model or args.model}",
+                litellm_model_name(args.user_model or args.model),
                 "--user-llm-args",
                 json.dumps(user_llm_args, separators=(",", ":")),
             ]
@@ -365,11 +377,11 @@ def main(argv: Optional[list[str]] = None) -> int:
                 "user_model_sent_to_litellm": (
                     None
                     if args.mode == "solo"
-                    else f"openai/{args.user_model or args.model}"
+                    else litellm_model_name(args.user_model or args.model)
                 ),
                 "provider": "litellm_openai_compatible",
                 "model_requested": args.model,
-                "model_sent_to_litellm": f"openai/{args.model}",
+                "model_sent_to_litellm": litellm_model_name(args.model),
                 "api_base": api_base,
                 "api_key_source": "OPENAI_API_KEY environment variable",
                 "request_timeout": args.request_timeout,
@@ -394,7 +406,9 @@ def main(argv: Optional[list[str]] = None) -> int:
 
         env = os.environ.copy()
         env["TAU2_DATA_DIR"] = str(bench_dir / "data")
-        command = build_upstream_command(args, llm_args, upstream_dir, selected_ids)
+        command = build_upstream_command(
+            args, llm_args, user_llm_args, upstream_dir, selected_ids
+        )
         print(
             f"[taubench] telecom split {args.split!r}: "
             f"{len(selected_ids)}/{split['task_count']} judge-free tasks; "
