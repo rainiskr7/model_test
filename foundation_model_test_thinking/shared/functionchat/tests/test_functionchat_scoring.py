@@ -201,6 +201,27 @@ def test_text_mode_warns_but_publishes():
     _assert(any("native_tool_calling" in w for w in warnings), f"expected warning, got {warnings}")
 
 
+
+def test_v1_artifacts_without_dialog_still_publishable():
+    """2026-08-23 이전 산출물에는 dialog.json 이 없다. 재채점이 막히면 안 된다."""
+    s = _fc_summary()
+    del s["by_dataset"]["dialog"]
+    s["overall"]["measured"] = 600
+    failures, _ = score.validate_summary(s)
+    _assert(failures == [], f"v1 artifact should still publish, got {failures}")
+
+
+def test_dialog_present_but_short_blocks_publish():
+    failures, _ = score.validate_summary(_fc_summary(dialog_measured=40))
+    _assert(any("부분 실행" in f for f in failures), f"expected partial gate, got {failures}")
+
+
+def test_dict_acceptable_arguments_is_returned_as_is():
+    """Dialog 핀 데이터에 dict 형태가 3건 있다. 상류는 호출 전 json.dumps 로 우회한다."""
+    got = exact.get_acceptable_arguments({"acceptable_arguments": {"city": ["서울", "Seoul"]}})
+    _assert(got == {"city": ["서울", "Seoul"]}, f"dict should pass through, got {got}")
+
+
 TESTS = [
     test_three_acceptable_argument_sentinels_are_empty,
     test_hallucinated_argument_key_fails,
@@ -213,6 +234,9 @@ TESTS = [
     test_total_failure_blocks_publish,
     test_partial_run_blocks_publish,
     test_text_mode_warns_but_publishes,
+    test_v1_artifacts_without_dialog_still_publishable,
+    test_dialog_present_but_short_blocks_publish,
+    test_dict_acceptable_arguments_is_returned_as_is,
 ]
 
 

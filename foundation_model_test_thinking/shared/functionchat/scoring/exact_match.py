@@ -21,6 +21,16 @@ _EMPTY_ACCEPTABLE_SENTINELS = (
 
 def get_acceptable_arguments(inp: Dict[str, Any]) -> Dict[str, Any]:
     acceptable_arguments = inp.get("acceptable_arguments", None)
+    # Dialog 데이터에는 acceptable_arguments 가 **이미 dict 인** 항목이 있다 (핀 데이터 3건).
+    # 상류는 호출 직전에 json.dumps 로 문자열화해서 이 경우를 피한다
+    # (src/evaluation_handler.py:129). 여기서는 dict 를 그대로 돌려준다 —
+    # dumps -> loads 왕복과 결과가 같고 불필요한 변환이 없다.
+    #
+    # 이걸 빠뜨리면 dict 가 f'"{...}"' 경로로 들어가 파이썬 repr 문자열이 되고,
+    # 마지막 json.loads 에서 "Expecting property name enclosed in double quotes" 로
+    # 죽는다 (2026-08-23 dialog 도입 시 실제로 발생).
+    if isinstance(acceptable_arguments, dict):
+        return acceptable_arguments
     if acceptable_arguments:
         try:
             acceptable_arguments = json.loads(acceptable_arguments)

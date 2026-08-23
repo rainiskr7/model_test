@@ -19,7 +19,11 @@ else:
 SCORING_VERSION = "functionchat_exact_v2"  # v1=600항목, v2=670항목(dialog call 70턴 추가)
 # dialog 는 45개 시나리오를 200개 평가 턴으로 펼친 것이다 (상류도 턴 단위로 평가한다).
 # 그중 call 70턴만 exact-match 로 채점되고 나머지 130턴은 판정 모델이 필요하다.
-RAW_DATASETS = ("singlecall", "call_decision", "dialog")
+REQUIRED_DATASETS = ("singlecall", "call_decision")
+# dialog 는 2026-08-23 에 추가됐다. 그 이전 산출물에는 없으므로 선택적으로 읽어
+# 하위 호환을 유지한다 — 없으면 v1(600항목)로, 있으면 v2(670항목)로 채점한다.
+OPTIONAL_DATASETS = ("dialog",)
+RAW_DATASETS = REQUIRED_DATASETS + OPTIONAL_DATASETS
 INTEGRITY_FIELDS = (
     "model",
     "request_timeout",
@@ -83,14 +87,15 @@ def build_summary(
     coverage: Mapping[str, Any],
     track: str,
 ) -> Dict[str, Any]:
-    missing = [name for name in RAW_DATASETS if name not in raw_by_dataset]
+    missing = [name for name in REQUIRED_DATASETS if name not in raw_by_dataset]
     if missing:
         raise ValueError(f"raw dataset artifacts missing: {missing}")
 
+    present = [name for name in RAW_DATASETS if name in raw_by_dataset]
     integrity = _shared_integrity(raw_by_dataset)
     by_dataset = {
         name: score_items(raw_by_dataset[name].get("results") or [])
-        for name in RAW_DATASETS
+        for name in present
     }
     measured = sum(entry["measured"] for entry in by_dataset.values())
     passed = sum(entry["passed"] for entry in by_dataset.values())
@@ -111,7 +116,10 @@ def build_summary(
         "benchmark": "kakao/FunctionChat-Bench (call exact match)",
         "model": integrity["model"],
         "track": track,
-        "scoring_version": SCORING_VERSION,
+        # dialog 유무로 버전이 갈린다. 600항목 산출물을 v2 로 표기하면 안 된다.
+        "scoring_version": (
+            SCORING_VERSION if "dialog" in by_dataset else "functionchat_exact_v1"
+        ),
         "native_tool_calling": integrity["native_tool_calling"],
         "harness_integrity": integrity,
         "overall": {
@@ -217,7 +225,9 @@ def validate_summary(summary: dict) -> tuple:
     for name, expected in EXPECTED_MEASURED.items():
         entry = (summary.get("by_dataset") or {}).get(name)
         if entry is None:
-            failures.append(f"by_dataset.{name} 이 없다")
+            # dialog 는 선택적이다 (v1 산출물에는 없다). 필수 데이터셋만 실패로 본다.
+            if name in REQUIRED_DATASETS:
+                failures.append(f"by_dataset.{name} 이 없다")
             continue
         got = entry.get("measured")
         if got != expected:
@@ -239,7 +249,13 @@ def main(argv: List[str] = None) -> int:
     try:
         args = parse_args(argv)
         results_dir = _results_dir(args)
-        raw = {name: _load(results_dir / f"{name}.json") for name in RAW_DATASETS}
+        raw = {}
+        for name in RAW_DATASETS:
+            path = results_dir / f"{name}.json"
+            if path.exists():
+                raw[name] = _load(path)
+            elif name in REQUIRED_DATASETS:
+                raise FileNotFoundError(f"required raw artifact missing: {path}")
         coverage = _load(results_dir / "coverage.json")
         summary = build_summary(raw, coverage, args.track)
         for name, entry in summary["by_dataset"].items():
