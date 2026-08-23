@@ -255,7 +255,8 @@ class PublishGateTest(unittest.TestCase):
             )
         )
         self.assertTrue(failures)
-        self.assertTrue(any("infrastructure_error" in f for f in failures))
+        # 게이트 문구는 "완주 실패 N건 (귀책 내역)" 이다. 귀책을 단정하지 않는다.
+        self.assertTrue(any("완주 실패" in f for f in failures), failures)
 
     def test_out_of_scope_domains_are_not_failures(self):
         """retail/airline 은 판정 모델이 없어 의도적으로 비운다. 장애가 아니다."""
@@ -298,55 +299,75 @@ class PublishGateTest(unittest.TestCase):
 
 
 class IncompletionAttributionTest(unittest.TestCase):
-    """모델 귀책 미완주와 환경 장애를 가른다.
+    """완주 실패를 후보/환경/미분류 3상태로 가른다.
 
-    tau2 는 둘을 모두 termination_reason=infrastructure_error 로 묶는다. 구분하지 않으면
-    서버가 죽은 런이 나쁜 모델 점수로 발행된다 — 2026-08-20 에 서버가 내려가 40/40 이
-    죽은 런이 실제로 있었다.
+    tau2 는 셋을 모두 termination_reason=infrastructure_error 로 묶는다. 구분하지 않으면
+    서버가 죽은 런이 나쁜 모델 점수로 발행된다 — 2026-08-20 에 실제로 있었다.
+    error_type 만으로도 부족하다: ContextWindowExceededError 는 후보 에이전트에서도
+    사용자 시뮬레이터에서도 날 수 있고, 후자는 평가 대상의 결함이 아니다.
     """
 
-    def _sim(self, reason, error_type=None, reward=None):
+    AGENT_TB = "agent_msg, self.agent_state = self.agent.generate_next_message(\n"
+    USER_TB = "user_msg, self.user_state = self.user.generate_next_message(\n"
+
+    def _sim(self, reason, error_type=None, traceback=None, reward=None):
         s = {"termination_reason": reason}
+        info = {}
         if error_type:
-            s["info"] = {"error_type": error_type}
+            info["error_type"] = error_type
+        if traceback:
+            info["error_traceback"] = traceback
+        if info:
+            s["info"] = info
         if reward is not None:
             s["reward_info"] = {"reward": reward}
         return s
 
-    def test_context_overflow_is_model_attributable(self):
-        m, e = scorer._classify_incompletions(
+    def test_context_overflow_in_agent_is_candidate(self):
+        c, e, u = scorer._classify_incompletions(
+            [self._sim("infrastructure_error", "ContextWindowExceededError", self.AGENT_TB)]
+        )
+        self.assertEqual(dict(c), {"ContextWindowExceededError@agent": 1})
+        self.assertEqual(dict(e), {})
+        self.assertEqual(dict(u), {})
+
+    def test_context_overflow_in_user_is_not_candidate(self):
+        """사용자 시뮬레이터가 컨텍스트를 넘긴 것은 평가 대상 탓이 아니다."""
+        c, e, u = scorer._classify_incompletions(
+            [self._sim("infrastructure_error", "ContextWindowExceededError", self.USER_TB)]
+        )
+        self.assertEqual(dict(c), {})
+        self.assertEqual(dict(e), {"ContextWindowExceededError@user": 1})
+
+    def test_context_overflow_without_traceback_is_unclassified(self):
+        """actor 를 모르면 후보에게 씌우지 않는다."""
+        c, e, u = scorer._classify_incompletions(
             [self._sim("infrastructure_error", "ContextWindowExceededError")]
         )
-        self.assertEqual(dict(m), {"ContextWindowExceededError": 1})
-        self.assertEqual(dict(e), {})
+        self.assertEqual(dict(c), {})
+        self.assertEqual(dict(u), {"ContextWindowExceededError@unknown": 1})
 
-    def test_server_and_harness_errors_are_environment(self):
-        """Timeout 은 모델이 느린 탓일 수도 있으나 서버 부하와 구분 불가하므로 환경이다.
-        TypeError 는 상류 DummyUser 버그, BadRequestError 는 서빙 제약이었다."""
+    def test_known_environment_errors(self):
         sims = [
-            self._sim("infrastructure_error", t)
+            self._sim("infrastructure_error", t, self.AGENT_TB)
             for t in ("Timeout", "InternalServerError", "APIError", "TypeError", "BadRequestError")
         ]
-        m, e = scorer._classify_incompletions(sims)
-        self.assertEqual(dict(m), {})
+        c, e, u = scorer._classify_incompletions(sims)
+        self.assertEqual(dict(c), {})
         self.assertEqual(len(e), 5)
+        self.assertEqual(dict(u), {})
 
-    def test_unknown_error_type_defaults_to_environment(self):
-        """화이트리스트다 — 모르는 유형이 모델 결함으로 둔갑하면 안 된다."""
-        m, e = scorer._classify_incompletions(
-            [self._sim("infrastructure_error", "SomeFutureUpstreamError")]
+    def test_unknown_error_type_is_unclassified_not_environment(self):
+        """모르는 것을 '환경 탓' 이라 단정하는 것도 근거 없는 주장이다."""
+        c, e, u = scorer._classify_incompletions(
+            [self._sim("infrastructure_error", "SomeFutureUpstreamError", self.AGENT_TB)]
         )
-        self.assertEqual(dict(m), {})
-        self.assertEqual(dict(e), {"SomeFutureUpstreamError": 1})
-
-    def test_missing_error_type_defaults_to_environment(self):
-        m, e = scorer._classify_incompletions([self._sim("infrastructure_error")])
-        self.assertEqual(dict(m), {})
-        self.assertEqual(dict(e), {"unknown": 1})
+        self.assertEqual(dict(c), {})
+        self.assertEqual(dict(e), {})
+        self.assertEqual(dict(u), {"SomeFutureUpstreamError@agent": 1})
 
     def test_normal_termination_is_not_an_incompletion(self):
-        m, e = scorer._classify_incompletions(
+        c, e, u = scorer._classify_incompletions(
             [self._sim("user_stop", reward=1.0), self._sim("max_steps", reward=0.0)]
         )
-        self.assertEqual(dict(m), {})
-        self.assertEqual(dict(e), {})
+        self.assertEqual((dict(c), dict(e), dict(u)), ({}, {}, {}))

@@ -191,6 +191,52 @@ def build_upstream_command(
     ]
 
 
+
+def redact_secrets_in_upstream(upstream_dir: Path) -> int:
+    """tau2 가 쓴 산출물에서 자격증명을 지운다. 지운 파일 수를 돌려준다.
+
+    tau2 는 info.agent_info.llm_args / user_info.llm_args 를 **그대로** results.json 에
+    적고, --llm-log-mode all 이면 호출별 덤프에도 남긴다. 우리가 외부 API 키를
+    llm_args 로 넘기므로 그대로 두면 키가 산출물에 박힌다.
+
+    2026-08-23 에 실제로 발생했다 — GitHub 푸시 보호가 막아 유출 직전에 걸렸다.
+    결과 파일은 버전관리 대상이므로 러너가 기록 직후 반드시 지워야 한다.
+    """
+    redacted = 0
+    for path in upstream_dir.rglob("*.json"):
+        try:
+            text = path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            continue
+        if '"api_key"' not in text:
+            continue
+        try:
+            data = json.loads(text)
+        except json.JSONDecodeError:
+            continue
+        if _scrub_api_key(data):
+            _write_atomic(path, data)
+            redacted += 1
+    return redacted
+
+
+def _scrub_api_key(node: Any) -> bool:
+    """중첩 구조를 훑어 api_key 값을 치환한다. 바꾼 게 있으면 True."""
+    changed = False
+    if isinstance(node, dict):
+        for key, value in list(node.items()):
+            if key == "api_key" and isinstance(value, str) and value:
+                node[key] = "***REDACTED***"
+                changed = True
+            elif _scrub_api_key(value):
+                changed = True
+    elif isinstance(node, list):
+        for item in node:
+            if _scrub_api_key(item):
+                changed = True
+    return changed
+
+
 def _write_atomic(path: Path, data: Mapping[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     fd, temp_name = tempfile.mkstemp(prefix=f".{path.name}.", dir=str(path.parent))
@@ -414,7 +460,13 @@ def main(argv: Optional[list[str]] = None) -> int:
             f"{len(selected_ids)}/{split['task_count']} judge-free tasks; "
             f"{split['not_measured_task_count']} not measured"
         )
-        subprocess.run(command, cwd=bench_dir, env=env, check=True)
+        try:
+            subprocess.run(command, cwd=bench_dir, env=env, check=True)
+        finally:
+            # 성공/실패와 무관하게 반드시 지운다. 실패한 런의 산출물도 커밋된다.
+            n_redacted = redact_secrets_in_upstream(upstream_dir)
+            if n_redacted:
+                print(f"[taubench] api_key 를 {n_redacted}개 파일에서 제거했다")
         manifest["status"] = "completed"
         manifest["completed_at"] = datetime.now().isoformat()
         manifest["upstream_results"] = str(

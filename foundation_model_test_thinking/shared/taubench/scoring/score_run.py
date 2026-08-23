@@ -166,7 +166,7 @@ def score_domain(
         task_results.append(record)
 
     terminations = Counter(str(sim.get("termination_reason")) for sim in simulations)
-    model_attr, env_attr = _classify_incompletions(simulations)
+    candidate_attr, env_attr, unclassified_attr = _classify_incompletions(simulations)
 
     # pass_rate_strict: 모델 귀책 미완주를 실패로 세는 분모. 서빙 의사결정용이다
     # ("이 모델을 붙이면 몇 %가 실제로 끝나는가"). upstream 의 pass_rate 를 덮어쓰지
@@ -174,11 +174,13 @@ def score_domain(
     #
     # 환경 귀책 오류가 하나라도 있으면 계산하지 않는다. 그 런은 모델과 무관한 이유로
     # 커버리지가 깨진 것이라 strict 분모가 의미를 갖지 않는다.
-    strict_denominator = measured + sum(model_attr.values())
-    if sum(env_attr.values()):
+    strict_denominator = measured + sum(candidate_attr.values())
+    blocking = {**dict(env_attr), **dict(unclassified_attr)}
+    if blocking:
         pass_rate_strict = None
         strict_reason = (
-            "환경 귀책 오류가 있어 계산하지 않는다: " + str(dict(sorted(env_attr.items())))
+            "후보 귀책으로 확정되지 않은 미완주가 있어 계산하지 않는다: "
+            + str(dict(sorted(blocking.items())))
         )
     elif strict_denominator:
         pass_rate_strict = passed / strict_denominator
@@ -199,9 +201,11 @@ def score_domain(
             "passed / (measured + 모델 귀책 미완주). upstream pass_rate 와 달리 모델이 "
             "스스로 망가져 못 끝낸 태스크를 실패로 센다. 환경 귀책 오류가 있으면 null."
         ),
+        # 키는 "<error_type>@<actor>" 다. actor 는 traceback 에서 뽑는다.
         "incompletion_attribution": {
-            "model": dict(sorted(model_attr.items())),
+            "candidate": dict(sorted(candidate_attr.items())),
             "environment": dict(sorted(env_attr.items())),
+            "unclassified": dict(sorted(unclassified_attr.items())),
         },
         "runnable_tasks": runnable_tasks,
         "result_records": len(simulations),
@@ -390,22 +394,69 @@ EXIT_CODE_HELP = """exit codes:
 #   Timeout                    21x   환경 — 모델이 느린 탓일 수도 있으나 서버 부하와
 #                                    구분할 수 없으므로 모델에 귀책시키지 않는다
 #   APIError                    9x   환경
-MODEL_ATTRIBUTABLE_ERROR_TYPES = frozenset({"ContextWindowExceededError"})
+# 평가 대상(후보 모델)에게 귀책시킬 수 있는 error_type. 화이트리스트다.
+CANDIDATE_ATTRIBUTABLE_ERROR_TYPES = frozenset({"ContextWindowExceededError"})
+
+# 원인이 확정된 환경 귀책 유형. 여기에도 없으면 unclassified 로 남긴다 —
+# "환경 탓" 이라고 단정하는 것도 근거 없는 주장이기 때문이다.
+KNOWN_ENVIRONMENT_ERROR_TYPES = frozenset(
+    {
+        "Timeout",           # 모델이 느린 탓일 수도 있으나 서버 부하와 구분 불가
+        "APIError",
+        "InternalServerError",
+        "BadRequestError",   # 서빙 제약 (예: system 전용 요청 거부)
+        "TypeError",         # 하네스 코드 결함 (상류 DummyUser 생성자 불일치)
+    }
+)
+
+
+def _failure_actor(sim: Mapping[str, Any]) -> str:
+    """traceback 으로 어느 참가자의 호출에서 터졌는지 가린다.
+
+    error_type 만으로는 알 수 없다. ContextWindowExceededError 는 후보 에이전트에서도,
+    사용자 시뮬레이터에서도, 판정 모델에서도 날 수 있다. 오케스트레이터가
+    self.agent.generate_next_message / self.user.generate_next_message 중 무엇을
+    부르다 터졌는지가 traceback 에 남는다.
+    """
+    tb = str(((sim.get("info") or {}).get("error_traceback")) or "")
+    has_agent = "self.agent.generate_next_message" in tb
+    has_user = "self.user.generate_next_message" in tb
+    if has_agent and not has_user:
+        return "agent"
+    if has_user and not has_agent:
+        return "user"
+    return "unknown"
 
 
 def _classify_incompletions(simulations) -> tuple:
-    """완주 실패를 (모델 귀책, 환경 귀책) 으로 가른다."""
-    model_attr = Counter()
-    env_attr = Counter()
+    """완주 실패를 (후보 귀책, 환경 귀책, 미분류) 로 가른다.
+
+    후보 귀책은 **error_type 과 actor 가 둘 다 맞을 때만** 인정한다. 사용자
+    시뮬레이터가 컨텍스트를 넘긴 것은 평가 대상의 결함이 아니라 우리 실험 설정의
+    문제이므로 후보에게 씌우면 안 된다.
+    """
+    candidate = Counter()
+    environment = Counter()
+    unclassified = Counter()
     for sim in simulations:
         if str(sim.get("termination_reason")) != "infrastructure_error":
             continue
         etype = str(((sim.get("info") or {}).get("error_type")) or "unknown")
-        if etype in MODEL_ATTRIBUTABLE_ERROR_TYPES:
-            model_attr[etype] += 1
+        actor = _failure_actor(sim)
+        key = f"{etype}@{actor}"
+        if etype in CANDIDATE_ATTRIBUTABLE_ERROR_TYPES:
+            if actor == "agent":
+                candidate[key] += 1
+            elif actor == "user":
+                # 사용자 시뮬레이터 쪽 초과 — 평가 대상 탓이 아니다.
+                environment[key] += 1
+            else:
+                unclassified[key] += 1
+        elif etype in KNOWN_ENVIRONMENT_ERROR_TYPES:
+            environment[key] += 1
         else:
-            env_attr[etype] += 1
-    return model_attr, env_attr
+            unclassified[key] += 1
+    return candidate, environment, unclassified
 
 
 def validate_summary(summary: dict) -> tuple:
@@ -445,9 +496,17 @@ def validate_summary(summary: dict) -> tuple:
 
         infra = (entry.get("termination_reasons") or {}).get("infrastructure_error")
         if infra:
+            # 귀책은 incompletion_attribution 이 말해준다. "전부 하네스 탓" 이라고
+            # 단정하지 않는다 — 후보 모델이 스스로 컨텍스트를 넘긴 경우도 여기 섞인다.
+            attr = entry.get("incompletion_attribution") or {}
+            parts = [
+                f"{k}={sum((attr.get(k) or {}).values())}"
+                for k in ("candidate", "environment", "unclassified")
+                if attr.get(k)
+            ]
+            detail = ", ".join(parts) if parts else "귀책 미기록"
             failures.append(
-                f"by_domain.{domain}: infrastructure_error {infra}건 — 모델 실패가 아니라 "
-                "하네스/서빙 장애다"
+                f"by_domain.{domain}: 완주 실패 {infra}건 ({detail}) — 완전 측정이 아니다"
             )
 
     return failures, warnings
