@@ -280,6 +280,48 @@ def test_not_measured_items_still_carry_a_response():
     )
 
 
+
+def _load_judge_mod():
+    import importlib.util, sys as _s
+    base = Path(__file__).resolve().parents[1] / "judge"
+    _s.path.insert(0, str(base))
+    spec = importlib.util.spec_from_file_location("run_judge_under_test", base / "run_judge.py")
+    m = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(m)
+    return m
+
+
+def test_lost_vote_cannot_produce_a_single_vote_verdict():
+    """2회 중 1회가 전송 실패하면 남은 1표로 판정이 확정되던 구멍.
+    전송 실패가 조용히 반복 수를 깎고 그 사실이 어디에도 남지 않았다."""
+    m = _load_judge_mod()
+    _assert(m.majority([None, "fail"]) == "fail", "majority 자체는 유효표 기준이 맞다")
+    integ = m.vote_integrity([None, "fail"], 2)
+    _assert(integ["lost"] == 1 and integ["single_vote"], f"유실 기록이 없다: {integ}")
+
+
+def test_vote_integrity_records_full_votes():
+    m = _load_judge_mod()
+    integ = m.vote_integrity(["pass", "pass"], 2)
+    _assert(integ["lost"] == 0 and not integ["single_vote"], f"정상인데 유실로 잡혔다: {integ}")
+
+
+def test_non_retryable_http_errors_are_not_retried():
+    """400 을 3회 재시도해도 성공할 수 없다. 429/408 만 재시도한다."""
+    import inspect
+    src = inspect.getsource(exact.__class__) if False else None
+    import importlib.util, sys as _s
+    base = Path(__file__).resolve().parents[1] / "judge"
+    _s.path.insert(0, str(base))
+    spec = importlib.util.spec_from_file_location("judge_pilot_under_test", base / "judge_pilot.py")
+    jp = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(jp)
+    body = inspect.getsource(jp.call_judge)
+    _assert("408, 429" in body, "재시도 예외 목록(408/429)이 없다")
+    _assert("Retry-After" in body, "429 의 Retry-After 를 존중하지 않는다")
+    _assert("exc.read()" in body, "HTTP 에러 본문을 읽지 않아 실제 사유가 사라진다")
+
+
 TESTS = [
     test_three_acceptable_argument_sentinels_are_empty,
     test_hallucinated_argument_key_fails,
@@ -298,6 +340,9 @@ TESTS = [
     test_dialog_coverage_mismatch_is_caught,
     test_content_in_model_output_does_not_affect_exact_match,
     test_not_measured_items_still_carry_a_response,
+    test_lost_vote_cannot_produce_a_single_vote_verdict,
+    test_vote_integrity_records_full_votes,
+    test_non_retryable_http_errors_are_not_retried,
 ]
 
 

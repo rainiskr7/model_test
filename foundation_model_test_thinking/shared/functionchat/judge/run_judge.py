@@ -40,11 +40,29 @@ SCORING_VERSION = "functionchat_judge_v1"
 
 
 def majority(verdicts: List[Optional[str]]) -> Optional[str]:
+    """유효 표의 과반을 돌려준다. 과반이 없으면 None.
+
+    **분모는 유효 표 수이지 요청한 반복 수가 아니다.** 전송 실패로 표가 줄면 남은
+    표만으로 과반을 따진다 — 예컨대 2회 중 1회가 실패하면 [None, "fail"] 이 되고
+    유효 표는 1개이므로 "fail" 이 과반이 된다. 이는 1표짜리 판정이므로 호출 측이
+    반드시 `lost_votes` 를 함께 기록해 사후에 걸러낼 수 있어야 한다.
+    """
     vs = [v for v in verdicts if v is not None]
     if not vs:
         return None
     top, n = Counter(vs).most_common(1)[0]
     return top if n * 2 > len(vs) else None
+
+
+def vote_integrity(verdicts: List[Optional[str]], requested: int) -> Dict[str, Any]:
+    """표가 유실됐는지, 그래서 판정이 몇 표에 기대는지 기록한다."""
+    valid = [v for v in verdicts if v is not None]
+    return {
+        "requested": requested,
+        "received": len(valid),
+        "lost": requested - len(valid),
+        "single_vote": len(valid) == 1,
+    }
 
 
 def main(argv: Optional[List[str]] = None) -> int:
@@ -117,6 +135,11 @@ def main(argv: Optional[List[str]] = None) -> int:
                 errors["parse"] += 1
         final = majority(verdicts)
         unstable = len({v for v in verdicts if v is not None}) > 1
+        integrity = vote_integrity(verdicts, len(runs))
+        # 표가 유실돼 단 1표로 확정된 판정은 정식 판정으로 세지 않는다.
+        # 전송 실패가 조용히 반복 수를 깎고 그 사실이 남지 않는 경로였다.
+        if final and integrity["lost"] and integrity["single_vote"]:
+            final = None
         # 판정 불가는 fail 로 바꾸지 않는다. 별도 상태로 남긴다.
         status = "judged" if final else "judge_error"
         per_type[kind][status if not final else final] += 1
@@ -130,6 +153,7 @@ def main(argv: Optional[List[str]] = None) -> int:
                 "verdict": final,
                 "status": status,
                 "unstable": unstable,
+                "vote_integrity": integrity,
                 "verdicts": verdicts,
                 "justification_ko": runs[0].get("justification_ko"),
             }

@@ -83,7 +83,7 @@ def call_judge(
         }
     ).encode("utf-8")
     last_error = None
-    for _ in range(max(1, retries)):
+    for attempt in range(max(1, retries)):
         req = urllib.request.Request(
             "https://openrouter.ai/api/v1/chat/completions",
             data=body,
@@ -104,9 +104,28 @@ def call_judge(
                 "usage": payload.get("usage"),
                 "error": None,
             }
+        except urllib.error.HTTPError as exc:
+            # 에러 **본문**을 읽는다. 읽지 않으면 "HTTP Error 400: Bad Request" 만 남고
+            # 실제 사유(잘못된 모델명, 스키마 거부 등)가 사라진다.
+            try:
+                detail = exc.read().decode("utf-8", "replace")[:300]
+            except Exception:  # noqa: BLE001
+                detail = ""
+            last_error = f"HTTPError {exc.code}: {detail or exc.reason}"
+            # 4xx 는 같은 요청을 다시 보내도 성공할 수 없다. 단 429(rate limit)와
+            # 408(timeout)은 예외다. 재시도해봐야 시간과 돈만 쓴다.
+            if 400 <= exc.code < 500 and exc.code not in (408, 429):
+                break
+            # 429 는 서버가 주는 Retry-After 를 존중한다. 없으면 지수 백오프.
+            wait = exc.headers.get("Retry-After") if exc.headers else None
+            try:
+                delay = float(wait) if wait else 2.0 ** attempt
+            except (TypeError, ValueError):
+                delay = 2.0 ** attempt
+            time.sleep(min(delay, 30.0))
         except Exception as exc:  # noqa: BLE001 - 원인을 그대로 기록한다
             last_error = f"{type(exc).__name__}: {exc}"
-            time.sleep(1.0)
+            time.sleep(min(2.0 ** attempt, 30.0))
     return {"verdict": None, "raw": None, "usage": None, "error": last_error}
 
 
