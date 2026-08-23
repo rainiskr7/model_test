@@ -48,6 +48,10 @@ def _input(name="informWeather", arguments=None, acceptable=None, output_type="c
             "arguments": json.dumps(arguments or {}, ensure_ascii=False),
         },
         "acceptable_arguments": acceptable,
+        # 채점기는 raw_response/error 로 "API 실패" 와 "모델이 툴을 안 부름" 을 가른다.
+        # 기본값은 **정상 응답**이어야 한다 — 없으면 모든 픽스처가 생성 실패로 분류된다.
+        "raw_response": {"message": {}},
+        "error": None,
     }
 
 
@@ -322,6 +326,52 @@ def test_non_retryable_http_errors_are_not_retried():
     _assert("exc.read()" in body, "HTTP 에러 본문을 읽지 않아 실제 사유가 사라진다")
 
 
+
+def test_api_failure_is_not_scored_as_a_model_failure():
+    """타임아웃/401/500 이 모델 오답 하나로 둔갑하던 경로. 채점에서 제외하고 별도로 센다."""
+    gt = {"role": "assistant", "tool_calls": [{"function": {"name": "f", "arguments": "{}"}}]}
+    ok = {"type_of_output": "call", "ground_truth": gt, "acceptable_arguments": None,
+          "raw_response": {"message": {}}, "error": None,
+          "model_output": {"tool_calls": [{"function": {"name": "f", "arguments": "{}"}}]}}
+    api_fail = {"type_of_output": "call", "ground_truth": gt, "acceptable_arguments": None,
+                "raw_response": None, "error": "APITimeoutError: ...",
+                "model_output": {"tool_calls": [], "content": None}}
+    r = score.score_items([ok, api_fail])
+    _assert(r["measured"] == 1, f"API 실패가 measured 에 들어갔다: {r}")
+    _assert(r["passed"] == 1 and r["failed"] == 0, f"점수가 오염됐다: {r}")
+    _assert(r["generation_errors"] == 1, f"생성 실패가 기록되지 않았다: {r}")
+
+
+def test_genuine_no_tool_call_is_still_a_model_failure():
+    """응답은 정상인데 툴을 안 부른 것은 진짜 모델 실패다. API 실패와 구분해야 한다."""
+    gt = {"role": "assistant", "tool_calls": [{"function": {"name": "f", "arguments": "{}"}}]}
+    no_call = {"type_of_output": "call", "ground_truth": gt, "acceptable_arguments": None,
+               "raw_response": {"message": {"content": "죄송합니다"}}, "error": None,
+               "model_output": {"tool_calls": [], "content": "죄송합니다"}}
+    r = score.score_items([no_call])
+    _assert(r["measured"] == 1 and r["failed"] == 1, f"진짜 실패가 제외됐다: {r}")
+    _assert(r["generation_errors"] == 0, f"생성 실패로 오분류됐다: {r}")
+
+
+def test_generation_errors_block_publish():
+    s = _fc_summary()
+    s["by_dataset"]["singlecall"]["generation_errors"] = 3
+    failures, _ = score.validate_summary(s)
+    _assert(any("생성 실패" in f for f in failures), f"게이트가 막지 않았다: {failures}")
+
+
+def test_judge_rejects_non_enum_verdict():
+    """{"verdict": "error"} 같은 값이 judged 로 확정되면서 pass/fail 어디에도
+    안 세어져 조용히 사라지던 경로."""
+    import importlib.util, sys as _s, inspect
+    base = Path(__file__).resolve().parents[1] / "judge"
+    _s.path.insert(0, str(base))
+    spec = importlib.util.spec_from_file_location("jp_verdict_test", base / "judge_pilot.py")
+    jp = importlib.util.module_from_spec(spec); spec.loader.exec_module(jp)
+    src = inspect.getsource(jp.call_judge)
+    _assert('("pass", "fail")' in src, "verdict 값을 검증하지 않는다")
+
+
 TESTS = [
     test_three_acceptable_argument_sentinels_are_empty,
     test_hallucinated_argument_key_fails,
@@ -343,6 +393,10 @@ TESTS = [
     test_lost_vote_cannot_produce_a_single_vote_verdict,
     test_vote_integrity_records_full_votes,
     test_non_retryable_http_errors_are_not_retried,
+    test_api_failure_is_not_scored_as_a_model_failure,
+    test_genuine_no_tool_call_is_still_a_model_failure,
+    test_generation_errors_block_publish,
+    test_judge_rejects_non_enum_verdict,
 ]
 
 

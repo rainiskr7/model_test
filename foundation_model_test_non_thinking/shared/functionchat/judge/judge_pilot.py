@@ -97,6 +97,11 @@ def call_judge(
                 payload = json.loads(resp.read().decode("utf-8"))
             content = payload["choices"][0]["message"]["content"]
             parsed = json.loads(content)
+            # 구조화 출력을 요청했다고 지켜졌다는 보장은 없다. **직접 검증한다.**
+            # 검증하지 않으면 {"verdict": "error"} 같은 값이 truthy 라서 judged 로
+            # 확정되면서도 pass/fail 어디에도 안 세어져 조용히 사라진다.
+            if not isinstance(parsed, dict) or parsed.get("verdict") not in ("pass", "fail"):
+                raise ValueError(f"판정 스키마 위반: {content[:160]}")
             return {
                 "verdict": parsed["verdict"],
                 "justification_ko": parsed.get("justification_ko"),
@@ -141,9 +146,18 @@ def collect_items(results_dir: Path) -> List[Dict[str, Any]]:
             if row.get("type_of_output") == "call":
                 continue
             out = row.get("model_output") or {}
-            if out.get("content") is None and not out.get("tool_calls"):
-                continue
-            items.append({**row, "dataset": name})
+            # **건너뛰지 않는다.** 예전에는 content 도 tool_calls 도 없는 행을 그냥
+            # 넘겼는데, 그게 정확히 후보 생성이 실패했을 때의 모양이다. 결과적으로
+            # 생성 실패 항목이 판정 분모에서 조용히 사라져 통과율이 편향됐다.
+            # 어려운 항목일수록 실패하기 쉬우므로 위쪽으로 편향될 가능성이 크다.
+            generation_failed = (
+                row.get("error") is not None
+                or row.get("raw_response") is None
+                or (out.get("content") is None and not out.get("tool_calls"))
+            )
+            items.append(
+                {**row, "dataset": name, "generation_failed": generation_failed}
+            )
     return items
 
 

@@ -41,13 +41,22 @@ def safe_model_name(model: str) -> str:
 
 
 def score_items(items: Iterable[Mapping[str, Any]]) -> Dict[str, Any]:
-    measured = passed = failed = 0
+    measured = passed = failed = generation_errors = 0
     not_measured: Dict[str, int] = {}
     for item in items:
         output_type = item.get("type_of_output")
         if output_type != CALL:
             key = str(output_type or "unknown")
             not_measured[key] = not_measured.get(key, 0) + 1
+            continue
+        # **API 실패를 모델 실패로 세지 않는다.** 러너는 호출이 끝내 실패하면 error 를
+        # 남기고 model_output 을 비운 채 항목을 저장한다. 그대로 채점하면 타임아웃
+        # 하나가 모델 오답 하나로 둔갑한다.
+        #
+        # 응답은 정상인데 툴 호출이 없는 것(raw_response 있음, error 없음)은 진짜 모델
+        # 실패이므로 그대로 채점한다. 둘을 가르는 것이 error/raw_response 다.
+        if item.get("error") is not None or item.get("raw_response") is None:
+            generation_errors += 1
             continue
         measured += 1
         if exact_match(dict(item), item.get("model_output")):
@@ -59,6 +68,8 @@ def score_items(items: Iterable[Mapping[str, Any]]) -> Dict[str, Any]:
         "measured": measured,
         "passed": passed,
         "failed": failed,
+        # API 실패로 채점에서 제외된 항목. 0 이 아니면 게이트가 발행을 막는다.
+        "generation_errors": generation_errors,
         "not_measured": dict(sorted(not_measured.items())),
     }
 
@@ -243,6 +254,14 @@ def validate_summary(summary: dict) -> tuple:
         if got != expected:
             failures.append(
                 f"by_dataset.{name}.measured = {got}, 기대값 {expected} — 부분 실행이다"
+            )
+
+    for name, entry in sorted((summary.get("by_dataset") or {}).items()):
+        n_err = (entry or {}).get("generation_errors") or 0
+        if n_err:
+            failures.append(
+                f"by_dataset.{name}: 생성 실패 {n_err}건 — API 오류를 모델 실패로 "
+                "세지 않으려고 채점에서 제외했다. 완전 측정이 아니다"
             )
 
     if summary.get("native_tool_calling") is not True:

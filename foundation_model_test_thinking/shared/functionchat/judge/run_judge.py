@@ -116,6 +116,11 @@ def main(argv: Optional[List[str]] = None) -> int:
     # 순차로는 636건 x 2회에 4시간이 걸렸다 (2026-08-23 실측).
     def judge_one(item: Dict[str, Any]):
         kind = str(item.get("type_of_output"))
+        # 후보 생성이 실패한 항목은 판정하지 않는다. 판정할 응답이 없기 때문이다.
+        # 그러나 **조용히 빼지도 않는다** — candidate_generation_error 로 남겨
+        # 커버리지 게이트가 잡게 한다.
+        if item.get("generation_failed"):
+            return item, []
         prompt = render_prompt(rubrics[kind], item)
         return item, [
             call_judge(prompt, args.judge_model, api_key, args.timeout, args.retries)
@@ -133,6 +138,23 @@ def main(argv: Optional[List[str]] = None) -> int:
                 errors["transport"] += 1
             elif r.get("verdict") is None:
                 errors["parse"] += 1
+        if item.get("generation_failed"):
+            records.append(
+                {
+                    "serial_num": item.get("serial_num"),
+                    "dataset": item.get("dataset"),
+                    "type_of_output": kind,
+                    "verdict": None,
+                    "status": "candidate_generation_error",
+                    "unstable": False,
+                    "vote_integrity": {"requested": 0, "received": 0, "lost": 0,
+                                       "single_vote": False},
+                    "verdicts": [],
+                    "justification_ko": None,
+                }
+            )
+            per_type[kind]["candidate_generation_error"] += 1
+            continue
         final = majority(verdicts)
         unstable = len({v for v in verdicts if v is not None}) > 1
         integrity = vote_integrity(verdicts, len(runs))
@@ -210,6 +232,33 @@ def main(argv: Optional[List[str]] = None) -> int:
     summary["judge"]["votes_per_item"] = {
         str(k): v for k, v in sorted(_C(len(r["verdicts"]) for r in records).items())
     }
+    # **발행 게이트.** 지금까지 이 스크립트는 무슨 일이 있어도 exit 0 이었다.
+    # 분모가 조용히 줄어드는 것이 이 층의 주된 오염 경로이므로 코드로 막는다.
+    expected = len(items) if previous is None else len(previous["records"])
+    gate_failures: List[str] = []
+    n_judge_err = sum(1 for r in records if r["status"] == "judge_error")
+    n_gen_err = sum(1 for r in records if r["status"] == "candidate_generation_error")
+    if len(records) != expected:
+        gate_failures.append(
+            f"레코드 수가 기대와 다르다: {len(records)} != {expected} — 항목이 조용히 사라졌다"
+        )
+    if judged + n_judge_err + n_gen_err != len(records):
+        gate_failures.append(
+            f"분해가 맞지 않는다: judged {judged} + judge_error {n_judge_err} + "
+            f"generation_error {n_gen_err} != {len(records)}"
+        )
+    if n_judge_err:
+        gate_failures.append(f"판정 불가 {n_judge_err}건 — 완전 측정이 아니다")
+    if n_gen_err:
+        gate_failures.append(
+            f"후보 생성 실패 {n_gen_err}건 — 판정할 응답이 없다. 완전 측정이 아니다"
+        )
+    summary["publish_status"] = {
+        "publishable": not gate_failures,
+        "failures": gate_failures,
+        "expected_records": expected,
+    }
+
     out = args.results_dir / "judge.json"
     out.write_text(json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8")
     o = summary["overall"]
@@ -220,6 +269,13 @@ def main(argv: Optional[List[str]] = None) -> int:
     print(f"[judge] overall {o['passed']}/{o['judged']} = {o['pass_rate']:.6f}  "
           f"errors={o['judge_errors']}  unstable={o['unstable']}")
     print(f"[judge] wrote {out}")
+    for f in gate_failures:
+        print(f"[judge] FAIL: {f}", file=sys.stderr)
+    if gate_failures:
+        print(
+            f"[judge] NOT PUBLISHABLE: {len(gate_failures)}건의 검증 실패", file=sys.stderr
+        )
+        return 1
     return 0
 
 
