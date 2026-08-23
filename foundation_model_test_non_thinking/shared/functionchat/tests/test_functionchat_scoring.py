@@ -249,6 +249,37 @@ def test_dialog_coverage_mismatch_is_caught():
     raise AssertionError("dialog 커버리지 불일치를 잡지 못했다")
 
 
+
+def test_content_in_model_output_does_not_affect_exact_match():
+    """판정 계층을 위해 model_output 에 content 를 넣었다. exact-match 는 tool_calls 만
+    보므로 결과가 달라지면 안 된다."""
+    item = {
+        "ground_truth": {
+            "role": "assistant",
+            "tool_calls": [{"function": {"name": "f", "arguments": '{"a": 1}'}}],
+        },
+        "acceptable_arguments": None,
+    }
+    out_without = {"tool_calls": [{"function": {"name": "f", "arguments": '{"a": 1}'}}]}
+    out_with = dict(out_without, content="네, 조회해 드리겠습니다.")
+    _assert(
+        exact.exact_match(dict(item), out_without) == exact.exact_match(dict(item), out_with),
+        "content 유무가 exact-match 결과를 바꿨다",
+    )
+
+
+def test_not_measured_items_still_carry_a_response():
+    """비-call 항목도 호출·저장해야 판정 계층이 쓸 수 있다.
+    2026-08-23 이전에는 130건 전부 model_output=null 이었다."""
+    import inspect
+    src = inspect.getsource(runner.run_item)
+    _assert("evaluation_status" in src, "run_item 이 채점 대상 여부를 인자로 받아야 한다")
+    _assert(
+        not hasattr(runner, "not_measured_item"),
+        "생성을 건너뛰던 not_measured_item 이 남아 있으면 안 된다",
+    )
+
+
 TESTS = [
     test_three_acceptable_argument_sentinels_are_empty,
     test_hallucinated_argument_key_fails,
@@ -265,6 +296,8 @@ TESTS = [
     test_dialog_present_but_short_blocks_publish,
     test_dict_acceptable_arguments_is_returned_as_is,
     test_dialog_coverage_mismatch_is_caught,
+    test_content_in_model_output_does_not_affect_exact_match,
+    test_not_measured_items_still_carry_a_response,
 ]
 
 

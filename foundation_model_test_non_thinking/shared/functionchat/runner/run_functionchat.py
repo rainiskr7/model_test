@@ -188,12 +188,20 @@ def _call_with_budget(adapter: Any, item: Mapping[str, Any], timeout: float):
     return value
 
 
-def run_measured_item(
+def run_item(
     adapter: Any,
     item: Mapping[str, Any],
     task_timeout: float,
     max_retries: int,
+    evaluation_status: str = "measured",
 ) -> Dict[str, Any]:
+    """모델을 호출하고 응답을 보존한다.
+
+    evaluation_status 는 **exact-match 채점 대상인지**만 나타낸다. 호출은 어느 쪽이든
+    한다 — not_measured 도 응답을 저장해야 나중에 판정 계층이 쓸 수 있다.
+    (2026-08-23 이전에는 not_measured 항목의 생성을 아예 건너뛰어 model_output 과
+     raw_response 가 130건 전부 null 이었고, 판정 계층을 붙일 수 없었다.)
+    """
     started = time.monotonic()
     deadline = started + task_timeout
     errors: List[str] = []
@@ -220,10 +228,16 @@ def run_measured_item(
     execution_time = time.monotonic() - started
     message = response.get("message", {}) if isinstance(response, dict) else {}
     tool_calls = message.get("tool_calls", []) if isinstance(message, dict) else []
-    model_output = {"tool_calls": tool_calls}
+    # content 도 함께 담는다. exact-match 는 tool_calls 만 보지만, 판정 계층은
+    # 되묻기(slot) / 거절(relevance) / 완결(completion) 을 평가하므로 **자연어 응답이
+    # 있어야 한다.** 예전엔 tool_calls 만 남겨서 판정 대상 응답이 통째로 없었다.
+    model_output = {
+        "tool_calls": tool_calls,
+        "content": message.get("content") if isinstance(message, dict) else None,
+    }
     return {
         **dict(item),
-        "evaluation_status": "measured",
+        "evaluation_status": evaluation_status,
         "model_output": model_output,
         "raw_response": response,
         "exact_match": None,
@@ -242,31 +256,6 @@ def run_measured_item(
         "finish_reason": response.get("finish_reason") if isinstance(response, dict) else None,
         "last_finish_reason": response.get("finish_reason") if isinstance(response, dict) else None,
         "token_usage": response.get("usage") if isinstance(response, dict) else None,
-    }
-
-
-def not_measured_item(item: Mapping[str, Any]) -> Dict[str, Any]:
-    return {
-        **dict(item),
-        "evaluation_status": "not_measured",
-        "model_output": None,
-        "raw_response": None,
-        "exact_match": None,
-        "attempts": 0,
-        "error": None,
-        "attempt_errors": [],
-        "execution_time": 0.0,
-        "latency_seconds": 0.0,
-        "completion_latency": {
-            "average": 0.0,
-            "min": 0.0,
-            "max": 0.0,
-            "count": 0,
-            "unit": "seconds",
-        },
-        "finish_reason": None,
-        "last_finish_reason": None,
-        "token_usage": None,
     }
 
 
@@ -406,12 +395,17 @@ def main(argv: Optional[List[str]] = None) -> int:
             before_unparsed = adapter.unparsed_tool_call_candidates
             results = []
             for index, item in enumerate(items, start=1):
-                if item["type_of_output"] == CALL:
-                    result = run_measured_item(
-                        adapter, item, args.task_timeout, args.max_retries
-                    )
-                else:
-                    result = not_measured_item(item)
+                # call 이든 아니든 **호출은 한다.** type_of_output 은 exact-match
+                # 채점 대상인지만 가른다 — 판정 계층이 쓸 응답은 어느 쪽이든 남긴다.
+                result = run_item(
+                    adapter,
+                    item,
+                    args.task_timeout,
+                    args.max_retries,
+                    evaluation_status=(
+                        "measured" if item["type_of_output"] == CALL else "not_measured"
+                    ),
+                )
                 results.append(result)
                 if index % 25 == 0 or index == len(items):
                     print(f"[functionchat] {dataset}: {index}/{len(items)}")
