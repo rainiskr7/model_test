@@ -88,17 +88,98 @@ def collect(base: Path) -> List[Dict[str, Any]]:
     return rows
 
 
+def render_markdown(rows: List[Dict[str, Any]]) -> str:
+    """명령을 돌리지 않고도 읽을 수 있는 보고서를 만든다.
+
+    수치는 전부 산출물에서 읽는다. 이 함수에 숫자를 적어 넣지 않는다 — 그렇게 하면
+    산출물이 바뀌어도 보고서가 따라가지 않아 거짓이 된다.
+    """
+    published = [r for r in rows if r["publishable"]]
+    rejected = [r for r in rows if not r["publishable"]]
+
+    out: List[str] = []
+    out.append("# agent 트랙 결과")
+    out.append("")
+    out.append(
+        "이 파일은 `report_agent_tracks.py` 가 산출물에서 생성한다. "
+        "손으로 고치지 말 것 — 다시 생성하면 덮어써진다."
+    )
+    out.append("")
+    out.append(
+        f"발행 가능 **{len(published)}** / 거부 **{len(rejected)}**. "
+        "판단 기준은 [`AGENT_TRACK_CLOSEOUT.md`](AGENT_TRACK_CLOSEOUT.md)."
+    )
+    out.append("")
+
+    # 트랙/모델별 대표 런을 고른다. **런 이름 문자열 정렬을 쓰면 안 된다** —
+    # fcrep_c 가 fcfull 보다 뒤로 잡혀 최신 670항목 결과가 밀려난다 (실제로 발생).
+    # 축이 더 많고(=커버리지가 넓고), 그다음 항목 수가 많은 런을 대표로 삼는다.
+    # **축 단위로 고른다.** taubench 는 telecom/retail/airline 이 서로 다른 런이므로
+    # "모델당 1런" 으로 접으면 두 도메인이 사라진다 (실제로 발생).
+    # 같은 축에 여러 런이 있으면 분모가 큰 쪽(=커버리지가 넓은 쪽)을 대표로 삼는다.
+    best: Dict[tuple, tuple] = {}
+    for r in published:
+        for name, num, den, provisional in r["axes"]:
+            key = (r["track"], r["model"], name)
+            cand = (den or 0, r["run"])
+            if key not in best or cand > best[key][0]:
+                best[key] = (cand, r, (name, num, den, provisional))
+
+    out.append("## 발행 가능한 수치 (축별 대표 런)")
+    out.append("")
+    out.append("| 트랙 | 모델 | 런 | 축 | 결과 | 상태 |")
+    out.append("|---|---|---|---|---|---|")
+    for key in sorted(best):
+        _, r, (name, num, den, provisional) = best[key]
+        track, model, _ = key
+        state = "PROVISIONAL — 판정기 기준, 인간 검증 없음" if provisional else "확정"
+        out.append(
+            f"| {track} | {model} | {r['run']} | {name} | "
+            f"{fraction(num, den)} | {state} |"
+        )
+    out.append("")
+
+    if rejected:
+        out.append("## 발행 불가 — 점수를 인용하지 마십시오")
+        out.append("")
+        for r in sorted(rejected, key=lambda x: (x["track"], x["model"], x["run"])):
+            reasons = r["failures"] or [
+                "게이트 기록 없음 — 현재 채점 계약으로 재채점되지 않는 낡은 산출물"
+            ]
+            out.append(f"- **{r['model']} / {r['run']} / {r['track']}**")
+            for reason in reasons:
+                out.append(f"  - {reason}")
+        out.append("")
+
+    out.append("## 읽는 법")
+    out.append("")
+    out.append("- 분자/분모를 함께 본다. 반올림된 점수만으로는 표본 크기가 사라진다.")
+    out.append("- **축을 합산하거나 평균하지 않는다.** 서로 다른 능력을 잰다.")
+    out.append("- PROVISIONAL 은 인간 검증 전이다. 정답률이 아니라 판정기 기준 점수다.")
+    out.append("- 거부된 런의 숫자는 존재하더라도 인용하지 않는다.")
+    return "\n".join(out) + "\n"
+
+
 def main(argv: Optional[List[str]] = None) -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--base", type=Path, default=Path("foundation_model_test_non_thinking"))
     ap.add_argument("--strict", action="store_true", help="거부된 런이 있으면 exit 1")
     ap.add_argument("--show-rejected", action="store_true", default=True)
+    ap.add_argument(
+        "--write-markdown",
+        type=Path,
+        help="명령 없이 읽을 수 있는 보고서를 이 경로에 쓴다",
+    )
     args = ap.parse_args(argv)
 
     rows = collect(args.base)
     if not rows:
         print("산출물이 없습니다.", file=sys.stderr)
         return 2
+
+    if args.write_markdown:
+        args.write_markdown.write_text(render_markdown(rows), encoding="utf-8")
+        print(f"  wrote {args.write_markdown}")
 
     published = [r for r in rows if r["publishable"]]
     rejected = [r for r in rows if not r["publishable"]]
