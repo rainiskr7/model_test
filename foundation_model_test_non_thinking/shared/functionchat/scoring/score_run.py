@@ -285,8 +285,14 @@ def main(argv: List[str] = None) -> int:
         for failure in failures:
             print(f"[functionchat-scoring] FAIL: {failure}", file=sys.stderr)
 
+        summary["publish_status"] = {
+            "publishable": not failures,
+            "failures": list(failures),
+            "warnings": list(warnings),
+            "gate_scoring_version": summary.get("scoring_version"),
+        }
         if not args.dry_run:
-            # 발행 불가여도 산출물은 남긴다 — 진단에 필요하다. 종료코드로만 막는다.
+            # 발행 불가여도 산출물은 남긴다 — 진단에 필요하다.
             _write_atomic(results_dir / "summary.json", summary)
             print(f"[functionchat-scoring] wrote {results_dir / 'summary.json'}")
 

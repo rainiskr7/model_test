@@ -31,7 +31,13 @@
 |---|---|---|
 | **harness** | 한국어 일반 지식 / 추론 (KMMLU 45 sub-task) | EleutherAI `lm-evaluation-harness` |
 | **nlu** | 짧은 NLU smoke test (도메인 프롬프트 YAML) | 자체 runner (`nlu-gpustack.py`) |
-| **agent** | Tool calling · multi-step agent (L1~L7) | `Ko-AgentBench` (HF-KREW) |
+| **functionchat** | 한국어 첫 호출 정확도 (exact 670 + 판정 636) | `FunctionChat-Bench` (kakao) |
+| **taubench** | 다단계 실행 (telecom/retail/airline test 분할) | `tau2-bench` (sierra-research) |
+| ~~agent~~ | ~~Tool calling · multi-step (L1~L7)~~ — **중단됨** | ~~`Ko-AgentBench`~~ |
+
+> **agent 트랙 종료 보고: [`AGENT_TRACK_CLOSEOUT.md`](../AGENT_TRACK_CLOSEOUT.md)**
+> 어떤 수치가 발행 가능한지는 그 문서가 유일한 기준이다. 결과 디렉토리에는
+> 게이트가 거부한 런과 진단용 런이 섞여 있다.
 | **multimodal** | OCR · 문서/표/차트 이해 · 실세계 장면 텍스트 · 자유 서술형 VQA | KRETA, KOFFVQA, K-DTCBench, K-MMBench, MTVQA(KR), KO-VLM-Benchmark + 자체 B-3/B-4 |
 
 ### 1.2 평가 대상 (vsm 메인 트랙, 6종)

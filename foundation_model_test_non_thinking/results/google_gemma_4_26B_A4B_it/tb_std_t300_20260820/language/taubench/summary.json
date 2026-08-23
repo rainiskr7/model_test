@@ -113,13 +113,15 @@
       "pass_rate_source": "tau2 results.simulations[].reward_info.reward",
       "pass_rate_strict": null,
       "pass_rate_strict_denominator": 33,
-      "pass_rate_strict_reason": "환경 귀책 오류가 있어 계산하지 않는다: {'Timeout': 7}",
+      "pass_rate_strict_reason": "후보 귀책으로 확정되지 않은 미완주가 있어 계산하지 않는다: {'Timeout@agent': 1, 'Timeout@user': 6}",
       "pass_rate_strict_definition": "passed / (measured + 모델 귀책 미완주). upstream pass_rate 와 달리 모델이 스스로 망가져 못 끝낸 태스크를 실패로 센다. 환경 귀책 오류가 있으면 null.",
       "incompletion_attribution": {
-        "model": {},
+        "candidate": {},
         "environment": {
-          "Timeout": 7
-        }
+          "Timeout@agent": 1,
+          "Timeout@user": 6
+        },
+        "unclassified": {}
       },
       "runnable_tasks": 40,
       "result_records": 40,
@@ -572,7 +574,7 @@
     },
     "retail": {
       "status": "not_measured",
-      "reason": "LLM judge required",
+      "reason": "not selected for this run",
       "pass_rate": null,
       "runnable_tasks": 0,
       "result_records": 0,
@@ -583,7 +585,7 @@
     },
     "airline": {
       "status": "not_measured",
-      "reason": "LLM judge required",
+      "reason": "LLM judge required for every task in the test split",
       "pass_rate": null,
       "runnable_tasks": 0,
       "result_records": 0,
@@ -638,5 +640,14 @@
     "repository": "sierra-research/tau2-bench",
     "commit": "c3398666e6559e3a063da3fc04b5acf7f941464e",
     "license": "MIT"
+  },
+  "publish_status": {
+    "publishable": false,
+    "failures": [
+      "by_domain.telecom: 40건 중 33건만 측정됐다 — 부분 실행이다",
+      "by_domain.telecom: 완주 실패 7건 (environment=7) — 완전 측정이 아니다"
+    ],
+    "warnings": [],
+    "gate_scoring_version": "taubench_state_v1"
   }
 }

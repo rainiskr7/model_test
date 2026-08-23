@@ -555,10 +555,19 @@ def main(argv: Optional[list[str]] = None) -> int:
         for failure in failures:
             print(f"[taubench/score] FAIL: {failure}", file=sys.stderr)
 
+        # **거부 상태를 산출물 자체에 새긴다.** 예전에는 종료코드로만 알렸는데 그 코드는
+        # 호출이 끝나면 사라진다. 2026-08-23 에 게이트가 거부한 gemma telecom
+        # 0.4615(18/39)가 요약 파일만 보고 최종 수치로 여러 번 인용됐다.
+        summary["publish_status"] = {
+            "publishable": not failures,
+            "failures": list(failures),
+            "warnings": list(warnings),
+            "gate_scoring_version": SCORING_VERSION,
+        }
         if args.dry_run:
             print(json.dumps(summary, ensure_ascii=False, indent=2))
         else:
-            # 발행 불가여도 산출물은 남긴다 — 진단에 필요하다. 종료코드로만 막는다.
+            # 발행 불가여도 산출물은 남긴다 — 진단에 필요하다.
             _write_atomic(results_dir / "summary.json", summary)
             print(f"[taubench/score] wrote {results_dir / 'summary.json'}")
 

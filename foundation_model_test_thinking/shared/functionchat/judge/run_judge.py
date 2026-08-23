@@ -156,7 +156,11 @@ def main(argv: Optional[List[str]] = None) -> int:
         "scoring_version": SCORING_VERSION,
         "judge": {
             "model": args.judge_model,
-            "repeats": args.repeats,
+            # 재판정(--retry-unresolved)을 하면 항목마다 투표 수가 다르다. 단일 값으로
+            # 적으면 거짓이 된다 — 2026-08-23 에 repeats=5 로 기록됐으나 실제로는
+            # 623건이 2회, 13건만 5회였다. 실제 분포를 기록한다.
+            "repeats_requested_this_invocation": args.repeats,
+            "votes_per_item": None,  # 아래에서 실측으로 채운다
             "temperature": 0,
             "output_contract": "json_schema strict {verdict, justification_ko}",
             "rubric_source": "upstream data/rubric_{type}.txt (unmodified)",
@@ -177,6 +181,10 @@ def main(argv: Optional[List[str]] = None) -> int:
         "by_type": {k: dict(v) for k, v in sorted(per_type.items())},
         "errors": dict(errors),
         "records": records,
+    }
+    from collections import Counter as _C
+    summary["judge"]["votes_per_item"] = {
+        str(k): v for k, v in sorted(_C(len(r["verdicts"]) for r in records).items())
     }
     out = args.results_dir / "judge.json"
     out.write_text(json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8")

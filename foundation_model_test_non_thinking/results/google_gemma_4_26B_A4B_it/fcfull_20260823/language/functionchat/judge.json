@@ -3,11 +3,16 @@
   "scoring_version": "functionchat_judge_v1",
   "judge": {
     "model": "openai/gpt-4.1-mini",
-    "repeats": 5,
     "temperature": 0,
     "output_contract": "json_schema strict {verdict, justification_ko}",
     "rubric_source": "upstream data/rubric_{type}.txt (unmodified)",
-    "human_validation": "not performed"
+    "human_validation": "not performed",
+    "repeats_requested_this_invocation": 5,
+    "votes_per_item": {
+      "2": 625,
+      "5": 11
+    },
+    "provenance_note": "최초 636건은 2회, 동점으로 미해결이던 항목만 5회 재판정했다. 단일 repeats 값으로 적으면 거짓이므로 실측 분포를 남긴다."
   },
   "caveat": "판정기 기준 점수다. 인간 라벨 검증을 하지 않았으므로 정답률의 추정치가 아니다. exact 층(functionchat_exact_v2)과 합산하지 말 것.",
   "overall": {
