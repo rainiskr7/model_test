@@ -32,13 +32,25 @@ def safe_model_name(model: str) -> str:
     return model.replace("/", "_").replace("-", "_").replace(":", "_")
 
 
-def classify_reward_basis(basis: Iterable[str]) -> tuple[str, Optional[str]]:
-    values = frozenset(str(value) for value in basis)
-    if values & JUDGE_BASES:
-        return "not_measured", "llm_judge_required"
+def classify_task(task: Mapping[str, Any]) -> tuple[str, Optional[str]]:
+    """태스크가 판정 없이 채점 가능한지 가린다. **선언이 아니라 내용을 본다.**
+
+    러너의 requires_judge() 와 같은 규칙이다. 둘이 어긋나면 러너는 실행하는데
+    채점기가 not_measured 로 버리는 사태가 난다 — 2026-08-23 retail 첫 런에서
+    실제로 발생했다 (29건을 돌려놓고 0건 측정으로 집계).
+
+    - COMMUNICATE 는 판정이 아니다 (evaluator_communicate.py 는 부분문자열 매칭).
+    - NL_ASSERTION 은 선언돼 있어도 nl_assertions 가 비면 판정을 부르지 않는다
+      (evaluator_nl_assertions.py:37 이 빈 목록에 대해 1.0 을 돌려준다).
+    """
+    criteria = task.get("evaluation_criteria") or {}
+    values = frozenset(str(v) for v in criteria.get("reward_basis") or [])
     if not values:
         return "not_measured", "reward_basis_missing"
-    if not values <= PROGRAMMATIC_BASES:
+    if "NL_ASSERTION" in values and criteria.get("nl_assertions"):
+        return "not_measured", "llm_judge_required"
+    unknown = values - PROGRAMMATIC_BASES - JUDGE_BASES
+    if unknown:
         return "not_measured", "unsupported_reward_basis"
     return "measured", None
 
@@ -136,8 +148,9 @@ def score_domain(
     simulations = list(raw.get("simulations") or [])
     for simulation in simulations:
         task_id = str(simulation.get("task_id"))
-        basis = _task_basis(tasks.get(task_id) or {})
-        status, reason = classify_reward_basis(basis)
+        task_obj = tasks.get(task_id) or {}
+        basis = _task_basis(task_obj)
+        status, reason = classify_task(task_obj)
         reward_info = simulation.get("reward_info") or {}
         reward = reward_info.get("reward")
         record: dict[str, Any] = {
@@ -258,20 +271,27 @@ def build_summary(
         )
 
     domain_scope = manifest.get("domain_scope") or {}
+    # 실행 도메인을 먼저 넣고, **미실행 도메인만** 사유와 함께 채운다.
+    # (예전에는 retail/airline 을 뒤에 무조건 넣어서, retail 을 실행하면 그 결과가
+    #  하드코딩된 not_measured 로 덮어써졌다 — 2026-08-23 retail 첫 런에서 29건을
+    #  돌려놓고 0건 측정으로 집계됐다.)
+    _fallback_reasons = {
+        "banking_knowledge": (
+            (domain_scope.get("banking_knowledge") or {}).get("reason")
+            or "banking_knowledge has no supported no-user mode"
+        ),
+        "retail": "not selected for this run",
+        "airline": "LLM judge required for every task in the test split",
+        "telecom": "not selected for this run",
+    }
     domains = {
         run_domain: score_domain(
             run_domain, domain_raw, int(runnable_task_count or 0)
-        ),
-        "banking_knowledge": score_domain(
-            "banking_knowledge",
-            None,
-            0,
-            (domain_scope.get("banking_knowledge") or {}).get("reason")
-            or "banking_knowledge has no supported no-user mode",
-        ),
-        "retail": score_domain("retail", None, 0, "LLM judge required"),
-        "airline": score_domain("airline", None, 0, "LLM judge required"),
+        )
     }
+    for name, reason in _fallback_reasons.items():
+        if name != run_domain:
+            domains[name] = score_domain(name, None, 0, reason)
     measured = sum(entry["measured"] for entry in domains.values())
     passed = sum(entry["passed"] for entry in domains.values())
     failed = sum(entry["failed"] for entry in domains.values())

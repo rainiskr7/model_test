@@ -89,24 +89,55 @@ def raw_results(tasks, simulations):
 
 
 class TauBenchScoringTests(unittest.TestCase):
-    def test_judge_reward_basis_is_never_scored(self):
-        for basis in (
-            ["DB", "NL_ASSERTION"],
-            ["DB", "COMMUNICATE"],
-            ["ENV_ASSERTION", "ACTION", "NL_ASSERTION"],
-        ):
+    def test_task_with_real_nl_assertions_is_never_scored(self):
+        """nl_assertions 에 **내용이 있으면** 판정이 필요하므로 채점하지 않는다."""
+        for basis in (["DB", "NL_ASSERTION"], ["ENV_ASSERTION", "ACTION", "NL_ASSERTION"]):
             with self.subTest(basis=basis):
-                status, reason = scorer.classify_reward_basis(basis)
+                status, reason = scorer.classify_task(
+                    task("t", basis, ["에이전트는 정책을 지켜야 한다"])
+                )
                 self.assertEqual("not_measured", status)
                 self.assertEqual("llm_judge_required", reason)
 
         raw = raw_results(
-            [task("judge-task", ["DB", "NL_ASSERTION"])],
+            [task("judge-task", ["DB", "NL_ASSERTION"], ["에이전트는 정책을 지켜야 한다"])],
             [simulation("judge-task", 1.0)],
         )
-        scored = scorer.score_domain("telecom", raw, runnable_tasks=1)
+        scored = scorer.score_domain("retail", raw, runnable_tasks=1)
         self.assertEqual(0, scored["measured"])
-        self.assertIsNone(scored["pass_rate"])
+
+    def test_declared_nl_assertion_without_content_is_scored(self):
+        """retail test 40건 중 28건이 NL_ASSERTION 을 선언만 하고 내용이 없다.
+        이걸 버리면 실행한 29건이 0건 측정으로 집계된다 (2026-08-23 실제 발생)."""
+        status, reason = scorer.classify_task(task("t", ["DB", "NL_ASSERTION"]))
+        self.assertEqual("measured", status)
+        self.assertIsNone(reason)
+
+        raw = raw_results(
+            [task("free", ["DB", "NL_ASSERTION"])],
+            [simulation("free", 1.0)],
+        )
+        scored = scorer.score_domain("retail", raw, runnable_tasks=1)
+        self.assertEqual(1, scored["measured"])
+        self.assertEqual(1, scored["passed"])
+
+    def test_communicate_alone_is_scored(self):
+        """evaluator_communicate.py 는 부분문자열 매칭이다 — 판정이 아니다."""
+        status, _ = scorer.classify_task(task("t", ["DB", "COMMUNICATE"]))
+        self.assertEqual("measured", status)
+
+    def test_run_domain_result_is_not_overwritten_by_fallback(self):
+        """retail 을 실행하면 그 결과가 하드코딩 not_measured 로 덮이면 안 된다."""
+        raw = raw_results(
+            [task("r1", ["DB"])],
+            [simulation("r1", 1.0)],
+        )
+        m = manifest(["r1"])
+        m["split"]["domain"] = "retail"
+        summary = scorer.build_summary({"retail": raw}, m, "taubench")
+        self.assertEqual(1, summary["by_domain"]["retail"]["measured"])
+        self.assertEqual("not_measured", summary["by_domain"]["telecom"]["status"])
+        self.assertIsNone(summary["by_domain"]["telecom"]["pass_rate"])
 
     def test_default_split_resolves_ids_from_split_tasks_json(self):
         split_ids = ["test-c", "test-a", "test-b"]
