@@ -1,5 +1,5 @@
 #!/bin/bash
-# K-MMBench (NCSOFT) — 한국어 멀티모달 4,330 샘플 (dev). 카테고리 선별 옵션 지원.
+# K-MMBench (NCSOFT) — 한국어 멀티모달 4,329 샘플 (dev). 카테고리 선별 옵션 지원.
 # Usage:
 #   ./run_k_mmbench.sh MODEL [BASE_URL]
 #   ./run_k_mmbench.sh MODEL [BASE_URL] --categories cat1,cat2,...

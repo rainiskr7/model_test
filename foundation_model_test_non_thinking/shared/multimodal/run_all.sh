@@ -68,7 +68,7 @@ run_checked "KOFFVQA" bash "$SCRIPT_DIR/run_koffvqa.sh" "$MODEL" "$BASE_URL"
 echo "=== MTVQA-KR (한국어 서브셋) ==="
 run_checked "MTVQA-KR" bash "$SCRIPT_DIR/run_mtvqa_kr.sh" "$MODEL" "$BASE_URL"
 
-echo "=== K-MMBench (4,330) ==="
+echo "=== K-MMBench (4,329) ==="
 run_checked "K-MMBench" bash "$SCRIPT_DIR/run_k_mmbench.sh" "$MODEL" "$BASE_URL"
 
 echo "=== KRETA (mode=${KRETA_SETTING:-default}) ==="
@@ -149,12 +149,13 @@ benches_dir = Path(sys.argv[3])
 # schema-aware validation (Pydantic 기반 — _schema.py 가 있으면 활용)
 sys.path.insert(0, str(benches_dir))
 try:
-    from _schema import detect_and_validate
+    from _schema import detect_and_validate, diagnostic_warnings, publish_status_error
     HAS_SCHEMA = True
 except Exception as e:
     print(f"[sanity] schema module 로드 실패 ({e}) — legacy 키 검사만")
     HAS_SCHEMA = False
 
+failures = []
 warnings = []
 if not session.exists():
     print(f"[sanity] WARN: session dir 없음 {session}")
@@ -171,11 +172,20 @@ for jf in session.rglob('*.json'):
         continue
     rel = jf.relative_to(session)
 
+    if HAS_SCHEMA and isinstance(d, dict):
+        warnings.extend(f"  [warning] {msg}" for msg in diagnostic_warnings(d, str(rel)))
+        gate_error = publish_status_error(
+            d, str(rel), allow_clean_unscored=(jf.parent.name == "koffvqa"),
+        )
+        if gate_error:
+            failures.append(f"  [publish] {gate_error}")
+            continue
+
     # 1차: schema 검증 (새 bench 표준)
     if HAS_SCHEMA and isinstance(d, dict):
         kind, msg = detect_and_validate(d, str(rel))
         if msg:
-            warnings.append(f"  [{kind}] {msg}")
+            failures.append(f"  [{kind}] {msg}")
             continue
         if kind != "unknown":
             continue  # schema 통과 → legacy 검사 skip
@@ -185,24 +195,28 @@ for jf in session.rglob('*.json'):
         for k in ("total", "count", "n_samples", "num_samples"):
             v = d.get(k)
             if isinstance(v, (int, float)) and v == 0:
-                warnings.append(f"  {rel}: {k}=0")
+                failures.append(f"  {rel}: {k}=0")
                 break
         # KRETA results.json 의 모델별 키 구조에서 stale key 탐지
         if jf.parent.name == "kreta" and jf.name == "results.json":
             stale = [k for k in d.keys() if not k.startswith(model_name)]
             if stale:
-                warnings.append(f"  {rel}: stale model key {stale}")
+                failures.append(f"  {rel}: stale model key {stale}")
 
 if warnings:
-    print(f"[sanity] {len(warnings)} 건의 의심 결과:")
+    print(f"[sanity] {len(warnings)} 건의 비치명 경고:")
     for w in warnings:
         print(w)
+if failures:
+    print(f"[sanity] {len(failures)} 건의 실패 결과:")
+    for failure in failures:
+        print(failure)
     sys.exit(1)
 else:
-    print("[sanity] OK — 모든 트랙 결과 정상")
+    print("[sanity] OK — 치명적 결과 없음")
 PY
 then
-  echo "[run_all] sanity check 에서 strong warning 감지됨"
+  echo "[run_all] sanity check 실패 감지됨"
   FAILURES=$((FAILURES + 1))
 fi
 

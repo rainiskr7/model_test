@@ -5,9 +5,10 @@
   "completed_at_utc": null,
   "counts": {
     "attempted": 2577,
-    "correct_measured": 1864,
+    "correct_measured": 1860,
     "errored": 0,
     "measured": 2577,
+    "no_answer": 10,
     "unresolved": 0
   },
   "failures": [],
@@ -16,16 +17,16 @@
       {
         "denominator": 2577,
         "name": "overall",
-        "numerator": 1864,
+        "numerator": 1860,
         "unit": "fraction",
-        "value": 0.7233216918897943
+        "value": 0.7217694994179278
       },
       {
         "denominator": 83,
         "name": "domain:Arts and Humanities",
-        "numerator": 78,
+        "numerator": 77,
         "unit": "fraction",
-        "value": 0.9397590361445783
+        "value": 0.927710843373494
       },
       {
         "denominator": 60,
@@ -37,9 +38,9 @@
       {
         "denominator": 478,
         "name": "domain:CSAT Science",
-        "numerator": 173,
+        "numerator": 174,
         "unit": "fraction",
-        "value": 0.3619246861924686
+        "value": 0.36401673640167365
       },
       {
         "denominator": 104,
@@ -65,9 +66,9 @@
       {
         "denominator": 264,
         "name": "domain:Hospitality and Food Service",
-        "numerator": 199,
+        "numerator": 198,
         "unit": "fraction",
-        "value": 0.7537878787878788
+        "value": 0.75
       },
       {
         "denominator": 145,
@@ -100,9 +101,9 @@
       {
         "denominator": 154,
         "name": "domain:Retail and Commerce",
-        "numerator": 121,
+        "numerator": 119,
         "unit": "fraction",
-        "value": 0.7857142857142857
+        "value": 0.7727272727272727
       },
       {
         "denominator": 92,
@@ -114,9 +115,9 @@
       {
         "denominator": 167,
         "name": "domain:Transportation and Logistics",
-        "numerator": 117,
+        "numerator": 116,
         "unit": "fraction",
-        "value": 0.7005988023952096
+        "value": 0.6946107784431138
       },
       {
         "denominator": 108,
@@ -128,42 +129,50 @@
       {
         "denominator": 1426,
         "name": "system:System1",
-        "numerator": 1283,
+        "numerator": 1282,
         "unit": "fraction",
-        "value": 0.8997194950911641
+        "value": 0.8990182328190743
       },
       {
         "denominator": 1151,
         "name": "system:System2",
-        "numerator": 581,
+        "numerator": 578,
         "unit": "fraction",
-        "value": 0.5047784535186794
+        "value": 0.5021720243266724
       }
     ],
     "conditional": {
       "denominator": 2577,
-      "numerator": 1864,
+      "numerator": 1860,
       "unit": "fraction",
-      "value": 0.7233216918897943
+      "value": 0.7217694994179278
     },
     "strict": {
       "denominator": 2577,
-      "numerator": 1864,
+      "numerator": 1860,
       "unit": "fraction",
-      "value": 0.7233216918897943
+      "value": 0.7217694994179278
     }
   },
   "model": "google_gemma_4_26b_a4b_it",
+  "no_answer_rate": {
+    "denominator": 2577,
+    "numerator": 10,
+    "unit": "fraction",
+    "value": 0.0038804811796662787
+  },
   "protocol": {
     "complete": false,
-    "fingerprint": "sha256:2eac70b4f5b4ae422ebeb77d44bc0bd0b5b0e779efbfb884f3e36b5422eaa7cd",
+    "fingerprint": "sha256:b5a8188c68cf13518732860ce14af6af7eca3f90a7bd5bc9b55faeb27f81737f",
     "inferred": {
       "max_tokens": {
-        "basis": "run_kreta.sh: direct mode default KRETA_MAX_TOKENS",
+        "basis": "legacy run_kreta.sh: direct mode default KRETA_MAX_TOKENS",
         "value": 32
       }
     },
     "recorded": {
+      "answer_parser_hash": "sha256:623dced50534d5fdd36879f6abc183f27bc1a83661472de40591468f0514ad56",
+      "answer_parser_version": "kreta-response-choice-v2",
       "benchmark": "KRETA",
       "dataset_item_digest": "0cc4ed8281009d38",
       "dataset_provenance": {
@@ -177,7 +186,6 @@
       "split": "test"
     },
     "unknown": [
-      "answer_parser_hash",
       "image_preprocessing_version",
       "prompt_template_hash",
       "seed",
@@ -206,8 +214,16 @@
     "unit": "results/google_gemma_4_26B_A4B_it/20260621_221741/vision/multimodal/kreta/google_gemma_4_26b_a4b_it_direct.jsonl"
   },
   "status": "LEGACY_REVALIDATED",
+  "upstream_comparison": {
+    "disagreement_different_choice": 1,
+    "disagreement_ours_empty": 10,
+    "note": "상류 파생 필드는 채점 근거로 쓰지 않음",
+    "parser_disagreement_rows": 11,
+    "upstream_accuracy": 72.33216918897944
+  },
   "variant": "direct",
   "warnings": [
-    "비교 비핵심 provenance 미기록: answer_parser_hash, image_preprocessing_version, prompt_template_hash, seed, temperature"
+    "상류 parser와 11행 불일치 (우리 무답 10, 다른 선택지 1) — 독립 재채점 점수임",
+    "비교 비핵심 provenance 미기록: image_preprocessing_version, prompt_template_hash, seed, temperature"
   ]
 }

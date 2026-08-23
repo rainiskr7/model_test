@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import shutil
+import threading
 from pathlib import Path
 
 import pytest
@@ -13,6 +14,7 @@ from shared.multimodal.publish.derive import (
     original_artifact_manifest,
     write_sidecar,
 )
+from shared.multimodal.publish.report import collect, strict_failed
 
 
 REPO = Path(__file__).resolve().parents[3]
@@ -120,3 +122,77 @@ def test_cli_skips_native_by_default_and_force_warns_before_overwrite(tmp_path, 
     assert "completed_at_utc='2026-08-24T12:34:56+00:00'" in forced_output.err
     assert "protocol provenance=" in forced_output.err
     assert json.loads(path.read_text(encoding="utf-8"))["status"] == "LEGACY_REVALIDATED"
+
+
+def test_tampered_native_artifact_is_not_collected_or_skipped(tmp_path):
+    source = _copy_clean_source(tmp_path)
+    path = _write_native(source, tmp_path)
+    raw = source / "results.json"
+    raw.write_text(raw.read_text(encoding="utf-8") + "\n", encoding="utf-8")
+
+    sidecars, missing = collect(tmp_path)
+    assert sidecars == []
+    assert len(missing) == 1
+    assert "손상" in missing[0]["reason"]
+
+    derived = derive_all(tmp_path, write=True)
+    assert len(derived) == 1
+    stored = json.loads(path.read_text(encoding="utf-8"))
+    assert stored["status"] == "REJECTED"
+    assert any("artifact 무결성 실패" in reason for reason in stored["failures"])
+
+
+def test_native_with_missing_source_artifact_is_not_collected(tmp_path):
+    source = _copy_clean_source(tmp_path)
+    _write_native(source, tmp_path)
+    (source / "summary.json").unlink()
+    sidecars, missing = collect(tmp_path)
+    assert sidecars == []
+    assert len(missing) == 1
+    assert "artifact missing" in missing[0]["reason"]
+
+
+def test_concurrent_passive_derive_cannot_overwrite_native(monkeypatch, tmp_path):
+    from shared.multimodal.publish import derive as derive_module
+
+    source = _copy_clean_source(tmp_path)
+    native_path, native = native_sidecar_from_source(source, tmp_path)
+    original_derive_source = derive_module.derive_source
+    calculated = threading.Event()
+    release = threading.Event()
+
+    def slow_derive(source_path, base):
+        item = original_derive_source(source_path, base)
+        calculated.set()
+        assert release.wait(timeout=5)
+        return item
+
+    monkeypatch.setattr(derive_module, "derive_source", slow_derive)
+    outcome = []
+    worker = threading.Thread(
+        target=lambda: outcome.extend(derive_module.derive_all(tmp_path, write=True)),
+    )
+    worker.start()
+    assert calculated.wait(timeout=5)
+    write_sidecar(native_path, native)
+    release.set()
+    worker.join(timeout=5)
+    assert not worker.is_alive()
+    assert outcome == []
+    assert json.loads(native_path.read_text(encoding="utf-8"))["status"] == "NATIVE"
+
+
+def test_strict_collection_is_scoped_to_requested_partial_session(tmp_path):
+    source = _copy_clean_source(tmp_path)
+    derive_all(tmp_path, write=True)
+    historical = tmp_path / "results/model/old-session/vision/multimodal/k_dtcbench"
+    historical.mkdir(parents=True)
+
+    current_session = source.relative_to(tmp_path / "results").parts[1]
+    sidecars, missing = collect(tmp_path, current_session)
+    assert sidecars and missing == []
+    assert strict_failed(sidecars, missing, []) is False
+
+    old_sidecars, old_missing = collect(tmp_path, "old-session")
+    assert old_sidecars == [] and len(old_missing) == 1
+    assert strict_failed(old_sidecars, old_missing, []) is True

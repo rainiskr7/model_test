@@ -39,39 +39,63 @@ echo "[multimodal/kreta] DEST=$DEST"
 KRETA_REPO="$BASE_DIR/data/KRETA"
 PUBLISH_CLI="$BASE_DIR/derive_multimodal_publish.py"
 
-# 재현용 메타데이터 기록 (eval 실패해도 환경 정보 보존)
-python "$SCRIPT_DIR/benches/common.py" \
-  --out "$DEST/run_config.json" \
-  --benchmark "KRETA" \
-  --model "$MODEL" \
-  --base-url "$BASE_URL" \
-  --repo-dir "$KRETA_REPO" || echo "[kreta] run_config 작성 실패 (계속)"
-
-# KRETA inference + evaluation
-# infer_gpt.py 가 --base_url 인자 미지원이므로 env var 로 전달.
-export OPENAI_BASE_URL="$BASE_URL"
-# WORKERS env 로 동시성 조정 가능 (default 2 — GB10 메모리/대역폭 고려해 낮춤)
-export KRETA_WORKERS="${KRETA_WORKERS:-2}"
-# 모드별 생성 상한 기본값 (env 로 override 가능):
-#   direct(글자만 답) → 32 로 작게: 타임아웃·절단 없음, GB10 등 느린 HW 안전.
-#   default(추론 후 답) → 4096: 추론 공간 확보(짧추면 긴 답 절단 → 답 유실).
 if [ "$SETTING" = "direct" ]; then
   export KRETA_MAX_TOKENS="${KRETA_MAX_TOKENS:-32}"
 else
   export KRETA_MAX_TOKENS="${KRETA_MAX_TOKENS:-4096}"
 fi
 
+# 재현용 메타데이터 기록 (eval 실패해도 환경 정보 보존)
+python "$SCRIPT_DIR/benches/common.py" \
+  --out "$DEST/run_config.json" \
+  --benchmark "KRETA" \
+  --model "$MODEL" \
+  --base-url "$BASE_URL" \
+  --max-tokens "$KRETA_MAX_TOKENS" \
+  --repo-dir "$KRETA_REPO" || { echo "[kreta] run_config 작성 실패 — 중단"; exit 1; }
+
+# KRETA inference + evaluation
+# infer_gpt.py 가 --base_url 인자 미지원이므로 env var 로 전달.
+export OPENAI_BASE_URL="$BASE_URL"
+# WORKERS env 로 동시성 조정 가능 (default 2 — GB10 메모리/대역폭 고려해 낮춤)
+export KRETA_WORKERS="${KRETA_WORKERS:-2}"
 cd "$KRETA_REPO/eval" || { echo "ERROR: $KRETA_REPO/eval not found. Run install.sh first."; exit 1; }
 
 # RESUME MODE: jsonl 은 보존(이어하기), results.json 만 정리(stale 평가 방지).
 # (원본 run_kreta.sh 는 jsonl 까지 삭제 → 처음부터 재실행. 여기선 의도적으로 보존.)
 mkdir -p ./output
+CHECKPOINT="./output/${MODEL}_${SETTING}.jsonl"
+if [ ! -f "$CHECKPOINT" ] || [ ! -f "./output/.resume_context.json" ]; then
+  echo "[multimodal/kreta] ERROR: 검증 가능한 checkpoint/context 없음 — 새 run_kreta.sh 실행 필요"
+  exit 1
+fi
+if ! python - "./output/.resume_context.json" "$MODEL" "$SETTING" "$BASE_URL" "$TIMESTAMP" "$KRETA_MAX_TOKENS" <<'PY'
+import json, sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+expected = {
+    "model": sys.argv[2], "setting": sys.argv[3], "base_url": sys.argv[4],
+    "session": sys.argv[5], "max_tokens": int(sys.argv[6]),
+}
+try:
+    actual = json.loads(path.read_text(encoding="utf-8"))
+except Exception as exc:
+    raise SystemExit(f"resume context 읽기 실패: {exc}")
+if actual != expected:
+    raise SystemExit(f"stale resume context 거부: expected={expected!r}, actual={actual!r}")
+PY
+then
+  echo "[multimodal/kreta] ERROR: 현재 실행 문맥과 checkpoint가 다름 — resume 중단"
+  exit 1
+fi
+# evaluate.py가 다른 모델 jsonl까지 일괄 읽지 못하도록 현재 checkpoint 외에는 제거한다.
+find ./output -maxdepth 1 -type f -name '*.jsonl' ! -name "$(basename "$CHECKPOINT")" -delete || { echo "[multimodal/kreta] ERROR: foreign checkpoint 정리 실패"; exit 1; }
 find ./output -maxdepth 1 -type f \( -name 'results.json' -o -name '*.jsonl.tmp' \) -delete || { echo "[multimodal/kreta] ERROR: ./output 정리 실패 — 중단"; exit 1; }
-echo "[multimodal/kreta] RESUME: jsonl 보존, results.json 만 정리"
+echo "[multimodal/kreta] RESUME: 문맥 일치 checkpoint만 보존"
 
 INFER_RC=0
 python infer/infer_gpt.py "$MODEL" "$SETTING" || INFER_RC=$?
-CHECKPOINT="./output/${MODEL}_${SETTING}.jsonl"
 if [ ! -f "$CHECKPOINT" ]; then
   echo "[multimodal/kreta] ERROR: checkpoint 없음: $CHECKPOINT"
   exit 1

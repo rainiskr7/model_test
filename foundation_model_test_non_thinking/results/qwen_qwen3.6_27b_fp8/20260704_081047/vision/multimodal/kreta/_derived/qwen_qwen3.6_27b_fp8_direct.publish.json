@@ -5,9 +5,10 @@
   "completed_at_utc": null,
   "counts": {
     "attempted": 2577,
-    "correct_measured": 1821,
+    "correct_measured": 1819,
     "errored": 0,
     "measured": 2577,
+    "no_answer": 8,
     "unresolved": 0
   },
   "failures": [],
@@ -16,9 +17,9 @@
       {
         "denominator": 2577,
         "name": "overall",
-        "numerator": 1821,
+        "numerator": 1819,
         "unit": "fraction",
-        "value": 0.7066356228172294
+        "value": 0.705859526581296
       },
       {
         "denominator": 83,
@@ -37,23 +38,23 @@
       {
         "denominator": 478,
         "name": "domain:CSAT Science",
-        "numerator": 138,
+        "numerator": 140,
         "unit": "fraction",
-        "value": 0.28870292887029286
+        "value": 0.2928870292887029
       },
       {
         "denominator": 104,
         "name": "domain:Economics and Finance",
-        "numerator": 80,
+        "numerator": 79,
         "unit": "fraction",
-        "value": 0.7692307692307693
+        "value": 0.7596153846153846
       },
       {
         "denominator": 215,
         "name": "domain:Education and Academia",
-        "numerator": 179,
+        "numerator": 178,
         "unit": "fraction",
-        "value": 0.8325581395348837
+        "value": 0.827906976744186
       },
       {
         "denominator": 168,
@@ -86,9 +87,9 @@
       {
         "denominator": 204,
         "name": "domain:Personal and Lifestyle",
-        "numerator": 176,
+        "numerator": 175,
         "unit": "fraction",
-        "value": 0.8627450980392157
+        "value": 0.8578431372549019
       },
       {
         "denominator": 245,
@@ -100,9 +101,9 @@
       {
         "denominator": 154,
         "name": "domain:Retail and Commerce",
-        "numerator": 121,
+        "numerator": 119,
         "unit": "fraction",
-        "value": 0.7857142857142857
+        "value": 0.7727272727272727
       },
       {
         "denominator": 92,
@@ -114,9 +115,9 @@
       {
         "denominator": 167,
         "name": "domain:Transportation and Logistics",
-        "numerator": 127,
+        "numerator": 128,
         "unit": "fraction",
-        "value": 0.7604790419161677
+        "value": 0.7664670658682635
       },
       {
         "denominator": 108,
@@ -128,42 +129,50 @@
       {
         "denominator": 1426,
         "name": "system:System1",
-        "numerator": 1286,
+        "numerator": 1283,
         "unit": "fraction",
-        "value": 0.9018232819074333
+        "value": 0.8997194950911641
       },
       {
         "denominator": 1151,
         "name": "system:System2",
-        "numerator": 535,
+        "numerator": 536,
         "unit": "fraction",
-        "value": 0.46481320590790615
+        "value": 0.46568201563857514
       }
     ],
     "conditional": {
       "denominator": 2577,
-      "numerator": 1821,
+      "numerator": 1819,
       "unit": "fraction",
-      "value": 0.7066356228172294
+      "value": 0.705859526581296
     },
     "strict": {
       "denominator": 2577,
-      "numerator": 1821,
+      "numerator": 1819,
       "unit": "fraction",
-      "value": 0.7066356228172294
+      "value": 0.705859526581296
     }
   },
   "model": "qwen_qwen3.6_27b_fp8",
+  "no_answer_rate": {
+    "denominator": 2577,
+    "numerator": 8,
+    "unit": "fraction",
+    "value": 0.0031043849437330227
+  },
   "protocol": {
     "complete": false,
-    "fingerprint": "sha256:2eac70b4f5b4ae422ebeb77d44bc0bd0b5b0e779efbfb884f3e36b5422eaa7cd",
+    "fingerprint": "sha256:b5a8188c68cf13518732860ce14af6af7eca3f90a7bd5bc9b55faeb27f81737f",
     "inferred": {
       "max_tokens": {
-        "basis": "run_kreta.sh: direct mode default KRETA_MAX_TOKENS",
+        "basis": "legacy run_kreta.sh: direct mode default KRETA_MAX_TOKENS",
         "value": 32
       }
     },
     "recorded": {
+      "answer_parser_hash": "sha256:623dced50534d5fdd36879f6abc183f27bc1a83661472de40591468f0514ad56",
+      "answer_parser_version": "kreta-response-choice-v2",
       "benchmark": "KRETA",
       "dataset_item_digest": "0cc4ed8281009d38",
       "dataset_provenance": {
@@ -177,7 +186,6 @@
       "split": "test"
     },
     "unknown": [
-      "answer_parser_hash",
       "image_preprocessing_version",
       "prompt_template_hash",
       "seed",
@@ -206,8 +214,16 @@
     "unit": "results/qwen_qwen3.6_27b_fp8/20260704_081047/vision/multimodal/kreta/qwen_qwen3.6_27b_fp8_direct.jsonl"
   },
   "status": "LEGACY_REVALIDATED",
+  "upstream_comparison": {
+    "disagreement_different_choice": 6,
+    "disagreement_ours_empty": 8,
+    "note": "상류 파생 필드는 채점 근거로 쓰지 않음",
+    "parser_disagreement_rows": 14,
+    "upstream_accuracy": 70.66356228172293
+  },
   "variant": "direct",
   "warnings": [
-    "비교 비핵심 provenance 미기록: answer_parser_hash, image_preprocessing_version, prompt_template_hash, seed, temperature"
+    "상류 parser와 14행 불일치 (우리 무답 8, 다른 선택지 6) — 독립 재채점 점수임",
+    "비교 비핵심 provenance 미기록: image_preprocessing_version, prompt_template_hash, seed, temperature"
   ]
 }

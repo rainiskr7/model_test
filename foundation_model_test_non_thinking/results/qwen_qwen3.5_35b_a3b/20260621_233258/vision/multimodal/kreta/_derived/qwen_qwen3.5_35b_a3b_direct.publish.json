@@ -5,9 +5,10 @@
   "completed_at_utc": null,
   "counts": {
     "attempted": 2577,
-    "correct_measured": 1782,
+    "correct_measured": 1769,
     "errored": 0,
     "measured": 2577,
+    "no_answer": 34,
     "unresolved": 0
   },
   "failures": [],
@@ -16,30 +17,30 @@
       {
         "denominator": 2577,
         "name": "overall",
-        "numerator": 1782,
+        "numerator": 1769,
         "unit": "fraction",
-        "value": 0.6915017462165308
+        "value": 0.6864571206829647
       },
       {
         "denominator": 83,
         "name": "domain:Arts and Humanities",
-        "numerator": 74,
+        "numerator": 73,
         "unit": "fraction",
-        "value": 0.891566265060241
+        "value": 0.8795180722891566
       },
       {
         "denominator": 60,
         "name": "domain:CSAT History",
-        "numerator": 30,
+        "numerator": 29,
         "unit": "fraction",
-        "value": 0.5
+        "value": 0.48333333333333334
       },
       {
         "denominator": 478,
         "name": "domain:CSAT Science",
-        "numerator": 128,
+        "numerator": 127,
         "unit": "fraction",
-        "value": 0.26778242677824265
+        "value": 0.26569037656903766
       },
       {
         "denominator": 104,
@@ -65,9 +66,9 @@
       {
         "denominator": 264,
         "name": "domain:Hospitality and Food Service",
-        "numerator": 211,
+        "numerator": 210,
         "unit": "fraction",
-        "value": 0.7992424242424242
+        "value": 0.7954545454545454
       },
       {
         "denominator": 145,
@@ -86,30 +87,30 @@
       {
         "denominator": 204,
         "name": "domain:Personal and Lifestyle",
-        "numerator": 176,
+        "numerator": 172,
         "unit": "fraction",
-        "value": 0.8627450980392157
+        "value": 0.8431372549019608
       },
       {
         "denominator": 245,
         "name": "domain:Public and Administration",
-        "numerator": 187,
+        "numerator": 186,
         "unit": "fraction",
-        "value": 0.763265306122449
+        "value": 0.7591836734693878
       },
       {
         "denominator": 154,
         "name": "domain:Retail and Commerce",
-        "numerator": 121,
+        "numerator": 118,
         "unit": "fraction",
-        "value": 0.7857142857142857
+        "value": 0.7662337662337663
       },
       {
         "denominator": 92,
         "name": "domain:Science and Technology",
-        "numerator": 66,
+        "numerator": 67,
         "unit": "fraction",
-        "value": 0.717391304347826
+        "value": 0.7282608695652174
       },
       {
         "denominator": 167,
@@ -121,49 +122,57 @@
       {
         "denominator": 108,
         "name": "domain:Travel and Tourism",
-        "numerator": 93,
+        "numerator": 91,
         "unit": "fraction",
-        "value": 0.8611111111111112
+        "value": 0.8425925925925926
       },
       {
         "denominator": 1426,
         "name": "system:System1",
-        "numerator": 1264,
+        "numerator": 1263,
         "unit": "fraction",
-        "value": 0.8863955119214586
+        "value": 0.8856942496493688
       },
       {
         "denominator": 1151,
         "name": "system:System2",
-        "numerator": 518,
+        "numerator": 506,
         "unit": "fraction",
-        "value": 0.45004344048653344
+        "value": 0.43961772371850566
       }
     ],
     "conditional": {
       "denominator": 2577,
-      "numerator": 1782,
+      "numerator": 1769,
       "unit": "fraction",
-      "value": 0.6915017462165308
+      "value": 0.6864571206829647
     },
     "strict": {
       "denominator": 2577,
-      "numerator": 1782,
+      "numerator": 1769,
       "unit": "fraction",
-      "value": 0.6915017462165308
+      "value": 0.6864571206829647
     }
   },
   "model": "qwen_qwen3.5_35b_a3b",
+  "no_answer_rate": {
+    "denominator": 2577,
+    "numerator": 34,
+    "unit": "fraction",
+    "value": 0.013193636010865347
+  },
   "protocol": {
     "complete": false,
-    "fingerprint": "sha256:2eac70b4f5b4ae422ebeb77d44bc0bd0b5b0e779efbfb884f3e36b5422eaa7cd",
+    "fingerprint": "sha256:b5a8188c68cf13518732860ce14af6af7eca3f90a7bd5bc9b55faeb27f81737f",
     "inferred": {
       "max_tokens": {
-        "basis": "run_kreta.sh: direct mode default KRETA_MAX_TOKENS",
+        "basis": "legacy run_kreta.sh: direct mode default KRETA_MAX_TOKENS",
         "value": 32
       }
     },
     "recorded": {
+      "answer_parser_hash": "sha256:623dced50534d5fdd36879f6abc183f27bc1a83661472de40591468f0514ad56",
+      "answer_parser_version": "kreta-response-choice-v2",
       "benchmark": "KRETA",
       "dataset_item_digest": "0cc4ed8281009d38",
       "dataset_provenance": {
@@ -177,7 +186,6 @@
       "split": "test"
     },
     "unknown": [
-      "answer_parser_hash",
       "image_preprocessing_version",
       "prompt_template_hash",
       "seed",
@@ -206,8 +214,16 @@
     "unit": "results/qwen_qwen3.5_35b_a3b/20260621_233258/vision/multimodal/kreta/qwen_qwen3.5_35b_a3b_direct.jsonl"
   },
   "status": "LEGACY_REVALIDATED",
+  "upstream_comparison": {
+    "disagreement_different_choice": 13,
+    "disagreement_ours_empty": 34,
+    "note": "상류 파생 필드는 채점 근거로 쓰지 않음",
+    "parser_disagreement_rows": 47,
+    "upstream_accuracy": 69.15017462165308
+  },
   "variant": "direct",
   "warnings": [
-    "비교 비핵심 provenance 미기록: answer_parser_hash, image_preprocessing_version, prompt_template_hash, seed, temperature"
+    "상류 parser와 47행 불일치 (우리 무답 34, 다른 선택지 13) — 독립 재채점 점수임",
+    "비교 비핵심 provenance 미기록: image_preprocessing_version, prompt_template_hash, seed, temperature"
   ]
 }

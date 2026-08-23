@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import os
 import json
+import fcntl
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Iterable
@@ -15,6 +17,7 @@ from .schema import (
     sidecar_json,
     sidecar_path,
     sha256_file,
+    validate_artifact_integrity,
     validate_sidecar,
 )
 
@@ -160,7 +163,12 @@ def preflight_kreta_source(source: Path, base: Path) -> tuple[bool, list[str]]:
                 rows.append(value)
     except Exception as exc:
         failures.append(f"JSONL 읽기 실패: {type(exc).__name__}")
-    aggregate = summarize_records("kreta", rows, expected_count=EXPECTED_COUNTS["kreta"])
+    # pred_indexs is produced by evaluate.py and does not exist yet at this
+    # preflight stage.  The post-evaluate adapter independently verifies it.
+    aggregate = summarize_records(
+        "kreta", rows, expected_count=EXPECTED_COUNTS["kreta"],
+        verify_stored_prediction=False,
+    )
     failures.extend(aggregate["publish_status"]["failures"])
     ids = [row.get("id") for row in rows]
     if any(item_id is None for item_id in ids) or len(set(ids)) != len(ids):
@@ -168,28 +176,99 @@ def preflight_kreta_source(source: Path, base: Path) -> tuple[bool, list[str]]:
     return not failures, failures
 
 
-def write_sidecar(path: Path, sidecar: dict[str, Any]) -> None:
-    """Atomically write a validated sidecar below ``_derived``."""
-
+def _validate_output_path(path: Path) -> Path:
     path = Path(path)
     if path.parent.name != "_derived":
         raise ValueError("publication sidecars must be written below _derived")
-    payload = sidecar_json(sidecar)
+    return path
+
+
+@contextmanager
+def _sidecar_lock(path: Path):
+    """Serialize publish-layer writers for one sidecar on POSIX filesystems."""
+
+    path = _validate_output_path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
+    lock_path = path.with_name(f".{path.name}.lock")
+    with lock_path.open("a+", encoding="utf-8") as lock_file:
+        fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+
+
+def _write_sidecar_unlocked(path: Path, sidecar: dict[str, Any]) -> None:
+    payload = sidecar_json(sidecar)
     tmp = path.with_name(f".{path.name}.{os.getpid()}.tmp")
     tmp.write_text(payload, encoding="utf-8")
     os.replace(tmp, path)
 
 
-def existing_native_sidecar(path: Path) -> dict[str, Any] | None:
-    """Return a valid existing NATIVE sidecar, never trusting status alone."""
+def write_sidecar(path: Path, sidecar: dict[str, Any]) -> None:
+    """Atomically write a validated sidecar below ``_derived``."""
+
+    path = _validate_output_path(path)
+    with _sidecar_lock(path):
+        _write_sidecar_unlocked(path, sidecar)
+
+
+def inspect_native_sidecar(path: Path, base: Path) -> tuple[dict[str, Any] | None, str | None]:
+    """Return ``(valid_native, damage_reason)`` for an existing sidecar."""
 
     try:
         sidecar = json.loads(Path(path).read_text(encoding="utf-8"))
-        validate_sidecar(sidecar)
     except Exception:
-        return None
-    return sidecar if sidecar.get("status") == PublishStatus.NATIVE else None
+        return None, None
+    if sidecar.get("status") != PublishStatus.NATIVE:
+        return None, None
+    try:
+        validate_sidecar(sidecar)
+        validate_artifact_integrity(sidecar, base)
+    except Exception as exc:
+        return None, f"{type(exc).__name__}: {exc}"
+    return sidecar, None
+
+
+def existing_native_sidecar(path: Path, base: Path) -> dict[str, Any] | None:
+    """Return a valid, artifact-bound NATIVE sidecar."""
+
+    return inspect_native_sidecar(path, base)[0]
+
+
+def reject_native_artifact_damage(sidecar: dict[str, Any], reason: str) -> dict[str, Any]:
+    sidecar["status"] = PublishStatus.REJECTED
+    sidecar["publishable"] = False
+    failure = f"기존 NATIVE artifact 무결성 실패: {reason}"
+    failures = list(sidecar.get("failures") or [])
+    if failure not in failures:
+        failures.append(failure)
+    sidecar["failures"] = failures
+    return sidecar
+
+
+def write_legacy_sidecar(
+    path: Path,
+    sidecar: dict[str, Any],
+    base: Path,
+    *,
+    force: bool = False,
+) -> tuple[bool, dict[str, Any] | None]:
+    """Write a passive-derived sidecar without racing a NATIVE promotion.
+
+    Returns ``(written, native_seen)``.  The NATIVE check and replacement are
+    covered by the same advisory lock used by runner writes.
+    """
+
+    path = _validate_output_path(path)
+    with _sidecar_lock(path):
+        native, native_damage = inspect_native_sidecar(path, base) if path.exists() else (None, None)
+        if native is not None and not force:
+            return False, native
+        if native_damage:
+            reject_native_artifact_damage(sidecar, native_damage)
+        _write_sidecar_unlocked(path, sidecar)
+        return True, native
 
 
 def derive_all(
@@ -205,17 +284,27 @@ def derive_all(
     derived: list[tuple[Path, dict[str, Any]]] = []
     for source in discover_sources(base):
         path = derived_sidecar_path(source)
-        native = existing_native_sidecar(path) if path.exists() else None
+        native, native_damage = inspect_native_sidecar(path, base) if path.exists() else (None, None)
         if native is not None and not force:
             if on_native_skip is not None:
                 on_native_skip(path, native)
             continue
-        if native is not None and on_native_overwrite is not None:
-            on_native_overwrite(path, native)
         item = derive_source(source, base)
-        derived.append(item)
+        if native_damage:
+            item = (item[0], reject_native_artifact_damage(item[1], native_damage))
         if write:
-            write_sidecar(*item)
+            written, native_at_write = write_legacy_sidecar(
+                *item, base, force=force,
+            )
+            if not written:
+                if on_native_skip is not None:
+                    on_native_skip(path, native_at_write or {})
+                continue
+            if native_at_write is not None and on_native_overwrite is not None:
+                on_native_overwrite(path, native_at_write)
+        elif native is not None and on_native_overwrite is not None:
+            on_native_overwrite(path, native)
+        derived.append(item)
     return derived
 
 

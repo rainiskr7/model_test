@@ -8,11 +8,11 @@
     "correct_measured": 0,
     "errored": 2577,
     "measured": 0,
+    "no_answer": 0,
     "unresolved": 0
   },
   "failures": [
-    "오류 응답이 포함됨",
-    "raw 재집계와 results.json overall이 일치하지 않음"
+    "오류 응답 2577건 포함"
   ],
   "metrics": {
     "axes": [
@@ -38,16 +38,24 @@
     }
   },
   "model": "gemma_4_31b_it",
+  "no_answer_rate": {
+    "denominator": 2577,
+    "numerator": 0,
+    "unit": "fraction",
+    "value": 0.0
+  },
   "protocol": {
     "complete": false,
-    "fingerprint": "sha256:700da17443eb6ab0c6fc5505e849493a4586502d57d5cb2f366915aa9f28d986",
+    "fingerprint": "sha256:4c2d67bae8bc79276ebc3ff1ec5fc2ade12264361c7654ed4a4bc7d753880b4b",
     "inferred": {
       "max_tokens": {
-        "basis": "run_kreta.sh: default mode default KRETA_MAX_TOKENS",
+        "basis": "legacy run_kreta.sh: default mode default KRETA_MAX_TOKENS",
         "value": 4096
       }
     },
     "recorded": {
+      "answer_parser_hash": "sha256:623dced50534d5fdd36879f6abc183f27bc1a83661472de40591468f0514ad56",
+      "answer_parser_version": "kreta-response-choice-v2",
       "benchmark": "KRETA",
       "dataset_item_digest": "0cc4ed8281009d38",
       "dataset_provenance": {
@@ -61,7 +69,6 @@
       "split": "test"
     },
     "unknown": [
-      "answer_parser_hash",
       "image_preprocessing_version",
       "prompt_template_hash",
       "seed",
@@ -90,6 +97,15 @@
     "unit": "results/gemma_4_31b_it/20260505_130752/vision/multimodal/kreta/gemma_4_31b_it_default.jsonl"
   },
   "status": "REJECTED",
+  "upstream_comparison": {
+    "disagreement_different_choice": 0,
+    "disagreement_ours_empty": 0,
+    "note": "상류 파생 필드는 채점 근거로 쓰지 않음",
+    "parser_disagreement_rows": 0,
+    "upstream_accuracy": 24.40822662010089
+  },
   "variant": "default",
-  "warnings": []
+  "warnings": [
+    "상류 results.json에 다른 source key가 함께 있음 — 채점에는 사용하지 않음"
+  ]
 }

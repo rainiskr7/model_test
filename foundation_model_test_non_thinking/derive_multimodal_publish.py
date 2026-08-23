@@ -12,10 +12,12 @@ from shared.multimodal.publish.derive import (
     derive_all,
     derive_source,
     derived_sidecar_path,
-    existing_native_sidecar,
+    inspect_native_sidecar,
     native_sidecar_from_source,
     preflight_kreta_source,
     rejected_sidecar_from_source,
+    reject_native_artifact_damage,
+    write_legacy_sidecar,
     write_sidecar,
 )
 
@@ -69,13 +71,15 @@ def main(argv: list[str] | None = None) -> int:
     try:
         if args.source is not None:
             path = derived_sidecar_path(args.source)
-            existing = existing_native_sidecar(path) if path.exists() else None
+            existing, native_damage = (
+                inspect_native_sidecar(path, args.base) if path.exists() else (None, None)
+            )
             passive_downgrade = existing is not None and not (args.native or args.reject_reason)
             if passive_downgrade and not args.force:
                 native_skip(path, existing)
                 derived = []
             else:
-                if passive_downgrade:
+                if passive_downgrade and not args.write:
                     native_overwrite_warning(path, existing)
                 derived = [
                     rejected_sidecar_from_source(args.source, args.base, args.reject_reason)
@@ -84,9 +88,28 @@ def main(argv: list[str] | None = None) -> int:
                     if args.native
                     else derive_source(args.source, args.base)
                 ]
+                if native_damage and not (args.native or args.reject_reason):
+                    derived = [
+                        (derived_path, reject_native_artifact_damage(sidecar, native_damage))
+                        for derived_path, sidecar in derived
+                    ]
             if args.write:
+                written: list[tuple[Path, dict]] = []
                 for path, sidecar in derived:
-                    write_sidecar(path, sidecar)
+                    if args.native or args.reject_reason:
+                        write_sidecar(path, sidecar)
+                        written.append((path, sidecar))
+                        continue
+                    did_write, native_at_write = write_legacy_sidecar(
+                        path, sidecar, args.base, force=args.force,
+                    )
+                    if not did_write:
+                        native_skip(path, native_at_write or {})
+                    else:
+                        if native_at_write is not None:
+                            native_overwrite_warning(path, native_at_write)
+                        written.append((path, sidecar))
+                derived = written
         else:
             derived = derive_all(
                 args.base,

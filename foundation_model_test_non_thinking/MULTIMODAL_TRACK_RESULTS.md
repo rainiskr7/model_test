@@ -15,34 +15,48 @@
 
 ## 헤드라인 — 벤치마크별 overall
 
-### KRETA — default, 2577문항 — protocol `700da17443eb`
+### KRETA — default, 2577문항 — protocol `4c2d67bae8bc`
 
-전체 protocol fingerprint: `sha256:700da17443eb6ab0c6fc5505e849493a4586502d57d5cb2f366915aa9f28d986`
+전체 protocol fingerprint: `sha256:4c2d67bae8bc79276ebc3ff1ec5fc2ade12264361c7654ed4a4bc7d753880b4b`
 
-| 모델 | 결과 | 상태 |
-|---|---|---|
-| qwen_qwen3.6_35b_a3b_fp8 | 2321/2577 = 90.07% | LEGACY_REVALIDATED |
-| qwen_qwen3.5_35b_a3b_fp8 | 2259/2577 = 87.66% | LEGACY_REVALIDATED |
+| 모델 | 결과 | 무답률 | 상태 |
+|---|---|---:|---|
+| qwen_qwen3.6_35b_a3b_fp8 | 2290/2577 = 88.86% | 4.4% | LEGACY_REVALIDATED |
+| qwen_qwen3.5_35b_a3b_fp8 | 2233/2577 = 86.65% | 3.1% | LEGACY_REVALIDATED |
 
 > 각주: 기록된 repo commit이 런마다 다름(문항 집합은 동일): `3104bffac9fe`, `9219dbd6b1f7`.
 
-### KRETA — direct, 2577문항 — protocol `2eac70b4f5b4`
+> 각주: `qwen_qwen3.5_35b_a3b_fp8` — 상류 parser와 91행 불일치(우리 무답 80, 다른 선택지 11) — 독립 재채점 점수임.
+> 각주: `qwen_qwen3.6_35b_a3b_fp8` — 상류 parser와 132행 불일치(우리 무답 113, 다른 선택지 19) — 독립 재채점 점수임.
 
-전체 protocol fingerprint: `sha256:2eac70b4f5b4ae422ebeb77d44bc0bd0b5b0e779efbfb884f3e36b5422eaa7cd`
+### KRETA — direct, 2577문항 — protocol `b5a8188c68cf`
 
-| 모델 | 결과 | 상태 |
-|---|---|---|
-| google_gemma_4_31B_it | 2030/2577 = 78.77% | LEGACY_REVALIDATED |
-| google_gemma_4_26b_a4b_it | 1864/2577 = 72.33% | LEGACY_REVALIDATED |
-| qwen3.5_27b | 1850/2577 = 71.79% | LEGACY_REVALIDATED |
-| qwen_qwen3.5_27b_fp8 | 1828/2577 = 70.94% | LEGACY_REVALIDATED |
-| qwen_qwen3.6_27b_fp8 | 1821/2577 = 70.66% | LEGACY_REVALIDATED |
-| qwen_qwen3.5_35b_a3b | 1782/2577 = 69.15% | LEGACY_REVALIDATED |
-| qwen_qwen3.6_27b | 1735/2577 = 67.33% | LEGACY_REVALIDATED |
-| qwen3.6-35b-a3b | 1732/2577 = 67.21% | LEGACY_REVALIDATED |
-| Qwen3.5_122B_A10B_GPTQ_Int4 | 1639/2577 = 63.60% | LEGACY_REVALIDATED |
+전체 protocol fingerprint: `sha256:b5a8188c68cf13518732860ce14af6af7eca3f90a7bd5bc9b55faeb27f81737f`
+
+| 모델 | 결과 | 무답률 | 상태 |
+|---|---|---:|---|
+| google_gemma_4_31B_it | 2030/2577 = 78.77% | 0.1% | LEGACY_REVALIDATED |
+| google_gemma_4_26b_a4b_it | 1860/2577 = 72.18% | 0.4% | LEGACY_REVALIDATED |
+| qwen3.5_27b | 1839/2577 = 71.36% | 1.1% | LEGACY_REVALIDATED |
+| qwen_qwen3.5_27b_fp8 | 1821/2577 = 70.66% | 1.1% | LEGACY_REVALIDATED |
+| qwen_qwen3.6_27b_fp8 | 1819/2577 = 70.59% | 0.3% | LEGACY_REVALIDATED |
+| qwen_qwen3.5_35b_a3b | 1769/2577 = 68.65% | 1.3% | LEGACY_REVALIDATED |
+| qwen3.6-35b-a3b | 1731/2577 = 67.17% | 0.0% | LEGACY_REVALIDATED |
+| qwen_qwen3.6_27b | 1725/2577 = 66.94% | 2.8% | LEGACY_REVALIDATED |
+| Qwen3.5_122B_A10B_GPTQ_Int4 | 1494/2577 = 57.97% | 21.1% | LEGACY_REVALIDATED |
 
 > 각주: 기록된 repo commit이 런마다 다름(문항 집합은 동일): `736779d467f6`, `7c0155d6bfa1`, `aad99f4759b9`, `c273302ade2c`, `ffe124392283`.
+
+> 각주: `Qwen3.5_122B_A10B_GPTQ_Int4` — 상류 parser와 551행 불일치(우리 무답 545, 다른 선택지 6) — 독립 재채점 점수임.
+> **주의:** `Qwen3.5_122B_A10B_GPTQ_Int4` — 무답 545건 (21.1%). 응답이 지시된 형식을 벗어나 절단됨. 점수를 능력 차이로만 해석하지 말 것.
+> 각주: `google_gemma_4_26b_a4b_it` — 상류 parser와 11행 불일치(우리 무답 10, 다른 선택지 1) — 독립 재채점 점수임.
+> 각주: `google_gemma_4_31B_it` — 상류 parser와 5행 불일치(우리 무답 3, 다른 선택지 2) — 독립 재채점 점수임.
+> 각주: `qwen3.5_27b` — 상류 parser와 28행 불일치(우리 무답 28, 다른 선택지 0) — 독립 재채점 점수임.
+> 각주: `qwen3.6-35b-a3b` — 상류 parser와 1행 불일치(우리 무답 1, 다른 선택지 0) — 독립 재채점 점수임.
+> 각주: `qwen_qwen3.5_27b_fp8` — 상류 parser와 30행 불일치(우리 무답 28, 다른 선택지 2) — 독립 재채점 점수임.
+> 각주: `qwen_qwen3.5_35b_a3b` — 상류 parser와 47행 불일치(우리 무답 34, 다른 선택지 13) — 독립 재채점 점수임.
+> 각주: `qwen_qwen3.6_27b` — 상류 parser와 73행 불일치(우리 무답 72, 다른 선택지 1) — 독립 재채점 점수임.
+> 각주: `qwen_qwen3.6_27b_fp8` — 상류 parser와 14행 불일치(우리 무답 8, 다른 선택지 6) — 독립 재채점 점수임.
 
 ### K-MMBench — full, 4329문항 — protocol `214f704b7c50`
 
@@ -107,93 +121,93 @@
 카테고리 및 System1/2 등 세부 축은 벤치별로 접어 두었다.
 
 <details>
-<summary>KRETA — default — protocol `700da17443eb`</summary>
+<summary>KRETA — default — protocol `4c2d67bae8bc`</summary>
 
-전체 protocol fingerprint: `sha256:700da17443eb6ab0c6fc5505e849493a4586502d57d5cb2f366915aa9f28d986`
+전체 protocol fingerprint: `sha256:4c2d67bae8bc79276ebc3ff1ec5fc2ade12264361c7654ed4a4bc7d753880b4b`
 
 | 모델 | 축 | 결과 | 상태 |
 |---|---|---|---|
 | qwen_qwen3.5_35b_a3b_fp8 | domain:Arts and Humanities | 80/83 = 96.39% | LEGACY_REVALIDATED |
 | qwen_qwen3.5_35b_a3b_fp8 | domain:CSAT History | 42/60 = 70.00% | LEGACY_REVALIDATED |
-| qwen_qwen3.5_35b_a3b_fp8 | domain:CSAT Science | 265/478 = 55.44% | LEGACY_REVALIDATED |
+| qwen_qwen3.5_35b_a3b_fp8 | domain:CSAT Science | 242/478 = 50.63% | LEGACY_REVALIDATED |
 | qwen_qwen3.5_35b_a3b_fp8 | domain:Economics and Finance | 102/104 = 98.08% | LEGACY_REVALIDATED |
 | qwen_qwen3.5_35b_a3b_fp8 | domain:Education and Academia | 205/215 = 95.35% | LEGACY_REVALIDATED |
 | qwen_qwen3.5_35b_a3b_fp8 | domain:Entertainment and Media | 156/168 = 92.86% | LEGACY_REVALIDATED |
-| qwen_qwen3.5_35b_a3b_fp8 | domain:Hospitality and Food Service | 254/264 = 96.21% | LEGACY_REVALIDATED |
+| qwen_qwen3.5_35b_a3b_fp8 | domain:Hospitality and Food Service | 253/264 = 95.83% | LEGACY_REVALIDATED |
 | qwen_qwen3.5_35b_a3b_fp8 | domain:Marketing and Advertising | 139/145 = 95.86% | LEGACY_REVALIDATED |
 | qwen_qwen3.5_35b_a3b_fp8 | domain:Medical and Healthcare | 83/90 = 92.22% | LEGACY_REVALIDATED |
 | qwen_qwen3.5_35b_a3b_fp8 | domain:Personal and Lifestyle | 199/204 = 97.55% | LEGACY_REVALIDATED |
 | qwen_qwen3.5_35b_a3b_fp8 | domain:Public and Administration | 240/245 = 97.96% | LEGACY_REVALIDATED |
 | qwen_qwen3.5_35b_a3b_fp8 | domain:Retail and Commerce | 145/154 = 94.16% | LEGACY_REVALIDATED |
 | qwen_qwen3.5_35b_a3b_fp8 | domain:Science and Technology | 87/92 = 94.57% | LEGACY_REVALIDATED |
-| qwen_qwen3.5_35b_a3b_fp8 | domain:Transportation and Logistics | 155/167 = 92.81% | LEGACY_REVALIDATED |
+| qwen_qwen3.5_35b_a3b_fp8 | domain:Transportation and Logistics | 153/167 = 91.62% | LEGACY_REVALIDATED |
 | qwen_qwen3.5_35b_a3b_fp8 | domain:Travel and Tourism | 107/108 = 99.07% | LEGACY_REVALIDATED |
-| qwen_qwen3.5_35b_a3b_fp8 | system:System1 | 1379/1426 = 96.70% | LEGACY_REVALIDATED |
-| qwen_qwen3.5_35b_a3b_fp8 | system:System2 | 880/1151 = 76.46% | LEGACY_REVALIDATED |
+| qwen_qwen3.5_35b_a3b_fp8 | system:System1 | 1377/1426 = 96.56% | LEGACY_REVALIDATED |
+| qwen_qwen3.5_35b_a3b_fp8 | system:System2 | 856/1151 = 74.37% | LEGACY_REVALIDATED |
 | qwen_qwen3.6_35b_a3b_fp8 | domain:Arts and Humanities | 82/83 = 98.80% | LEGACY_REVALIDATED |
 | qwen_qwen3.6_35b_a3b_fp8 | domain:CSAT History | 45/60 = 75.00% | LEGACY_REVALIDATED |
-| qwen_qwen3.6_35b_a3b_fp8 | domain:CSAT Science | 314/478 = 65.69% | LEGACY_REVALIDATED |
-| qwen_qwen3.6_35b_a3b_fp8 | domain:Economics and Finance | 102/104 = 98.08% | LEGACY_REVALIDATED |
-| qwen_qwen3.6_35b_a3b_fp8 | domain:Education and Academia | 207/215 = 96.28% | LEGACY_REVALIDATED |
-| qwen_qwen3.6_35b_a3b_fp8 | domain:Entertainment and Media | 160/168 = 95.24% | LEGACY_REVALIDATED |
-| qwen_qwen3.6_35b_a3b_fp8 | domain:Hospitality and Food Service | 254/264 = 96.21% | LEGACY_REVALIDATED |
+| qwen_qwen3.6_35b_a3b_fp8 | domain:CSAT Science | 286/478 = 59.83% | LEGACY_REVALIDATED |
+| qwen_qwen3.6_35b_a3b_fp8 | domain:Economics and Finance | 101/104 = 97.12% | LEGACY_REVALIDATED |
+| qwen_qwen3.6_35b_a3b_fp8 | domain:Education and Academia | 206/215 = 95.81% | LEGACY_REVALIDATED |
+| qwen_qwen3.6_35b_a3b_fp8 | domain:Entertainment and Media | 159/168 = 94.64% | LEGACY_REVALIDATED |
+| qwen_qwen3.6_35b_a3b_fp8 | domain:Hospitality and Food Service | 253/264 = 95.83% | LEGACY_REVALIDATED |
 | qwen_qwen3.6_35b_a3b_fp8 | domain:Marketing and Advertising | 143/145 = 98.62% | LEGACY_REVALIDATED |
 | qwen_qwen3.6_35b_a3b_fp8 | domain:Medical and Healthcare | 84/90 = 93.33% | LEGACY_REVALIDATED |
 | qwen_qwen3.6_35b_a3b_fp8 | domain:Personal and Lifestyle | 201/204 = 98.53% | LEGACY_REVALIDATED |
 | qwen_qwen3.6_35b_a3b_fp8 | domain:Public and Administration | 237/245 = 96.73% | LEGACY_REVALIDATED |
 | qwen_qwen3.6_35b_a3b_fp8 | domain:Retail and Commerce | 145/154 = 94.16% | LEGACY_REVALIDATED |
 | qwen_qwen3.6_35b_a3b_fp8 | domain:Science and Technology | 88/92 = 95.65% | LEGACY_REVALIDATED |
-| qwen_qwen3.6_35b_a3b_fp8 | domain:Transportation and Logistics | 151/167 = 90.42% | LEGACY_REVALIDATED |
+| qwen_qwen3.6_35b_a3b_fp8 | domain:Transportation and Logistics | 152/167 = 91.02% | LEGACY_REVALIDATED |
 | qwen_qwen3.6_35b_a3b_fp8 | domain:Travel and Tourism | 108/108 = 100.00% | LEGACY_REVALIDATED |
-| qwen_qwen3.6_35b_a3b_fp8 | system:System1 | 1387/1426 = 97.27% | LEGACY_REVALIDATED |
-| qwen_qwen3.6_35b_a3b_fp8 | system:System2 | 934/1151 = 81.15% | LEGACY_REVALIDATED |
+| qwen_qwen3.6_35b_a3b_fp8 | system:System1 | 1385/1426 = 97.12% | LEGACY_REVALIDATED |
+| qwen_qwen3.6_35b_a3b_fp8 | system:System2 | 905/1151 = 78.63% | LEGACY_REVALIDATED |
 
 </details>
 
 <details>
-<summary>KRETA — direct — protocol `2eac70b4f5b4`</summary>
+<summary>KRETA — direct — protocol `b5a8188c68cf`</summary>
 
-전체 protocol fingerprint: `sha256:2eac70b4f5b4ae422ebeb77d44bc0bd0b5b0e779efbfb884f3e36b5422eaa7cd`
+전체 protocol fingerprint: `sha256:b5a8188c68cf13518732860ce14af6af7eca3f90a7bd5bc9b55faeb27f81737f`
 
 | 모델 | 축 | 결과 | 상태 |
 |---|---|---|---|
-| Qwen3.5_122B_A10B_GPTQ_Int4 | domain:Arts and Humanities | 70/83 = 84.34% | LEGACY_REVALIDATED |
-| Qwen3.5_122B_A10B_GPTQ_Int4 | domain:CSAT History | 26/60 = 43.33% | LEGACY_REVALIDATED |
-| Qwen3.5_122B_A10B_GPTQ_Int4 | domain:CSAT Science | 122/478 = 25.52% | LEGACY_REVALIDATED |
-| Qwen3.5_122B_A10B_GPTQ_Int4 | domain:Economics and Finance | 66/104 = 63.46% | LEGACY_REVALIDATED |
-| Qwen3.5_122B_A10B_GPTQ_Int4 | domain:Education and Academia | 162/215 = 75.35% | LEGACY_REVALIDATED |
-| Qwen3.5_122B_A10B_GPTQ_Int4 | domain:Entertainment and Media | 128/168 = 76.19% | LEGACY_REVALIDATED |
-| Qwen3.5_122B_A10B_GPTQ_Int4 | domain:Hospitality and Food Service | 183/264 = 69.32% | LEGACY_REVALIDATED |
-| Qwen3.5_122B_A10B_GPTQ_Int4 | domain:Marketing and Advertising | 113/145 = 77.93% | LEGACY_REVALIDATED |
-| Qwen3.5_122B_A10B_GPTQ_Int4 | domain:Medical and Healthcare | 51/90 = 56.67% | LEGACY_REVALIDATED |
-| Qwen3.5_122B_A10B_GPTQ_Int4 | domain:Personal and Lifestyle | 165/204 = 80.88% | LEGACY_REVALIDATED |
-| Qwen3.5_122B_A10B_GPTQ_Int4 | domain:Public and Administration | 175/245 = 71.43% | LEGACY_REVALIDATED |
-| Qwen3.5_122B_A10B_GPTQ_Int4 | domain:Retail and Commerce | 114/154 = 74.03% | LEGACY_REVALIDATED |
-| Qwen3.5_122B_A10B_GPTQ_Int4 | domain:Science and Technology | 65/92 = 70.65% | LEGACY_REVALIDATED |
-| Qwen3.5_122B_A10B_GPTQ_Int4 | domain:Transportation and Logistics | 119/167 = 71.26% | LEGACY_REVALIDATED |
-| Qwen3.5_122B_A10B_GPTQ_Int4 | domain:Travel and Tourism | 80/108 = 74.07% | LEGACY_REVALIDATED |
-| Qwen3.5_122B_A10B_GPTQ_Int4 | system:System1 | 1168/1426 = 81.91% | LEGACY_REVALIDATED |
-| Qwen3.5_122B_A10B_GPTQ_Int4 | system:System2 | 471/1151 = 40.92% | LEGACY_REVALIDATED |
-| google_gemma_4_26b_a4b_it | domain:Arts and Humanities | 78/83 = 93.98% | LEGACY_REVALIDATED |
+| Qwen3.5_122B_A10B_GPTQ_Int4 | domain:Arts and Humanities | 69/83 = 83.13% | LEGACY_REVALIDATED |
+| Qwen3.5_122B_A10B_GPTQ_Int4 | domain:CSAT History | 24/60 = 40.00% | LEGACY_REVALIDATED |
+| Qwen3.5_122B_A10B_GPTQ_Int4 | domain:CSAT Science | 39/478 = 8.16% | LEGACY_REVALIDATED |
+| Qwen3.5_122B_A10B_GPTQ_Int4 | domain:Economics and Finance | 64/104 = 61.54% | LEGACY_REVALIDATED |
+| Qwen3.5_122B_A10B_GPTQ_Int4 | domain:Education and Academia | 150/215 = 69.77% | LEGACY_REVALIDATED |
+| Qwen3.5_122B_A10B_GPTQ_Int4 | domain:Entertainment and Media | 126/168 = 75.00% | LEGACY_REVALIDATED |
+| Qwen3.5_122B_A10B_GPTQ_Int4 | domain:Hospitality and Food Service | 176/264 = 66.67% | LEGACY_REVALIDATED |
+| Qwen3.5_122B_A10B_GPTQ_Int4 | domain:Marketing and Advertising | 111/145 = 76.55% | LEGACY_REVALIDATED |
+| Qwen3.5_122B_A10B_GPTQ_Int4 | domain:Medical and Healthcare | 48/90 = 53.33% | LEGACY_REVALIDATED |
+| Qwen3.5_122B_A10B_GPTQ_Int4 | domain:Personal and Lifestyle | 158/204 = 77.45% | LEGACY_REVALIDATED |
+| Qwen3.5_122B_A10B_GPTQ_Int4 | domain:Public and Administration | 163/245 = 66.53% | LEGACY_REVALIDATED |
+| Qwen3.5_122B_A10B_GPTQ_Int4 | domain:Retail and Commerce | 110/154 = 71.43% | LEGACY_REVALIDATED |
+| Qwen3.5_122B_A10B_GPTQ_Int4 | domain:Science and Technology | 62/92 = 67.39% | LEGACY_REVALIDATED |
+| Qwen3.5_122B_A10B_GPTQ_Int4 | domain:Transportation and Logistics | 118/167 = 70.66% | LEGACY_REVALIDATED |
+| Qwen3.5_122B_A10B_GPTQ_Int4 | domain:Travel and Tourism | 76/108 = 70.37% | LEGACY_REVALIDATED |
+| Qwen3.5_122B_A10B_GPTQ_Int4 | system:System1 | 1142/1426 = 80.08% | LEGACY_REVALIDATED |
+| Qwen3.5_122B_A10B_GPTQ_Int4 | system:System2 | 352/1151 = 30.58% | LEGACY_REVALIDATED |
+| google_gemma_4_26b_a4b_it | domain:Arts and Humanities | 77/83 = 92.77% | LEGACY_REVALIDATED |
 | google_gemma_4_26b_a4b_it | domain:CSAT History | 39/60 = 65.00% | LEGACY_REVALIDATED |
-| google_gemma_4_26b_a4b_it | domain:CSAT Science | 173/478 = 36.19% | LEGACY_REVALIDATED |
+| google_gemma_4_26b_a4b_it | domain:CSAT Science | 174/478 = 36.40% | LEGACY_REVALIDATED |
 | google_gemma_4_26b_a4b_it | domain:Economics and Finance | 87/104 = 83.65% | LEGACY_REVALIDATED |
 | google_gemma_4_26b_a4b_it | domain:Education and Academia | 185/215 = 86.05% | LEGACY_REVALIDATED |
 | google_gemma_4_26b_a4b_it | domain:Entertainment and Media | 140/168 = 83.33% | LEGACY_REVALIDATED |
-| google_gemma_4_26b_a4b_it | domain:Hospitality and Food Service | 199/264 = 75.38% | LEGACY_REVALIDATED |
+| google_gemma_4_26b_a4b_it | domain:Hospitality and Food Service | 198/264 = 75.00% | LEGACY_REVALIDATED |
 | google_gemma_4_26b_a4b_it | domain:Marketing and Advertising | 128/145 = 88.28% | LEGACY_REVALIDATED |
 | google_gemma_4_26b_a4b_it | domain:Medical and Healthcare | 70/90 = 77.78% | LEGACY_REVALIDATED |
 | google_gemma_4_26b_a4b_it | domain:Personal and Lifestyle | 172/204 = 84.31% | LEGACY_REVALIDATED |
 | google_gemma_4_26b_a4b_it | domain:Public and Administration | 196/245 = 80.00% | LEGACY_REVALIDATED |
-| google_gemma_4_26b_a4b_it | domain:Retail and Commerce | 121/154 = 78.57% | LEGACY_REVALIDATED |
+| google_gemma_4_26b_a4b_it | domain:Retail and Commerce | 119/154 = 77.27% | LEGACY_REVALIDATED |
 | google_gemma_4_26b_a4b_it | domain:Science and Technology | 72/92 = 78.26% | LEGACY_REVALIDATED |
-| google_gemma_4_26b_a4b_it | domain:Transportation and Logistics | 117/167 = 70.06% | LEGACY_REVALIDATED |
+| google_gemma_4_26b_a4b_it | domain:Transportation and Logistics | 116/167 = 69.46% | LEGACY_REVALIDATED |
 | google_gemma_4_26b_a4b_it | domain:Travel and Tourism | 87/108 = 80.56% | LEGACY_REVALIDATED |
-| google_gemma_4_26b_a4b_it | system:System1 | 1283/1426 = 89.97% | LEGACY_REVALIDATED |
-| google_gemma_4_26b_a4b_it | system:System2 | 581/1151 = 50.48% | LEGACY_REVALIDATED |
+| google_gemma_4_26b_a4b_it | system:System1 | 1282/1426 = 89.90% | LEGACY_REVALIDATED |
+| google_gemma_4_26b_a4b_it | system:System2 | 578/1151 = 50.22% | LEGACY_REVALIDATED |
 | google_gemma_4_31B_it | domain:Arts and Humanities | 78/83 = 93.98% | LEGACY_REVALIDATED |
 | google_gemma_4_31B_it | domain:CSAT History | 46/60 = 76.67% | LEGACY_REVALIDATED |
-| google_gemma_4_31B_it | domain:CSAT Science | 203/478 = 42.47% | LEGACY_REVALIDATED |
+| google_gemma_4_31B_it | domain:CSAT Science | 204/478 = 42.68% | LEGACY_REVALIDATED |
 | google_gemma_4_31B_it | domain:Economics and Finance | 89/104 = 85.58% | LEGACY_REVALIDATED |
 | google_gemma_4_31B_it | domain:Education and Academia | 197/215 = 91.63% | LEGACY_REVALIDATED |
 | google_gemma_4_31B_it | domain:Entertainment and Media | 146/168 = 86.90% | LEGACY_REVALIDATED |
@@ -204,30 +218,30 @@
 | google_gemma_4_31B_it | domain:Public and Administration | 215/245 = 87.76% | LEGACY_REVALIDATED |
 | google_gemma_4_31B_it | domain:Retail and Commerce | 129/154 = 83.77% | LEGACY_REVALIDATED |
 | google_gemma_4_31B_it | domain:Science and Technology | 80/92 = 86.96% | LEGACY_REVALIDATED |
-| google_gemma_4_31B_it | domain:Transportation and Logistics | 138/167 = 82.63% | LEGACY_REVALIDATED |
+| google_gemma_4_31B_it | domain:Transportation and Logistics | 137/167 = 82.04% | LEGACY_REVALIDATED |
 | google_gemma_4_31B_it | domain:Travel and Tourism | 90/108 = 83.33% | LEGACY_REVALIDATED |
 | google_gemma_4_31B_it | system:System1 | 1366/1426 = 95.79% | LEGACY_REVALIDATED |
 | google_gemma_4_31B_it | system:System2 | 664/1151 = 57.69% | LEGACY_REVALIDATED |
 | qwen3.5_27b | domain:Arts and Humanities | 74/83 = 89.16% | LEGACY_REVALIDATED |
 | qwen3.5_27b | domain:CSAT History | 33/60 = 55.00% | LEGACY_REVALIDATED |
 | qwen3.5_27b | domain:CSAT Science | 150/478 = 31.38% | LEGACY_REVALIDATED |
-| qwen3.5_27b | domain:Economics and Finance | 82/104 = 78.85% | LEGACY_REVALIDATED |
+| qwen3.5_27b | domain:Economics and Finance | 81/104 = 77.88% | LEGACY_REVALIDATED |
 | qwen3.5_27b | domain:Education and Academia | 182/215 = 84.65% | LEGACY_REVALIDATED |
 | qwen3.5_27b | domain:Entertainment and Media | 138/168 = 82.14% | LEGACY_REVALIDATED |
-| qwen3.5_27b | domain:Hospitality and Food Service | 203/264 = 76.89% | LEGACY_REVALIDATED |
+| qwen3.5_27b | domain:Hospitality and Food Service | 196/264 = 74.24% | LEGACY_REVALIDATED |
 | qwen3.5_27b | domain:Marketing and Advertising | 125/145 = 86.21% | LEGACY_REVALIDATED |
 | qwen3.5_27b | domain:Medical and Healthcare | 69/90 = 76.67% | LEGACY_REVALIDATED |
 | qwen3.5_27b | domain:Personal and Lifestyle | 182/204 = 89.22% | LEGACY_REVALIDATED |
-| qwen3.5_27b | domain:Public and Administration | 193/245 = 78.78% | LEGACY_REVALIDATED |
+| qwen3.5_27b | domain:Public and Administration | 191/245 = 77.96% | LEGACY_REVALIDATED |
 | qwen3.5_27b | domain:Retail and Commerce | 118/154 = 76.62% | LEGACY_REVALIDATED |
 | qwen3.5_27b | domain:Science and Technology | 69/92 = 75.00% | LEGACY_REVALIDATED |
-| qwen3.5_27b | domain:Transportation and Logistics | 135/167 = 80.84% | LEGACY_REVALIDATED |
+| qwen3.5_27b | domain:Transportation and Logistics | 134/167 = 80.24% | LEGACY_REVALIDATED |
 | qwen3.5_27b | domain:Travel and Tourism | 97/108 = 89.81% | LEGACY_REVALIDATED |
 | qwen3.5_27b | system:System1 | 1318/1426 = 92.43% | LEGACY_REVALIDATED |
-| qwen3.5_27b | system:System2 | 532/1151 = 46.22% | LEGACY_REVALIDATED |
+| qwen3.5_27b | system:System2 | 521/1151 = 45.26% | LEGACY_REVALIDATED |
 | qwen3.6-35b-a3b | domain:Arts and Humanities | 67/83 = 80.72% | LEGACY_REVALIDATED |
 | qwen3.6-35b-a3b | domain:CSAT History | 27/60 = 45.00% | LEGACY_REVALIDATED |
-| qwen3.6-35b-a3b | domain:CSAT Science | 132/478 = 27.62% | LEGACY_REVALIDATED |
+| qwen3.6-35b-a3b | domain:CSAT Science | 131/478 = 27.41% | LEGACY_REVALIDATED |
 | qwen3.6-35b-a3b | domain:Economics and Finance | 77/104 = 74.04% | LEGACY_REVALIDATED |
 | qwen3.6-35b-a3b | domain:Education and Academia | 178/215 = 82.79% | LEGACY_REVALIDATED |
 | qwen3.6-35b-a3b | domain:Entertainment and Media | 124/168 = 73.81% | LEGACY_REVALIDATED |
@@ -241,75 +255,75 @@
 | qwen3.6-35b-a3b | domain:Transportation and Logistics | 126/167 = 75.45% | LEGACY_REVALIDATED |
 | qwen3.6-35b-a3b | domain:Travel and Tourism | 86/108 = 79.63% | LEGACY_REVALIDATED |
 | qwen3.6-35b-a3b | system:System1 | 1245/1426 = 87.31% | LEGACY_REVALIDATED |
-| qwen3.6-35b-a3b | system:System2 | 487/1151 = 42.31% | LEGACY_REVALIDATED |
+| qwen3.6-35b-a3b | system:System2 | 486/1151 = 42.22% | LEGACY_REVALIDATED |
 | qwen_qwen3.5_27b_fp8 | domain:Arts and Humanities | 75/83 = 90.36% | LEGACY_REVALIDATED |
 | qwen_qwen3.5_27b_fp8 | domain:CSAT History | 33/60 = 55.00% | LEGACY_REVALIDATED |
-| qwen_qwen3.5_27b_fp8 | domain:CSAT Science | 142/478 = 29.71% | LEGACY_REVALIDATED |
+| qwen_qwen3.5_27b_fp8 | domain:CSAT Science | 141/478 = 29.50% | LEGACY_REVALIDATED |
 | qwen_qwen3.5_27b_fp8 | domain:Economics and Finance | 81/104 = 77.88% | LEGACY_REVALIDATED |
 | qwen_qwen3.5_27b_fp8 | domain:Education and Academia | 178/215 = 82.79% | LEGACY_REVALIDATED |
 | qwen_qwen3.5_27b_fp8 | domain:Entertainment and Media | 142/168 = 84.52% | LEGACY_REVALIDATED |
-| qwen_qwen3.5_27b_fp8 | domain:Hospitality and Food Service | 198/264 = 75.00% | LEGACY_REVALIDATED |
+| qwen_qwen3.5_27b_fp8 | domain:Hospitality and Food Service | 196/264 = 74.24% | LEGACY_REVALIDATED |
 | qwen_qwen3.5_27b_fp8 | domain:Marketing and Advertising | 128/145 = 88.28% | LEGACY_REVALIDATED |
 | qwen_qwen3.5_27b_fp8 | domain:Medical and Healthcare | 63/90 = 70.00% | LEGACY_REVALIDATED |
 | qwen_qwen3.5_27b_fp8 | domain:Personal and Lifestyle | 181/204 = 88.73% | LEGACY_REVALIDATED |
-| qwen_qwen3.5_27b_fp8 | domain:Public and Administration | 194/245 = 79.18% | LEGACY_REVALIDATED |
-| qwen_qwen3.5_27b_fp8 | domain:Retail and Commerce | 124/154 = 80.52% | LEGACY_REVALIDATED |
+| qwen_qwen3.5_27b_fp8 | domain:Public and Administration | 192/245 = 78.37% | LEGACY_REVALIDATED |
+| qwen_qwen3.5_27b_fp8 | domain:Retail and Commerce | 123/154 = 79.87% | LEGACY_REVALIDATED |
 | qwen_qwen3.5_27b_fp8 | domain:Science and Technology | 69/92 = 75.00% | LEGACY_REVALIDATED |
-| qwen_qwen3.5_27b_fp8 | domain:Transportation and Logistics | 127/167 = 76.05% | LEGACY_REVALIDATED |
+| qwen_qwen3.5_27b_fp8 | domain:Transportation and Logistics | 126/167 = 75.45% | LEGACY_REVALIDATED |
 | qwen_qwen3.5_27b_fp8 | domain:Travel and Tourism | 93/108 = 86.11% | LEGACY_REVALIDATED |
 | qwen_qwen3.5_27b_fp8 | system:System1 | 1313/1426 = 92.08% | LEGACY_REVALIDATED |
-| qwen_qwen3.5_27b_fp8 | system:System2 | 515/1151 = 44.74% | LEGACY_REVALIDATED |
-| qwen_qwen3.5_35b_a3b | domain:Arts and Humanities | 74/83 = 89.16% | LEGACY_REVALIDATED |
-| qwen_qwen3.5_35b_a3b | domain:CSAT History | 30/60 = 50.00% | LEGACY_REVALIDATED |
-| qwen_qwen3.5_35b_a3b | domain:CSAT Science | 128/478 = 26.78% | LEGACY_REVALIDATED |
+| qwen_qwen3.5_27b_fp8 | system:System2 | 508/1151 = 44.14% | LEGACY_REVALIDATED |
+| qwen_qwen3.5_35b_a3b | domain:Arts and Humanities | 73/83 = 87.95% | LEGACY_REVALIDATED |
+| qwen_qwen3.5_35b_a3b | domain:CSAT History | 29/60 = 48.33% | LEGACY_REVALIDATED |
+| qwen_qwen3.5_35b_a3b | domain:CSAT Science | 127/478 = 26.57% | LEGACY_REVALIDATED |
 | qwen_qwen3.5_35b_a3b | domain:Economics and Finance | 82/104 = 78.85% | LEGACY_REVALIDATED |
 | qwen_qwen3.5_35b_a3b | domain:Education and Academia | 178/215 = 82.79% | LEGACY_REVALIDATED |
 | qwen_qwen3.5_35b_a3b | domain:Entertainment and Media | 124/168 = 73.81% | LEGACY_REVALIDATED |
-| qwen_qwen3.5_35b_a3b | domain:Hospitality and Food Service | 211/264 = 79.92% | LEGACY_REVALIDATED |
+| qwen_qwen3.5_35b_a3b | domain:Hospitality and Food Service | 210/264 = 79.55% | LEGACY_REVALIDATED |
 | qwen_qwen3.5_35b_a3b | domain:Marketing and Advertising | 121/145 = 83.45% | LEGACY_REVALIDATED |
 | qwen_qwen3.5_35b_a3b | domain:Medical and Healthcare | 66/90 = 73.33% | LEGACY_REVALIDATED |
-| qwen_qwen3.5_35b_a3b | domain:Personal and Lifestyle | 176/204 = 86.27% | LEGACY_REVALIDATED |
-| qwen_qwen3.5_35b_a3b | domain:Public and Administration | 187/245 = 76.33% | LEGACY_REVALIDATED |
-| qwen_qwen3.5_35b_a3b | domain:Retail and Commerce | 121/154 = 78.57% | LEGACY_REVALIDATED |
-| qwen_qwen3.5_35b_a3b | domain:Science and Technology | 66/92 = 71.74% | LEGACY_REVALIDATED |
+| qwen_qwen3.5_35b_a3b | domain:Personal and Lifestyle | 172/204 = 84.31% | LEGACY_REVALIDATED |
+| qwen_qwen3.5_35b_a3b | domain:Public and Administration | 186/245 = 75.92% | LEGACY_REVALIDATED |
+| qwen_qwen3.5_35b_a3b | domain:Retail and Commerce | 118/154 = 76.62% | LEGACY_REVALIDATED |
+| qwen_qwen3.5_35b_a3b | domain:Science and Technology | 67/92 = 72.83% | LEGACY_REVALIDATED |
 | qwen_qwen3.5_35b_a3b | domain:Transportation and Logistics | 125/167 = 74.85% | LEGACY_REVALIDATED |
-| qwen_qwen3.5_35b_a3b | domain:Travel and Tourism | 93/108 = 86.11% | LEGACY_REVALIDATED |
-| qwen_qwen3.5_35b_a3b | system:System1 | 1264/1426 = 88.64% | LEGACY_REVALIDATED |
-| qwen_qwen3.5_35b_a3b | system:System2 | 518/1151 = 45.00% | LEGACY_REVALIDATED |
+| qwen_qwen3.5_35b_a3b | domain:Travel and Tourism | 91/108 = 84.26% | LEGACY_REVALIDATED |
+| qwen_qwen3.5_35b_a3b | system:System1 | 1263/1426 = 88.57% | LEGACY_REVALIDATED |
+| qwen_qwen3.5_35b_a3b | system:System2 | 506/1151 = 43.96% | LEGACY_REVALIDATED |
 | qwen_qwen3.6_27b | domain:Arts and Humanities | 70/83 = 84.34% | LEGACY_REVALIDATED |
-| qwen_qwen3.6_27b | domain:CSAT History | 28/60 = 46.67% | LEGACY_REVALIDATED |
-| qwen_qwen3.6_27b | domain:CSAT Science | 129/478 = 26.99% | LEGACY_REVALIDATED |
-| qwen_qwen3.6_27b | domain:Economics and Finance | 76/104 = 73.08% | LEGACY_REVALIDATED |
-| qwen_qwen3.6_27b | domain:Education and Academia | 178/215 = 82.79% | LEGACY_REVALIDATED |
+| qwen_qwen3.6_27b | domain:CSAT History | 27/60 = 45.00% | LEGACY_REVALIDATED |
+| qwen_qwen3.6_27b | domain:CSAT Science | 128/478 = 26.78% | LEGACY_REVALIDATED |
+| qwen_qwen3.6_27b | domain:Economics and Finance | 75/104 = 72.12% | LEGACY_REVALIDATED |
+| qwen_qwen3.6_27b | domain:Education and Academia | 177/215 = 82.33% | LEGACY_REVALIDATED |
 | qwen_qwen3.6_27b | domain:Entertainment and Media | 137/168 = 81.55% | LEGACY_REVALIDATED |
-| qwen_qwen3.6_27b | domain:Hospitality and Food Service | 185/264 = 70.08% | LEGACY_REVALIDATED |
+| qwen_qwen3.6_27b | domain:Hospitality and Food Service | 183/264 = 69.32% | LEGACY_REVALIDATED |
 | qwen_qwen3.6_27b | domain:Marketing and Advertising | 115/145 = 79.31% | LEGACY_REVALIDATED |
 | qwen_qwen3.6_27b | domain:Medical and Healthcare | 68/90 = 75.56% | LEGACY_REVALIDATED |
-| qwen_qwen3.6_27b | domain:Personal and Lifestyle | 170/204 = 83.33% | LEGACY_REVALIDATED |
-| qwen_qwen3.6_27b | domain:Public and Administration | 184/245 = 75.10% | LEGACY_REVALIDATED |
-| qwen_qwen3.6_27b | domain:Retail and Commerce | 121/154 = 78.57% | LEGACY_REVALIDATED |
+| qwen_qwen3.6_27b | domain:Personal and Lifestyle | 169/204 = 82.84% | LEGACY_REVALIDATED |
+| qwen_qwen3.6_27b | domain:Public and Administration | 182/245 = 74.29% | LEGACY_REVALIDATED |
+| qwen_qwen3.6_27b | domain:Retail and Commerce | 120/154 = 77.92% | LEGACY_REVALIDATED |
 | qwen_qwen3.6_27b | domain:Science and Technology | 67/92 = 72.83% | LEGACY_REVALIDATED |
-| qwen_qwen3.6_27b | domain:Transportation and Logistics | 121/167 = 72.46% | LEGACY_REVALIDATED |
-| qwen_qwen3.6_27b | domain:Travel and Tourism | 86/108 = 79.63% | LEGACY_REVALIDATED |
-| qwen_qwen3.6_27b | system:System1 | 1258/1426 = 88.22% | LEGACY_REVALIDATED |
-| qwen_qwen3.6_27b | system:System2 | 477/1151 = 41.44% | LEGACY_REVALIDATED |
+| qwen_qwen3.6_27b | domain:Transportation and Logistics | 122/167 = 73.05% | LEGACY_REVALIDATED |
+| qwen_qwen3.6_27b | domain:Travel and Tourism | 85/108 = 78.70% | LEGACY_REVALIDATED |
+| qwen_qwen3.6_27b | system:System1 | 1254/1426 = 87.94% | LEGACY_REVALIDATED |
+| qwen_qwen3.6_27b | system:System2 | 471/1151 = 40.92% | LEGACY_REVALIDATED |
 | qwen_qwen3.6_27b_fp8 | domain:Arts and Humanities | 75/83 = 90.36% | LEGACY_REVALIDATED |
 | qwen_qwen3.6_27b_fp8 | domain:CSAT History | 30/60 = 50.00% | LEGACY_REVALIDATED |
-| qwen_qwen3.6_27b_fp8 | domain:CSAT Science | 138/478 = 28.87% | LEGACY_REVALIDATED |
-| qwen_qwen3.6_27b_fp8 | domain:Economics and Finance | 80/104 = 76.92% | LEGACY_REVALIDATED |
-| qwen_qwen3.6_27b_fp8 | domain:Education and Academia | 179/215 = 83.26% | LEGACY_REVALIDATED |
+| qwen_qwen3.6_27b_fp8 | domain:CSAT Science | 140/478 = 29.29% | LEGACY_REVALIDATED |
+| qwen_qwen3.6_27b_fp8 | domain:Economics and Finance | 79/104 = 75.96% | LEGACY_REVALIDATED |
+| qwen_qwen3.6_27b_fp8 | domain:Education and Academia | 178/215 = 82.79% | LEGACY_REVALIDATED |
 | qwen_qwen3.6_27b_fp8 | domain:Entertainment and Media | 142/168 = 84.52% | LEGACY_REVALIDATED |
 | qwen_qwen3.6_27b_fp8 | domain:Hospitality and Food Service | 202/264 = 76.52% | LEGACY_REVALIDATED |
 | qwen_qwen3.6_27b_fp8 | domain:Marketing and Advertising | 122/145 = 84.14% | LEGACY_REVALIDATED |
 | qwen_qwen3.6_27b_fp8 | domain:Medical and Healthcare | 69/90 = 76.67% | LEGACY_REVALIDATED |
-| qwen_qwen3.6_27b_fp8 | domain:Personal and Lifestyle | 176/204 = 86.27% | LEGACY_REVALIDATED |
+| qwen_qwen3.6_27b_fp8 | domain:Personal and Lifestyle | 175/204 = 85.78% | LEGACY_REVALIDATED |
 | qwen_qwen3.6_27b_fp8 | domain:Public and Administration | 197/245 = 80.41% | LEGACY_REVALIDATED |
-| qwen_qwen3.6_27b_fp8 | domain:Retail and Commerce | 121/154 = 78.57% | LEGACY_REVALIDATED |
+| qwen_qwen3.6_27b_fp8 | domain:Retail and Commerce | 119/154 = 77.27% | LEGACY_REVALIDATED |
 | qwen_qwen3.6_27b_fp8 | domain:Science and Technology | 70/92 = 76.09% | LEGACY_REVALIDATED |
-| qwen_qwen3.6_27b_fp8 | domain:Transportation and Logistics | 127/167 = 76.05% | LEGACY_REVALIDATED |
+| qwen_qwen3.6_27b_fp8 | domain:Transportation and Logistics | 128/167 = 76.65% | LEGACY_REVALIDATED |
 | qwen_qwen3.6_27b_fp8 | domain:Travel and Tourism | 93/108 = 86.11% | LEGACY_REVALIDATED |
-| qwen_qwen3.6_27b_fp8 | system:System1 | 1286/1426 = 90.18% | LEGACY_REVALIDATED |
-| qwen_qwen3.6_27b_fp8 | system:System2 | 535/1151 = 46.48% | LEGACY_REVALIDATED |
+| qwen_qwen3.6_27b_fp8 | system:System1 | 1283/1426 = 89.97% | LEGACY_REVALIDATED |
+| qwen_qwen3.6_27b_fp8 | system:System2 | 536/1151 = 46.57% | LEGACY_REVALIDATED |
 
 </details>
 
@@ -557,17 +571,17 @@
 - `results/qwen_qwen3.6_27b/20260622_153150/vision/multimodal/k_mmbench`: `{"split": {"basis": "k_mmbench.py fixed load_dataset split", "value": "dev"}}`
 - `results/qwen_qwen3.6_27b_fp8/20260704_081047/vision/multimodal/k_mmbench`: `{"split": {"basis": "k_mmbench.py fixed load_dataset split", "value": "dev"}}`
 - `results/qwen_qwen3.6_35b_a3b_fp8/20260702_133909/vision/multimodal/k_mmbench`: `{"split": {"basis": "k_mmbench.py fixed load_dataset split", "value": "dev"}}`
-- `results/qwen_qwen3.5_35b_a3b_fp8/20260711_003523/vision/multimodal/kreta/qwen_qwen3.5_35b_a3b_fp8_default.jsonl`: `{"max_tokens": {"basis": "run_kreta.sh: default mode default KRETA_MAX_TOKENS", "value": 4096}}`
-- `results/qwen_qwen3.6_35b_a3b_fp8/20260702_133909/vision/multimodal/kreta/qwen_qwen3.6_35b_a3b_fp8_default.jsonl`: `{"max_tokens": {"basis": "run_kreta.sh: default mode default KRETA_MAX_TOKENS", "value": 4096}}`
-- `results/Qwen3.5_122B_A10B_GPTQ_Int4/20260720_235721/vision/multimodal/kreta/Qwen3.5_122B_A10B_GPTQ_Int4_direct.jsonl`: `{"max_tokens": {"basis": "run_kreta.sh: direct mode default KRETA_MAX_TOKENS", "value": 32}}`
-- `results/google_gemma_4_26B_A4B_it/20260621_221741/vision/multimodal/kreta/google_gemma_4_26b_a4b_it_direct.jsonl`: `{"max_tokens": {"basis": "run_kreta.sh: direct mode default KRETA_MAX_TOKENS", "value": 32}}`
-- `results/google_gemma_4_31B_it/20260525_152204/vision/multimodal/kreta/google_gemma_4_31B_it_direct.jsonl`: `{"max_tokens": {"basis": "run_kreta.sh: direct mode default KRETA_MAX_TOKENS", "value": 32}}`
-- `results/qwen3.5_27b/20260525_145725/vision/multimodal/kreta/qwen3.5_27b_direct.jsonl`: `{"max_tokens": {"basis": "run_kreta.sh: direct mode default KRETA_MAX_TOKENS", "value": 32}}`
-- `results/Qwen_Qwen3.6_35B_A3B/20260524_120652/vision/multimodal/kreta/qwen3.6-35b-a3b_direct.jsonl`: `{"max_tokens": {"basis": "run_kreta.sh: direct mode default KRETA_MAX_TOKENS", "value": 32}}`
-- `results/qwen_qwen3.5_27b_fp8/20260705_082256/vision/multimodal/kreta/qwen_qwen3.5_27b_fp8_direct.jsonl`: `{"max_tokens": {"basis": "run_kreta.sh: direct mode default KRETA_MAX_TOKENS", "value": 32}}`
-- `results/qwen_qwen3.5_35b_a3b/20260621_233258/vision/multimodal/kreta/qwen_qwen3.5_35b_a3b_direct.jsonl`: `{"max_tokens": {"basis": "run_kreta.sh: direct mode default KRETA_MAX_TOKENS", "value": 32}}`
-- `results/qwen_qwen3.6_27b/20260622_153150/vision/multimodal/kreta/qwen_qwen3.6_27b_direct.jsonl`: `{"max_tokens": {"basis": "run_kreta.sh: direct mode default KRETA_MAX_TOKENS", "value": 32}}`
-- `results/qwen_qwen3.6_27b_fp8/20260704_081047/vision/multimodal/kreta/qwen_qwen3.6_27b_fp8_direct.jsonl`: `{"max_tokens": {"basis": "run_kreta.sh: direct mode default KRETA_MAX_TOKENS", "value": 32}}`
+- `results/qwen_qwen3.5_35b_a3b_fp8/20260711_003523/vision/multimodal/kreta/qwen_qwen3.5_35b_a3b_fp8_default.jsonl`: `{"max_tokens": {"basis": "legacy run_kreta.sh: default mode default KRETA_MAX_TOKENS", "value": 4096}}`
+- `results/qwen_qwen3.6_35b_a3b_fp8/20260702_133909/vision/multimodal/kreta/qwen_qwen3.6_35b_a3b_fp8_default.jsonl`: `{"max_tokens": {"basis": "legacy run_kreta.sh: default mode default KRETA_MAX_TOKENS", "value": 4096}}`
+- `results/Qwen3.5_122B_A10B_GPTQ_Int4/20260720_235721/vision/multimodal/kreta/Qwen3.5_122B_A10B_GPTQ_Int4_direct.jsonl`: `{"max_tokens": {"basis": "legacy run_kreta.sh: direct mode default KRETA_MAX_TOKENS", "value": 32}}`
+- `results/google_gemma_4_26B_A4B_it/20260621_221741/vision/multimodal/kreta/google_gemma_4_26b_a4b_it_direct.jsonl`: `{"max_tokens": {"basis": "legacy run_kreta.sh: direct mode default KRETA_MAX_TOKENS", "value": 32}}`
+- `results/google_gemma_4_31B_it/20260525_152204/vision/multimodal/kreta/google_gemma_4_31B_it_direct.jsonl`: `{"max_tokens": {"basis": "legacy run_kreta.sh: direct mode default KRETA_MAX_TOKENS", "value": 32}}`
+- `results/qwen3.5_27b/20260525_145725/vision/multimodal/kreta/qwen3.5_27b_direct.jsonl`: `{"max_tokens": {"basis": "legacy run_kreta.sh: direct mode default KRETA_MAX_TOKENS", "value": 32}}`
+- `results/Qwen_Qwen3.6_35B_A3B/20260524_120652/vision/multimodal/kreta/qwen3.6-35b-a3b_direct.jsonl`: `{"max_tokens": {"basis": "legacy run_kreta.sh: direct mode default KRETA_MAX_TOKENS", "value": 32}}`
+- `results/qwen_qwen3.5_27b_fp8/20260705_082256/vision/multimodal/kreta/qwen_qwen3.5_27b_fp8_direct.jsonl`: `{"max_tokens": {"basis": "legacy run_kreta.sh: direct mode default KRETA_MAX_TOKENS", "value": 32}}`
+- `results/qwen_qwen3.5_35b_a3b/20260621_233258/vision/multimodal/kreta/qwen_qwen3.5_35b_a3b_direct.jsonl`: `{"max_tokens": {"basis": "legacy run_kreta.sh: direct mode default KRETA_MAX_TOKENS", "value": 32}}`
+- `results/qwen_qwen3.6_27b/20260622_153150/vision/multimodal/kreta/qwen_qwen3.6_27b_direct.jsonl`: `{"max_tokens": {"basis": "legacy run_kreta.sh: direct mode default KRETA_MAX_TOKENS", "value": 32}}`
+- `results/qwen_qwen3.6_27b_fp8/20260704_081047/vision/multimodal/kreta/qwen_qwen3.6_27b_fp8_direct.jsonl`: `{"max_tokens": {"basis": "legacy run_kreta.sh: direct mode default KRETA_MAX_TOKENS", "value": 32}}`
 
 ## 대표 런 자동 선정 불가 — 수치 비노출
 
@@ -617,11 +631,8 @@
   - 기대 건수 240와 다름
 - **B4-latency-profile / gemma_4_26b_a4b_it / 20260503_120309** — `REJECTED`
   - latency 호출 실패 또는 미해결 값이 포함됨
-  - summary condition 완주/실패 집계가 일치하지 않음
 - **KRETA / gemma_4_26b_a4b_it / 20260503_122218** — `REJECTED`
-  - 오류 응답이 포함됨
-  - raw 재집계와 results.json overall이 일치하지 않음
-  - raw 재집계와 results.json domain이 일치하지 않음
+  - 오류 응답 548건 포함
 - **MTVQA-KR / gemma_4_26b_a4b_it / 20260503_122218** — `REJECTED`
   - raw 재집계와 summary overall이 일치하지 않음
 - **B3-structured-output / gemma_4_26b_a4b_it / 20260505_124246** — `REJECTED`
@@ -630,18 +641,13 @@
 - **KOFFVQA / gemma_4_26b_a4b_it / 20260505_124246** — `UNSCORED`
   - 채점 산출물 없음
 - **KRETA / gemma_4_26b_a4b_it / 20260505_124246** — `REJECTED`
-  - 오류 응답이 포함됨
-  - raw 재집계와 results.json overall이 일치하지 않음
-  - raw 재집계와 results.json domain이 일치하지 않음
+  - 오류 응답 548건 포함
 - **K-DTCBench / gemma_4_26b_a4b_it / 20260503_120057** — `REJECTED`
   - 기대 건수 240와 다름
 - **B4-latency-profile / gemma_4_26b_a4b_it / 20260503_120309** — `REJECTED`
   - latency 호출 실패 또는 미해결 값이 포함됨
-  - summary condition 완주/실패 집계가 일치하지 않음
 - **KRETA / gemma_4_26b_a4b_it / 20260503_122218** — `REJECTED`
-  - 오류 응답이 포함됨
-  - raw 재집계와 results.json overall이 일치하지 않음
-  - raw 재집계와 results.json domain이 일치하지 않음
+  - 오류 응답 548건 포함
 - **MTVQA-KR / gemma_4_26b_a4b_it / 20260503_122218** — `REJECTED`
   - raw 재집계와 summary overall이 일치하지 않음
 - **B3-structured-output / gemma_4_26b_a4b_it / 20260505_124246** — `REJECTED`
@@ -650,63 +656,51 @@
 - **KOFFVQA / gemma_4_26b_a4b_it / 20260505_124246** — `UNSCORED`
   - 채점 산출물 없음
 - **KRETA / gemma_4_26b_a4b_it / 20260505_124246** — `REJECTED`
-  - 오류 응답이 포함됨
-  - raw 재집계와 results.json overall이 일치하지 않음
-  - raw 재집계와 results.json domain이 일치하지 않음
+  - 오류 응답 548건 포함
 - **B3-structured-output / gemma_4_31b_it / 20260505_130752** — `REJECTED`
   - total=0
   - manifest 전 항목을 시도하지 않음
 - **K-DTCBench / gemma_4_31b_it / 20260505_130752** — `REJECTED`
-  - 오류 응답이 포함됨
+  - 오류 응답 1건 포함
 - **K-MMBench / gemma_4_31b_it / 20260505_130752** — `REJECTED`
-  - 오류 응답이 포함됨
+  - 오류 응답 5건 포함
 - **KOFFVQA / gemma_4_31b_it / 20260505_130752** — `REJECTED`
   - 오류 응답이 포함됨
 - **KRETA / gemma_4_26b_a4b_it / 20260505_130752** — `REJECTED`
-  - 오류 응답이 포함됨
-  - raw 재집계와 results.json overall이 일치하지 않음
-  - raw 재집계와 results.json domain이 일치하지 않음
+  - 오류 응답 548건 포함
 - **KRETA / gemma_4_31b_it / 20260505_130752** — `REJECTED`
-  - 오류 응답이 포함됨
-  - raw 재집계와 results.json overall이 일치하지 않음
+  - 오류 응답 2577건 포함
 - **B3-structured-output / gemma_4_26b_a4b_it / 20260505_124246.bad** — `REJECTED`
   - total=0
   - manifest 전 항목을 시도하지 않음
 - **KOFFVQA / gemma_4_26b_a4b_it / 20260505_124246.bad** — `UNSCORED`
   - 채점 산출물 없음
 - **KRETA / gemma_4_26b_a4b_it / 20260505_124246.bad** — `REJECTED`
-  - 오류 응답이 포함됨
-  - raw 재집계와 results.json overall이 일치하지 않음
-  - raw 재집계와 results.json domain이 일치하지 않음
+  - 오류 응답 548건 포함
 - **B3-structured-output / gemma_4_26b_a4b_it / 20260505_124246** — `REJECTED`
   - total=0
   - manifest 전 항목을 시도하지 않음
 - **KOFFVQA / gemma_4_26b_a4b_it / 20260505_124246** — `UNSCORED`
   - 채점 산출물 없음
 - **KRETA / gemma_4_26b_a4b_it / 20260505_124246** — `REJECTED`
-  - 오류 응답이 포함됨
-  - raw 재집계와 results.json overall이 일치하지 않음
-  - raw 재집계와 results.json domain이 일치하지 않음
+  - 오류 응답 548건 포함
 - **B3-structured-output / gemma_4_31b_it / 20260505_130752** — `REJECTED`
   - total=0
   - manifest 전 항목을 시도하지 않음
 - **K-DTCBench / gemma_4_31b_it / 20260505_130752** — `REJECTED`
-  - 오류 응답이 포함됨
+  - 오류 응답 1건 포함
 - **K-MMBench / gemma_4_31b_it / 20260505_130752** — `REJECTED`
-  - 오류 응답이 포함됨
+  - 오류 응답 5건 포함
 - **KOFFVQA / gemma_4_31b_it / 20260505_130752** — `REJECTED`
   - 오류 응답이 포함됨
 - **KRETA / gemma_4_26b_a4b_it / 20260505_130752** — `REJECTED`
-  - 오류 응답이 포함됨
-  - raw 재집계와 results.json overall이 일치하지 않음
-  - raw 재집계와 results.json domain이 일치하지 않음
+  - 오류 응답 548건 포함
 - **KRETA / gemma_4_31b_it / 20260505_130752** — `REJECTED`
-  - 오류 응답이 포함됨
-  - raw 재집계와 results.json overall이 일치하지 않음
+  - 오류 응답 2577건 포함
 - **K-DTCBench / google_gemma_4_31B_it / 20260525_152204** — `REJECTED`
-  - 오류 응답이 포함됨
+  - 오류 응답 1건 포함
 - **K-MMBench / google_gemma_4_31B_it / 20260525_152204** — `REJECTED`
-  - 오류 응답이 포함됨
+  - 오류 응답 5건 포함
 - **KOFFVQA / google_gemma_4_31B_it / 20260525_152204** — `UNSCORED`
   - 채점 산출물 없음
 - **KOFFVQA / qwen3.5_27b / 20260525_145725** — `REJECTED`
@@ -720,7 +714,7 @@
 - **KOFFVQA / qwen_qwen3.6_27b / 20260622_153150** — `UNSCORED`
   - 채점 산출물 없음
 - **K-DTCBench / qwen_qwen3.6_27b_fp8 / 20260704_081047** — `REJECTED`
-  - 오류 응답이 포함됨
+  - 오류 응답 1건 포함
 - **KOFFVQA / qwen_qwen3.6_27b_fp8 / 20260704_081047** — `UNSCORED`
   - 채점 산출물 없음
 - **KOFFVQA / qwen_qwen3.6_35b_a3b_fp8 / 20260702_133909** — `UNSCORED`

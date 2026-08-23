@@ -5,9 +5,10 @@
   "completed_at_utc": null,
   "counts": {
     "attempted": 2577,
-    "correct_measured": 1850,
+    "correct_measured": 1839,
     "errored": 0,
     "measured": 2577,
+    "no_answer": 28,
     "unresolved": 0
   },
   "failures": [],
@@ -16,9 +17,9 @@
       {
         "denominator": 2577,
         "name": "overall",
-        "numerator": 1850,
+        "numerator": 1839,
         "unit": "fraction",
-        "value": 0.7178890182382616
+        "value": 0.7136204889406287
       },
       {
         "denominator": 83,
@@ -44,9 +45,9 @@
       {
         "denominator": 104,
         "name": "domain:Economics and Finance",
-        "numerator": 82,
+        "numerator": 81,
         "unit": "fraction",
-        "value": 0.7884615384615384
+        "value": 0.7788461538461539
       },
       {
         "denominator": 215,
@@ -65,9 +66,9 @@
       {
         "denominator": 264,
         "name": "domain:Hospitality and Food Service",
-        "numerator": 203,
+        "numerator": 196,
         "unit": "fraction",
-        "value": 0.7689393939393939
+        "value": 0.7424242424242424
       },
       {
         "denominator": 145,
@@ -93,9 +94,9 @@
       {
         "denominator": 245,
         "name": "domain:Public and Administration",
-        "numerator": 193,
+        "numerator": 191,
         "unit": "fraction",
-        "value": 0.7877551020408163
+        "value": 0.7795918367346939
       },
       {
         "denominator": 154,
@@ -114,9 +115,9 @@
       {
         "denominator": 167,
         "name": "domain:Transportation and Logistics",
-        "numerator": 135,
+        "numerator": 134,
         "unit": "fraction",
-        "value": 0.8083832335329342
+        "value": 0.8023952095808383
       },
       {
         "denominator": 108,
@@ -135,35 +136,43 @@
       {
         "denominator": 1151,
         "name": "system:System2",
-        "numerator": 532,
+        "numerator": 521,
         "unit": "fraction",
-        "value": 0.4622067767158992
+        "value": 0.4526498696785404
       }
     ],
     "conditional": {
       "denominator": 2577,
-      "numerator": 1850,
+      "numerator": 1839,
       "unit": "fraction",
-      "value": 0.7178890182382616
+      "value": 0.7136204889406287
     },
     "strict": {
       "denominator": 2577,
-      "numerator": 1850,
+      "numerator": 1839,
       "unit": "fraction",
-      "value": 0.7178890182382616
+      "value": 0.7136204889406287
     }
   },
   "model": "qwen3.5_27b",
+  "no_answer_rate": {
+    "denominator": 2577,
+    "numerator": 28,
+    "unit": "fraction",
+    "value": 0.01086534730306558
+  },
   "protocol": {
     "complete": false,
-    "fingerprint": "sha256:2eac70b4f5b4ae422ebeb77d44bc0bd0b5b0e779efbfb884f3e36b5422eaa7cd",
+    "fingerprint": "sha256:b5a8188c68cf13518732860ce14af6af7eca3f90a7bd5bc9b55faeb27f81737f",
     "inferred": {
       "max_tokens": {
-        "basis": "run_kreta.sh: direct mode default KRETA_MAX_TOKENS",
+        "basis": "legacy run_kreta.sh: direct mode default KRETA_MAX_TOKENS",
         "value": 32
       }
     },
     "recorded": {
+      "answer_parser_hash": "sha256:623dced50534d5fdd36879f6abc183f27bc1a83661472de40591468f0514ad56",
+      "answer_parser_version": "kreta-response-choice-v2",
       "benchmark": "KRETA",
       "dataset_item_digest": "0cc4ed8281009d38",
       "dataset_provenance": {
@@ -177,7 +186,6 @@
       "split": "test"
     },
     "unknown": [
-      "answer_parser_hash",
       "image_preprocessing_version",
       "prompt_template_hash",
       "seed",
@@ -206,8 +214,16 @@
     "unit": "results/qwen3.5_27b/20260525_145725/vision/multimodal/kreta/qwen3.5_27b_direct.jsonl"
   },
   "status": "LEGACY_REVALIDATED",
+  "upstream_comparison": {
+    "disagreement_different_choice": 0,
+    "disagreement_ours_empty": 28,
+    "note": "상류 파생 필드는 채점 근거로 쓰지 않음",
+    "parser_disagreement_rows": 28,
+    "upstream_accuracy": 71.78890182382615
+  },
   "variant": "direct",
   "warnings": [
-    "비교 비핵심 provenance 미기록: answer_parser_hash, image_preprocessing_version, prompt_template_hash, seed, temperature"
+    "상류 parser와 28행 불일치 (우리 무답 28, 다른 선택지 0) — 독립 재채점 점수임",
+    "비교 비핵심 provenance 미기록: image_preprocessing_version, prompt_template_hash, seed, temperature"
   ]
 }

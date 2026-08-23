@@ -153,7 +153,7 @@ bash vsm/multimodal/run_all.sh \
 
 개별 벤치마크 실행은 `vsm/multimodal/run_<benchmark>.sh` 직접 호출.
 
-KRETA가 중단된 경우 `vsm/multimodal/run_kreta_resume.sh`로 이어서 진행한다. `run_kreta.sh`와 달리 `./output`의 jsonl을 삭제하지 않아, 이미 처리된 `id`는 skip하고 남은 샘플만 추론한다(idempotent resume). 추론 완료 후 evaluate · 결과 복사 · 키 검증까지 자동 수행.
+KRETA가 중단된 경우 `vsm/multimodal/run_kreta_resume.sh`로 이어서 진행한다. 최초 실행이 기록한 checkpoint context(세션·모델·모드·endpoint·max tokens)가 현재 실행과 정확히 같을 때만 기존 jsonl을 허용하며, 다른 모델의 jsonl은 evaluate 전에 제거한다. context가 없거나 다르면 stale checkpoint 재발행을 막기 위해 중단하고 `run_kreta.sh`로 새로 시작해야 한다. 일치할 때는 이미 처리된 `id`를 skip하고 남은 샘플만 추론한다.
 
 KRETA 러너는 3번째 인자로 프롬프트 모드(`SETTING`)를 받는다 — `direct`(글자만 답, 빠름·DGX Spark 권장) / `default`(추론 후 답). 모드별 생성 상한은 자동 설정되며 자세한 내용은 아래 §3.8 운영 노트 참고. 예: `bash vsm/multimodal/run_kreta_resume.sh <model> direct <url>`.
 
@@ -297,7 +297,7 @@ GB10은 통합 메모리(LPDDR5X, 대역폭 ~273 GB/s)라 dense 대형 모델의
 
 **튜닝 env / 권장값:**
 
-- **`KRETA_MAX_TOKENS`** (생성 상한): 러너가 모드별 기본값을 자동 export — `direct`→**32**, 그 외→**4096**. env로 override 가능.
+- **`KRETA_MAX_TOKENS`** (생성 상한): 러너가 모드별 기본값을 자동 export — `direct`→**32**, 그 외→**4096**. env로 override 가능하며, wrapper가 실제 최종값을 `run_config.json`과 NATIVE sidecar protocol에 기록한다.
   - ⚠️ `default` 모드를 1024 등으로 낮추지 말 것: 응답의 ~13%(가장 긴 = 가장 어려운 문항)가 잘려 답이 유실되고, 손실이 난이도 쪽으로 **편향**되어 랭킹을 왜곡한다. `default`는 4096 유지, 속도가 필요하면 `direct` 사용.
 - **`KRETA_TIMEOUT`** (요청 timeout, 기본 **600초**): 큰 비전 prefill/긴 생성이 timeout→오답으로 기록되는 것을 방지.
 - **vLLM `--max-model-len`**: KRETA 요청 최대 컨텍스트 ≈ 비전(~16K) + 텍스트 + 출력 ≈ 20.5K. **24576 이상** 필요 (16384는 ~1.3% 요청이 길이 초과로 거부됨).

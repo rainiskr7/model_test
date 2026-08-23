@@ -123,9 +123,11 @@ attempted = measured + errored + unresolved
   "recorded": {
     "dataset_item_digest": "0cc4ed8281009d38",
     "dataset_provenance": {"git_commit": "c273302...", "revision": null},
-    "mode": "direct"
+    "mode": "direct",
+    "max_tokens": 32,
+    "answer_parser_version": "kreta-response-choice-v2",
+    "answer_parser_hash": "sha256:..."
   },
-  "inferred": {"max_tokens": {"value": 32, "basis": "run_kreta.sh: direct -> KRETA_MAX_TOKENS=32"}},
   "unknown": ["temperature", "seed"],
   "complete": false
 }
@@ -137,9 +139,9 @@ attempted = measured + errored + unresolved
 - `unknown` 이 그 외 항목(temperature/seed 등 decoding 세부)만 포함하고
   나머지 검증을 통과하면 → `LEGACY_REVALIDATED` + 경고.
 
-근거: KRETA 깨끗한 런 11개(direct 9 + default 2)는 오류 0건이고 mode와
-산출물의 문항 집합을 복원할 수 있다.
-이걸 통째로 버리면 2577샘플짜리 최대 벤치가 보고서에서 사라져 도구가 무시된다.
+KRETA는 독립 response parser의 결과만 채점에 사용한다. 상류 `pred_indexs` /
+`if_right` / `results.json.overall_accuracy`는 비교용 provenance일 뿐이다. 상류 parser와
+불일치해도 발행을 막지 않고 `upstream_comparison`과 `warnings`에 기록한다.
 반대로 dataset item digest가 불명이면 무엇과 비교하는지 자체가 불명이라 버린다.
 
 dataset 정체성은 외부 원본 데이터셋의 expected-ID가 아니라 **우리 산출물에 기록된
@@ -152,10 +154,13 @@ SHA-256을 계산하며, 앞 16자를 `dataset_item_digest`로 기록하고 지�
 | K-DTCBench | `results.json`의 `index` |
 | K-MMBench | `results.json`의 `index` |
 | MTVQA-KR | `results.json`의 `(row_idx, qa_idx)` |
+| KOFFVQA API judge | judge `results.json`의 prediction 원본 `dataset_item_id` (xlsx `index`) |
 
 `git_commit` / `huggingface_id` / `revision` 등 dataset provenance는 정보용으로
 sidecar에 계속 기록하지만 protocol fingerprint 계산에서는 제외한다. 같은 코호트에서
 repo commit이 갈리면 보고서 표 아래에 문항 집합은 동일하다는 각주를 남긴다.
+KOFFVQA `prediction_sha256`도 judge 결과와 모델별 prediction artifact의 결합 검증에만
+쓰며 protocol fingerprint에서는 제외한다.
 
 문항 집합 digest와 별도로 **기대 건수**도 벤치별 상수로 단언한다
 (KRETA 2577, K-MMBench 4329, K-DTCBench 240, KOFFVQA 275, MTVQA-KR 558).
@@ -170,11 +175,11 @@ repo commit이 갈리면 보고서 표 아래에 문항 집합은 동일하다�
 | K-DTCBench | 240건 완주, `errored=0`, `unresolved=0`, raw 재집계 == summary |
 | K-MMBench | 4329건 완주, 오류 0, category filter/limit 이 variant 와 일치. 전체 vs 선별은 **별도 코호트** |
 | MTVQA-KR | 558건 완주, 오류 0, raw 재집계 == summary |
-| KRETA | JSONL **1개 = 1 source 단위**, 2577 unique id와 item digest, 오류 0, unresolved 0, mode 기록됨, raw 재집계 == results.json |
+| KRETA | JSONL **1개 = 1 source 단위**, 2577 unique id와 item digest, 오류 0, unresolved 0, mode 기록됨. 고정 parser로 `response`를 독립 채점하며 상류 파생 필드·summary 일치는 발행 조건이 아님 |
 | KOFFVQA 생성 | 항상 `UNSCORED` — 채점이 없다 |
 | KOFFVQA 판정 | 275건 전부 채점, judge error 0, 모든 score 가 **정수 0–10**, prediction SHA 일치 → `provisional=true` |
-| B3 | `total>0`, manifest 전 항목 시도, 오류 0. **기존 7개는 total=0 이므로 전부 REJECTED** |
-| B4 | 전 condition·rep 완주, 실패 0. latency 축별 발행. **점수가 아니므로 strict/conditional 없음** |
+| B3 | `total>0`, manifest 전 항목 시도, 오류 0, raw `parse_ok`/`schema_check`/`value_check` 재집계 == summary. **기존 7개는 total=0 이므로 전부 REJECTED** |
+| B4 | 전 condition·rep 완주, 실패 0, `runs.json` 재계산 percentile == summary. latency 축별 발행. **점수가 아니므로 strict/conditional 없음** |
 
 ---
 
@@ -221,12 +226,37 @@ KRETA jsonl 21개 중 10개가 오류 응답을 정답으로 채점했다. 오�
 | `direct` | 9 | 0 |
 | `default` | 2 | 10 |
 
-**단, 판정은 모드가 아니라 데이터로 한다.** `default` 라서 거부하는 것이 아니라
-오류 레코드가 있어서 거부한다 — 깨끗한 `default` 런 2개
-(`qwen_qwen3.5_35b_a3b_fp8_default`, `qwen_qwen3.6_35b_a3b_fp8_default`)는 통과해야 한다.
+**단, 오류 판정은 모드가 아니라 데이터로 한다.** 오류 0건인 11개는 고정 parser로
+독립 재채점하여 발행한다. parser는 다음 순서로 선택지를 찾는다.
 
-깨끗한 런 11개는 전부 `measured=2577/2577` 이고, 재집계값이 저장된
-`overall_accuracy` 와 소수점 4자리까지 일치함을 실측 확인했다 (독립 재계산).
+1. `Answer:` / `정답:` / `답:` / `The correct answer is` / `option X` 등 명시 표지의
+   **마지막 출현**
+2. markdown을 제거한 5자 이하 짧은 응답의 첫 선택지 (`A`, `**B**`, `B.` 등)
+3. 제한된 마지막 줄 선택지 형식
+
+긴 본문의 맨몸 `\b([ABCD])\b`는 영어 관사 `a`를 오인하므로 사용하지 않는다.
+`response='E'`처럼 A–D 밖의 답이나 최종 답 표지 전에 잘린 응답은 `''`로 두며,
+이는 불확정 레코드가 아니라 **측정된 무답 오답**이다. parser version/hash는 protocol에
+기록한다.
+
+상류 parser 불일치는 실패가 아니라 다음 비교 정보로 sidecar에 남긴다.
+
+```json
+"upstream_comparison": {
+  "upstream_accuracy": 63.60,
+  "parser_disagreement_rows": 551,
+  "disagreement_ours_empty": 545,
+  "disagreement_different_choice": 6,
+  "note": "상류 파생 필드는 채점 근거로 쓰지 않음"
+}
+```
+
+`no_answer_rate`는 KRETA의 일급 발행 필드다. 무답률이 10%를 넘으면 발행을 거부하지
+않고 `warnings`와 보고서 표 아래에 “응답이 지시된 형식을 벗어나 절단됨. 점수를 능력
+차이로만 해석하지 말 것”이라고 표시한다. 거부하지 않는 이유는 모든 모델이 같은
+direct/32-token protocol을 받았고 지시 준수와 제한 안에서 답을 완결하는 능력도 측정
+대상이기 때문이다. `Qwen3.5_122B_A10B_GPTQ_Int4`는 545건의 무답으로 57.97%지만,
+하네스 실패가 아니라 모델 응답이 최종 선택지 전에 잘린 유효한 측정이므로 발행한다.
 
 | 경로 | 전체 | 오류 | 오류인데 정답처리 |
 |---|---|---|---|
@@ -246,7 +276,7 @@ KRETA jsonl 21개 중 10개가 오류 응답을 정답으로 채점했다. 오�
 
 ---
 
-## 9. KOFFVQA 판정기는 현재 실행 불가
+## 9. KOFFVQA 판정기 컬럼 및 점수 계약
 
 xlsx 컬럼: `['index','question','answer','category','l2-category','prediction']`
 
@@ -255,7 +285,20 @@ xlsx 컬럼: `['index','question','answer','category','l2-category','prediction'
 컬럼에 있고, `resp_col` 후보에도 `answer` 가 있어 기준을 응답으로 오인 결합할
 위험까지 있다. 진짜 응답인 `prediction` 은 후보에 없다.
 
-v1 에서 고친다: fuzzy substring 감지를 제거하고 `question` / `answer`(기준) /
+v1 에서 고쳤다: fuzzy substring 감지를 제거하고 `question` / `answer`(기준) /
 `prediction`(응답) 으로 고정, `--question-column` 등 명시 override 제공,
 동일 컬럼 중복 결합 시 즉시 실패. 점수는 `int` 이고 `0 <= s <= 10` 만 수용
-(bool 거부). **v1 에서 judge 를 실제 호출하지는 않는다.**
+(bool 거부). 회귀 검증에서는 judge를 실제 호출하지 않는다.
+
+---
+
+## 10. 운영 안전장치와 한계
+
+- reporter와 passive derive는 sidecar의 모든 `source.artifacts` 경로·SHA-256을
+  원본과 다시 대조한다. 하나라도 없거나 달라지면 기존 NATIVE를 신뢰하거나 발행하지 않는다.
+- publish 계층 writer는 sidecar별 POSIX advisory lock과 atomic replace를 함께 쓴다.
+  passive derive는 lock 안에서 NATIVE를 재확인하므로 runner의 NATIVE 승격을 강등하지 않는다.
+  publish 계층을 우회해 파일을 직접 쓰는 외부 프로세스에는 이 lock 보장이 적용되지 않는다.
+- KRETA resume은 `.resume_context.json`이 현재 세션·모델·모드·endpoint·max tokens와
+  정확히 같을 때만 checkpoint를 재사용한다. 이 규칙 도입 전 checkpoint는 context가
+  없으므로 resume하지 않고 새 `run_kreta.sh`로 시작한다.

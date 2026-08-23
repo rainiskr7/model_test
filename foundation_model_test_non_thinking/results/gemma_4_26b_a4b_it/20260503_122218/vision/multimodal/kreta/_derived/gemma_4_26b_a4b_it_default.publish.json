@@ -5,24 +5,23 @@
   "completed_at_utc": null,
   "counts": {
     "attempted": 2577,
-    "correct_measured": 1969,
+    "correct_measured": 1968,
     "errored": 548,
     "measured": 2029,
+    "no_answer": 1,
     "unresolved": 0
   },
   "failures": [
-    "오류 응답이 포함됨",
-    "raw 재집계와 results.json overall이 일치하지 않음",
-    "raw 재집계와 results.json domain이 일치하지 않음"
+    "오류 응답 548건 포함"
   ],
   "metrics": {
     "axes": [
       {
         "denominator": 2577,
         "name": "overall",
-        "numerator": 1969,
+        "numerator": 1968,
         "unit": "fraction",
-        "value": 0.7640667442762903
+        "value": 0.7636786961583236
       },
       {
         "denominator": 83,
@@ -62,9 +61,9 @@
       {
         "denominator": 166,
         "name": "domain:Entertainment and Media",
-        "numerator": 159,
+        "numerator": 158,
         "unit": "fraction",
-        "value": 0.9578313253012049
+        "value": 0.9518072289156626
       },
       {
         "denominator": 261,
@@ -139,35 +138,43 @@
       {
         "denominator": 607,
         "name": "system:System2",
-        "numerator": 581,
+        "numerator": 580,
         "unit": "fraction",
-        "value": 0.957166392092257
+        "value": 0.9555189456342669
       }
     ],
     "conditional": {
       "denominator": 2029,
-      "numerator": 1969,
+      "numerator": 1968,
       "unit": "fraction",
-      "value": 0.9704287826515525
+      "value": 0.9699359290290783
     },
     "strict": {
       "denominator": 2577,
-      "numerator": 1969,
+      "numerator": 1968,
       "unit": "fraction",
-      "value": 0.7640667442762903
+      "value": 0.7636786961583236
     }
   },
   "model": "gemma_4_26b_a4b_it",
+  "no_answer_rate": {
+    "denominator": 2577,
+    "numerator": 1,
+    "unit": "fraction",
+    "value": 0.00038804811796662784
+  },
   "protocol": {
     "complete": false,
-    "fingerprint": "sha256:700da17443eb6ab0c6fc5505e849493a4586502d57d5cb2f366915aa9f28d986",
+    "fingerprint": "sha256:4c2d67bae8bc79276ebc3ff1ec5fc2ade12264361c7654ed4a4bc7d753880b4b",
     "inferred": {
       "max_tokens": {
-        "basis": "run_kreta.sh: default mode default KRETA_MAX_TOKENS",
+        "basis": "legacy run_kreta.sh: default mode default KRETA_MAX_TOKENS",
         "value": 4096
       }
     },
     "recorded": {
+      "answer_parser_hash": "sha256:623dced50534d5fdd36879f6abc183f27bc1a83661472de40591468f0514ad56",
+      "answer_parser_version": "kreta-response-choice-v2",
       "benchmark": "KRETA",
       "dataset_item_digest": "0cc4ed8281009d38",
       "dataset_provenance": {
@@ -181,7 +188,6 @@
       "split": "test"
     },
     "unknown": [
-      "answer_parser_hash",
       "image_preprocessing_version",
       "prompt_template_hash",
       "seed",
@@ -210,6 +216,15 @@
     "unit": "results/gemma_4_26b_a4b_it/20260503_122218/vision/multimodal/kreta/gemma_4_26b_a4b_it_default.jsonl"
   },
   "status": "REJECTED",
+  "upstream_comparison": {
+    "disagreement_different_choice": 0,
+    "disagreement_ours_empty": 1,
+    "note": "상류 파생 필드는 채점 근거로 쓰지 않음",
+    "parser_disagreement_rows": 1,
+    "upstream_accuracy": 81.99456732634846
+  },
   "variant": "default",
-  "warnings": []
+  "warnings": [
+    "상류 parser와 1행 불일치 (우리 무답 1, 다른 선택지 0) — 독립 재채점 점수임"
+  ]
 }

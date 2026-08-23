@@ -52,3 +52,21 @@ def test_mtvqa_dataset_identity_uses_all_row_and_qa_pairs():
     assert len(rows) == len(set(pairs)) == 558
     assert len({row["id"] for row in rows}) == 250
     assert sidecar["protocol"]["recorded"]["dataset_item_digest"] == dataset_item_digest(pairs)
+
+
+def test_clean_kreta_default_modes_use_final_answer_markers_not_body_letters():
+    expected = {
+        "qwen_qwen3.5_35b_a3b_fp8_default.jsonl": (2233, 91, 80, 11),
+        "qwen_qwen3.6_35b_a3b_fp8_default.jsonl": (2290, 132, 113, 19),
+    }
+    for source in REPO.glob("results/*/*/vision/multimodal/kreta/*_default.jsonl"):
+        if source.name not in expected:
+            continue
+        result = adapt_kreta(source)
+        correct, disagreements, ours_empty, different = expected[source.name]
+        assert result["status"] == "LEGACY_REVALIDATED"
+        assert result["counts"]["correct_measured"] == correct
+        comparison = result["upstream_comparison"]
+        assert comparison["parser_disagreement_rows"] == disagreements
+        assert comparison["disagreement_ours_empty"] == ours_empty
+        assert comparison["disagreement_different_choice"] == different

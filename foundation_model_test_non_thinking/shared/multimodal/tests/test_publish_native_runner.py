@@ -6,7 +6,14 @@ import sys
 import types
 from pathlib import Path
 
-from shared.multimodal.publish.adapters import adapt_accuracy, summarize_records
+from shared.multimodal.publish.adapters import (
+    KRETA_ANSWER_PARSER_HASH,
+    KRETA_ANSWER_PARSER_VERSION,
+    adapt_accuracy,
+    adapt_kreta,
+    parse_kreta_response,
+    summarize_records,
+)
 from shared.multimodal.publish.derive import native_sidecar_from_records, preflight_kreta_source
 
 
@@ -98,6 +105,64 @@ def test_kreta_preflight_blocks_typed_error_before_evaluate(monkeypatch, tmp_pat
     ok, failures = preflight_kreta_source(source, tmp_path)
     assert ok is False
     assert "오류 응답 1건 포함" in failures
+
+
+def test_kreta_response_parser_mismatch_is_warning_and_upstream_is_not_scoring_authority(monkeypatch, tmp_path):
+    from shared.multimodal.publish import adapters
+
+    monkeypatch.setitem(adapters.EXPECTED_COUNTS, "kreta", 1)
+    source = tmp_path / "results/model/session/vision/multimodal/kreta/model_direct.jsonl"
+    source.parent.mkdir(parents=True)
+    row = {
+        "id": "a", "response": "B", "pred_indexs": "A", "answer": "A",
+        "category": "document", "topic_difficulty": "System 1", "split": "test",
+    }
+    source.write_text(json.dumps(row) + "\n", encoding="utf-8")
+    (source.parent / "results.json").write_text(json.dumps({
+        "model_direct": {
+            "total": 1, "correct": 1,
+            "domains": {"document": {"total": 1, "correct": 1}},
+        }
+    }), encoding="utf-8")
+    (source.parent / "run_config.json").write_text(json.dumps({
+        "decoding": {"max_tokens": 1},
+        "dataset": {"git_commit": "abc"},
+    }), encoding="utf-8")
+
+    result = adapt_kreta(source)
+    assert result["status"] == "LEGACY_REVALIDATED"
+    assert result["publishable"] is True
+    assert result["counts"]["correct_measured"] == 0
+    assert result["failures"] == []
+    assert any("상류 parser와 1행 불일치" in warning for warning in result["warnings"])
+    assert result["upstream_comparison"]["disagreement_different_choice"] == 1
+    recorded = result["protocol"]["recorded"]
+    assert recorded["answer_parser_version"] == KRETA_ANSWER_PARSER_VERSION
+    assert recorded["answer_parser_hash"] == KRETA_ANSWER_PARSER_HASH
+    assert recorded["max_tokens"] == 1
+
+
+def test_kreta_parser_uses_last_explicit_marker_short_choice_and_rejects_invalid_choice():
+    long_response = (
+        "Looking at a background image, option A is initially plausible.\n"
+        "The correct match is option D.\n\nAnswer: D"
+    )
+    assert parse_kreta_response(long_response) == "D"
+    assert parse_kreta_response("**B**") == "B"
+    assert parse_kreta_response("E") == ""
+    assert parse_kreta_response("A long English article without a final answer") == ""
+
+
+def test_kreta_invalid_choice_is_measured_no_answer_not_rejection():
+    summary = summarize_records(
+        "kreta",
+        [{"response": "E", "pred_indexs": "B", "answer": "B"}],
+        expected_count=1,
+    )
+    assert summary["publish_status"]["publishable"] is True
+    assert summary["correct"] == 0
+    assert summary["no_answer"] == 1
+    assert summary["disagreement_ours_empty"] == 1
 
 
 class _TinyDataset:

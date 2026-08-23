@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from .derive import discover_sources
-from .schema import PublishStatus, sidecar_path, validate_sidecar
+from .schema import PublishStatus, sidecar_path, validate_artifact_integrity, validate_sidecar
 from .select import select_representatives
 
 
@@ -34,8 +34,12 @@ def collect(base: Path, run: str | None = None) -> tuple[list[dict[str, Any]], l
         try:
             value = json.loads(path.read_text(encoding="utf-8"))
             validate_sidecar(value)
+            validate_artifact_integrity(value, base)
         except Exception as exc:
-            missing.append({"source": source.relative_to(base).as_posix(), "reason": f"게이트 기록 손상: {type(exc).__name__}"})
+            missing.append({
+                "source": source.relative_to(base).as_posix(),
+                "reason": f"게이트 기록 손상: {type(exc).__name__}: {exc}",
+            })
             continue
         sidecars.append(value)
     return sidecars, missing
@@ -123,6 +127,37 @@ def _dataset_commit_note(cohort: list[dict[str, Any]]) -> str | None:
     return f"> 각주: 기록된 repo commit이 런마다 다름(문항 집합은 동일): {short}."
 
 
+def _no_answer_percent(sidecar: dict[str, Any]) -> str:
+    rate = sidecar.get("no_answer_rate")
+    value = rate.get("value") if isinstance(rate, dict) else None
+    return f"{100 * value:.1f}%" if isinstance(value, (int, float)) else "-"
+
+
+def _kreta_notes(cohort: list[dict[str, Any]]) -> list[str]:
+    notes: list[str] = []
+    for sidecar in sorted(cohort, key=lambda item: str(item.get("model"))):
+        comparison = sidecar.get("upstream_comparison")
+        if isinstance(comparison, dict):
+            disagreement = comparison.get("parser_disagreement_rows")
+            ours_empty = comparison.get("disagreement_ours_empty")
+            different = comparison.get("disagreement_different_choice")
+            if isinstance(disagreement, int) and disagreement > 0:
+                notes.append(
+                    f"> 각주: `{_escape(sidecar.get('model'))}` — 상류 parser와 {disagreement}행 불일치"
+                    f"(우리 무답 {ours_empty}, 다른 선택지 {different}) — 독립 재채점 점수임."
+                )
+        rate = sidecar.get("no_answer_rate")
+        value = rate.get("value") if isinstance(rate, dict) else None
+        numerator = rate.get("numerator") if isinstance(rate, dict) else None
+        if isinstance(value, (int, float)) and value > 0.10:
+            notes.append(
+                f"> **주의:** `{_escape(sidecar.get('model'))}` — 무답 {numerator}건 "
+                f"({100 * value:.1f}%). 응답이 지시된 형식을 벗어나 절단됨. "
+                "점수를 능력 차이로만 해석하지 말 것."
+            )
+    return notes
+
+
 def _headline(
     out: list[str],
     selected: list[dict[str, Any]],
@@ -144,22 +179,36 @@ def _headline(
             )
         )
         denominator = rows[0][1].get("denominator") if rows else None
+        header = (
+            ["| 모델 | 결과 | 무답률 | 상태 |", "|---|---|---:|---|"]
+            if benchmark == "KRETA"
+            else ["| 모델 | 결과 | 상태 |", "|---|---|---|"]
+        )
         out.extend([
             f"### {_cohort_heading(benchmark, variant, fingerprint, denominator)}",
             "",
             f"전체 protocol fingerprint: `{fingerprint}`",
             "",
-            "| 모델 | 결과 | 상태 |",
-            "|---|---|---|",
+            *header,
         ])
         for sidecar, axis in rows:
-            out.append(
-                f"| {_escape(sidecar.get('model'))} | {_escape(_metric(axis))} | {_escape(_state(sidecar))} |"
-            )
+            if benchmark == "KRETA":
+                out.append(
+                    f"| {_escape(sidecar.get('model'))} | {_escape(_metric(axis))} | "
+                    f"{_no_answer_percent(sidecar)} | {_escape(_state(sidecar))} |"
+                )
+            else:
+                out.append(
+                    f"| {_escape(sidecar.get('model'))} | {_escape(_metric(axis))} | {_escape(_state(sidecar))} |"
+                )
         out.append("")
         provenance_cohort = provenance_by_cohort.get((benchmark, variant, fingerprint), cohort)
         if note := _dataset_commit_note(provenance_cohort):
             out.extend([note, ""])
+        if benchmark == "KRETA":
+            notes = _kreta_notes(cohort)
+            if notes:
+                out.extend(notes + [""])
 
 
 def _detail_axes(out: list[str], selected: list[dict[str, Any]]) -> None:

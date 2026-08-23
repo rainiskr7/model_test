@@ -205,6 +205,7 @@ def main():
 
         results.append({
             "idx": int(i),
+            "dataset_item_id": str(row["index"]) if "index" in df.columns and pd.notna(row["index"]) else str(i),
             "question": q,
             "response": resp,
             "criteria": crit if isinstance(crit, str) else str(crit),
@@ -233,6 +234,7 @@ def main():
             benchmark="KOFFVQA-API-judge",
             model=args.target_model,
             base_url=args.judge_base_url,
+            temperature=0.0,
             seed=args.seed,
             max_tokens=args.judge_max_tokens,
             judge_model=args.judge_model,

@@ -11,6 +11,22 @@ from typing import Any, Iterable, Mapping
 
 SCHEMA_VERSION = 1
 SIDECAR_SUFFIX = ".publish.json"
+KRETA_ANSWER_PARSER_VERSION = "kreta-response-choice-v2"
+KRETA_ANSWER_PARSER_SPEC = {
+    "normalization": "strip, remove markdown emphasis, then Unicode uppercase",
+    "selection": "last explicit answer marker; short whole response; restricted last line",
+    "explicit_patterns": [
+        r"(?:FINAL\s+)?ANSWER\s*(?:IS|[:：])\s*(?:OPTION\s*)?[\(\[\{]?\s*([A-D])(?=\s|[\)\]\}.:,]|$)",
+        r"(?:THE\s+)?CORRECT\s+(?:ANSWER|MATCH|CHOICE|OPTION)\s*(?:IS|[:：])?\s*(?:OPTION\s*)?[\(\[\{]?\s*([A-D])(?=\s|[\)\]\}.:,]|$)",
+        r"(?:정답|답)\s*(?:은|는|이|가|[:：])\s*(?:선택지\s*)?[\(\[\{]?\s*([A-D])(?=\s|[\)\]\}.:,]|$)",
+        r"(?:정답|답)\s+(?:OPTION|선택지)?\s*[\(\[\{]?\s*([A-D])(?=\s|[\)\]\}.:,]|$)",
+        r"\bOPTION\s*[:：]?\s*([A-D])(?=\s|[\)\]\}.:,]|$)",
+        r"\\BOXED\s*\{\s*([A-D])\s*\}",
+    ],
+    "short_max_compact_chars": 5,
+    "short_pattern": r"[\(\[\{]?([A-D])[\)\]\}.:,!\-]*",
+    "last_line_pattern": r"[\(\[\{]?\s*([A-D])\s*[\)\]\}]?\s*(?:번|[\.:：-].*)?",
+}
 
 
 class RecordClass(str, Enum):
@@ -60,6 +76,10 @@ FINGERPRINT_INFORMATIONAL_RECORDED = {
     "git_commit",
     "huggingface_id",
     "revision",
+    # Binds a KOFFVQA judge run to one prediction artifact, but is model
+    # output rather than evaluation protocol and therefore must not split a
+    # cohort per model.
+    "prediction_sha256",
 }
 
 
@@ -71,12 +91,52 @@ def sha256_bytes(data: bytes) -> str:
     return "sha256:" + hashlib.sha256(data).hexdigest()
 
 
+KRETA_ANSWER_PARSER_HASH = sha256_bytes(
+    canonical_json(KRETA_ANSWER_PARSER_SPEC).encode("utf-8")
+)
+
+
 def sha256_file(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as fh:
         for chunk in iter(lambda: fh.read(1024 * 1024), b""):
             digest.update(chunk)
     return "sha256:" + digest.hexdigest()
+
+
+def validate_artifact_integrity(sidecar: Mapping[str, Any], base: Path) -> None:
+    """Verify every source artifact recorded by a sidecar against disk.
+
+    Schema validation alone cannot detect a raw artifact changed after a
+    NATIVE sidecar was written.  Publication and passive derive both call
+    this function before trusting such a sidecar.
+    """
+
+    source = sidecar.get("source")
+    artifacts = source.get("artifacts") if isinstance(source, Mapping) else None
+    if not isinstance(artifacts, list) or not artifacts:
+        raise ValueError("source.artifacts must be a non-empty list")
+    root = Path(base).resolve()
+    for artifact in artifacts:
+        if not isinstance(artifact, Mapping):
+            raise ValueError("source artifact must be an object")
+        raw_path = artifact.get("path")
+        expected = artifact.get("sha256")
+        if not isinstance(raw_path, str) or not isinstance(expected, str):
+            raise ValueError("source artifact path/sha256 is required")
+        candidate = Path(raw_path)
+        if candidate.is_absolute():
+            resolved = candidate.resolve()
+        else:
+            resolved = (root / candidate).resolve()
+            try:
+                resolved.relative_to(root)
+            except ValueError as exc:
+                raise ValueError(f"source artifact escapes base: {raw_path}") from exc
+        if not resolved.is_file():
+            raise ValueError(f"source artifact missing: {raw_path}")
+        if sha256_file(resolved) != expected:
+            raise ValueError(f"source artifact sha256 mismatch: {raw_path}")
 
 
 def dataset_item_digest(items: Iterable[str]) -> str:
@@ -147,6 +207,13 @@ def validate_sidecar(sidecar: Mapping[str, Any]) -> None:
     unknown = set(protocol.get("unknown") or [])
     if status.publishable and unknown & COMPARISON_CRITICAL_UNKNOWN:
         raise ValueError("publishable sidecar has comparison-critical unknown provenance")
+    if sidecar.get("benchmark_id") == "KRETA" and status.publishable:
+        recorded = protocol.get("recorded") or {}
+        if (
+            recorded.get("answer_parser_version") != KRETA_ANSWER_PARSER_VERSION
+            or recorded.get("answer_parser_hash") != KRETA_ANSWER_PARSER_HASH
+        ):
+            raise ValueError("KRETA sidecar does not bind the current answer parser")
     counts = sidecar.get("counts") or {}
     attempted = counts.get("attempted")
     measured = counts.get("measured")

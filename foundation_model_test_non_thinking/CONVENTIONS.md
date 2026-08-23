@@ -67,18 +67,18 @@ results/<safe_model_name>/<timestamp>/<category>/<track>/<benchmark>.json
 {
   "benchmark": "K-MMBench",
   "model": "google_gemma_4_31B_it",
-  "total": 4330,
+  "total": 4329,
   "correct": 3812,
   "accuracy": 0.880,
   "by_category": {...}
 }
 ```
 
-`total`, `count`, `accuracy` 같은 표준 필드를 두면 `run_all.sh` 의 sanity check 가 자동 검증 (0건 결과 / 비정상 낮은 accuracy 탐지).
+`total`, `count`, `accuracy` 같은 표준 필드를 두면 `run_all.sh` 의 sanity check 가 자동 검증한다. 0건·schema 위반·`publish_status.publishable=false`는 실패이며, 낮은 accuracy 자체는 정상 측정일 수 있으므로 비치명 경고만 낸다.
 
 ## 6. 에러 처리 정책
 
-- **트랙 wrapper** (`run_full_eval.sh`, `run_all.sh`): 트랙 하나 실패해도 다음 진행. `|| echo "..."` 패턴.
+- **트랙 wrapper** (`run_full_eval.sh`, `run_all.sh`): 트랙 하나가 nonzero를 반환해도 다음 트랙은 진행하되 실패 수를 누적하고 마지막에 nonzero를 반환한다. KOFFVQA의 깨끗한 `UNSCORED`는 실패가 아니지만 생성 오류는 실패다.
 - **트랙 본체** (`run_kreta.sh`, `run_b4_*.sh` 등): 가능한 fail-fast. `set -e` 권장.
 - **bench 코드** (.py): `except Exception: pass` 금지. 명시 예외 (`json.JSONDecodeError` 등) + 로깅.
 - **bare `except:`** 금지 (KeyboardInterrupt 잡힘).

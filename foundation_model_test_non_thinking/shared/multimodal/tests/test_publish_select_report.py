@@ -18,9 +18,11 @@ def sidecar(
     item_digest="digest-a",
     dataset_commit=None,
     axes=None,
+    no_answer=None,
+    parser_disagreement=None,
 ):
     publishable = status in {"LEGACY_REVALIDATED", "NATIVE"}
-    return {
+    value = {
         "schema_version": 1,
         "benchmark_id": benchmark,
         "benchmark_key": benchmark,
@@ -46,6 +48,20 @@ def sidecar(
         "failures": [] if publishable else ["blocked"],
         "warnings": [],
     }
+    if no_answer is not None:
+        value["no_answer_rate"] = {
+            "numerator": no_answer, "denominator": 100,
+            "value": no_answer / 100, "unit": "fraction",
+        }
+    if parser_disagreement is not None:
+        value["upstream_comparison"] = {
+            "upstream_accuracy": 80.0,
+            "parser_disagreement_rows": parser_disagreement,
+            "disagreement_ours_empty": parser_disagreement - 2,
+            "disagreement_different_choice": 2,
+            "note": "상류 파생 필드는 채점 근거로 쓰지 않음",
+        }
+    return value
 
 
 def test_latest_timestamp_wins_without_score_or_run_name_tiebreak():
@@ -137,7 +153,7 @@ def test_different_fingerprints_render_in_separate_headline_tables():
     )
     markdown, _ = render_markdown([first, second], [])
     headline = markdown.split("## 헤드라인", 1)[1].split("## 상태 요약", 1)[0]
-    table_blocks = [block for block in headline.split("### ") if "| 모델 | 결과 | 상태 |" in block]
+    table_blocks = [block for block in headline.split("### ") if "| 모델 | 결과 | 무답률 | 상태 |" in block]
     assert len(table_blocks) == 2
     assert all(not ("model-alpha" in block and "model-beta" in block) for block in table_blocks)
 
@@ -179,6 +195,20 @@ def test_headline_notes_different_repo_commits_in_same_item_cohort():
     )
     markdown, _ = render_markdown([first, second], [])
     assert "기록된 repo commit이 런마다 다름(문항 집합은 동일)" in markdown
+
+
+def test_kreta_headline_shows_no_answer_column_and_quality_notes():
+    result = sidecar(
+        "run", "2026-01-01T00:00:00+00:00",
+        benchmark="KRETA", variant="direct", no_answer=21,
+        parser_disagreement=23,
+    )
+    markdown, _ = render_markdown([result], [])
+    headline = markdown.split("## 헤드라인", 1)[1].split("## 상태 요약", 1)[0]
+    assert "| 모델 | 결과 | 무답률 | 상태 |" in headline
+    assert "21.0%" in headline
+    assert "상류 parser와 23행 불일치(우리 무답 21, 다른 선택지 2)" in headline
+    assert "점수를 능력 차이로만 해석하지 말 것" in headline
 
 
 def test_commit_note_uses_all_candidates_before_representative_selection():

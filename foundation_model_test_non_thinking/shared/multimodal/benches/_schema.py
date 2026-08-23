@@ -90,9 +90,40 @@ def detect_and_validate(d: dict, file_path: str = "<json>") -> tuple[str, Option
             r = AccuracyBenchmark.model_validate(d)
             if r.total == 0:
                 return "accuracy", f"{file_path}: accuracy total=0"
-            if r.accuracy < 0.05:
-                return "accuracy", f"{file_path}: accuracy={r.accuracy:.3f} 매우 낮음 (broken template 의심)"
             return "accuracy", None
         except Exception as e:
             return "accuracy", f"{file_path}: accuracy schema 위반 — {e}"
     return "unknown", None  # legacy / KRETA 같은 모델별 키 구조는 별도 처리
+
+
+def diagnostic_warnings(d: dict, file_path: str = "<json>") -> list[str]:
+    """Return non-fatal diagnostics that must never invalidate a measurement."""
+
+    accuracy = d.get("accuracy")
+    total = d.get("total")
+    if (
+        isinstance(accuracy, (int, float))
+        and not isinstance(accuracy, bool)
+        and isinstance(total, int)
+        and total > 0
+        and accuracy < 0.05
+    ):
+        return [f"{file_path}: accuracy={accuracy:.3f} 매우 낮음 (template 점검 권장)"]
+    return []
+
+
+def publish_status_error(
+    d: dict,
+    file_path: str = "<json>",
+    *,
+    allow_clean_unscored: bool = False,
+) -> Optional[str]:
+    """Return a fatal gate error, preserving clean KOFFVQA UNSCORED semantics."""
+
+    status = d.get("publish_status")
+    if not isinstance(status, dict) or status.get("publishable") is not False:
+        return None
+    failures = status.get("failures") or []
+    if allow_clean_unscored and failures == ["채점 산출물 없음"]:
+        return None
+    return f"{file_path}: publish_status.publishable=false — {failures}"

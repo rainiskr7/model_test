@@ -1,6 +1,6 @@
 """K-MMBench (NCSOFT) — Korean multimodal benchmark, 20 categories, multiple-choice.
 
-4,330 samples (dev split), A/B/C/D, accuracy.
+4,329 samples (dev split), A/B/C/D, accuracy.
 Source: https://huggingface.co/datasets/NCSOFT/K-MMBench
 
 기본 동작: 전체 카테고리. 특정 카테고리만 평가하려면 --categories 인자 사용.

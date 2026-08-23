@@ -60,7 +60,7 @@ python "$SCRIPT_DIR/benches/common.py" \
   --benchmark "KOFFVQA" \
   --model "$MODEL" \
   --base-url "$BASE_URL" \
-  --repo-dir "$BASE_DIR/data/KOFFVQA" || echo "[koffvqa] run_config 작성 실패 (계속)"
+  --repo-dir "$BASE_DIR/data/KOFFVQA" || { echo "[koffvqa] run_config 작성 실패 — 중단"; exit 1; }
 
 # 1) 자체 runner — 응답 생성
 PY="${PY:-$BASE_DIR/.venv/bin/python}"

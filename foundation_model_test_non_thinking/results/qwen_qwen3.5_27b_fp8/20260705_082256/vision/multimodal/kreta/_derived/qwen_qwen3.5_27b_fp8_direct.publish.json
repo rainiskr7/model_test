@@ -5,9 +5,10 @@
   "completed_at_utc": null,
   "counts": {
     "attempted": 2577,
-    "correct_measured": 1828,
+    "correct_measured": 1821,
     "errored": 0,
     "measured": 2577,
+    "no_answer": 28,
     "unresolved": 0
   },
   "failures": [],
@@ -16,9 +17,9 @@
       {
         "denominator": 2577,
         "name": "overall",
-        "numerator": 1828,
+        "numerator": 1821,
         "unit": "fraction",
-        "value": 0.7093519596429957
+        "value": 0.7066356228172294
       },
       {
         "denominator": 83,
@@ -37,9 +38,9 @@
       {
         "denominator": 478,
         "name": "domain:CSAT Science",
-        "numerator": 142,
+        "numerator": 141,
         "unit": "fraction",
-        "value": 0.29707112970711297
+        "value": 0.29497907949790797
       },
       {
         "denominator": 104,
@@ -65,9 +66,9 @@
       {
         "denominator": 264,
         "name": "domain:Hospitality and Food Service",
-        "numerator": 198,
+        "numerator": 196,
         "unit": "fraction",
-        "value": 0.75
+        "value": 0.7424242424242424
       },
       {
         "denominator": 145,
@@ -93,16 +94,16 @@
       {
         "denominator": 245,
         "name": "domain:Public and Administration",
-        "numerator": 194,
+        "numerator": 192,
         "unit": "fraction",
-        "value": 0.7918367346938775
+        "value": 0.7836734693877551
       },
       {
         "denominator": 154,
         "name": "domain:Retail and Commerce",
-        "numerator": 124,
+        "numerator": 123,
         "unit": "fraction",
-        "value": 0.8051948051948052
+        "value": 0.7987012987012987
       },
       {
         "denominator": 92,
@@ -114,9 +115,9 @@
       {
         "denominator": 167,
         "name": "domain:Transportation and Logistics",
-        "numerator": 127,
+        "numerator": 126,
         "unit": "fraction",
-        "value": 0.7604790419161677
+        "value": 0.7544910179640718
       },
       {
         "denominator": 108,
@@ -135,35 +136,43 @@
       {
         "denominator": 1151,
         "name": "system:System2",
-        "numerator": 515,
+        "numerator": 508,
         "unit": "fraction",
-        "value": 0.4474370112945265
+        "value": 0.4413553431798436
       }
     ],
     "conditional": {
       "denominator": 2577,
-      "numerator": 1828,
+      "numerator": 1821,
       "unit": "fraction",
-      "value": 0.7093519596429957
+      "value": 0.7066356228172294
     },
     "strict": {
       "denominator": 2577,
-      "numerator": 1828,
+      "numerator": 1821,
       "unit": "fraction",
-      "value": 0.7093519596429957
+      "value": 0.7066356228172294
     }
   },
   "model": "qwen_qwen3.5_27b_fp8",
+  "no_answer_rate": {
+    "denominator": 2577,
+    "numerator": 28,
+    "unit": "fraction",
+    "value": 0.01086534730306558
+  },
   "protocol": {
     "complete": false,
-    "fingerprint": "sha256:2eac70b4f5b4ae422ebeb77d44bc0bd0b5b0e779efbfb884f3e36b5422eaa7cd",
+    "fingerprint": "sha256:b5a8188c68cf13518732860ce14af6af7eca3f90a7bd5bc9b55faeb27f81737f",
     "inferred": {
       "max_tokens": {
-        "basis": "run_kreta.sh: direct mode default KRETA_MAX_TOKENS",
+        "basis": "legacy run_kreta.sh: direct mode default KRETA_MAX_TOKENS",
         "value": 32
       }
     },
     "recorded": {
+      "answer_parser_hash": "sha256:623dced50534d5fdd36879f6abc183f27bc1a83661472de40591468f0514ad56",
+      "answer_parser_version": "kreta-response-choice-v2",
       "benchmark": "KRETA",
       "dataset_item_digest": "0cc4ed8281009d38",
       "dataset_provenance": {
@@ -177,7 +186,6 @@
       "split": "test"
     },
     "unknown": [
-      "answer_parser_hash",
       "image_preprocessing_version",
       "prompt_template_hash",
       "seed",
@@ -206,8 +214,16 @@
     "unit": "results/qwen_qwen3.5_27b_fp8/20260705_082256/vision/multimodal/kreta/qwen_qwen3.5_27b_fp8_direct.jsonl"
   },
   "status": "LEGACY_REVALIDATED",
+  "upstream_comparison": {
+    "disagreement_different_choice": 2,
+    "disagreement_ours_empty": 28,
+    "note": "상류 파생 필드는 채점 근거로 쓰지 않음",
+    "parser_disagreement_rows": 30,
+    "upstream_accuracy": 70.93519596429957
+  },
   "variant": "direct",
   "warnings": [
-    "비교 비핵심 provenance 미기록: answer_parser_hash, image_preprocessing_version, prompt_template_hash, seed, temperature"
+    "상류 parser와 30행 불일치 (우리 무답 28, 다른 선택지 2) — 독립 재채점 점수임",
+    "비교 비핵심 provenance 미기록: image_preprocessing_version, prompt_template_hash, seed, temperature"
   ]
 }

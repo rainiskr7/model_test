@@ -13,6 +13,9 @@ from typing import Any, Callable, Iterable, Mapping
 from .classify import classify_record
 from .schema import (
     COMPARISON_CRITICAL_UNKNOWN,
+    KRETA_ANSWER_PARSER_HASH,
+    KRETA_ANSWER_PARSER_SPEC,
+    KRETA_ANSWER_PARSER_VERSION,
     PublishStatus,
     RecordClass,
     dataset_item_digest,
@@ -72,6 +75,7 @@ def summarize_records(
     *,
     response_field: str = "response",
     expected_count: int | None = None,
+    verify_stored_prediction: bool = True,
 ) -> dict[str, Any]:
     """Pure runner/adapter aggregation over raw records.
 
@@ -87,6 +91,10 @@ def summarize_records(
     correct = 0
     by_category: dict[str, list[int]] = defaultdict(lambda: [0, 0])
     score_accuracy = key != "koffvqa"
+    stored_prediction_mismatches = 0
+    disagreement_ours_empty = 0
+    disagreement_different_choice = 0
+    no_answer = 0
     for row, kind in classified:
         category = str(row.get("category", "overall"))
         by_category[category][1] += 1
@@ -96,7 +104,17 @@ def summarize_records(
         if key == "mtvqa_kr":
             is_correct = any(_mtvqa_match(response, str(gold)) for gold in (row.get("gold") or []))
         elif key == "kreta":
-            is_correct = str(row.get("pred_indexs", "")).strip().upper() == str(row.get("answer", "")).strip().upper()
+            parsed = parse_kreta_response(response)
+            stored = str(row.get("pred_indexs", "")).strip().upper()
+            if verify_stored_prediction and parsed != stored:
+                stored_prediction_mismatches += 1
+                if not parsed and stored in {"A", "B", "C", "D"}:
+                    disagreement_ours_empty += 1
+                elif parsed in {"A", "B", "C", "D"} and stored in {"A", "B", "C", "D"}:
+                    disagreement_different_choice += 1
+            if not parsed:
+                no_answer += 1
+            is_correct = parsed == str(row.get("answer", "")).strip().upper()
         else:
             is_correct = _choice(response) == str(row.get("answer", "")).strip().upper()
         if is_correct:
@@ -110,6 +128,19 @@ def summarize_records(
         failures.append(f"오류 응답 {counts['errored']}건 포함")
     if counts["unresolved"]:
         failures.append(f"미해결 응답 {counts['unresolved']}건 포함")
+    warnings: list[str] = []
+    if stored_prediction_mismatches:
+        warnings.append(
+            f"상류 parser와 {stored_prediction_mismatches}행 불일치 "
+            f"(우리 무답 {disagreement_ours_empty}, 다른 선택지 {disagreement_different_choice}) "
+            "— 독립 재채점 점수임"
+        )
+    no_answer_rate = no_answer / counts["attempted"] if counts["attempted"] else 0.0
+    if key == "kreta" and no_answer_rate > 0.10:
+        warnings.append(
+            f"무답 {no_answer}건 ({100 * no_answer_rate:.1f}%) — 응답이 지시된 형식을 "
+            "벗어나 절단됨. 점수를 능력 차이로만 해석하지 말 것"
+        )
     return {
         "counts": counts,
         "correct": correct,
@@ -125,7 +156,44 @@ def summarize_records(
         "accuracy_strict": _fraction(correct, counts["attempted"]),
         "accuracy_conditional": _fraction(correct, counts["measured"]),
         "publish_status": {"publishable": not failures, "failures": failures},
+        "warnings": warnings,
+        "stored_prediction_mismatches": stored_prediction_mismatches,
+        "disagreement_ours_empty": disagreement_ours_empty,
+        "disagreement_different_choice": disagreement_different_choice,
+        "no_answer": no_answer,
     }
+
+
+def parse_kreta_response(response: Any) -> str:
+    """Parse only the answer forms promised by KRETA prompts.
+
+    The parser deliberately does not scan arbitrary prose for the first A-D;
+    doing so recreates the upstream accidental-match failure mode.
+    """
+
+    if not isinstance(response, str):
+        return ""
+    text = re.sub(r"[*_`]", "", response.strip().upper())
+    explicit: list[tuple[int, str]] = []
+    for pattern in KRETA_ANSWER_PARSER_SPEC["explicit_patterns"]:
+        explicit.extend((match.start(), match.group(1)) for match in re.finditer(pattern, text))
+    if explicit:
+        return max(explicit)[1]
+    compact = re.sub(r"[\s#>]+", "", text)
+    if len(compact) <= KRETA_ANSWER_PARSER_SPEC["short_max_compact_chars"]:
+        short = re.fullmatch(KRETA_ANSWER_PARSER_SPEC["short_pattern"], compact)
+        if short:
+            return short.group(1)
+    lines = [
+        re.sub(r"^[\s>#]+|[\s#]+$", "", line).strip()
+        for line in text.splitlines()
+        if line.strip()
+    ]
+    if lines:
+        last = re.fullmatch(KRETA_ANSWER_PARSER_SPEC["last_line_pattern"], lines[-1])
+        if last:
+            return last.group(1)
+    return ""
 
 
 def _choice(response: str) -> str:
@@ -398,9 +466,7 @@ def _kreta_axes(rows: list[Mapping[str, Any]], measured_only: bool = True) -> tu
     for row in rows:
         if measured_only and classify_record(row) is not RecordClass.MEASURED:
             continue
-        # pred_indexs is the raw prediction emitted by KRETA inference.  We do
-        # not trust parsed_pred/if_right; equality with gold is recomputed.
-        pred = str(row.get("pred_indexs", "")).strip().upper()
+        pred = parse_kreta_response(row.get("response"))
         gold = str(row.get("answer", "")).strip().upper()
         ok = pred == gold
         correct += ok
@@ -429,17 +495,18 @@ def adapt_kreta(jsonl_path: Path) -> dict[str, Any]:
                     rows.append(value)
     except Exception as exc:
         failures.append(f"JSONL 읽기 실패: {type(exc).__name__}")
-    counts, _ = _counts(rows)
-    if counts["attempted"] != EXPECTED_COUNTS["kreta"]:
-        failures.append(f"기대 건수 {EXPECTED_COUNTS['kreta']}와 다름")
+    aggregate = summarize_records(
+        "kreta", rows, expected_count=EXPECTED_COUNTS["kreta"],
+        verify_stored_prediction=True,
+    )
+    counts = aggregate["counts"]
+    counts["no_answer"] = aggregate["no_answer"]
+    failures.extend(aggregate["publish_status"]["failures"])
+    warnings.extend(aggregate["warnings"])
     ids = [row.get("id") for row in rows]
     if any(value is None for value in ids) or len(set(ids)) != len(ids):
         failures.append("id가 누락되었거나 중복됨")
     item_digest = dataset_item_digest(str(value) for value in ids) if ids and all(value is not None for value in ids) else None
-    if counts["errored"]:
-        failures.append("오류 응답이 포함됨")
-    if counts["unresolved"]:
-        failures.append("미해결 응답이 포함됨")
     correct, group_axes, groups = _kreta_axes(rows)
     counts["correct_measured"] = correct
 
@@ -449,23 +516,14 @@ def adapt_kreta(jsonl_path: Path) -> dict[str, Any]:
         stored = all_summaries.get(jsonl_path.stem) if isinstance(all_summaries, dict) else None
     except Exception:
         stored = None
+    upstream_accuracy = stored.get("overall_accuracy") if isinstance(stored, dict) else None
     if not isinstance(stored, dict):
-        failures.append("해당 source의 results.json 요약이 없음")
-    else:
-        if list(all_summaries) != [jsonl_path.stem]:
-            failures.append("results.json source key 집합이 정확히 일치하지 않음")
-        if stored.get("total") != counts["attempted"] or stored.get("correct") != correct:
-            failures.append("raw 재집계와 results.json overall이 일치하지 않음")
-        for name, (group_correct, group_total) in groups.items():
-            if not name.startswith("domain:"):
-                continue
-            domain = name.split(":", 1)[1]
-            entry = (stored.get("domains") or {}).get(domain) or {}
-            if entry.get("correct") != group_correct or entry.get("total") != group_total:
-                failures.append("raw 재집계와 results.json domain이 일치하지 않음")
-                break
+        warnings.append("상류 results.json 비교값 없음 — raw 독립 재채점만 사용")
+    elif list(all_summaries) != [jsonl_path.stem]:
+        warnings.append("상류 results.json에 다른 source key가 함께 있음 — 채점에는 사용하지 않음")
 
     model, mode = _kreta_mode(jsonl_path.stem)
+
     config_path = source_dir / "run_config.json"
     try:
         config = load_json(config_path)
@@ -478,10 +536,16 @@ def adapt_kreta(jsonl_path: Path) -> dict[str, Any]:
         unknown.append("mode")
     else:
         recorded["mode"] = mode
-        inferred["max_tokens"] = {
-            "value": 32 if mode == "direct" else 4096,
-            "basis": f"run_kreta.sh: {mode} mode default KRETA_MAX_TOKENS",
-        }
+        configured_max_tokens = ((config.get("decoding") or {}).get("max_tokens"))
+        if isinstance(configured_max_tokens, int) and configured_max_tokens > 0:
+            recorded["max_tokens"] = configured_max_tokens
+        else:
+            inferred["max_tokens"] = {
+                "value": 32 if mode == "direct" else 4096,
+                "basis": f"legacy run_kreta.sh: {mode} mode default KRETA_MAX_TOKENS",
+            }
+    recorded["answer_parser_version"] = KRETA_ANSWER_PARSER_VERSION
+    recorded["answer_parser_hash"] = KRETA_ANSWER_PARSER_HASH
     _add_dataset_provenance(config, recorded)
     if item_digest:
         recorded["dataset_item_digest"] = item_digest
@@ -492,14 +556,14 @@ def adapt_kreta(jsonl_path: Path) -> dict[str, Any]:
         recorded["split"] = next(iter(splits))
     else:
         unknown.append("split")
-    unknown.extend(("temperature", "seed", "prompt_template_hash", "answer_parser_hash", "image_preprocessing_version"))
+    unknown.extend(("temperature", "seed", "prompt_template_hash", "image_preprocessing_version"))
     protocol = make_protocol(recorded, inferred, unknown)
     metrics = {
         "strict": _fraction(correct, counts["attempted"]),
         "conditional": _fraction(correct, counts["measured"]),
         "axes": [{"name": "overall", **_fraction(correct, counts["attempted"])}] + group_axes,
     }
-    return _base_result(
+    result = _base_result(
         benchmark_key="kreta",
         variant=mode,
         model=model,
@@ -512,6 +576,15 @@ def adapt_kreta(jsonl_path: Path) -> dict[str, Any]:
         failures=failures,
         warnings=warnings,
     )
+    result["no_answer_rate"] = _fraction(aggregate["no_answer"], counts["attempted"])
+    result["upstream_comparison"] = {
+        "upstream_accuracy": upstream_accuracy,
+        "parser_disagreement_rows": aggregate["stored_prediction_mismatches"],
+        "disagreement_ours_empty": aggregate["disagreement_ours_empty"],
+        "disagreement_different_choice": aggregate["disagreement_different_choice"],
+        "note": "상류 파생 필드는 채점 근거로 쓰지 않음",
+    }
+    return result
 
 
 def adapt_koffvqa(source_dir: Path) -> dict[str, Any]:
@@ -580,7 +653,13 @@ def adapt_koffvqa_judge(source_dir: Path) -> dict[str, Any]:
         "unresolved": 0,
     }
     scores: list[int] = []
+    item_keys: list[str] = []
     for row in rows:
+        item_key = row.get("dataset_item_id")
+        if item_key is None:
+            failures.append("judge row dataset_item_id가 누락됨")
+        else:
+            item_keys.append(str(item_key))
         if row.get("error"):
             counts["errored"] += 1
             continue
@@ -596,6 +675,9 @@ def adapt_koffvqa_judge(source_dir: Path) -> dict[str, Any]:
         failures.append("judge 오류가 포함됨")
     if counts["unresolved"]:
         failures.append("0~10 정수 아닌 judge 점수가 포함됨")
+    if len(item_keys) != len(rows) or len(set(item_keys)) != len(item_keys):
+        failures.append("judge dataset item key가 누락되었거나 중복됨")
+    item_digest = dataset_item_digest(item_keys) if len(item_keys) == len(rows) else None
     if summary.get("scored") != len(scores):
         failures.append("raw 재집계와 summary scored가 일치하지 않음")
     average = sum(scores) / len(scores) if scores else None
@@ -621,13 +703,15 @@ def adapt_koffvqa_judge(source_dir: Path) -> dict[str, Any]:
         "judge_model": summary.get("judge_model"),
         "judge_prompt_version": summary.get("judge_prompt_version"),
         "prediction_sha256": recorded_sha,
+        "dataset_item_digest": item_digest,
         "limit": (config.get("extra") or {}).get("limit"),
     }
     unknown = [key for key in ("judge_model", "judge_prompt_version") if not recorded.get(key)]
+    _add_decoding(config, recorded, unknown)
     if generation_revision:
-        recorded["dataset_revision"] = generation_revision
-    else:
-        unknown.append("dataset_revision")
+        recorded["dataset_provenance"] = {"revision": generation_revision}
+    if not item_digest:
+        unknown.append("dataset_item_digest")
     protocol = make_protocol(recorded, {}, unknown)
     metrics = {
         "axes": [{"name": "rubric", "value": average, "unit": "score/10", "numerator": sum(scores), "denominator": len(scores)}]
@@ -647,6 +731,42 @@ def adapt_koffvqa_judge(source_dir: Path) -> dict[str, Any]:
         warnings=warnings,
         provisional=True,
     )
+
+
+def _same_metric(stored: Any, calculated: Any) -> bool:
+    if stored is None or calculated is None:
+        return stored is None and calculated is None
+    if isinstance(stored, bool) or isinstance(calculated, bool):
+        return stored is calculated
+    if isinstance(stored, (int, float)) and isinstance(calculated, (int, float)):
+        return math.isclose(float(stored), float(calculated), rel_tol=1e-12, abs_tol=1e-12)
+    return stored == calculated
+
+
+def _b3_raw_metrics(rows: list[Mapping[str, Any]]) -> dict[str, Any]:
+    total = len(rows)
+    parse_ok = sum(row.get("parse_ok") is True for row in rows)
+    schema_ok = sum(
+        isinstance(check := row.get("schema_check"), Mapping)
+        and check.get("required_fields_present") is True
+        and check.get("type_match") is True
+        for row in rows
+    )
+    value_rates = [
+        check.get("match_rate")
+        for row in rows
+        if isinstance(check := row.get("value_check"), Mapping)
+        and isinstance(check.get("match_rate"), (int, float))
+        and not isinstance(check.get("match_rate"), bool)
+    ]
+    return {
+        "json_parse_rate": parse_ok / total if total else 0.0,
+        "schema_pass_rate": schema_ok / total if total else 0.0,
+        "value_match_rate": sum(value_rates) / len(value_rates) if value_rates else None,
+        "json_parse_numerator": parse_ok,
+        "schema_pass_numerator": schema_ok,
+        "value_count": len(value_rates),
+    }
 
 
 def adapt_b3(source_dir: Path) -> dict[str, Any]:
@@ -670,16 +790,25 @@ def adapt_b3(source_dir: Path) -> dict[str, Any]:
         failures.append("manifest 전 항목을 시도하지 않음")
     if counts["errored"] or counts["unresolved"]:
         failures.append("오류 또는 미해결 응답이 포함됨")
+    raw_metrics = _b3_raw_metrics(rows)
+    for key in ("json_parse_rate", "schema_pass_rate", "value_match_rate"):
+        if not _same_metric(summary.get(key), raw_metrics[key]):
+            failures.append(f"raw 재집계와 summary {key}가 일치하지 않음")
     recorded = {"benchmark": "B3", "manifest_size": manifest_size, "limit": (config.get("extra") or {}).get("limit")}
     unknown: list[str] = []
     _add_decoding(config, recorded, unknown)
     protocol = make_protocol(recorded, {}, unknown)
     total = counts["attempted"]
-    axes = []
-    for name, key in (("json_parse", "json_parse_rate"), ("schema_pass", "schema_pass_rate"), ("value_match", "value_match_rate")):
-        value = summary.get(key)
-        if isinstance(value, (int, float)):
-            axes.append({"name": name, "value": value, "unit": "fraction", "numerator": None, "denominator": total})
+    axes = [
+        {"name": "json_parse", **_fraction(raw_metrics["json_parse_numerator"], total)},
+        {"name": "schema_pass", **_fraction(raw_metrics["schema_pass_numerator"], total)},
+    ]
+    if raw_metrics["value_match_rate"] is not None:
+        axes.append({
+            "name": "value_match", "value": raw_metrics["value_match_rate"],
+            "unit": "fraction", "numerator": None,
+            "denominator": raw_metrics["value_count"],
+        })
     model = str(summary.get("model") or (config.get("model") or {}).get("name") or source_dir.parents[3].name)
     return _base_result(
         benchmark_key="b3_structured_output", variant="manifest", model=model,
@@ -687,6 +816,67 @@ def adapt_b3(source_dir: Path) -> dict[str, Any]:
         metrics={"axes": axes}, protocol=protocol, completed_at_utc=config.get("timestamp_utc"),
         failures=failures, warnings=warnings,
     )
+
+
+def _percentiles(values: Iterable[Any]) -> dict[str, Any]:
+    numeric = [
+        float(value) for value in values
+        if isinstance(value, (int, float)) and not isinstance(value, bool)
+    ]
+    if not numeric:
+        return {"p50": None, "p95": None, "p99": None, "mean": None, "n": 0}
+    ordered = sorted(numeric)
+    n = len(ordered)
+
+    def percentile(p: float) -> float:
+        if n == 1:
+            return ordered[0]
+        position = p / 100.0 * (n - 1)
+        low = int(position)
+        high = min(low + 1, n - 1)
+        fraction = position - low
+        return ordered[low] * (1 - fraction) + ordered[high] * fraction
+
+    return {
+        "p50": percentile(50), "p95": percentile(95), "p99": percentile(99),
+        "mean": sum(ordered) / n, "n": n,
+    }
+
+
+def _b4_raw_summary(name: str, entries: list[Mapping[str, Any]]) -> dict[str, Any]:
+    def completion_tokens(row: Mapping[str, Any]) -> Any:
+        return row.get("completion_tokens") or row.get("chunks")
+
+    def tokens_per_second(row: Mapping[str, Any]) -> float | None:
+        tokens, total = completion_tokens(row), row.get("total")
+        if not isinstance(tokens, (int, float)) or not tokens or not isinstance(total, (int, float)) or not total:
+            return None
+        return float(tokens) / float(total)
+
+    return {
+        "condition": name,
+        "reps": len(entries),
+        "successful": sum(row.get("ttft") is not None for row in entries),
+        "failed": sum(bool(row.get("error")) for row in entries),
+        "ttft": _percentiles(row.get("ttft") for row in entries),
+        "total": _percentiles(row.get("total") for row in entries),
+        "completion_tokens": _percentiles(completion_tokens(row) for row in entries),
+        "tokens_per_sec": _percentiles(tokens_per_second(row) for row in entries),
+    }
+
+
+def _b4_summary_matches(stored: Mapping[str, Any], calculated: Mapping[str, Any]) -> bool:
+    for key in ("condition", "reps", "successful", "failed"):
+        if stored.get(key) != calculated.get(key):
+            return False
+    for metric in ("ttft", "total", "completion_tokens", "tokens_per_sec"):
+        stored_metric = stored.get(metric)
+        calculated_metric = calculated[metric]
+        if not isinstance(stored_metric, Mapping):
+            return False
+        if any(not _same_metric(stored_metric.get(key), calculated_metric[key]) for key in ("p50", "p95", "p99", "mean", "n")):
+            return False
+    return True
 
 
 def adapt_b4(source_dir: Path) -> dict[str, Any]:
@@ -726,18 +916,24 @@ def adapt_b4(source_dir: Path) -> dict[str, Any]:
     if errored or unresolved:
         failures.append("latency 호출 실패 또는 미해결 값이 포함됨")
     by_name = {entry.get("condition"): entry for entry in (summary.get("conditions") or []) if isinstance(entry, dict)}
+    raw_by_name: dict[str, dict[str, Any]] = {}
+    for name in expected_names:
+        entries = runs.get(name)
+        if isinstance(entries, list):
+            raw_by_name[name] = _b4_raw_summary(name, entries)
     if set(by_name) != expected_names:
         failures.append("summary condition 집합이 일치하지 않음")
     else:
         for name in expected_names:
             entry = by_name[name]
-            if entry.get("reps") != reps or entry.get("successful") != reps or entry.get("failed") != 0:
-                failures.append("summary condition 완주/실패 집계가 일치하지 않음")
+            calculated = raw_by_name.get(name)
+            if calculated is None or not _b4_summary_matches(entry, calculated):
+                failures.append("runs.json 재집계와 summary condition 수치가 일치하지 않음")
                 break
     counts = {"attempted": attempted, "measured": measured, "errored": errored, "unresolved": unresolved}
     axes: list[dict[str, Any]] = []
     for name in sorted(expected_names):
-        entry = by_name.get(name) or {}
+        entry = raw_by_name.get(name) or {}
         for metric, unit in (("ttft", "seconds"), ("total", "seconds"), ("tokens_per_sec", "tokens/second")):
             values = entry.get(metric) or {}
             for percentile in ("p50", "p95", "p99"):

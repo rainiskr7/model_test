@@ -43,13 +43,21 @@ echo "[multimodal/kreta] DEST=$DEST"
 KRETA_REPO="$BASE_DIR/data/KRETA"
 PUBLISH_CLI="$BASE_DIR/derive_multimodal_publish.py"
 
+# 실제 요청값을 provenance에도 동일하게 기록한다.
+if [ "$SETTING" = "direct" ]; then
+  export KRETA_MAX_TOKENS="${KRETA_MAX_TOKENS:-32}"
+else
+  export KRETA_MAX_TOKENS="${KRETA_MAX_TOKENS:-4096}"
+fi
+
 # 재현용 메타데이터 기록 (eval 실패해도 환경 정보 보존)
 python "$SCRIPT_DIR/benches/common.py" \
   --out "$DEST/run_config.json" \
   --benchmark "KRETA" \
   --model "$MODEL" \
   --base-url "$BASE_URL" \
-  --repo-dir "$KRETA_REPO" || echo "[kreta] run_config 작성 실패 (계속)"
+  --max-tokens "$KRETA_MAX_TOKENS" \
+  --repo-dir "$KRETA_REPO" || { echo "[kreta] run_config 작성 실패 — 중단"; exit 1; }
 
 # KRETA inference + evaluation
 # infer_gpt.py 가 --base_url 인자 미지원이므로 env var 로 전달.
@@ -57,22 +65,28 @@ python "$SCRIPT_DIR/benches/common.py" \
 export OPENAI_BASE_URL="$BASE_URL"
 # WORKERS env 로 동시성 조정 가능 (default 2 — GB10 메모리 압박으로 4는 모델 인스턴스 hang 유발 사례 있어 낮춤)
 export KRETA_WORKERS="${KRETA_WORKERS:-2}"
-# 모드별 생성 상한 기본값 (env 로 override 가능):
-#   direct(글자만 답) → 32 로 작게: 타임아웃·절단 없음, GB10 등 느린 HW 안전.
-#   default(추론 후 답) → 4096: 추론 공간 확보(짧추면 긴 답 절단 → 답 유실).
-if [ "$SETTING" = "direct" ]; then
-  export KRETA_MAX_TOKENS="${KRETA_MAX_TOKENS:-32}"
-else
-  export KRETA_MAX_TOKENS="${KRETA_MAX_TOKENS:-4096}"
-fi
-
 cd "$KRETA_REPO/eval" || { echo "ERROR: $KRETA_REPO/eval not found. Run install.sh first."; exit 1; }
 
 # KRETA evaluate.py 는 ./output 안의 모든 jsonl 을 일괄 평가해 results.json 에 누적함.
 # 이전 모델의 jsonl 이 남아 있으면 cross-contamination 발생 → 평가 전 cleanup.
 mkdir -p ./output
-find ./output -maxdepth 1 -type f \( -name '*.jsonl' -o -name '*.jsonl.tmp' -o -name 'results.json' \) -delete || { echo "[multimodal/kreta] ERROR: ./output 정리 실패 — 중단"; exit 1; }
+find ./output -maxdepth 1 -type f \( -name '*.jsonl' -o -name '*.jsonl.tmp' -o -name 'results.json' -o -name '.resume_context.json' \) -delete || { echo "[multimodal/kreta] ERROR: ./output 정리 실패 — 중단"; exit 1; }
 echo "[multimodal/kreta] ./output stale 정리 완료"
+
+# resume은 이 정확한 실행 문맥에서 생성된 checkpoint만 이어받을 수 있다.
+python - "./output/.resume_context.json" "$MODEL" "$SETTING" "$BASE_URL" "$TIMESTAMP" "$KRETA_MAX_TOKENS" <<'PY' || exit 1
+import json, os, sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+value = {
+    "model": sys.argv[2], "setting": sys.argv[3], "base_url": sys.argv[4],
+    "session": sys.argv[5], "max_tokens": int(sys.argv[6]),
+}
+tmp = path.with_name(f".{path.name}.{os.getpid()}.tmp")
+tmp.write_text(json.dumps(value, ensure_ascii=False, sort_keys=True) + "\n", encoding="utf-8")
+os.replace(tmp, path)
+PY
 
 INFER_RC=0
 python infer/infer_gpt.py "$MODEL" "$SETTING" || INFER_RC=$?
