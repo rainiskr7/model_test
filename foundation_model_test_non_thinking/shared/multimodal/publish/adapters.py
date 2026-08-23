@@ -41,6 +41,11 @@ BENCHMARK_IDS = {
     "b4_latency_profile": "B4-latency-profile",
 }
 
+BENCHMARK_KEYS = {
+    value.lower(): key for key, value in BENCHMARK_IDS.items()
+}
+BENCHMARK_KEYS.update({key.lower(): key for key in BENCHMARK_IDS})
+
 
 def load_json(path: Path) -> Any:
     return json.loads(path.read_text(encoding="utf-8"))
@@ -59,6 +64,68 @@ def _counts(records: Iterable[Mapping[str, Any]], response_field: str = "respons
         "unresolved": sum(kind is RecordClass.UNRESOLVED for _, kind in classified),
     }
     return counts, classified
+
+
+def summarize_records(
+    benchmark_id: str,
+    records: Iterable[Mapping[str, Any]],
+    *,
+    response_field: str = "response",
+    expected_count: int | None = None,
+) -> dict[str, Any]:
+    """Pure runner/adapter aggregation over raw records.
+
+    Stored ``correct`` fields are intentionally ignored.  Only records
+    classified as MEASURED are eligible for the numerator.
+    """
+
+    rows = list(records)
+    key = BENCHMARK_KEYS.get(benchmark_id.lower())
+    if key not in {"k_dtcbench", "k_mmbench", "mtvqa_kr", "kreta", "koffvqa"}:
+        raise ValueError(f"summarize_records does not support {benchmark_id!r}")
+    counts, classified = _counts(rows, response_field)
+    correct = 0
+    by_category: dict[str, list[int]] = defaultdict(lambda: [0, 0])
+    score_accuracy = key != "koffvqa"
+    for row, kind in classified:
+        category = str(row.get("category", "overall"))
+        by_category[category][1] += 1
+        if kind is not RecordClass.MEASURED or not score_accuracy:
+            continue
+        response = row[response_field]
+        if key == "mtvqa_kr":
+            is_correct = any(_mtvqa_match(response, str(gold)) for gold in (row.get("gold") or []))
+        elif key == "kreta":
+            is_correct = str(row.get("pred_indexs", "")).strip().upper() == str(row.get("answer", "")).strip().upper()
+        else:
+            is_correct = _choice(response) == str(row.get("answer", "")).strip().upper()
+        if is_correct:
+            correct += 1
+            by_category[category][0] += 1
+    counts["correct_measured"] = correct
+    failures: list[str] = []
+    if expected_count is not None and counts["attempted"] != expected_count:
+        failures.append(f"기대 건수 {expected_count}와 다름")
+    if counts["errored"]:
+        failures.append(f"오류 응답 {counts['errored']}건 포함")
+    if counts["unresolved"]:
+        failures.append(f"미해결 응답 {counts['unresolved']}건 포함")
+    return {
+        "counts": counts,
+        "correct": correct,
+        "accuracy": correct / counts["attempted"] if counts["attempted"] else 0.0,
+        "by_category": {
+            category: {
+                "correct": values[0],
+                "total": values[1],
+                "accuracy": values[0] / values[1] if values[1] else 0.0,
+            }
+            for category, values in sorted(by_category.items())
+        },
+        "accuracy_strict": _fraction(correct, counts["attempted"]),
+        "accuracy_conditional": _fraction(correct, counts["measured"]),
+        "publish_status": {"publishable": not failures, "failures": failures},
+    }
 
 
 def _choice(response: str) -> str:
@@ -264,48 +331,33 @@ def adapt_accuracy(source_dir: Path, benchmark_key: str) -> dict[str, Any]:
     if not isinstance(records, list) or not isinstance(summary, dict):
         records, summary = [], {}
         failures.append("results.json/summary.json 형식이 올바르지 않음")
-    counts, classified = _counts(records)
     expected = EXPECTED_COUNTS[benchmark_key]
-    if counts["attempted"] != expected:
-        failures.append(f"기대 건수 {expected}와 다름")
+    configured_expected = summary.get("publish_expected_count")
+    if benchmark_key == "k_mmbench" and isinstance(configured_expected, int) and configured_expected > 0:
+        expected = configured_expected
+    aggregate = summarize_records(benchmark_key, records, expected_count=expected)
+    counts = aggregate["counts"]
+    failures.extend(aggregate["publish_status"]["failures"])
     item_keys, item_key_failure = _accuracy_item_keys(benchmark_key, records)
     if item_key_failure:
         failures.append(item_key_failure)
     item_digest = dataset_item_digest(item_keys) if item_keys else None
-    if counts["errored"]:
-        failures.append("오류 응답이 포함됨")
-    if counts["unresolved"]:
-        failures.append("미해결 응답이 포함됨")
-
-    scorer: Callable[[Mapping[str, Any]], bool]
-    if benchmark_key == "mtvqa_kr":
-        scorer = lambda row: any(_mtvqa_match(row["response"], str(gold)) for gold in (row.get("gold") or []))
-    else:
-        scorer = lambda row: _choice(row["response"]) == str(row.get("answer", "")).strip().upper()
-    correct = 0
-    by_category: dict[str, list[int]] = defaultdict(lambda: [0, 0])
-    for row, kind in classified:
-        category = str(row.get("category", "overall"))
-        by_category[category][1] += 1
-        if kind is RecordClass.MEASURED and scorer(row):
-            correct += 1
-            by_category[category][0] += 1
-    counts["correct_measured"] = correct
+    correct = aggregate["correct"]
     if summary.get("total") != counts["attempted"] or summary.get("correct") != correct:
         failures.append("raw 재집계와 summary overall이 일치하지 않음")
     stored_categories = summary.get("by_category")
     if isinstance(stored_categories, dict):
-        for category, (cat_correct, cat_total) in by_category.items():
+        for category, recalculated in aggregate["by_category"].items():
             stored = stored_categories.get(category) or {}
-            if stored.get("correct") != cat_correct or stored.get("total") != cat_total:
+            if stored.get("correct") != recalculated["correct"] or stored.get("total") != recalculated["total"]:
                 failures.append("raw 재집계와 summary category가 일치하지 않음")
                 break
 
     axes = [{"name": "overall", **_fraction(correct, counts["attempted"])}]
     if benchmark_key != "mtvqa_kr":
         axes.extend(
-            {"name": f"category:{category}", **_fraction(values[0], values[1])}
-            for category, values in sorted(by_category.items())
+            {"name": f"category:{category}", **_fraction(values["correct"], values["total"])}
+            for category, values in aggregate["by_category"].items()
         )
     metrics = {
         "strict": _fraction(correct, counts["attempted"]),
@@ -400,6 +452,8 @@ def adapt_kreta(jsonl_path: Path) -> dict[str, Any]:
     if not isinstance(stored, dict):
         failures.append("해당 source의 results.json 요약이 없음")
     else:
+        if list(all_summaries) != [jsonl_path.stem]:
+            failures.append("results.json source key 집합이 정확히 일치하지 않음")
         if stored.get("total") != counts["attempted"] or stored.get("correct") != correct:
             failures.append("raw 재집계와 results.json overall이 일치하지 않음")
         for name, (group_correct, group_total) in groups.items():

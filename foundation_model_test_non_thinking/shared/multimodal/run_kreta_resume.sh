@@ -37,6 +37,7 @@ echo "[multimodal/kreta] DEST=$DEST"
 
 # KRETA repo 위치: <BASE>/data/KRETA (중앙 집중)
 KRETA_REPO="$BASE_DIR/data/KRETA"
+PUBLISH_CLI="$BASE_DIR/derive_multimodal_publish.py"
 
 # 재현용 메타데이터 기록 (eval 실패해도 환경 정보 보존)
 python "$SCRIPT_DIR/benches/common.py" \
@@ -68,8 +69,33 @@ mkdir -p ./output
 find ./output -maxdepth 1 -type f \( -name 'results.json' -o -name '*.jsonl.tmp' \) -delete || { echo "[multimodal/kreta] ERROR: ./output 정리 실패 — 중단"; exit 1; }
 echo "[multimodal/kreta] RESUME: jsonl 보존, results.json 만 정리"
 
-python infer/infer_gpt.py "$MODEL" "$SETTING" || { echo "[multimodal/kreta] ERROR: infer 실패(exit $?) — sample 누락/중단 의심, evaluate 스킵 후 중단"; exit 1; }
-python evaluate.py || { echo "[multimodal/kreta] ERROR: evaluate 실패 — 중단"; exit 1; }
+INFER_RC=0
+python infer/infer_gpt.py "$MODEL" "$SETTING" || INFER_RC=$?
+CHECKPOINT="./output/${MODEL}_${SETTING}.jsonl"
+if [ ! -f "$CHECKPOINT" ]; then
+  echo "[multimodal/kreta] ERROR: checkpoint 없음: $CHECKPOINT"
+  exit 1
+fi
+DEST_JSONL="$DEST/$(basename "$CHECKPOINT")"
+cp "$CHECKPOINT" "$DEST_JSONL" || { echo "[multimodal/kreta] ERROR: checkpoint 보존 실패"; exit 1; }
+
+if ! python "$PUBLISH_CLI" --base "$BASE_DIR" --source "$DEST_JSONL" --preflight-kreta --write; then
+  echo "[multimodal/kreta] ERROR: raw preflight 실패 — checkpoint 보존, evaluate 스킵"
+  exit 1
+fi
+if [ "$INFER_RC" -ne 0 ]; then
+  python "$PUBLISH_CLI" --base "$BASE_DIR" --source "$DEST_JSONL" \
+    --reject-reason "infer 실패(exit $INFER_RC)" --write || true
+  echo "[multimodal/kreta] ERROR: infer 실패(exit $INFER_RC) — evaluate 스킵"
+  exit 1
+fi
+
+python evaluate.py || {
+  python "$PUBLISH_CLI" --base "$BASE_DIR" --source "$DEST_JSONL" \
+    --reject-reason "evaluate.py 실패" --write || true
+  echo "[multimodal/kreta] ERROR: evaluate 실패 — REJECTED sidecar 기록 후 중단"
+  exit 1
+}
 
 # KRETA 산출물 경로:
 #   infer_gpt.py: ./output/{MODEL}_{part_name}.jsonl
@@ -82,21 +108,9 @@ else
   exit 1
 fi
 
-# 평가 후 검증: results.json 의 key 가 정확히 {MODEL}_{SETTING} 하나인지 assert.
-# 정확 일치로 검사 → 빈 평가(0건)·stale jsonl 오염(다른 setting/모델)·중복키를 한 번에 차단.
-python - <<PY || { echo "[multimodal/kreta] ERROR: results.json 검증 실패"; exit 1; }
-import json, sys
-from pathlib import Path
-p = Path("$DEST/results.json")
-if not p.exists():
-    sys.exit(f"results.json 없음: {p}")
-d = json.loads(p.read_text())
-keys = list(d.keys())
-expected = "$MODEL" + "_" + "$SETTING"
-if keys != [expected]:
-    sys.exit(f"results.json 키가 정확히 ['{expected}'] 가 아님: {keys} "
-             f"(빈 평가/stale jsonl 오염/중복 의심)")
-print(f"[multimodal/kreta] results.json keys OK: {keys}")
-PY
+python "$PUBLISH_CLI" --base "$BASE_DIR" --source "$DEST_JSONL" --native --write || {
+  echo "[multimodal/kreta] ERROR: post-evaluate 검증 실패 — REJECTED sidecar 기록됨"
+  exit 1
+}
 
 echo "[multimodal/kreta] done"

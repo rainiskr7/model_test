@@ -5,6 +5,7 @@ Source: https://huggingface.co/datasets/NCSOFT/K-DTCBench
 """
 
 import re
+import sys
 
 try:
     from datasets import load_dataset
@@ -15,6 +16,7 @@ from common import (
     standard_argparser, make_client, chat_with_image,
     get_base_dir, get_timestamp, get_results_dir, save_json,
     build_run_config, resolve_dataset_revision,
+    native_sidecar_from_records, summarize_records, write_sidecar,
 )
 
 
@@ -22,6 +24,7 @@ PROMPT_TEMPLATE = """{question}
 Options: A: {A}, B: {B}, C: {C}, D: {D}
 
 주어진 선택지 중 해당 옵션의 문자로 바로 답하세요."""
+EXPECTED_COUNT = 240
 
 
 def extract_choice(response: str) -> str:
@@ -95,11 +98,11 @@ def main():
             )
             err = None
         except Exception as e:
-            response = ""
             err = str(e)
+            response = {"error": err}
 
-        pred = extract_choice(response)
-        is_correct = pred == row["answer"]
+        pred = extract_choice(response) if isinstance(response, str) else ""
+        is_correct = isinstance(response, str) and pred == row["answer"]
         if is_correct:
             correct += 1
 
@@ -125,16 +128,19 @@ def main():
             acc = correct / (i + 1)
             print(f"[k_dtcbench] {i+1}/{len(ds)} acc={acc:.3f}")
 
+    aggregate = summarize_records("k_dtcbench", results, expected_count=EXPECTED_COUNT)
+    correct = aggregate["correct"]
     summary = {
         "benchmark": "K-DTCBench",
         "model": args.model,
         "total": len(results),
         "correct": correct,
         "accuracy": correct / len(results) if results else 0.0,
-        "by_category": {
-            cat: {"correct": c, "total": t, "accuracy": (c / t) if t else 0.0}
-            for cat, (c, t) in by_category.items()
-        },
+        "by_category": aggregate["by_category"],
+        "counts": aggregate["counts"],
+        "accuracy_strict": aggregate["accuracy_strict"],
+        "accuracy_conditional": aggregate["accuracy_conditional"],
+        "publish_status": aggregate["publish_status"],
         "run_config": build_run_config(
             benchmark="K-DTCBench",
             model=args.model,
@@ -155,11 +161,17 @@ def main():
 
     save_json(out_dir / "results.json", results)
     save_json(out_dir / "summary.json", summary)
+    sidecar_path, sidecar = native_sidecar_from_records(
+        out_dir, base_dir, results,
+        benchmark_id="k_dtcbench", expected_count=EXPECTED_COUNT,
+    )
+    write_sidecar(sidecar_path, sidecar)
 
     print(f"\n[k_dtcbench] FINAL acc={summary['accuracy']:.3f} ({correct}/{summary['total']})")
     for cat, stats in summary["by_category"].items():
         print(f"  {cat}: {stats['accuracy']:.3f} ({stats['correct']}/{stats['total']})")
+    return 0 if aggregate["publish_status"]["publishable"] and sidecar["publishable"] else 1
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

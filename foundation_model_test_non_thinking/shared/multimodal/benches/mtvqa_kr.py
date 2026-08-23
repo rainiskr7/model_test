@@ -6,6 +6,7 @@ Source: https://huggingface.co/datasets/ByteDance/MTVQA
 """
 
 import re
+import sys
 import unicodedata
 
 try:
@@ -17,12 +18,14 @@ from common import (
     standard_argparser, make_client, chat_with_image,
     get_base_dir, get_timestamp, get_results_dir, save_json,
     build_run_config, resolve_dataset_revision,
+    native_sidecar_from_records, summarize_records, write_sidecar,
 )
 
 
 PROMPT_TEMPLATE = """{question}
 
 이미지를 보고 위 질문에 한 단어 또는 짧은 구로 정확히 답하세요. 설명·머리말 없이 답만 출력하세요."""
+EXPECTED_COUNT = 558
 
 
 def normalize_answer(s: str) -> str:
@@ -201,10 +204,10 @@ def main():
                 )
                 err = None
             except Exception as e:
-                response = ""
                 err = str(e)
+                response = {"error": err}
 
-            is_correct = any(is_match(response, g) for g in gold_list)
+            is_correct = isinstance(response, str) and any(is_match(response, g) for g in gold_list)
             if is_correct:
                 correct += 1
 
@@ -223,6 +226,8 @@ def main():
             total_q = len(results)
             print(f"[mtvqa_kr] row {i+1}/{len(ds)} (Q={total_q}) acc={correct/total_q:.3f}")
 
+    aggregate = summarize_records("mtvqa_kr", results, expected_count=EXPECTED_COUNT)
+    correct = aggregate["correct"]
     summary = {
         "benchmark": "MTVQA-KR",
         "model": args.model,
@@ -230,6 +235,10 @@ def main():
         "correct": correct,
         "accuracy": correct / len(results) if results else 0.0,
         "metric": "normalized exact/substring match (case-insensitive)",
+        "counts": aggregate["counts"],
+        "accuracy_strict": aggregate["accuracy_strict"],
+        "accuracy_conditional": aggregate["accuracy_conditional"],
+        "publish_status": aggregate["publish_status"],
         "run_config": build_run_config(
             benchmark="MTVQA-KR",
             model=args.model,
@@ -254,9 +263,15 @@ def main():
 
     save_json(out_dir / "results.json", results)
     save_json(out_dir / "summary.json", summary)
+    sidecar_path, sidecar = native_sidecar_from_records(
+        out_dir, base_dir, results,
+        benchmark_id="mtvqa_kr", expected_count=EXPECTED_COUNT,
+    )
+    write_sidecar(sidecar_path, sidecar)
 
     print(f"\n[mtvqa_kr] FINAL acc={summary['accuracy']:.3f} ({correct}/{summary['total']})")
+    return 0 if aggregate["publish_status"]["publishable"] and sidecar["publishable"] else 1
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

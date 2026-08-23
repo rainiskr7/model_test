@@ -8,6 +8,7 @@ plan #2의 "선별" 운영을 위해 --categories 옵션 제공.
 """
 
 import re
+import sys
 
 try:
     from datasets import load_dataset
@@ -18,6 +19,7 @@ from common import (
     standard_argparser, make_client, chat_with_image,
     get_base_dir, get_timestamp, get_results_dir, save_json,
     build_run_config, resolve_dataset_revision,
+    native_sidecar_from_records, summarize_records, write_sidecar,
 )
 
 
@@ -32,6 +34,7 @@ PROMPT_TEMPLATE_HINT = """Hint: {hint}
 Options: A: {A}, B: {B}, C: {C}, D: {D}
 
 주어진 선택지 중 해당 옵션의 문자로 바로 답하세요."""
+EXPECTED_COUNT = 4329
 
 
 def extract_choice(response: str) -> str:
@@ -162,11 +165,11 @@ def main():
             )
             err = None
         except Exception as e:
-            response = ""
             err = str(e)
+            response = {"error": err}
 
-        pred = extract_choice(response)
-        is_correct = pred == row["answer"]
+        pred = extract_choice(response) if isinstance(response, str) else ""
+        is_correct = isinstance(response, str) and pred == row["answer"]
         if is_correct:
             correct += 1
 
@@ -191,16 +194,22 @@ def main():
         if (i + 1) % 50 == 0:
             print(f"[k_mmbench] {i+1}/{len(ds)} acc={correct/(i+1):.3f}")
 
+    selected_variant = bool(args.categories or args.limit)
+    expected_count = len(ds) if selected_variant else EXPECTED_COUNT
+    aggregate = summarize_records("k_mmbench", results, expected_count=expected_count)
+    correct = aggregate["correct"]
     summary = {
         "benchmark": "K-MMBench",
         "model": args.model,
         "total": len(results),
         "correct": correct,
         "accuracy": correct / len(results) if results else 0.0,
-        "by_category": {
-            cat: {"correct": c, "total": t, "accuracy": (c / t) if t else 0.0}
-            for cat, (c, t) in by_category.items()
-        },
+        "by_category": aggregate["by_category"],
+        "counts": aggregate["counts"],
+        "accuracy_strict": aggregate["accuracy_strict"],
+        "accuracy_conditional": aggregate["accuracy_conditional"],
+        "publish_status": aggregate["publish_status"],
+        "publish_expected_count": expected_count,
         "run_config": build_run_config(
             benchmark="K-MMBench",
             model=args.model,
@@ -225,12 +234,18 @@ def main():
 
     save_json(out_dir / "results.json", results)
     save_json(out_dir / "summary.json", summary)
+    sidecar_path, sidecar = native_sidecar_from_records(
+        out_dir, base_dir, results,
+        benchmark_id="k_mmbench", expected_count=expected_count,
+    )
+    write_sidecar(sidecar_path, sidecar)
 
     print(f"\n[k_mmbench] FINAL acc={summary['accuracy']:.3f} ({correct}/{summary['total']})")
     for cat in sorted(summary["by_category"].keys()):
         s = summary["by_category"][cat]
         print(f"  {cat}: {s['accuracy']:.3f} ({s['correct']}/{s['total']})")
+    return 0 if aggregate["publish_status"]["publishable"] and sidecar["publishable"] else 1
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

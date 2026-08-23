@@ -26,6 +26,9 @@ python3 report_multimodal_tracks.py  --base . --run <session> --strict  # CI
 4. **native 단위로 표시한다.** 0–1 일괄 정규화를 하지 않는다.
    `1850/2577 = 71.79%` / `7.4/10 — PROVISIONAL` / `TTFT P50 0.48s`.
 5. **거부된 런의 점수는 stdout·Markdown 어디에도 출력하지 않는다.** 사유만 적는다.
+6. **derive 는 NATIVE 를 강등하지 않는다.** bulk/passive derive는 유효한 기존
+   `NATIVE` sidecar를 기본적으로 건너뛰고 승격만 허용한다. `--force`로만 덮어쓸 수
+   있으며, 이때 손실될 완료 시각과 protocol provenance를 먼저 경고한다.
 
 v1 sidecar 실제 경로:
 

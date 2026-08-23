@@ -12,7 +12,12 @@ __main__ 은 셸 wrapper(KRETA, KOFFVQA, KO-VLM-Benchmark)용 run_config.json �
 """
 
 import argparse
+import sys
 from pathlib import Path
+
+REPO_ROOT = Path(__file__).resolve().parents[3]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
 
 from paths import (
     safe_model_name, get_base_dir, get_timestamp, get_results_dir,
@@ -31,6 +36,12 @@ from metadata import (
     get_hf_dataset_revision, get_git_commit, get_package_version,
     get_eval_script_hash, resolve_dataset_revision, build_run_config,
 )
+from shared.multimodal.publish import (
+    native_sidecar_from_records,
+    native_sidecar_from_source,
+    summarize_records,
+    write_sidecar,
+)
 
 __all__ = [
     "safe_model_name", "get_base_dir", "get_timestamp", "get_results_dir",
@@ -40,6 +51,8 @@ __all__ = [
     "normalize_text", "normalize_number",
     "get_hf_dataset_revision", "get_git_commit", "get_package_version",
     "get_eval_script_hash", "resolve_dataset_revision", "build_run_config",
+    "native_sidecar_from_records", "native_sidecar_from_source",
+    "summarize_records", "write_sidecar",
 ]
 
 

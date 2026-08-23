@@ -17,6 +17,7 @@
 """
 
 import argparse
+import sys
 import time
 from pathlib import Path
 
@@ -28,6 +29,7 @@ except ImportError as e:
 from common import (
     safe_model_name, get_base_dir, get_timestamp, get_results_dir,
     save_json, image_to_data_url, make_client, build_run_config,
+    native_sidecar_from_source, write_sidecar,
 )
 # client.py 를 우회해 SDK 를 직접 호출하므로 여기서도 서빙 제약을 적용해야 한다.
 from client import apply_serving_constraints
@@ -214,10 +216,24 @@ def main():
         summaries.append(s)
         runs_by_condition[name] = r
 
+    failures = []
+    if args.reps <= 0:
+        failures.append("condition rep 기대 건수가 0 이하")
+    expected_names = {name for name, _ in conditions}
+    if set(runs_by_condition) != expected_names:
+        failures.append("condition 집합 미완주")
+    for name in expected_names:
+        runs = runs_by_condition.get(name)
+        summary = next((entry for entry in summaries if entry["condition"] == name), None)
+        if not isinstance(runs, list) or len(runs) != args.reps:
+            failures.append(f"{name}: rep 미완주")
+        elif summary is None or summary["successful"] != args.reps or summary["failed"] != 0:
+            failures.append(f"{name}: 실패 호출 포함")
     final = {
         "benchmark": "B-4 Latency Profile",
         "model": args.model,
         "conditions": summaries,
+        "publish_status": {"publishable": not failures, "failures": failures},
         "run_config": build_run_config(
             benchmark="B-4 Latency Profile",
             model=args.model,
@@ -237,6 +253,8 @@ def main():
 
     save_json(out_dir / "summary.json", final)
     save_json(out_dir / "runs.json", runs_by_condition)
+    sidecar_path, sidecar = native_sidecar_from_source(out_dir, base_dir)
+    write_sidecar(sidecar_path, sidecar)
 
     print(f"\n[b4] FINAL")
     for s in summaries:
@@ -251,7 +269,8 @@ def main():
         print(f"    Total P50={total['p50']:.3f}s P95={total['p95']:.3f}s P99={total['p99']:.3f}s")
         if tps.get('p50'):
             print(f"    Tok/s P50={tps['p50']:.1f} P95={tps['p95']:.1f}")
+    return 0 if final["publish_status"]["publishable"] and sidecar["publishable"] else 1
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

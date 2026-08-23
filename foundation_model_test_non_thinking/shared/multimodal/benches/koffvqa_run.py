@@ -19,6 +19,7 @@ Judge 단계는 별도:
 import base64
 import io
 import json
+import sys
 from pathlib import Path
 
 try:
@@ -32,10 +33,12 @@ from common import (
     standard_argparser, make_client, chat_with_image,
     get_base_dir, get_timestamp, get_results_dir, save_json,
     safe_model_name, build_run_config,
+    native_sidecar_from_records, summarize_records, write_sidecar,
 )
 
 
 KOFFVQA_TSV_URL = "https://huggingface.co/datasets/maum-ai/KOFFVQA_Data/resolve/main/data/KOFFVQA.tsv"
+EXPECTED_COUNT = 275
 
 
 def download_tsv(target: Path) -> None:
@@ -127,10 +130,10 @@ def main():
             )
             err = None
         except Exception as e:
-            response = ""
             err = str(e)
+            response = {"error": err}
 
-        predictions.append(response)
+        predictions.append(response if isinstance(response, str) else "")
         results.append({
             "index": idx,
             "category": str(row.get("category", "")),
@@ -155,12 +158,22 @@ def main():
     # 3) raw results.json + summary.json
     save_json(out_dir / "results.json", results)
 
+    expected_count = len(bench) if args.limit else EXPECTED_COUNT
+    aggregate = summarize_records(
+        "koffvqa", results, response_field="prediction", expected_count=expected_count,
+    )
+    generation_failures = aggregate["publish_status"]["failures"]
     summary = {
         "benchmark": "KOFFVQA (response generation)",
         "model": args.model,
         "total": len(results),
         "successful": sum(1 for r in results if not r.get("error")),
         "failed": sum(1 for r in results if r.get("error")),
+        "counts": aggregate["counts"],
+        "publish_status": {
+            "publishable": False,
+            "failures": generation_failures or ["채점 산출물 없음"],
+        },
         "predictions_xlsx": str(xlsx_path),
         "judge_step": "별도 — koffvqa_api_judge.py 또는 KOFFVQA evaluate.py 로 채점 필요",
         "run_config": build_run_config(
@@ -180,10 +193,16 @@ def main():
         ),
     }
     save_json(out_dir / "summary.json", summary)
+    sidecar_path, sidecar = native_sidecar_from_records(
+        out_dir, base_dir, results,
+        benchmark_id="koffvqa", response_field="prediction", expected_count=expected_count,
+    )
+    write_sidecar(sidecar_path, sidecar)
 
     print(f"\n[koffvqa] FINAL {summary['successful']}/{summary['total']} 응답 생성 완료")
     print(f"[koffvqa] judge 채점 필요: koffvqa_api_judge.py --predfile {xlsx_path}")
+    return 1 if generation_failures or sidecar["status"] != "UNSCORED" else 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
