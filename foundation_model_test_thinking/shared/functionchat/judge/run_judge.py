@@ -52,11 +52,19 @@ def main(argv: Optional[List[str]] = None) -> int:
     ap.add_argument("--results-dir", required=True, type=Path)
     ap.add_argument("--data-dir", type=Path, default=Path("data/FunctionChat-Bench/data"))
     ap.add_argument("--judge-model", default="openai/gpt-4.1-mini")
-    ap.add_argument("--repeats", type=int, default=2)
+    # 3회여야 과반이 성립한다. 2회는 갈리면 판정 불가가 되어 분모에서 빠진다 —
+    # 2026-08-23 본 실행에서 21건(qwen 12/gemma 9)이 그렇게 사라졌다.
+    # 전송·파싱 실패는 0건이었고 전부 동점이었다.
+    ap.add_argument("--repeats", type=int, default=3)
     ap.add_argument("--api-key-env", default="TAUBENCH_USER_API_KEY")
     ap.add_argument("--timeout", type=float, default=120.0)
     ap.add_argument("--retries", type=int, default=3)
     ap.add_argument("--concurrency", type=int, default=8)
+    ap.add_argument(
+        "--retry-unresolved",
+        action="store_true",
+        help="기존 judge.json 의 판정 불가 항목만 다시 판정해 병합한다",
+    )
     args = ap.parse_args(argv)
 
     api_key = os.environ.get(args.api_key_env)
@@ -65,6 +73,21 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     rubrics = load_rubrics(args.data_dir)
     items = collect_items(args.results_dir)
+
+    # --retry-unresolved: 기존 judge.json 에서 판정 불가(동점)로 남은 항목만 다시 돈다.
+    # 전체 재실행은 이미 확정된 615건까지 다시 부르는 낭비다.
+    previous = None
+    out_path = args.results_dir / "judge.json"
+    if args.retry_unresolved:
+        if not out_path.exists():
+            raise SystemExit(f"--retry-unresolved 인데 {out_path} 가 없습니다.")
+        previous = json.loads(out_path.read_text(encoding="utf-8"))
+        unresolved = {
+            r["serial_num"] for r in previous["records"] if r["status"] == "judge_error"
+        }
+        items = [i for i in items if i.get("serial_num") in unresolved]
+        print(f"[judge] 재판정 대상 {len(items)}건 (기존 판정 불가)")
+
     print(f"[judge] 대상 {len(items)}건, 판정기 {args.judge_model}, 반복 {args.repeats}")
 
     per_type: Dict[str, Counter] = defaultdict(Counter)
@@ -113,6 +136,18 @@ def main(argv: Optional[List[str]] = None) -> int:
         )
         if index % 50 == 0 or index == len(items):
             print(f"[judge] {index}/{len(items)}")
+
+    if previous is not None:
+        # 재판정하지 않은 기존 레코드를 합치고 유형별 집계를 다시 만든다.
+        redone = {r["serial_num"] for r in records}
+        merged = [r for r in previous["records"] if r["serial_num"] not in redone]
+        records = merged + records
+        per_type = defaultdict(Counter)
+        for r in records:
+            kind = r["type_of_output"]
+            per_type[kind][r["verdict"] or r["status"]] += 1
+            if r["unstable"]:
+                per_type[kind]["unstable"] += 1
 
     judged = sum(c["pass"] + c["fail"] for c in per_type.values())
     passed = sum(c["pass"] for c in per_type.values())
