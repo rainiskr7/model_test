@@ -80,8 +80,13 @@ def collect(base: Path) -> List[Dict[str, Any]]:
             for domain, entry in sorted((d.get("by_domain") or {}).items()):
                 if not isinstance(entry, dict) or entry.get("status") != "measured":
                     continue
+                # provisional 을 False 로 하드코딩하지 않는다. 지금 tau2 는 전부
+                # 프로그램 채점이라 False 가 맞지만, 나중에 판정기를 붙이면 판정
+                # 조건부 결과가 "확정" 으로 찍힌다. 산출물이 판정 사용을 밝히면
+                # 자동으로 provisional 이 되도록 둔다.
+                judge_used = bool(entry.get("judge") or entry.get("nl_judge_model"))
                 row["axes"].append(
-                    (domain, entry.get("passed"), entry.get("measured"), False)
+                    (domain, entry.get("passed"), entry.get("measured"), judge_used)
                 )
                 row["runnable"] = entry.get("runnable_tasks")
         rows.append(row)
