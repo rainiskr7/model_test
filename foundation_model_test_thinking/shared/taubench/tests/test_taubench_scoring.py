@@ -27,8 +27,12 @@ runner = load_module("taubench_runner_test", TAUBENCH_DIR / "runner" / "run_taub
 scorer = load_module("taubench_scorer_test", TAUBENCH_DIR / "scoring" / "score_run.py")
 
 
-def task(task_id, basis):
-    return {"id": task_id, "evaluation_criteria": {"reward_basis": basis}}
+def task(task_id, basis, nl_assertions=None):
+    """nl_assertions 는 선언과 별개다 — 비어 있으면 상류가 판정 없이 1.0 을 준다."""
+    criteria = {"reward_basis": basis}
+    if nl_assertions:
+        criteria["nl_assertions"] = list(nl_assertions)
+    return {"id": task_id, "evaluation_criteria": criteria}
 
 
 def simulation(task_id, reward):
@@ -154,9 +158,31 @@ class TauBenchScoringTests(unittest.TestCase):
         self.assertEqual(3, summary["split"]["task_count"])
         self.assertEqual(ids, summary["split"]["task_ids"])
 
+
+    def test_nl_assertion_declared_but_empty_needs_no_judge(self):
+        """retail test 40건 중 39건이 NL_ASSERTION 을 선언하지만 실제 내용은 11건뿐이다.
+        선언만 보고 배제하면 29건을 잘못 버린다 (evaluator_nl_assertions.py:37 이
+        빈 목록에 대해 판정 없이 1.0 을 돌려준다)."""
+        declared_empty = task("declared_empty", ["DB", "NL_ASSERTION"])
+        self.assertFalse(runner.requires_judge(declared_empty))
+
+    def test_nl_assertion_with_content_needs_judge(self):
+        with_content = task("real", ["DB", "NL_ASSERTION"], ["에이전트는 정책을 지켜야 한다"])
+        self.assertTrue(runner.requires_judge(with_content))
+
+    def test_communicate_is_not_a_judge_basis(self):
+        """evaluator_communicate.py 는 부분문자열 매칭이다 — 판정 모델이 아니다."""
+        comm = task("comm", ["DB", "COMMUNICATE"])
+        self.assertFalse(runner.requires_judge(comm))
+
+    def test_telecom_bases_remain_judge_free(self):
+        """이 규칙 도입으로 telecom 거동이 바뀌면 안 된다."""
+        for basis in (["ENV_ASSERTION"], ["ACTION", "ENV_ASSERTION"]):
+            self.assertFalse(runner.requires_judge(task("t", basis)))
+
     def test_selected_judge_task_is_reported_not_measured_with_count(self):
         runnable = task("programmatic", ["ENV_ASSERTION"])
-        judge = task("judge", ["DB", "NL_ASSERTION"])
+        judge = task("judge", ["DB", "NL_ASSERTION"], ["에이전트는 보상을 먼저 제안하면 안 된다"])
         with tempfile.TemporaryDirectory() as temp_dir:
             split_path = Path(temp_dir) / "split_tasks.json"
             split_path.write_text(

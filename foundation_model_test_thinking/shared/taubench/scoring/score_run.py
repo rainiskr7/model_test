@@ -245,9 +245,11 @@ def build_summary(
         raise ValueError("split task_count disagrees with runnable/not-measured counts")
     if not split.get("name"):
         raise ValueError("split name is missing")
-    telecom_raw = raw_by_domain.get("telecom")
+    # 실행 도메인은 매니페스트의 split.domain 이 말해준다 (기본 telecom — 기존 산출물 호환).
+    run_domain = str((split or {}).get("domain") or "telecom")
+    domain_raw = raw_by_domain.get(run_domain)
     upstream_task_ids = sorted(
-        str(task["id"]) for task in (telecom_raw or {}).get("tasks") or []
+        str(task["id"]) for task in (domain_raw or {}).get("tasks") or []
     )
     if sorted(str(value) for value in task_ids) != upstream_task_ids:
         raise ValueError(
@@ -257,8 +259,8 @@ def build_summary(
 
     domain_scope = manifest.get("domain_scope") or {}
     domains = {
-        "telecom": score_domain(
-            "telecom", telecom_raw, int(runnable_task_count or 0)
+        run_domain: score_domain(
+            run_domain, domain_raw, int(runnable_task_count or 0)
         ),
         "banking_knowledge": score_domain(
             "banking_knowledge",
@@ -275,7 +277,7 @@ def build_summary(
     failed = sum(entry["failed"] for entry in domains.values())
     harness_integrity = dict(manifest.get("harness_integrity") or {})
     harness_integrity["upstream_result_evidence"] = _validate_upstream_integrity(
-        telecom_raw or {}, manifest
+        domain_raw or {}, manifest
     )
     harness_integrity["manifest_only_not_in_upstream_info"] = [
         "task_timeout",
@@ -517,7 +519,15 @@ def main(argv: Optional[list[str]] = None) -> int:
         args = parse_args(argv)
         results_dir = _results_dir(args)
         manifest = _load(results_dir / "run_manifest.json")
-        raw = {"telecom": _load(results_dir / "upstream" / "telecom" / "results.json")}
+        # 매니페스트가 실행 도메인을 안다. upstream/<domain>/results.json 을 읽는다.
+        run_domain = str(
+            ((manifest.get("split") or {}).get("domain")) or "telecom"
+        )
+        raw = {
+            run_domain: _load(
+                results_dir / "upstream" / run_domain / "results.json"
+            )
+        }
         summary = build_summary(raw, manifest, args.track)
         failures, warnings = validate_summary(summary)
         for warning in warnings:

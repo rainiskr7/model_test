@@ -58,6 +58,29 @@ def reward_basis(task: Mapping[str, Any]) -> tuple[str, ...]:
     return tuple(sorted(str(value) for value in criteria.get("reward_basis") or []))
 
 
+def requires_judge(task: Mapping[str, Any]) -> bool:
+    """이 태스크를 채점하려면 LLM 판정이 필요한가.
+
+    reward_basis 선언만 보면 안 된다. 두 가지 이유다.
+
+    1. COMMUNICATE 는 판정이 아니다. evaluator_communicate.py 가
+       `info_str.lower() in message.content.lower()` 로 부분문자열을 찾는다.
+       (취약한 매칭이지 의미 판정이 아니다 — 결과 해석 시 유의할 것.)
+
+    2. NL_ASSERTION 은 **선언돼 있어도 내용이 비면 판정을 부르지 않는다.**
+       evaluator_nl_assertions.py:37 이 nl_assertions 가 비면 판정 없이 1.0 을
+       돌려준다. retail test 40건 중 39건이 NL_ASSERTION 을 선언하지만 실제 내용이
+       있는 것은 11건뿐이라, 선언만 보면 29건을 잘못 배제한다.
+
+    telecom 은 ENV_ASSERTION / ACTION 만 쓰므로 이 함수의 도입으로 거동이 바뀌지 않는다.
+    """
+    criteria = task.get("evaluation_criteria") or {}
+    basis = {str(b) for b in (criteria.get("reward_basis") or [])}
+    if "NL_ASSERTION" in basis and criteria.get("nl_assertions"):
+        return True
+    return False
+
+
 def is_programmatic_basis(basis: Iterable[str]) -> bool:
     values = frozenset(str(value) for value in basis)
     return bool(values) and not (values & JUDGE_BASES) and values <= PROGRAMMATIC_BASES
@@ -82,7 +105,10 @@ def _load_task_splits(path: Path) -> dict[str, list[str]]:
 
 
 def resolve_task_split(
-    tasks: Iterable[Mapping[str, Any]], split_path: Path, split_name: str
+    tasks: Iterable[Mapping[str, Any]],
+    split_path: Path,
+    split_name: str,
+    domain: str = "telecom",
 ) -> dict[str, Any]:
     """공식 split 순서를 보존하고 judge-free 실행 목록을 만든다."""
     splits = _load_task_splits(split_path)
@@ -106,23 +132,20 @@ def resolve_task_split(
     runnable_ids: list[str] = []
     not_measured_tasks: list[dict[str, Any]] = []
     for task_id in split_ids:
-        basis = reward_basis(tasks_by_id[task_id])
-        if is_programmatic_basis(basis):
+        task = tasks_by_id[task_id]
+        basis = reward_basis(task)
+        if not requires_judge(task):
             runnable_ids.append(task_id)
             continue
-        reason = (
-            "llm_judge_required"
-            if set(basis) & JUDGE_BASES
-            else "unsupported_reward_basis"
-        )
+        reason = "llm_judge_required"
         not_measured_tasks.append(
             {"task_id": task_id, "reward_basis": list(basis), "reason": reason}
         )
 
     return {
-        "domain": "telecom",
+        "domain": domain,
         "name": split_name,
-        "source": "data/tau2/domains/telecom/split_tasks.json",
+        "source": f"data/tau2/domains/{domain}/split_tasks.json",
         "task_count": len(split_ids),
         "runnable_task_count": len(runnable_ids),
         "task_ids": runnable_ids,
@@ -146,7 +169,7 @@ def build_upstream_command(
         "tau2.cli",
         "run",
         "--domain",
-        "telecom",
+        args.domain,
         "--agent",
         "llm_agent_solo" if args.mode == "solo" else "llm_agent",
         "--agent-llm",
@@ -288,6 +311,10 @@ def parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
     # 상류 기본값은 고정 3자 모델이다 (config.py:17 DEFAULT_LLM_USER =
     # "gpt-4.1-2025-04-14"). 후보 모델을 사용자로 쓰는 것은 상류 설계가 아니다.
     # 조용한 기본값 대신 운영자가 명시적으로 고르게 한다.
+    # 실행 도메인. telecom 은 판정 불필요 40/40, retail 은 29/40 (나머지는
+    # nl_assertions 내용이 있어 판정이 필요하다). airline 은 20/20 전부 판정 필요라
+    # 이 트랙에서 돌 수 없다.
+    parser.add_argument("--domain", default="telecom")
     parser.add_argument("--user-model", default=None)
     # 사용자 시뮬레이터를 에이전트와 **다른 엔드포인트**로 보낼 때 쓴다.
     # 상류 기본값이 외부 모델(gpt-4.1)이므로 이게 정상 형태다. 생략하면 에이전트와
@@ -347,15 +374,15 @@ def main(argv: Optional[list[str]] = None) -> int:
                 f"tau2-bench commit mismatch: expected {SOURCE_COMMIT}, got {actual_commit}"
             )
 
-        telecom_dir = bench_dir / "data" / "tau2" / "domains" / "telecom"
-        canonical_path = telecom_dir / "tasks.json"
-        split_path = telecom_dir / "split_tasks.json"
+        domain_dir = bench_dir / "data" / "tau2" / "domains" / args.domain
+        canonical_path = domain_dir / "tasks.json"
+        split_path = domain_dir / "split_tasks.json"
         tasks = _load_tasks(canonical_path)
-        split = resolve_task_split(tasks, split_path, args.split)
+        split = resolve_task_split(tasks, split_path, args.split, args.domain)
         selected_ids = list(split["task_ids"])
         if not selected_ids:
             raise ValueError(
-                f"telecom split {args.split!r} has no judge-free runnable tasks"
+                f"{args.domain} split {args.split!r} has no judge-free runnable tasks"
             )
         timestamp = _timestamp(base_dir)
         results_dir = (
@@ -366,7 +393,7 @@ def main(argv: Optional[list[str]] = None) -> int:
             / "language"
             / args.track_name
         )
-        upstream_dir = results_dir / "upstream" / "telecom"
+        upstream_dir = results_dir / "upstream" / args.domain
         api_base = normalize_api_base(args.base_url)
         llm_args = build_litellm_args(api_base, args.request_timeout, args.max_tokens)
 
@@ -399,14 +426,17 @@ def main(argv: Optional[list[str]] = None) -> int:
                 "license": "MIT",
             },
             "split": split,
+            # 실행 도메인만 runnable 로 적고 나머지는 미실행 사유를 남긴다.
+            # 판정 불필요 태스크 수는 requires_judge() 로 판정한다 (선언이 아니라
+            # nl_assertions 내용 유무 기준). 2026-08-23 실측:
+            #   telecom test 40/40, retail test 29/40, airline test 0/20
             "domain_scope": {
-                "telecom": {"runnable": True, "user_mode": "dummy_user"},
-                "banking_knowledge": {
-                    "runnable": False,
-                    "reason": "banking_knowledge environment rejects solo mode",
-                },
-                "retail": {"runnable": False, "reason": "LLM-judge reward basis"},
-                "airline": {"runnable": False, "reason": "LLM-judge reward basis"},
+                d: (
+                    {"runnable": True, "user_mode": args.mode}
+                    if d == args.domain
+                    else {"runnable": False, "reason": "not selected for this run"}
+                )
+                for d in ("telecom", "retail", "airline", "banking_knowledge")
             },
             "harness_integrity": {
                 "architecture": "upstream_tau2_framework",
