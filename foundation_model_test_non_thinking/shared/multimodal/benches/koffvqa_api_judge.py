@@ -19,20 +19,17 @@ Usage:
 """
 
 import argparse
+import hashlib
 import json
 import re
+import sys
+from pathlib import Path
 from typing import Optional
 
 try:
     import pandas as pd
 except ImportError as e:
     raise SystemExit("pandas 미설치 — `uv pip install pandas openpyxl`") from e
-
-from common import (
-    safe_model_name, get_base_dir, get_timestamp, get_results_dir,
-    save_json, build_run_config, make_client,
-)
-
 
 JUDGE_PROMPT_VERSION = "v3-anchored-with-examples"
 
@@ -71,6 +68,10 @@ JUDGE_PROMPT = """아래는 한국어 시각 질의응답에 대한 객관적 �
 {{"score": <0-10 integer>, "reason": "<채점 근거 1~2 문장>"}}"""
 
 
+def valid_score(score) -> bool:
+    return not isinstance(score, bool) and isinstance(score, int) and 0 <= score <= 10
+
+
 def judge_one(client, judge_model: str, question: str, response: str, criteria,
               seed: Optional[int] = None, max_tokens: int = 1024) -> tuple:
     crit_str = criteria if isinstance(criteria, str) else json.dumps(criteria, ensure_ascii=False, indent=2)
@@ -90,7 +91,10 @@ def judge_one(client, judge_model: str, question: str, response: str, criteria,
         if m:
             try:
                 data = json.loads(m.group(0))
-                return data.get("score"), data.get("reason"), None, text
+                score = data.get("score")
+                if not valid_score(score):
+                    return None, data.get("reason"), "score must be an integer from 0 through 10", text
+                return score, data.get("reason"), None, text
             except json.JSONDecodeError as e:
                 return None, None, f"json parse: {e}", text
         return None, None, "no JSON in judge response", text
@@ -98,16 +102,46 @@ def judge_one(client, judge_model: str, question: str, response: str, criteria,
         return None, None, str(e), ""
 
 
-def _detect_column(cols, candidates):
-    cl = [c.lower() for c in cols]
-    for cand in candidates:
-        for i, c in enumerate(cl):
-            if cand in c:
-                return cols[i]
-    return None
+def _detect_column(cols, name):
+    """Exact, case-insensitive column lookup; fuzzy substring matching is unsafe."""
+    matches = [column for column in cols if str(column).casefold() == name.casefold()]
+    return matches[0] if len(matches) == 1 else None
+
+
+def resolve_columns(cols, question=None, criteria=None, response=None):
+    """Resolve KOFFVQA columns and reject missing or duplicate role binding."""
+    resolved = {
+        "question": question or _detect_column(cols, "question"),
+        "criteria": criteria or _detect_column(cols, "answer"),
+        "response": response or _detect_column(cols, "prediction"),
+    }
+    missing = [role for role, column in resolved.items() if column not in cols]
+    if missing:
+        raise ValueError(f"컬럼 감지 실패 ({', '.join(missing)}). 실제 컬럼: {cols}")
+    if len(set(resolved.values())) != len(resolved):
+        raise ValueError(f"동일 컬럼을 여러 역할에 결합할 수 없음: {resolved}")
+    return resolved["question"], resolved["criteria"], resolved["response"]
+
+
+def file_sha256(path):
+    digest = hashlib.sha256()
+    with Path(path).open("rb") as fh:
+        for chunk in iter(lambda: fh.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return "sha256:" + digest.hexdigest()
 
 
 def main():
+    # Runner helpers use direct-script imports internally.  Delay loading so
+    # pure column/score validation remains importable without runner deps.
+    benches_dir = str(Path(__file__).resolve().parent)
+    if benches_dir not in sys.path:
+        sys.path.insert(0, benches_dir)
+    from common import (  # pylint: disable=import-outside-toplevel
+        get_base_dir, get_timestamp, get_results_dir,
+        save_json, build_run_config, make_client,
+    )
+
     ap = argparse.ArgumentParser()
     ap.add_argument("--predfile", required=True, help="KOFFVQA generate.py 결과 .xlsx")
     ap.add_argument("--target-model", required=True, help="평가 대상 모델명 (결과 폴더 명명용)")
@@ -117,20 +151,26 @@ def main():
     ap.add_argument("--limit", type=int, default=None)
     ap.add_argument("--seed", type=int, default=None, help="judge seed")
     ap.add_argument("--judge-max-tokens", type=int, default=1024, help="judge 응답 max_tokens (default 1024 — 근거 포함)")
+    ap.add_argument("--question-column", default=None, help="질문 컬럼 override (default: question)")
+    ap.add_argument("--criteria-column", "--answer-column", dest="criteria_column", default=None,
+                    help="채점 기준 컬럼 override (default: answer)")
+    ap.add_argument("--response-column", "--prediction-column", dest="response_column", default=None,
+                    help="모델 응답 컬럼 override (default: prediction)")
     args = ap.parse_args()
 
     df = pd.read_excel(args.predfile)
     cols = df.columns.tolist()
     print(f"[koffvqa_judge] loaded {args.predfile}: {len(df)} rows / cols: {cols}")
 
-    q_col = _detect_column(cols, ["question", "instruction", "input"])
-    crit_col = _detect_column(cols, ["criteria", "rubric", "grading"])
-    resp_col = _detect_column(cols, ["response", "output", "answer", "model_response"])
-
-    if not (q_col and crit_col and resp_col):
-        raise SystemExit(
-            f"컬럼 자동감지 실패. question/criteria/response 가 필요. 실제 컬럼: {cols}"
+    try:
+        q_col, crit_col, resp_col = resolve_columns(
+            cols,
+            question=args.question_column,
+            criteria=args.criteria_column,
+            response=args.response_column,
         )
+    except ValueError as exc:
+        raise SystemExit(str(exc)) from exc
     print(f"[koffvqa_judge] columns: q={q_col} criteria={crit_col} response={resp_col}")
 
     if args.limit:
@@ -160,8 +200,8 @@ def main():
             client, args.judge_model, q, resp, crit,
             seed=args.seed, max_tokens=args.judge_max_tokens,
         )
-        if score is not None and isinstance(score, (int, float)):
-            scores.append(float(score))
+        if score is not None:
+            scores.append(score)
 
         results.append({
             "idx": int(i),
@@ -184,6 +224,7 @@ def main():
         "judge_prompt_version": JUDGE_PROMPT_VERSION,
         "target_model": args.target_model,
         "predfile": args.predfile,
+        "prediction_sha256": file_sha256(args.predfile),
         "total": len(results),
         "scored": len(scores),
         "avg_score": sum(scores) / len(scores) if scores else None,

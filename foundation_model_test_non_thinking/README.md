@@ -81,19 +81,22 @@
 | **KRETA** | 한국어 텍스트-리치 VQA, 15영역 × 26유형 | [tabtoyou/KRETA](https://github.com/tabtoyou/KRETA) |
 | **KOFFVQA** | 한국어 free-form VQA, **Rubric judge** 채점 (275 샘플) | [maum-ai/KOFFVQA](https://github.com/maum-ai/KOFFVQA) |
 | **K-DTCBench** | 한국어 문서/표/차트 multiple-choice VQA (240 샘플) | NCSOFT (HF: `NCSOFT/K-DTCBench`) |
-| **K-MMBench** | 한국어 멀티모달 dev set (4,330 샘플) | NCSOFT |
+| **K-MMBench** | 한국어 멀티모달 dev set (4,329 샘플) | NCSOFT |
 | **MTVQA (KR)** | 9개 언어 중 한국어 서브셋, 실세계 장면 텍스트 free-form VQA | ByteDance |
 | **KO-VLM-Benchmark** | KO-VQA / KO-VDC / KO-OCRAG | [Marker-Inc-Korea/KO-VLM-Benchmark](https://github.com/Marker-Inc-Korea/KO-VLM-Benchmark) (현재 stub) |
 | **B-3 Structured Output** (자체) | 이미지 → JSON 변환 정확도 (포맷 준수) | `vsm/multimodal/data/structured_output/` |
 | **B-4 Latency Profile** (자체) | 조건별(text-only / 256px / 1024px / multi-image) TTFT · tokens/sec | 자체 측정 스크립트 |
 
-### 2.4 데이터셋 카테고리 매핑 (Plan #2 가중치)
+### 2.4 데이터셋 카테고리 매핑 (합산 금지)
 
-| 카테고리 | 가중치 | 대표 벤치마크 |
+| 카테고리 | 대표 벤치마크 | 발행 단위 |
 |---|---|---|
-| 문서 OCR · 구조 이해 | **50%** | KRETA, K-DTCBench, K-MMBench (문서/표/차트 카테고리) |
-| 실세계 장면 텍스트 | **30%** | MTVQA(KR), KO-VLM-Benchmark |
-| 자유 서술형 VQA | **20%** | KOFFVQA |
+| 문서 OCR · 구조 이해 | KRETA, K-DTCBench, K-MMBench (문서/표/차트 카테고리) | 벤치별 accuracy와 분자/분모 |
+| 실세계 장면 텍스트 | MTVQA(KR), KO-VLM-Benchmark | 벤치별 native metric |
+| 자유 서술형 VQA | KOFFVQA | 0–10 rubric score, 인간 검증 전 PROVISIONAL |
+
+서로 다른 데이터셋과 판정 축은 척도가 같지 않으므로 종합 점수로 합산하거나 평균하지 않는다.
+발행 가능 여부와 대표 런 선정은 `MULTIMODAL_PUBLISH_CONTRACT.md`를 따른다.
 
 ---
 
@@ -155,6 +158,12 @@ KRETA가 중단된 경우 `vsm/multimodal/run_kreta_resume.sh`로 이어서 진�
 KRETA 러너는 3번째 인자로 프롬프트 모드(`SETTING`)를 받는다 — `direct`(글자만 답, 빠름·DGX Spark 권장) / `default`(추론 후 답). 모드별 생성 상한은 자동 설정되며 자세한 내용은 아래 §3.8 운영 노트 참고. 예: `bash vsm/multimodal/run_kreta_resume.sh <model> direct <url>`.
 
 KOFFVQA도 idempotent resume를 지원한다(`koffvqa_run.py`). 같은 `EVAL_TIMESTAMP`로 재실행하면 `out_dir/results.json`의 **유효 응답**(error 없음 + 비어있지 않은 prediction)은 `index` 기준으로 재사용하고, **에러·타임아웃·누락 항목만 다시 호출**한 뒤 results.json·xlsx·summary를 머지해 재생성한다. 따라서 일부 샘플이 타임아웃으로 실패하면 **같은 명령을 재실행하는 것만으로 복구**된다 — 별도 retry 스크립트 불필요. `run_koffvqa.sh`는 `KOFFVQA_TIMEOUT` env(기본 600초, kreta `KRETA_TIMEOUT`과 일관)를 받으며, 게이트웨이 200초 컷을 피하려면 직접 vLLM 포트를 `<url>`로 준다. 예: `KOFFVQA_TIMEOUT=600 bash vsm/multimodal/run_koffvqa.sh <model> http://<host>:<vllm_port>/v1`. 처음부터 다시 돌리려면 `koffvqa_run.py --no-resume`.
+
+멀티모달 발행 계층 회귀 테스트:
+
+```bash
+.venv/bin/python -m pytest shared/multimodal/tests/ -q
+```
 
 ### 3.4 전체 평가 (한 모델 4트랙 일괄)
 

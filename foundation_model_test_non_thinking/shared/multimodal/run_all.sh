@@ -25,6 +25,17 @@ fi
 echo "[run_all] EVAL_TIMESTAMP=$EVAL_TIMESTAMP"
 echo "[run_all] MODEL=$MODEL BASE_URL=$BASE_URL"
 
+# 각 벤치는 끝까지 실행하되 실패를 잊지 않고 마지막에 nonzero로 반환한다.
+FAILURES=0
+run_checked() {
+  local label="$1"
+  shift
+  if ! "$@"; then
+    echo "[run_all] $label 실패 — 계속"
+    FAILURES=$((FAILURES + 1))
+  fi
+}
+
 # SKIP_BENCHES: 모델 config(또는 serving_profile)가 지정한 제외 벤치 목록.
 # 해당 모델에서 숫자가 의미를 갖지 못하는 벤치를 아예 안 돌려, 잘못 비교될
 # 결과가 생기지 않게 한다. 미설정 시 아무것도 건너뛰지 않는다(기존 동작).
@@ -49,21 +60,21 @@ fi
 
 # 가장 가벼운 것부터
 echo "=== K-DTCBench (240) ==="
-bash "$SCRIPT_DIR/run_k_dtcbench.sh" "$MODEL" "$BASE_URL" || echo "[run_all] K-DTCBench 실패 — 계속"
+run_checked "K-DTCBench" bash "$SCRIPT_DIR/run_k_dtcbench.sh" "$MODEL" "$BASE_URL"
 
 echo "=== KOFFVQA (275, Rubric judge) ==="
-bash "$SCRIPT_DIR/run_koffvqa.sh" "$MODEL" "$BASE_URL" || echo "[run_all] KOFFVQA 실패 — 계속"
+run_checked "KOFFVQA" bash "$SCRIPT_DIR/run_koffvqa.sh" "$MODEL" "$BASE_URL"
 
 echo "=== MTVQA-KR (한국어 서브셋) ==="
-bash "$SCRIPT_DIR/run_mtvqa_kr.sh" "$MODEL" "$BASE_URL" || echo "[run_all] MTVQA-KR 실패 — 계속"
+run_checked "MTVQA-KR" bash "$SCRIPT_DIR/run_mtvqa_kr.sh" "$MODEL" "$BASE_URL"
 
 echo "=== K-MMBench (4,330) ==="
-bash "$SCRIPT_DIR/run_k_mmbench.sh" "$MODEL" "$BASE_URL" || echo "[run_all] K-MMBench 실패 — 계속"
+run_checked "K-MMBench" bash "$SCRIPT_DIR/run_k_mmbench.sh" "$MODEL" "$BASE_URL"
 
 echo "=== KRETA (mode=${KRETA_SETTING:-default}) ==="
 # KRETA 프롬프트 모드: KRETA_SETTING env 로 override (기본 default).
 #   direct → 글자만 답(빠름, Spark/느린 HW 권장) / default → 추론 후 답.
-bash "$SCRIPT_DIR/run_kreta.sh" "$MODEL" "${KRETA_SETTING:-default}" "$BASE_URL" || echo "[run_all] KRETA 실패 — 계속"
+run_checked "KRETA" bash "$SCRIPT_DIR/run_kreta.sh" "$MODEL" "${KRETA_SETTING:-default}" "$BASE_URL"
 
 # KO-VLM-Benchmark — stub (외부 코드 OpenAI-compat 미지원, 별도 작업 필요)
 echo "=== KO-VLM-Benchmark (stub — skip) ==="
@@ -75,7 +86,7 @@ if skip_bench b4_latency_profile; then
   echo "=== B-4 Latency Profile — SKIP (SKIP_BENCHES) ==="
 else
   echo "=== B-4 Latency Profile (50 reps × 4 conditions) ==="
-  bash "$SCRIPT_DIR/run_b4_latency_profile.sh" "$MODEL" "$BASE_URL" || echo "[run_all] B-4 실패 — 계속"
+  run_checked "B-4" bash "$SCRIPT_DIR/run_b4_latency_profile.sh" "$MODEL" "$BASE_URL"
 fi
 
 echo "=== B-3 Structured Output (data/structured_output/manifest.json 필요) ==="
@@ -109,9 +120,10 @@ else:
 PY
 )
   if [ "$B3_PREFLIGHT_OK" = "OK" ]; then
-    bash "$SCRIPT_DIR/run_b3_structured_output.sh" "$MODEL" "$BASE_URL" || echo "[run_all] B-3 실패 — 계속"
+    run_checked "B-3" bash "$SCRIPT_DIR/run_b3_structured_output.sh" "$MODEL" "$BASE_URL"
   else
     echo "[run_all] B-3 스킵 (preflight 실패 — 이미지 준비 후 재실행)"
+    FAILURES=$((FAILURES + 1))
   fi
 fi
 
@@ -126,7 +138,7 @@ SAFE_MODEL="${MODEL//\//_}"
 SAFE_MODEL="${SAFE_MODEL//-/_}"
 SAFE_MODEL="${SAFE_MODEL//:/_}"
 SESSION_DIR="$RESULTS_ROOT/$SAFE_MODEL/$EVAL_TIMESTAMP"
-python - "$SESSION_DIR" "$MODEL" "$SCRIPT_DIR/benches" <<'PY' || echo "[run_all] sanity check 에서 strong warning 감지됨"
+if ! python - "$SESSION_DIR" "$MODEL" "$SCRIPT_DIR/benches" <<'PY'
 import json, sys
 from pathlib import Path
 
@@ -149,6 +161,8 @@ if not session.exists():
     sys.exit(0)
 
 for jf in session.rglob('*.json'):
+    if '_derived' in jf.parts:
+        continue
     if jf.name in ('run_config.json', 'runs.json'):
         continue
     try:
@@ -187,5 +201,13 @@ if warnings:
 else:
     print("[sanity] OK — 모든 트랙 결과 정상")
 PY
+then
+  echo "[run_all] sanity check 에서 strong warning 감지됨"
+  FAILURES=$((FAILURES + 1))
+fi
 
-echo "[run_all] all benchmarks done"
+echo "[run_all] all benchmarks done (failures=$FAILURES)"
+if [ "$FAILURES" -ne 0 ]; then
+  exit 1
+fi
+exit 0
