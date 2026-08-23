@@ -31,6 +31,10 @@ export OPENAI_API_KEY="${OPENAI_API_KEY:-EMPTY}"
 if [ -n "${TAUBENCH_USER_API_KEY:-}" ]; then
   export TAUBENCH_USER_API_KEY
 fi
+# 사용자가 직접 OPENROUTER_API_KEY 로 넣었을 수도 있다. 러너는 둘 다 본다.
+if [ -n "${OPENROUTER_API_KEY:-}" ]; then
+  export OPENROUTER_API_KEY
+fi
 
 if [ ! -x "$TAU_PY" ]; then
   echo "ERROR: isolated tau2 venv 없음: $TAU_PY. 먼저 install.sh 실행." >&2

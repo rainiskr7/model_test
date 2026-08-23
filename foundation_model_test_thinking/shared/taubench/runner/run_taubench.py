@@ -401,20 +401,29 @@ def main(argv: Optional[list[str]] = None) -> int:
         # 에이전트와 같은 곳으로 보낸다. 키는 환경변수에서만 읽는다.
         user_llm_args = dict(llm_args)
         if args.mode == "standard":
+            user_model = args.user_model or args.model
+            is_external = "/" in user_model and not user_model.startswith("openai/")
             if args.user_base_url:
                 user_llm_args["api_base"] = normalize_api_base(args.user_base_url)
-            user_api_key = os.environ.get(args.user_api_key_env)
-            if user_api_key:
-                user_llm_args["api_key"] = user_api_key
-            elif args.user_base_url:
-                raise SystemExit(
-                    f"--user-base-url 을 줬으면 {args.user_api_key_env} 환경변수에 "
-                    "그 엔드포인트의 API 키가 있어야 합니다."
-                )
-            # 상류는 사용자 시뮬레이터에 temperature=0 을 명시한다 (config.py
-            # DEFAULT_LLM_ARGS_USER). 로컬 diffusion 엔드포인트와 달리 외부 API 는
-            # 이를 받으므로, 별도 엔드포인트일 때만 붙여 재현성을 확보한다.
-            if args.user_base_url:
+            if is_external or args.user_base_url:
+                # **키를 llm_args 에 넣지 않는다.** tau2 는 llm_args 를 results.json 에
+                # 그대로 적으므로 넣으면 산출물에 자격증명이 박힌다 (2026-08-23 에
+                # 실제로 발생, GitHub 푸시 보호가 두 번 막았다).
+                #
+                # litellm 은 provider 접두사에 따라 환경변수에서 키를 읽는다:
+                #   openrouter/...  -> OPENROUTER_API_KEY  (main.py:3283)
+                # 따라서 모델명을 openrouter/openai/gpt-4.1-mini 형태로 주면
+                # api_base 도 api_key 도 인자로 넘길 필요가 없다.
+                user_api_key = os.environ.get(args.user_api_key_env)
+                if not user_api_key:
+                    raise SystemExit(
+                        f"외부 사용자 시뮬레이터에는 {args.user_api_key_env} 환경변수가 "
+                        "필요합니다 (값은 인자로 넘기지 않습니다)."
+                    )
+                # litellm 이 읽을 자리에 옮겨 담는다. 자식 프로세스 env 로만 전달된다.
+                os.environ.setdefault("OPENROUTER_API_KEY", user_api_key)
+                # 상류는 사용자 시뮬레이터에 temperature=0 을 명시한다
+                # (config.py DEFAULT_LLM_ARGS_USER). 외부 API 는 이를 받는다.
                 user_llm_args["temperature"] = 0.0
         manifest: dict[str, Any] = {
             "status": "running",

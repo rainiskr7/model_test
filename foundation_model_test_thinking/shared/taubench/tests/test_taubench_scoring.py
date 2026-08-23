@@ -428,3 +428,55 @@ class IncompletionAttributionTest(unittest.TestCase):
             [self._sim("user_stop", reward=1.0), self._sim("max_steps", reward=0.0)]
         )
         self.assertEqual((dict(c), dict(e), dict(u)), ({}, {}, {}))
+
+
+class SecretLeakTest(unittest.TestCase):
+    """자격증명이 산출물에 들어가지 않는지 못 박는다.
+
+    tau2 는 llm_args 를 results.json 에 그대로 적는다. 2026-08-23 에 API 키를
+    llm_args 로 넘겨 142개 파일에 박혔고 GitHub 푸시 보호가 두 번 막았다.
+    """
+
+    def test_redactor_scrubs_nested_api_key(self):
+        node = {
+            "info": {
+                "agent_info": {"llm_args": {"api_key": "sk-secret", "timeout": 60}},
+                "user_info": {"llm_args": {"api_key": "sk-secret"}},
+            },
+            "simulations": [{"llm_args": {"api_key": "sk-secret"}}],
+        }
+        changed = runner._scrub_api_key(node)
+        self.assertTrue(changed)
+        dumped = json.dumps(node)
+        self.assertNotIn("sk-secret", dumped)
+        self.assertEqual(3, dumped.count("***REDACTED***"))
+        # 다른 필드는 건드리지 않는다
+        self.assertEqual(60, node["info"]["agent_info"]["llm_args"]["timeout"])
+
+    def test_redactor_reports_no_change_when_clean(self):
+        node = {"info": {"agent_info": {"llm_args": {"timeout": 60}}}}
+        self.assertFalse(runner._scrub_api_key(node))
+
+    def test_external_user_simulator_requires_key_env(self):
+        """키를 인자로 받지 않으므로, 없으면 실행 전에 죽어야 한다."""
+        args = runner.parse_args(
+            [
+                "--model", "local-model",
+                "--base-url", "http://host/v1/chat/completions",
+                "--track-name", "taubench",
+                "--mode", "standard",
+                "--user-model", "openrouter/openai/gpt-4.1-mini",
+            ]
+        )
+        self.assertEqual("openrouter/openai/gpt-4.1-mini", args.user_model)
+        self.assertEqual("TAUBENCH_USER_API_KEY", args.user_api_key_env)
+
+    def test_api_key_is_not_a_cli_argument(self):
+        """키가 CLI 인자면 ps 로 노출된다. 이름만 받아야 한다."""
+        args = runner.parse_args(
+            ["--model", "m", "--base-url", "http://h/v1/chat/completions", "--track-name", "t"]
+        )
+        for name in vars(args):
+            self.assertNotIn(
+                name, {"user_api_key", "api_key"}, "키 값을 받는 인자가 있으면 안 된다"
+            )
