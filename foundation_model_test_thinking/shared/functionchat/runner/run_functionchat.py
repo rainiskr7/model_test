@@ -437,7 +437,11 @@ def main(argv: Optional[List[str]] = None) -> int:
         decision_types = Counter(
             item["type_of_output"] for item in datasets["call_decision"]
         )
-        dialog_count = len(_load_jsonl(data_dir / "FunctionChat-Dialog.jsonl"))
+        # dialog 은 **턴 단위**로 평가한다 (상류 payload_creator.py 도 turns 를 순회).
+        # 시나리오 수(45)로 세면 판정 필요 항목이 130 대신 45 로 집계돼 커버리지가
+        # 어긋난다 — 2026-08-23 에 total_items 가 551 로 찍혔고 실제는 636 이었다.
+        dialog_scenarios = len(_load_jsonl(data_dir / "FunctionChat-Dialog.jsonl"))
+        dialog_types = Counter(item["type_of_output"] for item in datasets["dialog"])
         coverage = {
             "source": {
                 "repository": "kakao/FunctionChat-Bench",
@@ -454,8 +458,9 @@ def main(argv: Optional[List[str]] = None) -> int:
                     "measured_items": decision_types[CALL],
                 },
                 "dialog": {
-                    "source_records": dialog_count,
-                    "measured_items": 0,
+                    "source_records": dialog_scenarios,
+                    "expanded_items": len(datasets["dialog"]),
+                    "measured_items": dialog_types[CALL],
                 },
             },
             "not_measured": {
@@ -463,7 +468,13 @@ def main(argv: Optional[List[str]] = None) -> int:
                     "relevance": decision_types["relevance"],
                     "slot": decision_types["slot"],
                 },
-                "dialog": {"multi_turn": dialog_count},
+                # 판정이 필요한 턴을 유형별로 적는다. multi_turn 이라는 뭉뚱그린 이름으로
+                # 시나리오 수를 적던 것을 바로잡았다.
+                "dialog": {
+                    key: dialog_types[key]
+                    for key in sorted(dialog_types)
+                    if key != CALL
+                },
             },
         }
         _write_atomic(results_dir / "coverage.json", coverage)

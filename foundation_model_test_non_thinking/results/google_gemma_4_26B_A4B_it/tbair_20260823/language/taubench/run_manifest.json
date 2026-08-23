@@ -1,0 +1,87 @@
+{
+  "status": "running",
+  "model": "google_gemma_4_26b_a4b_it",
+  "track": "taubench",
+  "source": {
+    "repository": "sierra-research/tau2-bench",
+    "commit": "c3398666e6559e3a063da3fc04b5acf7f941464e",
+    "license": "MIT"
+  },
+  "split": {
+    "domain": "airline",
+    "name": "test",
+    "source": "data/tau2/domains/airline/split_tasks.json",
+    "task_count": 20,
+    "runnable_task_count": 20,
+    "task_ids": [
+      "2",
+      "6",
+      "8",
+      "13",
+      "16",
+      "18",
+      "19",
+      "22",
+      "24",
+      "25",
+      "26",
+      "29",
+      "30",
+      "31",
+      "32",
+      "35",
+      "37",
+      "44",
+      "45",
+      "48"
+    ],
+    "not_measured_task_count": 0,
+    "not_measured_tasks": []
+  },
+  "domain_scope": {
+    "telecom": {
+      "runnable": false,
+      "reason": "not selected for this run"
+    },
+    "retail": {
+      "runnable": false,
+      "reason": "not selected for this run"
+    },
+    "airline": {
+      "runnable": true,
+      "user_mode": "standard"
+    },
+    "banking_knowledge": {
+      "runnable": false,
+      "reason": "not selected for this run"
+    }
+  },
+  "harness_integrity": {
+    "architecture": "upstream_tau2_framework",
+    "mode": "standard",
+    "agent_implementation": "llm_agent",
+    "user_implementation": "user_simulator",
+    "user_model_sent_to_litellm": "openrouter/openai/gpt-4.1-mini",
+    "provider": "litellm_openai_compatible",
+    "model_requested": "google_gemma_4_26b_a4b_it",
+    "model_sent_to_litellm": "openai/google_gemma_4_26b_a4b_it",
+    "api_base": "http://192.168.0.7:18023/v1",
+    "api_key_source": "OPENAI_API_KEY environment variable",
+    "request_timeout": 600.0,
+    "task_timeout": 5400.0,
+    "framework_max_retries": 0,
+    "litellm_num_retries": 0,
+    "max_tokens": 8192,
+    "temperature_sent": false,
+    "serving_profile_applied": false,
+    "serving_profile_observable": false,
+    "max_concurrency": 1,
+    "max_steps": 100,
+    "tau2_version": "1.0.1",
+    "litellm_version": "1.82.6",
+    "openai_sdk_version": "3.2.0",
+    "successful_request_logs": true,
+    "failed_request_attempts_observable": false,
+    "absorbed_timeout_counter_observable": false
+  }
+}

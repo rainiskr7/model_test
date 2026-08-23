@@ -222,6 +222,33 @@ def test_dict_acceptable_arguments_is_returned_as_is():
     _assert(got == {"city": ["서울", "Seoul"]}, f"dict should pass through, got {got}")
 
 
+
+def test_dialog_coverage_mismatch_is_caught():
+    """dialog 은 턴 단위로 평가하는데 커버리지를 시나리오 수로 적으면 안 된다.
+    2026-08-23 에 45(시나리오)로 적혀 판정 필요 항목이 130 대신 45 로 집계됐고
+    total_items 가 551(실제 636)로 발행됐다."""
+    # 무결성 검사가 요구하는 필드를 코드에서 그대로 가져와 채운다 — 목록이 바뀌면
+    # 이 테스트가 조용히 통과하지 않고 같이 따라간다.
+    meta = {field: "x" for field in score.INTEGRITY_FIELDS}
+    raw = {
+        name: {"results": [], "metadata": dict(meta)}
+        for name in ("singlecall", "call_decision", "dialog")
+    }
+    coverage = {
+        "datasets": {},
+        "not_measured": {
+            "call_decision": {},
+            "dialog": {"multi_turn": 45},   # 시나리오 수 — 틀렸다
+        },
+    }
+    try:
+        score.build_summary(raw, coverage, "functionchat")
+    except ValueError as exc:
+        _assert("Dialog not-measured" in str(exc), f"wrong error: {exc}")
+        return
+    raise AssertionError("dialog 커버리지 불일치를 잡지 못했다")
+
+
 TESTS = [
     test_three_acceptable_argument_sentinels_are_empty,
     test_hallucinated_argument_key_fails,
@@ -237,6 +264,7 @@ TESTS = [
     test_v1_artifacts_without_dialog_still_publishable,
     test_dialog_present_but_short_blocks_publish,
     test_dict_acceptable_arguments_is_returned_as_is,
+    test_dialog_coverage_mismatch_is_caught,
 ]
 
 

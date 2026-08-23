@@ -405,6 +405,13 @@ def main(argv: Optional[list[str]] = None) -> int:
             is_external = "/" in user_model and not user_model.startswith("openai/")
             if args.user_base_url:
                 user_llm_args["api_base"] = normalize_api_base(args.user_base_url)
+            elif is_external:
+                # **에이전트의 api_base 를 물려받으면 안 된다.** user_llm_args 는
+                # llm_args 를 복사해 만들므로 로컬 서빙 주소가 들어 있다. provider
+                # 접두사가 있는 외부 모델은 litellm 이 자기 엔드포인트를 아는데,
+                # api_base 가 남아 있으면 그쪽으로 보내 401 이 난다
+                # (2026-08-23 airline 첫 런에서 20/20 AuthenticationError).
+                user_llm_args.pop("api_base", None)
             if is_external or args.user_base_url:
                 # **키를 llm_args 에 넣지 않는다.** tau2 는 llm_args 를 results.json 에
                 # 그대로 적으므로 넣으면 산출물에 자격증명이 박힌다 (2026-08-23 에
