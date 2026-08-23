@@ -1,0 +1,88 @@
+{
+  "benchmark": "kakao/FunctionChat-Bench (call exact match)",
+  "model": "google_gemma_4_26b_a4b_it",
+  "track": "functionchat",
+  "scoring_version": "functionchat_exact_v2",
+  "native_tool_calling": true,
+  "harness_integrity": {
+    "model": "google_gemma_4_26b_a4b_it",
+    "request_timeout": 600.0,
+    "task_timeout": 1800.0,
+    "max_retries": 2,
+    "max_tokens": 8192,
+    "native_tool_calling": true,
+    "sdk_max_retries": 0,
+    "openai_sdk_version": "2.54.0"
+  },
+  "overall": {
+    "accuracy": 0.8940298507462686,
+    "measured": 670,
+    "passed": 599,
+    "failed": 71
+  },
+  "by_dataset": {
+    "singlecall": {
+      "accuracy": 0.886,
+      "measured": 500,
+      "passed": 443,
+      "failed": 57,
+      "not_measured": {}
+    },
+    "call_decision": {
+      "accuracy": 0.91,
+      "measured": 100,
+      "passed": 91,
+      "failed": 9,
+      "not_measured": {
+        "relevance": 100,
+        "slot": 406
+      }
+    },
+    "dialog": {
+      "accuracy": 0.9285714285714286,
+      "measured": 70,
+      "passed": 65,
+      "failed": 5,
+      "not_measured": {
+        "completion": 71,
+        "relevance": 23,
+        "slot": 36
+      }
+    }
+  },
+  "not_measured": {
+    "score": null,
+    "status": "judge_missing",
+    "in_score": false,
+    "reason": "These output types require an LLM judge and are outside this exact-match track.",
+    "total_items": 551,
+    "by_dataset": {
+      "call_decision": {
+        "relevance": 100,
+        "slot": 406
+      },
+      "dialog": {
+        "multi_turn": 45
+      }
+    }
+  },
+  "coverage": {
+    "singlecall": {
+      "source_lines": 25,
+      "expanded_items": 500,
+      "measured_items": 500
+    },
+    "call_decision": {
+      "source_lines": 606,
+      "measured_items": 100
+    },
+    "dialog": {
+      "source_records": 45,
+      "measured_items": 0
+    }
+  },
+  "source": {
+    "repository": "kakao/FunctionChat-Bench",
+    "commit": "5ddb0b5bb37d6423e1f3381ef693cda811a7847e"
+  }
+}
