@@ -150,7 +150,7 @@ def build_upstream_command(
                 "--user-llm",
                 f"openai/{args.user_model or args.model}",
                 "--user-llm-args",
-                json.dumps(llm_args, separators=(",", ":")),
+                json.dumps(user_llm_args, separators=(",", ":")),
             ]
         ),
         "--task-split-name",
@@ -231,6 +231,13 @@ def parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
     # "gpt-4.1-2025-04-14"). 후보 모델을 사용자로 쓰는 것은 상류 설계가 아니다.
     # 조용한 기본값 대신 운영자가 명시적으로 고르게 한다.
     parser.add_argument("--user-model", default=None)
+    # 사용자 시뮬레이터를 에이전트와 **다른 엔드포인트**로 보낼 때 쓴다.
+    # 상류 기본값이 외부 모델(gpt-4.1)이므로 이게 정상 형태다. 생략하면 에이전트와
+    # 같은 엔드포인트를 쓴다(로컬 제3 모델을 사용자로 세우는 경우).
+    parser.add_argument("--user-base-url", default=None)
+    # 사용자 엔드포인트의 API 키. 값을 CLI 로 받지 않는다 — 프로세스 목록에 노출된다.
+    # 환경변수 이름만 받고 값은 러너가 읽는다. 기본 TAUBENCH_USER_API_KEY.
+    parser.add_argument("--user-api-key-env", default="TAUBENCH_USER_API_KEY")
     parser.add_argument(
         "--base-url", default="http://172.16.1.81:18090/v1/chat/completions"
     )
@@ -304,6 +311,26 @@ def main(argv: Optional[list[str]] = None) -> int:
         upstream_dir = results_dir / "upstream" / "telecom"
         api_base = normalize_api_base(args.base_url)
         llm_args = build_litellm_args(api_base, args.request_timeout, args.max_tokens)
+
+        # 사용자 시뮬레이터 llm_args. 별도 엔드포인트를 주면 그쪽으로, 아니면
+        # 에이전트와 같은 곳으로 보낸다. 키는 환경변수에서만 읽는다.
+        user_llm_args = dict(llm_args)
+        if args.mode == "standard":
+            if args.user_base_url:
+                user_llm_args["api_base"] = normalize_api_base(args.user_base_url)
+            user_api_key = os.environ.get(args.user_api_key_env)
+            if user_api_key:
+                user_llm_args["api_key"] = user_api_key
+            elif args.user_base_url:
+                raise SystemExit(
+                    f"--user-base-url 을 줬으면 {args.user_api_key_env} 환경변수에 "
+                    "그 엔드포인트의 API 키가 있어야 합니다."
+                )
+            # 상류는 사용자 시뮬레이터에 temperature=0 을 명시한다 (config.py
+            # DEFAULT_LLM_ARGS_USER). 로컬 diffusion 엔드포인트와 달리 외부 API 는
+            # 이를 받으므로, 별도 엔드포인트일 때만 붙여 재현성을 확보한다.
+            if args.user_base_url:
+                user_llm_args["temperature"] = 0.0
         manifest: dict[str, Any] = {
             "status": "running",
             "model": args.model,

@@ -58,6 +58,16 @@ RUN_ARGS=(
   --max-steps "${TAUBENCH_MAX_STEPS:-100}"
 )
 
+# 사용자 시뮬레이터 (standard 모드 필수). 모든 후보에 **같은** 모델을 써야 비교가 성립한다.
+if [ -n "${TAUBENCH_USER_MODEL:-}" ]; then
+  RUN_ARGS+=(--user-model "$TAUBENCH_USER_MODEL")
+fi
+# 사용자 시뮬레이터를 외부 API 로 보낼 때만. 키는 여기서 넘기지 않는다 —
+# 프로세스 목록 노출을 피하려고 러너가 TAUBENCH_USER_API_KEY 환경변수(.env)를 직접 읽는다.
+if [ -n "${TAUBENCH_USER_BASE_URL:-}" ]; then
+  RUN_ARGS+=(--user-base-url "$TAUBENCH_USER_BASE_URL")
+fi
+
 "$TAU_PY" "$SCRIPT_DIR/runner/run_taubench.py" "${RUN_ARGS[@]}"
 "$TAU_PY" "$SCRIPT_DIR/scoring/score_run.py" \
   --model "$MODEL" \
