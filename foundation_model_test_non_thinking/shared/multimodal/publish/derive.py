@@ -14,6 +14,8 @@ from .adapters import ADAPTERS, adapt_source
 from .schema import (
     PublishStatus,
     SCHEMA_VERSION,
+    apply_model_identity,
+    load_model_identity_map,
     sidecar_json,
     sidecar_path,
     sha256_file,
@@ -88,6 +90,7 @@ def derive_source(source: Path, base: Path) -> tuple[Path, dict[str, Any]]:
         },
         **adapted,
     }
+    result, _ = apply_model_identity(result, load_model_identity_map(base))
     out_path = sidecar_path(source_dir, source.stem if source.suffix == ".jsonl" else None)
     return out_path, result
 
@@ -213,6 +216,28 @@ def write_sidecar(path: Path, sidecar: dict[str, Any]) -> None:
         _write_sidecar_unlocked(path, sidecar)
 
 
+def refresh_native_model_identity(
+    path: Path,
+    base: Path,
+    mapping: dict[str, str],
+    *,
+    write: bool,
+) -> dict[str, Any] | None:
+    """Refresh identity metadata without replacing or downgrading NATIVE data."""
+
+    if not write:
+        native, _ = inspect_native_sidecar(path, base)
+        return apply_model_identity(native, mapping)[0] if native is not None else None
+    with _sidecar_lock(path):
+        native, _ = inspect_native_sidecar(path, base)
+        if native is None:
+            return None
+        refreshed, changed = apply_model_identity(native, mapping)
+        if changed:
+            _write_sidecar_unlocked(path, refreshed)
+        return refreshed
+
+
 def inspect_native_sidecar(path: Path, base: Path) -> tuple[dict[str, Any] | None, str | None]:
     """Return ``(valid_native, damage_reason)`` for an existing sidecar."""
 
@@ -282,10 +307,16 @@ def derive_all(
     """Derive legacy sidecars without downgrading valid NATIVE records by default."""
 
     derived: list[tuple[Path, dict[str, Any]]] = []
+    identity_mapping = load_model_identity_map(base)
     for source in discover_sources(base):
         path = derived_sidecar_path(source)
         native, native_damage = inspect_native_sidecar(path, base) if path.exists() else (None, None)
         if native is not None and not force:
+            refreshed = refresh_native_model_identity(
+                path, base, identity_mapping, write=write,
+            )
+            if refreshed is not None:
+                native = refreshed
             if on_native_skip is not None:
                 on_native_skip(path, native)
             continue

@@ -23,13 +23,16 @@ def main(argv: list[str] | None = None) -> int:
     if not sidecars and not missing:
         print("multimodal 산출물이 없습니다.", file=sys.stderr)
         return 2
-    markdown, ambiguous = render_markdown(sidecars, missing)
+    comparison_sidecars = None
+    if args.strict:
+        comparison_sidecars, _ = collect(args.base)
+    markdown, ambiguous = render_markdown(sidecars, missing, comparison_sidecars)
     if args.write_markdown:
         args.write_markdown.write_text(markdown, encoding="utf-8")
         print(f"wrote {args.write_markdown}")
     else:
         print(markdown, end="")
-    if args.strict and strict_failed(sidecars, missing, ambiguous):
+    if args.strict and strict_failed(sidecars, missing, ambiguous, comparison_sidecars):
         return 1
     return 0
 

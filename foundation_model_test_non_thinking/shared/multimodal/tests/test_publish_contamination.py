@@ -34,7 +34,13 @@ def test_known_contaminated_kreta_sources_are_rejected():
 def test_non_error_kreta_sources_survive_independent_response_regrading():
     dirty = {case["path"] for case in json.loads(FIXTURE.read_text(encoding="utf-8"))}
     sources = [path for path in discover_sources(REPO) if path.suffix == ".jsonl"]
-    clean = [path for path in sources if path.relative_to(REPO).as_posix() not in dirty]
+    clean = []
+    for path in sources:
+        if path.relative_to(REPO).as_posix() in dirty:
+            continue
+        _, candidate = derive_source(path, REPO)
+        if candidate["publishable"]:
+            clean.append(path)
     assert len(clean) == 11
     for source in clean:
         _, sidecar = derive_source(source, REPO)

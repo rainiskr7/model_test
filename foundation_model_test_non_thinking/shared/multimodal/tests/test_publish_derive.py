@@ -72,6 +72,30 @@ def test_derive_all_preserves_native_status_and_completed_at(tmp_path):
     assert stored["completed_at_utc"] == completed_at
 
 
+def test_derive_refreshes_native_model_identity_without_downgrade(tmp_path):
+    source = _copy_clean_source(tmp_path)
+    completed_at = "2026-08-24T12:34:56+00:00"
+    path = _write_native(source, tmp_path, completed_at)
+    before = json.loads(path.read_text(encoding="utf-8"))
+    config = tmp_path / "configs/model_identity.json"
+    config.parent.mkdir(parents=True)
+    config.write_text(
+        json.dumps({before["model"]: "canonical-test-qwen3.5-35b-a3b-fp8"}),
+        encoding="utf-8",
+    )
+
+    derive_all(tmp_path, write=True)
+    stored = json.loads(path.read_text(encoding="utf-8"))
+    assert stored["status"] == "NATIVE"
+    assert stored["completed_at_utc"] == completed_at
+    assert stored["model"] == before["model"]
+    assert stored["model_identity"] == {
+        "canonical_id": "canonical-test-qwen3.5-35b-a3b-fp8",
+        "serving_name": before["model"],
+        "mapped": True,
+    }
+
+
 def test_force_overwrites_native_with_legacy_and_reports_loss(tmp_path):
     source = _copy_clean_source(tmp_path)
     completed_at = "2026-08-24T12:34:56+00:00"

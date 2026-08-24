@@ -4,7 +4,7 @@
 
 판단 기준: [`MULTIMODAL_PUBLISH_CONTRACT.md`](MULTIMODAL_PUBLISH_CONTRACT.md).
 
-발행 가능 source **71** / 발행 불가 source **46** / 게이트 기록 없음 **0**.
+발행 가능 source **73** / 발행 불가 source **48** / 게이트 기록 없음 **0**.
 
 읽는 법:
 
@@ -12,6 +12,19 @@
 - 결과는 반올림된 점수만 보지 말고 분자/분모를 함께 본다.
 - PROVISIONAL은 판정기 기준이며 인간 검증 전이다.
 - 거부된 런의 숫자는 원본에 존재하더라도 인용하지 않는다.
+
+## 모델 정체성 경고
+
+다음 서빙명은 `configs/model_identity.json`에 미매핑이다. 추측해서 합치지 않고 자기 이름을 canonical id로 사용한다.
+
+- `Qwen3.5_122B_A10B_GPTQ_Int4`
+- `qwen3.5_27b`
+- `qwen_qwen3.5_27b_fp8`
+- `qwen_qwen3.5_35b_a3b`
+- `qwen_qwen3.5_35b_a3b_fp8`
+- `qwen_qwen3.6_27b`
+- `qwen_qwen3.6_27b_fp8`
+- `qwen_qwen3.6_35b_a3b_fp8`
 
 ## 헤드라인 — 벤치마크별 overall
 
@@ -35,8 +48,8 @@
 
 | 모델 | 결과 | 무답률 | 상태 |
 |---|---|---:|---|
-| google_gemma_4_31B_it | 2030/2577 = 78.77% | 0.1% | LEGACY_REVALIDATED |
-| google_gemma_4_26b_a4b_it | 1860/2577 = 72.18% | 0.4% | LEGACY_REVALIDATED |
+| gemma_4_31b_it | 2030/2577 = 78.77% | 0.1% | LEGACY_REVALIDATED |
+| gemma_4_26b_a4b_it | 1860/2577 = 72.18% | 0.4% | LEGACY_REVALIDATED |
 | qwen3.5_27b | 1839/2577 = 71.36% | 1.1% | LEGACY_REVALIDATED |
 | qwen_qwen3.5_27b_fp8 | 1821/2577 = 70.66% | 1.1% | LEGACY_REVALIDATED |
 | qwen_qwen3.6_27b_fp8 | 1819/2577 = 70.59% | 0.3% | LEGACY_REVALIDATED |
@@ -49,8 +62,8 @@
 
 > 각주: `Qwen3.5_122B_A10B_GPTQ_Int4` — 상류 parser와 551행 불일치(우리 무답 545, 다른 선택지 6) — 독립 재채점 점수임.
 > **주의:** `Qwen3.5_122B_A10B_GPTQ_Int4` — 무답 545건 (21.1%). 응답이 지시된 형식을 벗어나 절단됨. 점수를 능력 차이로만 해석하지 말 것.
-> 각주: `google_gemma_4_26b_a4b_it` — 상류 parser와 11행 불일치(우리 무답 10, 다른 선택지 1) — 독립 재채점 점수임.
-> 각주: `google_gemma_4_31B_it` — 상류 parser와 5행 불일치(우리 무답 3, 다른 선택지 2) — 독립 재채점 점수임.
+> 각주: `gemma_4_26b_a4b_it` — 상류 parser와 11행 불일치(우리 무답 10, 다른 선택지 1) — 독립 재채점 점수임.
+> 각주: `gemma_4_31b_it` — 상류 parser와 5행 불일치(우리 무답 3, 다른 선택지 2) — 독립 재채점 점수임.
 > 각주: `qwen3.5_27b` — 상류 parser와 28행 불일치(우리 무답 28, 다른 선택지 0) — 독립 재채점 점수임.
 > 각주: `qwen3.6-35b-a3b` — 상류 parser와 1행 불일치(우리 무답 1, 다른 선택지 0) — 독립 재채점 점수임.
 > 각주: `qwen_qwen3.5_27b_fp8` — 상류 parser와 30행 불일치(우리 무답 28, 다른 선택지 2) — 독립 재채점 점수임.
@@ -65,6 +78,7 @@
 | 모델 | 결과 | 상태 |
 |---|---|---|
 | qwen3.6-35b-a3b | 3907/4329 = 90.25% | LEGACY_REVALIDATED |
+| gemma_4_26b_a4b_it | 3776/4329 = 87.23% | LEGACY_REVALIDATED |
 | qwen3.5_27b | 3701/4329 = 85.49% | LEGACY_REVALIDATED |
 | qwen_qwen3.5_27b_fp8 | 3688/4329 = 85.19% | LEGACY_REVALIDATED |
 | qwen_qwen3.6_27b | 3610/4329 = 83.39% | LEGACY_REVALIDATED |
@@ -74,6 +88,18 @@
 | qwen_qwen3.5_35b_a3b_fp8 | 3425/4329 = 79.12% | LEGACY_REVALIDATED |
 | qwen_qwen3.5_35b_a3b | 3395/4329 = 78.42% | LEGACY_REVALIDATED |
 
+> 중복 접기: `gemma_4_26b_a4b_it` — `results/gemma_4_26b_a4b_it/20260505_124246/vision/multimodal/k_mmbench` 유지; 동일 artifact role/SHA-256·측정 payload 복사본 `results/google_gemma_4_26B_A4B_it/20260505_124246/vision/multimodal/k_mmbench`, `results/gemma_4_26b_a4b_it.bad/20260505_124246/vision/multimodal/k_mmbench`, `results/google_gemma_4_26B_A4B_it/20260505_124246.bad/vision/multimodal/k_mmbench` 접음.
+
+### K-MMBench — full, 4329문항 — protocol `2e65cebe14d4`
+
+전체 protocol fingerprint: `sha256:2e65cebe14d400c2339ede83a524f79cc7c3a7587950dfb0122e27766aa7df43`
+
+| 모델 | 결과 | 상태 |
+|---|---|---|
+| gemma_4_26b_a4b_it | 3758/4329 = 86.81% | LEGACY_REVALIDATED |
+
+> 중복 접기: `gemma_4_26b_a4b_it` — `results/gemma_4_26b_a4b_it/20260503_122218/vision/multimodal/k_mmbench` 유지; 동일 artifact role/SHA-256·측정 payload 복사본 `results/gemma_4_26b_a4b_it.bad/20260503_122218/vision/multimodal/k_mmbench` 접음.
+
 ### K-DTCBench — full, 240문항 — protocol `4f3ddf3131ab`
 
 전체 protocol fingerprint: `sha256:4f3ddf3131ab43c9a233de443d2e24c072421fd8fe0b01ec2d5ae3e470fdb0c5`
@@ -81,6 +107,7 @@
 | 모델 | 결과 | 상태 |
 |---|---|---|
 | qwen3.6-35b-a3b | 214/240 = 89.17% | LEGACY_REVALIDATED |
+| gemma_4_26b_a4b_it | 206/240 = 85.83% | NATIVE |
 | qwen3.5_27b | 196/240 = 81.67% | LEGACY_REVALIDATED |
 | qwen_qwen3.6_35b_a3b_fp8 | 196/240 = 81.67% | LEGACY_REVALIDATED |
 | qwen_qwen3.5_27b_fp8 | 195/240 = 81.25% | LEGACY_REVALIDATED |
@@ -88,6 +115,25 @@
 | qwen_qwen3.6_27b | 182/240 = 75.83% | LEGACY_REVALIDATED |
 | qwen_qwen3.5_35b_a3b | 173/240 = 72.08% | LEGACY_REVALIDATED |
 | qwen_qwen3.5_35b_a3b_fp8 | 172/240 = 71.67% | LEGACY_REVALIDATED |
+
+> 중복 접기: `gemma_4_26b_a4b_it` — `results/gemma_4_26b_a4b_it/20260505_124246/vision/multimodal/k_dtcbench` 유지; 동일 artifact role/SHA-256·측정 payload 복사본 `results/google_gemma_4_26B_A4B_it/20260505_124246/vision/multimodal/k_dtcbench`, `results/gemma_4_26b_a4b_it.bad/20260505_124246/vision/multimodal/k_dtcbench`, `results/google_gemma_4_26B_A4B_it/20260505_124246.bad/vision/multimodal/k_dtcbench` 접음.
+> 재현성: `gemma_4_26b_a4b_it` — 이 코호트에 런 2개. 코호트 산포 1건 (0.42%p), 허용 3건 — **PASS**
+>   `20260505_124246`  207/240 = 86.25% (기준)
+>   `v2b_20260824`  206/240 = 85.83% (대표)
+
+### K-DTCBench — full, 240문항 — protocol `683c2a83a0e0`
+
+전체 protocol fingerprint: `sha256:683c2a83a0e049dce79ca2ff7a12c7347047f6b3c316ee76dc6371d877a64b32`
+
+| 모델 | 결과 | 상태 |
+|---|---|---|
+| gemma_4_26b_a4b_it | 205/240 = 85.42% | LEGACY_REVALIDATED |
+
+> 중복 접기: `gemma_4_26b_a4b_it` — `results/gemma_4_26b_a4b_it/20260503_120151/vision/multimodal/k_dtcbench` 유지; 동일 artifact role/SHA-256·측정 payload 복사본 `results/gemma_4_26b_a4b_it.bad/20260503_120151/vision/multimodal/k_dtcbench` 접음.
+> 중복 접기: `gemma_4_26b_a4b_it` — `results/gemma_4_26b_a4b_it/20260503_120309/vision/multimodal/k_dtcbench` 유지; 동일 artifact role/SHA-256·측정 payload 복사본 `results/gemma_4_26b_a4b_it.bad/20260503_120309/vision/multimodal/k_dtcbench` 접음.
+> 재현성: `gemma_4_26b_a4b_it` — 이 코호트에 런 2개. 코호트 산포 2건 (0.83%p), 허용 3건 — **PASS**
+>   `20260503_120151`  203/240 = 84.58% (기준)
+>   `20260503_120309`  205/240 = 85.42% (대표)
 
 ### MTVQA-KR — full, 558문항 — protocol `22d01e02a2f6`
 
@@ -104,17 +150,27 @@
 | qwen_qwen3.5_27b_fp8 | 287/558 = 51.43% | LEGACY_REVALIDATED |
 | qwen3.5_27b | 286/558 = 51.25% | LEGACY_REVALIDATED |
 | qwen3.6-35b-a3b | 273/558 = 48.92% | LEGACY_REVALIDATED |
-| google_gemma_4_31B_it | 268/558 = 48.03% | LEGACY_REVALIDATED |
+| gemma_4_31b_it | 268/558 = 48.03% | LEGACY_REVALIDATED |
+| gemma_4_26b_a4b_it | 255/558 = 45.70% | NATIVE |
+
+> 중복 접기: `gemma_4_26b_a4b_it` — `results/gemma_4_26b_a4b_it/20260505_124246/vision/multimodal/mtvqa_kr` 유지; 동일 artifact role/SHA-256·측정 payload 복사본 `results/google_gemma_4_26B_A4B_it/20260505_124246/vision/multimodal/mtvqa_kr`, `results/gemma_4_26b_a4b_it.bad/20260505_124246/vision/multimodal/mtvqa_kr`, `results/google_gemma_4_26B_A4B_it/20260505_124246.bad/vision/multimodal/mtvqa_kr` 접음.
+> 중복 접기: `gemma_4_31b_it` — `results/gemma_4_31b_it/20260505_130752/vision/multimodal/mtvqa_kr` 유지; 동일 artifact role/SHA-256·측정 payload 복사본 `results/google_gemma_4_31B_it/20260505_130752/vision/multimodal/mtvqa_kr` 접음.
+> 재현성: `gemma_4_26b_a4b_it` — 이 코호트에 런 2개. 코호트 산포 3건 (0.54%p), 허용 6건 — **PASS**
+>   `20260505_124246`  258/558 = 46.24% (기준)
+>   `v2b_20260824`  255/558 = 45.70% (대표)
+> 재현성: `gemma_4_31b_it` — 이 코호트에 런 2개. 코호트 산포 2건 (0.36%p), 허용 6건 — **PASS**
+>   `20260505_130752`  270/558 = 48.39% (기준)
+>   `20260525_152204`  268/558 = 48.03% (대표)
 
 ## 상태 요약
 
 | 상태 | source 수 |
 |---|---:|
-| NATIVE | 0 |
+| NATIVE | 2 |
 | LEGACY_REVALIDATED | 71 |
-| REJECTED | 33 |
+| REJECTED | 34 |
 | INSUFFICIENT_PROVENANCE | 0 |
-| UNSCORED | 13 |
+| UNSCORED | 14 |
 
 ## 세부 축
 
@@ -188,40 +244,40 @@
 | Qwen3.5_122B_A10B_GPTQ_Int4 | domain:Travel and Tourism | 76/108 = 70.37% | LEGACY_REVALIDATED |
 | Qwen3.5_122B_A10B_GPTQ_Int4 | system:System1 | 1142/1426 = 80.08% | LEGACY_REVALIDATED |
 | Qwen3.5_122B_A10B_GPTQ_Int4 | system:System2 | 352/1151 = 30.58% | LEGACY_REVALIDATED |
-| google_gemma_4_26b_a4b_it | domain:Arts and Humanities | 77/83 = 92.77% | LEGACY_REVALIDATED |
-| google_gemma_4_26b_a4b_it | domain:CSAT History | 39/60 = 65.00% | LEGACY_REVALIDATED |
-| google_gemma_4_26b_a4b_it | domain:CSAT Science | 174/478 = 36.40% | LEGACY_REVALIDATED |
-| google_gemma_4_26b_a4b_it | domain:Economics and Finance | 87/104 = 83.65% | LEGACY_REVALIDATED |
-| google_gemma_4_26b_a4b_it | domain:Education and Academia | 185/215 = 86.05% | LEGACY_REVALIDATED |
-| google_gemma_4_26b_a4b_it | domain:Entertainment and Media | 140/168 = 83.33% | LEGACY_REVALIDATED |
-| google_gemma_4_26b_a4b_it | domain:Hospitality and Food Service | 198/264 = 75.00% | LEGACY_REVALIDATED |
-| google_gemma_4_26b_a4b_it | domain:Marketing and Advertising | 128/145 = 88.28% | LEGACY_REVALIDATED |
-| google_gemma_4_26b_a4b_it | domain:Medical and Healthcare | 70/90 = 77.78% | LEGACY_REVALIDATED |
-| google_gemma_4_26b_a4b_it | domain:Personal and Lifestyle | 172/204 = 84.31% | LEGACY_REVALIDATED |
-| google_gemma_4_26b_a4b_it | domain:Public and Administration | 196/245 = 80.00% | LEGACY_REVALIDATED |
-| google_gemma_4_26b_a4b_it | domain:Retail and Commerce | 119/154 = 77.27% | LEGACY_REVALIDATED |
-| google_gemma_4_26b_a4b_it | domain:Science and Technology | 72/92 = 78.26% | LEGACY_REVALIDATED |
-| google_gemma_4_26b_a4b_it | domain:Transportation and Logistics | 116/167 = 69.46% | LEGACY_REVALIDATED |
-| google_gemma_4_26b_a4b_it | domain:Travel and Tourism | 87/108 = 80.56% | LEGACY_REVALIDATED |
-| google_gemma_4_26b_a4b_it | system:System1 | 1282/1426 = 89.90% | LEGACY_REVALIDATED |
-| google_gemma_4_26b_a4b_it | system:System2 | 578/1151 = 50.22% | LEGACY_REVALIDATED |
-| google_gemma_4_31B_it | domain:Arts and Humanities | 78/83 = 93.98% | LEGACY_REVALIDATED |
-| google_gemma_4_31B_it | domain:CSAT History | 46/60 = 76.67% | LEGACY_REVALIDATED |
-| google_gemma_4_31B_it | domain:CSAT Science | 204/478 = 42.68% | LEGACY_REVALIDATED |
-| google_gemma_4_31B_it | domain:Economics and Finance | 89/104 = 85.58% | LEGACY_REVALIDATED |
-| google_gemma_4_31B_it | domain:Education and Academia | 197/215 = 91.63% | LEGACY_REVALIDATED |
-| google_gemma_4_31B_it | domain:Entertainment and Media | 146/168 = 86.90% | LEGACY_REVALIDATED |
-| google_gemma_4_31B_it | domain:Hospitality and Food Service | 223/264 = 84.47% | LEGACY_REVALIDATED |
-| google_gemma_4_31B_it | domain:Marketing and Advertising | 138/145 = 95.17% | LEGACY_REVALIDATED |
-| google_gemma_4_31B_it | domain:Medical and Healthcare | 74/90 = 82.22% | LEGACY_REVALIDATED |
-| google_gemma_4_31B_it | domain:Personal and Lifestyle | 184/204 = 90.20% | LEGACY_REVALIDATED |
-| google_gemma_4_31B_it | domain:Public and Administration | 215/245 = 87.76% | LEGACY_REVALIDATED |
-| google_gemma_4_31B_it | domain:Retail and Commerce | 129/154 = 83.77% | LEGACY_REVALIDATED |
-| google_gemma_4_31B_it | domain:Science and Technology | 80/92 = 86.96% | LEGACY_REVALIDATED |
-| google_gemma_4_31B_it | domain:Transportation and Logistics | 137/167 = 82.04% | LEGACY_REVALIDATED |
-| google_gemma_4_31B_it | domain:Travel and Tourism | 90/108 = 83.33% | LEGACY_REVALIDATED |
-| google_gemma_4_31B_it | system:System1 | 1366/1426 = 95.79% | LEGACY_REVALIDATED |
-| google_gemma_4_31B_it | system:System2 | 664/1151 = 57.69% | LEGACY_REVALIDATED |
+| gemma_4_26b_a4b_it | domain:Arts and Humanities | 77/83 = 92.77% | LEGACY_REVALIDATED |
+| gemma_4_26b_a4b_it | domain:CSAT History | 39/60 = 65.00% | LEGACY_REVALIDATED |
+| gemma_4_26b_a4b_it | domain:CSAT Science | 174/478 = 36.40% | LEGACY_REVALIDATED |
+| gemma_4_26b_a4b_it | domain:Economics and Finance | 87/104 = 83.65% | LEGACY_REVALIDATED |
+| gemma_4_26b_a4b_it | domain:Education and Academia | 185/215 = 86.05% | LEGACY_REVALIDATED |
+| gemma_4_26b_a4b_it | domain:Entertainment and Media | 140/168 = 83.33% | LEGACY_REVALIDATED |
+| gemma_4_26b_a4b_it | domain:Hospitality and Food Service | 198/264 = 75.00% | LEGACY_REVALIDATED |
+| gemma_4_26b_a4b_it | domain:Marketing and Advertising | 128/145 = 88.28% | LEGACY_REVALIDATED |
+| gemma_4_26b_a4b_it | domain:Medical and Healthcare | 70/90 = 77.78% | LEGACY_REVALIDATED |
+| gemma_4_26b_a4b_it | domain:Personal and Lifestyle | 172/204 = 84.31% | LEGACY_REVALIDATED |
+| gemma_4_26b_a4b_it | domain:Public and Administration | 196/245 = 80.00% | LEGACY_REVALIDATED |
+| gemma_4_26b_a4b_it | domain:Retail and Commerce | 119/154 = 77.27% | LEGACY_REVALIDATED |
+| gemma_4_26b_a4b_it | domain:Science and Technology | 72/92 = 78.26% | LEGACY_REVALIDATED |
+| gemma_4_26b_a4b_it | domain:Transportation and Logistics | 116/167 = 69.46% | LEGACY_REVALIDATED |
+| gemma_4_26b_a4b_it | domain:Travel and Tourism | 87/108 = 80.56% | LEGACY_REVALIDATED |
+| gemma_4_26b_a4b_it | system:System1 | 1282/1426 = 89.90% | LEGACY_REVALIDATED |
+| gemma_4_26b_a4b_it | system:System2 | 578/1151 = 50.22% | LEGACY_REVALIDATED |
+| gemma_4_31b_it | domain:Arts and Humanities | 78/83 = 93.98% | LEGACY_REVALIDATED |
+| gemma_4_31b_it | domain:CSAT History | 46/60 = 76.67% | LEGACY_REVALIDATED |
+| gemma_4_31b_it | domain:CSAT Science | 204/478 = 42.68% | LEGACY_REVALIDATED |
+| gemma_4_31b_it | domain:Economics and Finance | 89/104 = 85.58% | LEGACY_REVALIDATED |
+| gemma_4_31b_it | domain:Education and Academia | 197/215 = 91.63% | LEGACY_REVALIDATED |
+| gemma_4_31b_it | domain:Entertainment and Media | 146/168 = 86.90% | LEGACY_REVALIDATED |
+| gemma_4_31b_it | domain:Hospitality and Food Service | 223/264 = 84.47% | LEGACY_REVALIDATED |
+| gemma_4_31b_it | domain:Marketing and Advertising | 138/145 = 95.17% | LEGACY_REVALIDATED |
+| gemma_4_31b_it | domain:Medical and Healthcare | 74/90 = 82.22% | LEGACY_REVALIDATED |
+| gemma_4_31b_it | domain:Personal and Lifestyle | 184/204 = 90.20% | LEGACY_REVALIDATED |
+| gemma_4_31b_it | domain:Public and Administration | 215/245 = 87.76% | LEGACY_REVALIDATED |
+| gemma_4_31b_it | domain:Retail and Commerce | 129/154 = 83.77% | LEGACY_REVALIDATED |
+| gemma_4_31b_it | domain:Science and Technology | 80/92 = 86.96% | LEGACY_REVALIDATED |
+| gemma_4_31b_it | domain:Transportation and Logistics | 137/167 = 82.04% | LEGACY_REVALIDATED |
+| gemma_4_31b_it | domain:Travel and Tourism | 90/108 = 83.33% | LEGACY_REVALIDATED |
+| gemma_4_31b_it | system:System1 | 1366/1426 = 95.79% | LEGACY_REVALIDATED |
+| gemma_4_31b_it | system:System2 | 664/1151 = 57.69% | LEGACY_REVALIDATED |
 | qwen3.5_27b | domain:Arts and Humanities | 74/83 = 89.16% | LEGACY_REVALIDATED |
 | qwen3.5_27b | domain:CSAT History | 33/60 = 55.00% | LEGACY_REVALIDATED |
 | qwen3.5_27b | domain:CSAT Science | 150/478 = 31.38% | LEGACY_REVALIDATED |
@@ -354,6 +410,26 @@
 | Qwen3.5_122B_A10B_GPTQ_Int4 | category:social_relation | 125/172 = 72.67% | LEGACY_REVALIDATED |
 | Qwen3.5_122B_A10B_GPTQ_Int4 | category:spatial_relationship | 129/177 = 72.88% | LEGACY_REVALIDATED |
 | Qwen3.5_122B_A10B_GPTQ_Int4 | category:structuralized_imagetext_understanding | 231/282 = 81.91% | LEGACY_REVALIDATED |
+| gemma_4_26b_a4b_it | category:action_recognition | 204/215 = 94.88% | LEGACY_REVALIDATED |
+| gemma_4_26b_a4b_it | category:attribute_comparison | 110/141 = 78.01% | LEGACY_REVALIDATED |
+| gemma_4_26b_a4b_it | category:attribute_recognition | 242/264 = 91.67% | LEGACY_REVALIDATED |
+| gemma_4_26b_a4b_it | category:celebrity_recognition | 383/396 = 96.72% | LEGACY_REVALIDATED |
+| gemma_4_26b_a4b_it | category:function_reasoning | 279/304 = 91.78% | LEGACY_REVALIDATED |
+| gemma_4_26b_a4b_it | category:future_prediction | 101/130 = 77.69% | LEGACY_REVALIDATED |
+| gemma_4_26b_a4b_it | category:identity_reasoning | 175/176 = 99.43% | LEGACY_REVALIDATED |
+| gemma_4_26b_a4b_it | category:image_emotion | 176/200 = 88.00% | LEGACY_REVALIDATED |
+| gemma_4_26b_a4b_it | category:image_quality | 92/150 = 61.33% | LEGACY_REVALIDATED |
+| gemma_4_26b_a4b_it | category:image_scene | 396/407 = 97.30% | LEGACY_REVALIDATED |
+| gemma_4_26b_a4b_it | category:image_style | 199/212 = 93.87% | LEGACY_REVALIDATED |
+| gemma_4_26b_a4b_it | category:image_topic | 137/140 = 97.86% | LEGACY_REVALIDATED |
+| gemma_4_26b_a4b_it | category:nature_relation | 163/179 = 91.06% | LEGACY_REVALIDATED |
+| gemma_4_26b_a4b_it | category:object_localization | 210/315 = 66.67% | LEGACY_REVALIDATED |
+| gemma_4_26b_a4b_it | category:ocr | 150/156 = 96.15% | LEGACY_REVALIDATED |
+| gemma_4_26b_a4b_it | category:physical_property_reasoning | 163/219 = 74.43% | LEGACY_REVALIDATED |
+| gemma_4_26b_a4b_it | category:physical_relation | 68/94 = 72.34% | LEGACY_REVALIDATED |
+| gemma_4_26b_a4b_it | category:social_relation | 135/172 = 78.49% | LEGACY_REVALIDATED |
+| gemma_4_26b_a4b_it | category:spatial_relationship | 137/177 = 77.40% | LEGACY_REVALIDATED |
+| gemma_4_26b_a4b_it | category:structuralized_imagetext_understanding | 256/282 = 90.78% | LEGACY_REVALIDATED |
 | qwen3.5_27b | category:action_recognition | 209/215 = 97.21% | LEGACY_REVALIDATED |
 | qwen3.5_27b | category:attribute_comparison | 98/141 = 69.50% | LEGACY_REVALIDATED |
 | qwen3.5_27b | category:attribute_recognition | 223/264 = 84.47% | LEGACY_REVALIDATED |
@@ -518,6 +594,36 @@
 </details>
 
 <details>
+<summary>K-MMBench — full — protocol `2e65cebe14d4`</summary>
+
+전체 protocol fingerprint: `sha256:2e65cebe14d400c2339ede83a524f79cc7c3a7587950dfb0122e27766aa7df43`
+
+| 모델 | 축 | 결과 | 상태 |
+|---|---|---|---|
+| gemma_4_26b_a4b_it | category:action_recognition | 201/215 = 93.49% | LEGACY_REVALIDATED |
+| gemma_4_26b_a4b_it | category:attribute_comparison | 112/141 = 79.43% | LEGACY_REVALIDATED |
+| gemma_4_26b_a4b_it | category:attribute_recognition | 244/264 = 92.42% | LEGACY_REVALIDATED |
+| gemma_4_26b_a4b_it | category:celebrity_recognition | 381/396 = 96.21% | LEGACY_REVALIDATED |
+| gemma_4_26b_a4b_it | category:function_reasoning | 277/304 = 91.12% | LEGACY_REVALIDATED |
+| gemma_4_26b_a4b_it | category:future_prediction | 100/130 = 76.92% | LEGACY_REVALIDATED |
+| gemma_4_26b_a4b_it | category:identity_reasoning | 175/176 = 99.43% | LEGACY_REVALIDATED |
+| gemma_4_26b_a4b_it | category:image_emotion | 174/200 = 87.00% | LEGACY_REVALIDATED |
+| gemma_4_26b_a4b_it | category:image_quality | 93/150 = 62.00% | LEGACY_REVALIDATED |
+| gemma_4_26b_a4b_it | category:image_scene | 394/407 = 96.81% | LEGACY_REVALIDATED |
+| gemma_4_26b_a4b_it | category:image_style | 198/212 = 93.40% | LEGACY_REVALIDATED |
+| gemma_4_26b_a4b_it | category:image_topic | 137/140 = 97.86% | LEGACY_REVALIDATED |
+| gemma_4_26b_a4b_it | category:nature_relation | 165/179 = 92.18% | LEGACY_REVALIDATED |
+| gemma_4_26b_a4b_it | category:object_localization | 210/315 = 66.67% | LEGACY_REVALIDATED |
+| gemma_4_26b_a4b_it | category:ocr | 150/156 = 96.15% | LEGACY_REVALIDATED |
+| gemma_4_26b_a4b_it | category:physical_property_reasoning | 160/219 = 73.06% | LEGACY_REVALIDATED |
+| gemma_4_26b_a4b_it | category:physical_relation | 65/94 = 69.15% | LEGACY_REVALIDATED |
+| gemma_4_26b_a4b_it | category:social_relation | 132/172 = 76.74% | LEGACY_REVALIDATED |
+| gemma_4_26b_a4b_it | category:spatial_relationship | 135/177 = 76.27% | LEGACY_REVALIDATED |
+| gemma_4_26b_a4b_it | category:structuralized_imagetext_understanding | 255/282 = 90.43% | LEGACY_REVALIDATED |
+
+</details>
+
+<details>
 <summary>K-DTCBench — full — protocol `4f3ddf3131ab`</summary>
 
 전체 protocol fingerprint: `sha256:4f3ddf3131ab43c9a233de443d2e24c072421fd8fe0b01ec2d5ae3e470fdb0c5`
@@ -527,6 +633,9 @@
 | Qwen3.5_122B_A10B_GPTQ_Int4 | category:chart | 52/80 = 65.00% | LEGACY_REVALIDATED |
 | Qwen3.5_122B_A10B_GPTQ_Int4 | category:document | 73/80 = 91.25% | LEGACY_REVALIDATED |
 | Qwen3.5_122B_A10B_GPTQ_Int4 | category:table | 60/80 = 75.00% | LEGACY_REVALIDATED |
+| gemma_4_26b_a4b_it | category:chart | 57/80 = 71.25% | NATIVE |
+| gemma_4_26b_a4b_it | category:document | 77/80 = 96.25% | NATIVE |
+| gemma_4_26b_a4b_it | category:table | 72/80 = 90.00% | NATIVE |
 | qwen3.5_27b | category:chart | 53/80 = 66.25% | LEGACY_REVALIDATED |
 | qwen3.5_27b | category:document | 73/80 = 91.25% | LEGACY_REVALIDATED |
 | qwen3.5_27b | category:table | 70/80 = 87.50% | LEGACY_REVALIDATED |
@@ -551,10 +660,24 @@
 
 </details>
 
+<details>
+<summary>K-DTCBench — full — protocol `683c2a83a0e0`</summary>
+
+전체 protocol fingerprint: `sha256:683c2a83a0e049dce79ca2ff7a12c7347047f6b3c316ee76dc6371d877a64b32`
+
+| 모델 | 축 | 결과 | 상태 |
+|---|---|---|---|
+| gemma_4_26b_a4b_it | category:chart | 58/80 = 72.50% | LEGACY_REVALIDATED |
+| gemma_4_26b_a4b_it | category:document | 75/80 = 93.75% | LEGACY_REVALIDATED |
+| gemma_4_26b_a4b_it | category:table | 72/80 = 90.00% | LEGACY_REVALIDATED |
+
+</details>
+
 
 ### 추론 복원 provenance
 
 - `results/Qwen3.5_122B_A10B_GPTQ_Int4/20260720_235721/vision/multimodal/k_dtcbench`: `{"split": {"basis": "k_dtcbench.py fixed load_dataset split", "value": "test"}}`
+- `results/google_gemma_4_26b_a4b_it/v2b_20260824/vision/multimodal/k_dtcbench`: `{"split": {"basis": "k_dtcbench.py fixed load_dataset split", "value": "test"}}`
 - `results/qwen3.5_27b/20260525_145725/vision/multimodal/k_dtcbench`: `{"split": {"basis": "k_dtcbench.py fixed load_dataset split", "value": "test"}}`
 - `results/Qwen_Qwen3.6_35B_A3B/20260524_120652/vision/multimodal/k_dtcbench`: `{"split": {"basis": "k_dtcbench.py fixed load_dataset split", "value": "test"}}`
 - `results/qwen_qwen3.5_27b_fp8/20260705_082256/vision/multimodal/k_dtcbench`: `{"split": {"basis": "k_dtcbench.py fixed load_dataset split", "value": "test"}}`
@@ -562,7 +685,9 @@
 - `results/qwen_qwen3.5_35b_a3b_fp8/20260711_003523/vision/multimodal/k_dtcbench`: `{"split": {"basis": "k_dtcbench.py fixed load_dataset split", "value": "test"}}`
 - `results/qwen_qwen3.6_27b/20260622_153150/vision/multimodal/k_dtcbench`: `{"split": {"basis": "k_dtcbench.py fixed load_dataset split", "value": "test"}}`
 - `results/qwen_qwen3.6_35b_a3b_fp8/20260702_133909/vision/multimodal/k_dtcbench`: `{"split": {"basis": "k_dtcbench.py fixed load_dataset split", "value": "test"}}`
+- `results/gemma_4_26b_a4b_it/20260503_120309/vision/multimodal/k_dtcbench`: `{"split": {"basis": "k_dtcbench.py fixed load_dataset split", "value": "test"}}`
 - `results/Qwen3.5_122B_A10B_GPTQ_Int4/20260720_235721/vision/multimodal/k_mmbench`: `{"split": {"basis": "k_mmbench.py fixed load_dataset split", "value": "dev"}}`
+- `results/gemma_4_26b_a4b_it/20260505_124246/vision/multimodal/k_mmbench`: `{"split": {"basis": "k_mmbench.py fixed load_dataset split", "value": "dev"}}`
 - `results/qwen3.5_27b/20260525_145725/vision/multimodal/k_mmbench`: `{"split": {"basis": "k_mmbench.py fixed load_dataset split", "value": "dev"}}`
 - `results/Qwen_Qwen3.6_35B_A3B/20260524_120652/vision/multimodal/k_mmbench`: `{"split": {"basis": "k_mmbench.py fixed load_dataset split", "value": "dev"}}`
 - `results/qwen_qwen3.5_27b_fp8/20260705_082256/vision/multimodal/k_mmbench`: `{"split": {"basis": "k_mmbench.py fixed load_dataset split", "value": "dev"}}`
@@ -571,6 +696,7 @@
 - `results/qwen_qwen3.6_27b/20260622_153150/vision/multimodal/k_mmbench`: `{"split": {"basis": "k_mmbench.py fixed load_dataset split", "value": "dev"}}`
 - `results/qwen_qwen3.6_27b_fp8/20260704_081047/vision/multimodal/k_mmbench`: `{"split": {"basis": "k_mmbench.py fixed load_dataset split", "value": "dev"}}`
 - `results/qwen_qwen3.6_35b_a3b_fp8/20260702_133909/vision/multimodal/k_mmbench`: `{"split": {"basis": "k_mmbench.py fixed load_dataset split", "value": "dev"}}`
+- `results/gemma_4_26b_a4b_it/20260503_122218/vision/multimodal/k_mmbench`: `{"split": {"basis": "k_mmbench.py fixed load_dataset split", "value": "dev"}}`
 - `results/qwen_qwen3.5_35b_a3b_fp8/20260711_003523/vision/multimodal/kreta/qwen_qwen3.5_35b_a3b_fp8_default.jsonl`: `{"max_tokens": {"basis": "legacy run_kreta.sh: default mode default KRETA_MAX_TOKENS", "value": 4096}}`
 - `results/qwen_qwen3.6_35b_a3b_fp8/20260702_133909/vision/multimodal/kreta/qwen_qwen3.6_35b_a3b_fp8_default.jsonl`: `{"max_tokens": {"basis": "legacy run_kreta.sh: default mode default KRETA_MAX_TOKENS", "value": 4096}}`
 - `results/Qwen3.5_122B_A10B_GPTQ_Int4/20260720_235721/vision/multimodal/kreta/Qwen3.5_122B_A10B_GPTQ_Int4_direct.jsonl`: `{"max_tokens": {"basis": "legacy run_kreta.sh: direct mode default KRETA_MAX_TOKENS", "value": 32}}`
@@ -582,41 +708,6 @@
 - `results/qwen_qwen3.5_35b_a3b/20260621_233258/vision/multimodal/kreta/qwen_qwen3.5_35b_a3b_direct.jsonl`: `{"max_tokens": {"basis": "legacy run_kreta.sh: direct mode default KRETA_MAX_TOKENS", "value": 32}}`
 - `results/qwen_qwen3.6_27b/20260622_153150/vision/multimodal/kreta/qwen_qwen3.6_27b_direct.jsonl`: `{"max_tokens": {"basis": "legacy run_kreta.sh: direct mode default KRETA_MAX_TOKENS", "value": 32}}`
 - `results/qwen_qwen3.6_27b_fp8/20260704_081047/vision/multimodal/kreta/qwen_qwen3.6_27b_fp8_direct.jsonl`: `{"max_tokens": {"basis": "legacy run_kreta.sh: direct mode default KRETA_MAX_TOKENS", "value": 32}}`
-
-## 대표 런 자동 선정 불가 — 수치 비노출
-
-- **B4-latency-profile / latency / gemma_4_31b_it** — 동일한 최신 완료 시각 후보가 둘 이상
-  - `results/gemma_4_31b_it/20260505_130752/vision/customB/b4_latency_profile`
-  - `results/google_gemma_4_31B_it/20260505_130752/vision/customB/b4_latency_profile`
-- **B4-latency-profile / latency / gemma_4_26b_a4b_it** — 동일한 최신 완료 시각 후보가 둘 이상
-  - `results/gemma_4_26b_a4b_it.bad/20260503_122218/vision/customB/b4_latency_profile`
-  - `results/gemma_4_26b_a4b_it/20260503_122218/vision/customB/b4_latency_profile`
-- **K-DTCBench / full / gemma_4_26b_a4b_it** — 동일한 최신 완료 시각 후보가 둘 이상
-  - `results/gemma_4_26b_a4b_it.bad/20260505_124246/vision/multimodal/k_dtcbench`
-  - `results/gemma_4_26b_a4b_it/20260505_124246/vision/multimodal/k_dtcbench`
-  - `results/google_gemma_4_26B_A4B_it/20260505_124246.bad/vision/multimodal/k_dtcbench`
-  - `results/google_gemma_4_26B_A4B_it/20260505_124246/vision/multimodal/k_dtcbench`
-- **K-DTCBench / full / gemma_4_26b_a4b_it** — 동일한 최신 완료 시각 후보가 둘 이상
-  - `results/gemma_4_26b_a4b_it.bad/20260503_120151/vision/multimodal/k_dtcbench`
-  - `results/gemma_4_26b_a4b_it.bad/20260503_120309/vision/multimodal/k_dtcbench`
-  - `results/gemma_4_26b_a4b_it/20260503_120151/vision/multimodal/k_dtcbench`
-  - `results/gemma_4_26b_a4b_it/20260503_120309/vision/multimodal/k_dtcbench`
-- **K-MMBench / full / gemma_4_26b_a4b_it** — 동일한 최신 완료 시각 후보가 둘 이상
-  - `results/gemma_4_26b_a4b_it.bad/20260505_124246/vision/multimodal/k_mmbench`
-  - `results/gemma_4_26b_a4b_it/20260505_124246/vision/multimodal/k_mmbench`
-  - `results/google_gemma_4_26B_A4B_it/20260505_124246.bad/vision/multimodal/k_mmbench`
-  - `results/google_gemma_4_26B_A4B_it/20260505_124246/vision/multimodal/k_mmbench`
-- **K-MMBench / full / gemma_4_26b_a4b_it** — 동일한 최신 완료 시각 후보가 둘 이상
-  - `results/gemma_4_26b_a4b_it.bad/20260503_122218/vision/multimodal/k_mmbench`
-  - `results/gemma_4_26b_a4b_it/20260503_122218/vision/multimodal/k_mmbench`
-- **MTVQA-KR / full / gemma_4_26b_a4b_it** — 동일한 최신 완료 시각 후보가 둘 이상
-  - `results/gemma_4_26b_a4b_it.bad/20260505_124246/vision/multimodal/mtvqa_kr`
-  - `results/gemma_4_26b_a4b_it/20260505_124246/vision/multimodal/mtvqa_kr`
-  - `results/google_gemma_4_26B_A4B_it/20260505_124246.bad/vision/multimodal/mtvqa_kr`
-  - `results/google_gemma_4_26B_A4B_it/20260505_124246/vision/multimodal/mtvqa_kr`
-- **MTVQA-KR / full / gemma_4_31b_it** — 동일한 최신 완료 시각 후보가 둘 이상
-  - `results/gemma_4_31b_it/20260505_130752/vision/multimodal/mtvqa_kr`
-  - `results/google_gemma_4_31B_it/20260505_130752/vision/multimodal/mtvqa_kr`
 
 ## 발행 불가 — 점수를 인용하지 마십시오
 
@@ -684,6 +775,8 @@
   - 채점 산출물 없음
 - **KRETA / gemma_4_26b_a4b_it / 20260505_124246** — `REJECTED`
   - 오류 응답 548건 포함
+- **KOFFVQA / google_gemma_4_26b_a4b_it / v2b_20260824** — `UNSCORED`
+  - 채점 산출물 없음
 - **B3-structured-output / gemma_4_31b_it / 20260505_130752** — `REJECTED`
   - total=0
   - manifest 전 항목을 시도하지 않음
@@ -711,6 +804,8 @@
   - 채점 산출물 없음
 - **KOFFVQA / qwen_qwen3.5_35b_a3b_fp8 / 20260711_003523** — `UNSCORED`
   - 채점 산출물 없음
+- **KRETA / qwen_qwen3.5_35b_a3b_fp8 / v2_20260824_2300** — `REJECTED`
+  - 미해결 응답 6건 포함
 - **KOFFVQA / qwen_qwen3.6_27b / 20260622_153150** — `UNSCORED`
   - 채점 산출물 없음
 - **K-DTCBench / qwen_qwen3.6_27b_fp8 / 20260704_081047** — `REJECTED`
@@ -736,10 +831,14 @@
 | Qwen3.5_122B_A10B_GPTQ_Int4 | image_256px | 0.316s | 2.205s | 13.15 tokens/s | LEGACY_REVALIDATED |
 | Qwen3.5_122B_A10B_GPTQ_Int4 | multi_image_3x512px | 0.566s | 2.523s | 11.89 tokens/s | LEGACY_REVALIDATED |
 | Qwen3.5_122B_A10B_GPTQ_Int4 | text_only | 0.267s | 2.413s | 13.66 tokens/s | LEGACY_REVALIDATED |
-| google_gemma_4_26b_a4b_it | image_1024px | 0.142s | 1.404s | 22.78 tokens/s | LEGACY_REVALIDATED |
-| google_gemma_4_26b_a4b_it | image_256px | 0.138s | 1.431s | 22.36 tokens/s | LEGACY_REVALIDATED |
-| google_gemma_4_26b_a4b_it | multi_image_3x512px | 0.148s | 1.257s | 22.28 tokens/s | LEGACY_REVALIDATED |
-| google_gemma_4_26b_a4b_it | text_only | 0.140s | 1.211s | 22.29 tokens/s | LEGACY_REVALIDATED |
+| gemma_4_26b_a4b_it | image_1024px | 0.142s | 1.404s | 22.78 tokens/s | LEGACY_REVALIDATED |
+| gemma_4_26b_a4b_it | image_256px | 0.138s | 1.431s | 22.36 tokens/s | LEGACY_REVALIDATED |
+| gemma_4_26b_a4b_it | multi_image_3x512px | 0.148s | 1.257s | 22.28 tokens/s | LEGACY_REVALIDATED |
+| gemma_4_26b_a4b_it | text_only | 0.140s | 1.211s | 22.29 tokens/s | LEGACY_REVALIDATED |
+| gemma_4_31b_it | image_1024px | 0.536s | 8.227s | 3.65 tokens/s | LEGACY_REVALIDATED |
+| gemma_4_31b_it | image_256px | 0.519s | 7.957s | 3.77 tokens/s | LEGACY_REVALIDATED |
+| gemma_4_31b_it | multi_image_3x512px | 0.558s | 9.171s | 3.71 tokens/s | LEGACY_REVALIDATED |
+| gemma_4_31b_it | text_only | 0.527s | 9.140s | 3.72 tokens/s | LEGACY_REVALIDATED |
 | qwen3.6-35b-a3b | image_1024px | 0.185s | 1.172s | 26.46 tokens/s | LEGACY_REVALIDATED |
 | qwen3.6-35b-a3b | image_256px | 0.267s | 1.128s | 23.93 tokens/s | LEGACY_REVALIDATED |
 | qwen3.6-35b-a3b | multi_image_3x512px | 0.424s | 1.477s | 22.34 tokens/s | LEGACY_REVALIDATED |
@@ -780,10 +879,14 @@
 | Qwen3.5_122B_A10B_GPTQ_Int4 | image_256px | 0.319s | 2.212s | 13.20 tokens/s | LEGACY_REVALIDATED |
 | Qwen3.5_122B_A10B_GPTQ_Int4 | multi_image_3x512px | 0.578s | 2.575s | 11.94 tokens/s | LEGACY_REVALIDATED |
 | Qwen3.5_122B_A10B_GPTQ_Int4 | text_only | 0.294s | 2.444s | 13.74 tokens/s | LEGACY_REVALIDATED |
-| google_gemma_4_26b_a4b_it | image_1024px | 0.155s | 1.443s | 22.98 tokens/s | LEGACY_REVALIDATED |
-| google_gemma_4_26b_a4b_it | image_256px | 0.147s | 1.441s | 22.45 tokens/s | LEGACY_REVALIDATED |
-| google_gemma_4_26b_a4b_it | multi_image_3x512px | 0.159s | 1.268s | 22.41 tokens/s | LEGACY_REVALIDATED |
-| google_gemma_4_26b_a4b_it | text_only | 0.155s | 1.223s | 23.00 tokens/s | LEGACY_REVALIDATED |
+| gemma_4_26b_a4b_it | image_1024px | 0.155s | 1.443s | 22.98 tokens/s | LEGACY_REVALIDATED |
+| gemma_4_26b_a4b_it | image_256px | 0.147s | 1.441s | 22.45 tokens/s | LEGACY_REVALIDATED |
+| gemma_4_26b_a4b_it | multi_image_3x512px | 0.159s | 1.268s | 22.41 tokens/s | LEGACY_REVALIDATED |
+| gemma_4_26b_a4b_it | text_only | 0.155s | 1.223s | 23.00 tokens/s | LEGACY_REVALIDATED |
+| gemma_4_31b_it | image_1024px | 0.558s | 8.398s | 3.75 tokens/s | LEGACY_REVALIDATED |
+| gemma_4_31b_it | image_256px | 0.571s | 8.541s | 3.82 tokens/s | LEGACY_REVALIDATED |
+| gemma_4_31b_it | multi_image_3x512px | 0.581s | 9.658s | 3.72 tokens/s | LEGACY_REVALIDATED |
+| gemma_4_31b_it | text_only | 0.567s | 9.603s | 3.78 tokens/s | LEGACY_REVALIDATED |
 | qwen3.6-35b-a3b | image_1024px | 0.202s | 1.212s | 26.87 tokens/s | LEGACY_REVALIDATED |
 | qwen3.6-35b-a3b | image_256px | 0.295s | 1.213s | 24.14 tokens/s | LEGACY_REVALIDATED |
 | qwen3.6-35b-a3b | multi_image_3x512px | 0.497s | 1.623s | 22.79 tokens/s | LEGACY_REVALIDATED |
@@ -821,10 +924,14 @@
 | Qwen3.5_122B_A10B_GPTQ_Int4 | image_256px | 0.323s | 2.214s | 13.21 tokens/s | LEGACY_REVALIDATED |
 | Qwen3.5_122B_A10B_GPTQ_Int4 | multi_image_3x512px | 0.624s | 2.605s | 11.96 tokens/s | LEGACY_REVALIDATED |
 | Qwen3.5_122B_A10B_GPTQ_Int4 | text_only | 0.339s | 2.477s | 13.76 tokens/s | LEGACY_REVALIDATED |
-| google_gemma_4_26b_a4b_it | image_1024px | 0.321s | 1.726s | 23.00 tokens/s | LEGACY_REVALIDATED |
-| google_gemma_4_26b_a4b_it | image_256px | 0.580s | 1.875s | 22.47 tokens/s | LEGACY_REVALIDATED |
-| google_gemma_4_26b_a4b_it | multi_image_3x512px | 0.911s | 2.021s | 22.45 tokens/s | LEGACY_REVALIDATED |
-| google_gemma_4_26b_a4b_it | text_only | 0.242s | 1.301s | 23.05 tokens/s | LEGACY_REVALIDATED |
+| gemma_4_26b_a4b_it | image_1024px | 0.321s | 1.726s | 23.00 tokens/s | LEGACY_REVALIDATED |
+| gemma_4_26b_a4b_it | image_256px | 0.580s | 1.875s | 22.47 tokens/s | LEGACY_REVALIDATED |
+| gemma_4_26b_a4b_it | multi_image_3x512px | 0.911s | 2.021s | 22.45 tokens/s | LEGACY_REVALIDATED |
+| gemma_4_26b_a4b_it | text_only | 0.242s | 1.301s | 23.05 tokens/s | LEGACY_REVALIDATED |
+| gemma_4_31b_it | image_1024px | 0.768s | 8.777s | 3.75 tokens/s | LEGACY_REVALIDATED |
+| gemma_4_31b_it | image_256px | 0.762s | 8.747s | 3.82 tokens/s | LEGACY_REVALIDATED |
+| gemma_4_31b_it | multi_image_3x512px | 2.098s | 10.740s | 3.72 tokens/s | LEGACY_REVALIDATED |
+| gemma_4_31b_it | text_only | 0.686s | 9.878s | 3.81 tokens/s | LEGACY_REVALIDATED |
 | qwen3.6-35b-a3b | image_1024px | 0.472s | 1.522s | 26.99 tokens/s | LEGACY_REVALIDATED |
 | qwen3.6-35b-a3b | image_256px | 0.309s | 1.282s | 24.22 tokens/s | LEGACY_REVALIDATED |
 | qwen3.6-35b-a3b | multi_image_3x512px | 0.524s | 1.682s | 22.84 tokens/s | LEGACY_REVALIDATED |
@@ -855,3 +962,43 @@
 | qwen_qwen3.6_35b_a3b_fp8 | text_only | 0.194s | 0.744s | 47.17 tokens/s | LEGACY_REVALIDATED |
 
 </details>
+
+> 중복 접기: `gemma_4_31b_it` — `results/gemma_4_31b_it/20260505_130752/vision/customB/b4_latency_profile` 유지; 동일 artifact role/SHA-256·측정 payload 복사본 `results/google_gemma_4_31B_it/20260505_130752/vision/customB/b4_latency_profile` 접음.
+
+### B4-latency-profile — latency — protocol `c7f6965296a1`
+
+전체 protocol fingerprint: `sha256:c7f6965296a13755e35e7f86f50b35e0c7609c4bb6cb08f39461e68afdfcd034`
+
+#### p50
+
+| 모델 | condition | TTFT | total | tokens/sec | 상태 |
+|---|---|---:|---:|---:|---|
+| gemma_4_26b_a4b_it | image_1024px | 0.147s | 1.457s | 21.96 tokens/s | LEGACY_REVALIDATED |
+| gemma_4_26b_a4b_it | image_256px | 0.141s | 1.450s | 22.07 tokens/s | LEGACY_REVALIDATED |
+| gemma_4_26b_a4b_it | multi_image_3x512px | 0.151s | 1.309s | 21.40 tokens/s | LEGACY_REVALIDATED |
+| gemma_4_26b_a4b_it | text_only | 0.150s | 1.237s | 21.82 tokens/s | LEGACY_REVALIDATED |
+
+<details>
+<summary>p95 / p99 보기</summary>
+
+#### p95
+
+| 모델 | condition | TTFT | total | tokens/sec | 상태 |
+|---|---|---:|---:|---:|---|
+| gemma_4_26b_a4b_it | image_1024px | 0.167s | 1.486s | 22.19 tokens/s | LEGACY_REVALIDATED |
+| gemma_4_26b_a4b_it | image_256px | 0.156s | 1.475s | 22.30 tokens/s | LEGACY_REVALIDATED |
+| gemma_4_26b_a4b_it | multi_image_3x512px | 0.166s | 1.336s | 21.62 tokens/s | LEGACY_REVALIDATED |
+| gemma_4_26b_a4b_it | text_only | 0.171s | 1.303s | 22.14 tokens/s | LEGACY_REVALIDATED |
+
+#### p99
+
+| 모델 | condition | TTFT | total | tokens/sec | 상태 |
+|---|---|---:|---:|---:|---|
+| gemma_4_26b_a4b_it | image_1024px | 0.385s | 1.692s | 22.21 tokens/s | LEGACY_REVALIDATED |
+| gemma_4_26b_a4b_it | image_256px | 0.621s | 1.941s | 22.37 tokens/s | LEGACY_REVALIDATED |
+| gemma_4_26b_a4b_it | multi_image_3x512px | 0.887s | 2.054s | 21.64 tokens/s | LEGACY_REVALIDATED |
+| gemma_4_26b_a4b_it | text_only | 0.485s | 1.601s | 22.27 tokens/s | LEGACY_REVALIDATED |
+
+</details>
+
+> 중복 접기: `gemma_4_26b_a4b_it` — `results/gemma_4_26b_a4b_it/20260503_122218/vision/customB/b4_latency_profile` 유지; 동일 artifact role/SHA-256·측정 payload 복사본 `results/gemma_4_26b_a4b_it.bad/20260503_122218/vision/customB/b4_latency_profile` 접음.

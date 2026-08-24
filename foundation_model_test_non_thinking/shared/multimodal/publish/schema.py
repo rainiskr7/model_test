@@ -4,6 +4,9 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
+import re
+from copy import deepcopy
 from enum import Enum
 from pathlib import Path
 from typing import Any, Iterable, Mapping
@@ -94,6 +97,90 @@ def sha256_bytes(data: bytes) -> str:
 KRETA_ANSWER_PARSER_HASH = sha256_bytes(
     canonical_json(KRETA_ANSWER_PARSER_SPEC).encode("utf-8")
 )
+
+MODEL_IDENTITY_CONFIG = Path("configs/model_identity.json")
+UNMAPPED_MODEL_WARNING_PREFIX = "모델 정체성 미매핑:"
+ACCURACY_BENCHMARK_IDS = {"KRETA", "K-MMBench", "K-DTCBench", "MTVQA-KR"}
+
+
+def _model_identity_markers(name: str) -> set[str]:
+    normalized = name.lower()
+    markers = set(re.findall(r"\d+(?:\.\d+)?b", normalized))
+    markers.update(re.findall(r"fp8|gptq|int4|awq", normalized))
+    return markers
+
+
+def load_model_identity_map(base: Path) -> dict[str, str]:
+    """Load the explicit serving-name to canonical-model mapping.
+
+    A missing config is treated as an empty mapping so publication remains
+    fail-safe: every serving name stays distinct and is visibly marked as
+    unmapped.  Invalid mappings are rejected instead of guessed.
+    """
+
+    path = Path(base) / MODEL_IDENTITY_CONFIG
+    if not path.exists():
+        return {}
+    value = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(value, dict) or any(
+        not isinstance(name, str) or not name or not isinstance(canonical, str) or not canonical
+        for name, canonical in value.items()
+    ):
+        raise ValueError(f"invalid model identity mapping: {path}")
+    for serving_name, canonical_id in value.items():
+        serving_markers = _model_identity_markers(serving_name)
+        canonical_markers = _model_identity_markers(canonical_id)
+        if serving_markers != canonical_markers:
+            raise ValueError(
+                "unsafe model identity mapping changes size/quantization markers: "
+                f"{serving_name!r} -> {canonical_id!r} "
+                f"({sorted(serving_markers)} != {sorted(canonical_markers)})"
+            )
+    return dict(value)
+
+
+def resolve_model_identity(serving_name: Any, mapping: Mapping[str, str]) -> dict[str, Any]:
+    """Resolve only an explicit alias; never infer model equivalence."""
+
+    name = str(serving_name or "")
+    mapped = name in mapping
+    return {
+        "canonical_id": mapping[name] if mapped else name,
+        "serving_name": name,
+        "mapped": mapped,
+    }
+
+
+def apply_model_identity(
+    sidecar: Mapping[str, Any],
+    mapping: Mapping[str, str],
+) -> tuple[dict[str, Any], bool]:
+    """Return a sidecar carrying current identity metadata and warning state."""
+
+    updated = deepcopy(dict(sidecar))
+    identity = resolve_model_identity(updated.get("model"), mapping)
+    changed = updated.get("model_identity") != identity
+    updated["model_identity"] = identity
+    warnings = [
+        warning
+        for warning in list(updated.get("warnings") or [])
+        if not str(warning).startswith(UNMAPPED_MODEL_WARNING_PREFIX)
+    ]
+    if not identity["mapped"]:
+        warnings.append(
+            f"{UNMAPPED_MODEL_WARNING_PREFIX} {identity['serving_name']} — 자기 이름을 canonical id로 사용"
+        )
+    if warnings != list(updated.get("warnings") or []):
+        changed = True
+    updated["warnings"] = warnings
+    return updated, changed
+
+
+def canonical_model_id(sidecar: Mapping[str, Any]) -> str:
+    identity = sidecar.get("model_identity")
+    if isinstance(identity, Mapping) and isinstance(identity.get("canonical_id"), str):
+        return identity["canonical_id"]
+    return str(sidecar.get("model"))
 
 
 def sha256_file(path: Path) -> str:
@@ -198,6 +285,16 @@ def validate_sidecar(sidecar: Mapping[str, Any]) -> None:
         raise ValueError("publishable does not match status")
     if sidecar.get("aggregation_allowed") is not False:
         raise ValueError("aggregation_allowed must be false in v1")
+    identity = sidecar.get("model_identity")
+    if identity is not None:
+        if not isinstance(identity, Mapping):
+            raise ValueError("model_identity must be an object")
+        if not isinstance(identity.get("canonical_id"), str) or not identity.get("canonical_id"):
+            raise ValueError("model_identity.canonical_id is required")
+        if identity.get("serving_name") != str(sidecar.get("model")):
+            raise ValueError("model_identity.serving_name must preserve model")
+        if not isinstance(identity.get("mapped"), bool):
+            raise ValueError("model_identity.mapped must be boolean")
     protocol = sidecar.get("protocol")
     if not isinstance(protocol, Mapping):
         raise ValueError("protocol is required")
@@ -214,6 +311,25 @@ def validate_sidecar(sidecar: Mapping[str, Any]) -> None:
             or recorded.get("answer_parser_hash") != KRETA_ANSWER_PARSER_HASH
         ):
             raise ValueError("KRETA sidecar does not bind the current answer parser")
+    if status.publishable and sidecar.get("benchmark_id") in ACCURACY_BENCHMARK_IDS:
+        axes = ((sidecar.get("metrics") or {}).get("axes") or [])
+        overall = next(
+            (axis for axis in axes if isinstance(axis, Mapping) and axis.get("name") == "overall"),
+            None,
+        )
+        if not isinstance(overall, Mapping) or overall.get("unit") != "fraction":
+            raise ValueError("publishable accuracy sidecar requires overall fraction axis")
+        numerator, denominator, value = (
+            overall.get("numerator"), overall.get("denominator"), overall.get("value")
+        )
+        if (
+            isinstance(numerator, bool) or not isinstance(numerator, int)
+            or isinstance(denominator, bool) or not isinstance(denominator, int)
+            or denominator <= 0 or not 0 <= numerator <= denominator
+            or isinstance(value, bool) or not isinstance(value, (int, float))
+            or not math.isclose(float(value), numerator / denominator, rel_tol=1e-12, abs_tol=1e-12)
+        ):
+            raise ValueError("invalid publishable overall fraction axis")
     counts = sidecar.get("counts") or {}
     attempted = counts.get("attempted")
     measured = counts.get("measured")
