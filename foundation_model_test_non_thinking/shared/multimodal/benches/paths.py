@@ -21,6 +21,31 @@ def safe_model_name(model: str) -> str:
     return model.replace("/", "_").replace("-", "_").replace(":", "_")
 
 
+def results_model_dir_name(base_dir: Path, model: str) -> str:
+    """Reuse the sole case-fold-equivalent model directory spelling.
+
+    macOS commonly hides casing drift that breaks a Linux clone.  If exactly
+    one existing directory matches, its on-disk spelling is authoritative.
+    Multiple case-fold matches are unsafe and are rejected.
+    """
+
+    requested = safe_model_name(model)
+    results_root = Path(base_dir) / "results"
+    if not results_root.is_dir():
+        return requested
+    matches = sorted(
+        entry.name for entry in results_root.iterdir()
+        if entry.is_dir() and entry.name.casefold() == requested.casefold()
+    )
+    if len(matches) == 1:
+        return matches[0]
+    if len(matches) > 1:
+        raise ValueError(
+            f"case-fold ambiguous results model directory for {requested!r}: {matches}"
+        )
+    return requested
+
+
 def get_base_dir(script_path: str) -> Path:
     """Resolve <model_test> root.
 
@@ -82,7 +107,7 @@ def get_results_dir(
     Default: vision/multimodal (한국어 비전 벤치마크 트랙용).
     customB(B-1~B-4) 등은 track="customB" 같이 override.
     """
-    p = base_dir / "results" / safe_model_name(model) / timestamp / category / track / bench
+    p = base_dir / "results" / results_model_dir_name(base_dir, model) / timestamp / category / track / bench
     p.mkdir(parents=True, exist_ok=True)
     return p
 

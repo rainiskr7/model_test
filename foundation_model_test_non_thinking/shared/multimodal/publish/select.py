@@ -69,20 +69,27 @@ def _measurement_payload(sidecar: dict[str, Any]) -> str:
     })
 
 
+def _session_identity(sidecar: dict[str, Any]) -> str:
+    """Normalize only the explicit copied-directory ``.bad`` suffix."""
+
+    session = str(sidecar.get("session") or "")
+    return session[:-4] if session.endswith(".bad") else session
+
+
 def _fold_exact_copies(
     candidates: list[dict[str, Any]],
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-    groups: dict[tuple[tuple[str, str], ...], list[dict[str, Any]]] = {}
+    groups: dict[tuple[str, tuple[tuple[str, str], ...]], list[dict[str, Any]]] = {}
     unique_without_signature: list[dict[str, Any]] = []
     for candidate in candidates:
         signature = _artifact_signature(candidate)
         if signature is None:
             unique_without_signature.append(candidate)
         else:
-            groups.setdefault(signature, []).append(candidate)
+            groups.setdefault((_session_identity(candidate), signature), []).append(candidate)
     kept = list(unique_without_signature)
     folded: list[dict[str, Any]] = []
-    for signature, signature_copies in groups.items():
+    for (_, signature), signature_copies in groups.items():
         payload_groups: dict[str, list[dict[str, Any]]] = {}
         for candidate in signature_copies:
             payload_groups.setdefault(_measurement_payload(candidate), []).append(candidate)

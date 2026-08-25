@@ -251,12 +251,27 @@ def _run_config(summary: Mapping[str, Any], source_dir: Path) -> dict[str, Any]:
 
 def _add_decoding(config: Mapping[str, Any], recorded: dict[str, Any], unknown: list[str]) -> None:
     decoding = config.get("decoding") or {}
+    serving = config.get("serving_constraints")
+    removed = set(serving.get("removed_parameters") or []) if isinstance(serving, Mapping) else set()
     for key in ("temperature", "max_tokens", "seed"):
         value = decoding.get(key)
-        if value is None:
+        if key in removed:
+            recorded[f"{key}_removed"] = True
+        elif value is None:
             unknown.append(key)
         else:
             recorded[key] = value
+    if isinstance(serving, Mapping):
+        recorded["serving_constraints"] = {
+            key: serving.get(key)
+            for key in (
+                "unsupported_sampling_params",
+                "max_output_tokens",
+                "force_skip_special_tokens",
+                "removed_parameters",
+                "skip_special_tokens",
+            )
+        }
     unknown.extend(("prompt_template_hash", "answer_parser_hash", "image_preprocessing_version"))
 
 
@@ -536,10 +551,12 @@ def adapt_kreta(jsonl_path: Path) -> dict[str, Any]:
         unknown.append("mode")
     else:
         recorded["mode"] = mode
-        configured_max_tokens = ((config.get("decoding") or {}).get("max_tokens"))
-        if isinstance(configured_max_tokens, int) and configured_max_tokens > 0:
-            recorded["max_tokens"] = configured_max_tokens
-        else:
+        _add_decoding(config, recorded, unknown)
+        # KRETA binds its own fixed response parser below; this is known even
+        # though the generic helper treats answer parser metadata as absent.
+        unknown = [item for item in unknown if item != "answer_parser_hash"]
+        if "max_tokens" in unknown:
+            unknown.remove("max_tokens")
             inferred["max_tokens"] = {
                 "value": 32 if mode == "direct" else 4096,
                 "basis": f"legacy run_kreta.sh: {mode} mode default KRETA_MAX_TOKENS",
@@ -556,7 +573,8 @@ def adapt_kreta(jsonl_path: Path) -> dict[str, Any]:
         recorded["split"] = next(iter(splits))
     else:
         unknown.append("split")
-    unknown.extend(("temperature", "seed", "prompt_template_hash", "image_preprocessing_version"))
+    if mode == "unknown":
+        unknown.extend(("temperature", "seed", "prompt_template_hash", "image_preprocessing_version"))
     protocol = make_protocol(recorded, inferred, unknown)
     metrics = {
         "strict": _fraction(correct, counts["attempted"]),
@@ -669,6 +687,9 @@ def adapt_koffvqa_judge(source_dir: Path) -> dict[str, Any]:
             continue
         counts["measured"] += 1
         scores.append(score)
+    # Non-accuracy benchmarks use correct_measured for records that produced
+    # a contract-valid primary measurement (a valid judge score here).
+    counts["correct_measured"] = counts["measured"]
     if counts["attempted"] != EXPECTED_COUNTS["koffvqa_api_judge"]:
         failures.append(f"기대 건수 {EXPECTED_COUNTS['koffvqa_api_judge']}와 다름")
     if counts["errored"]:
@@ -791,6 +812,7 @@ def adapt_b3(source_dir: Path) -> dict[str, Any]:
     if counts["errored"] or counts["unresolved"]:
         failures.append("오류 또는 미해결 응답이 포함됨")
     raw_metrics = _b3_raw_metrics(rows)
+    counts["correct_measured"] = raw_metrics["schema_pass_numerator"]
     for key in ("json_parse_rate", "schema_pass_rate", "value_match_rate"):
         if not _same_metric(summary.get(key), raw_metrics[key]):
             failures.append(f"raw 재집계와 summary {key}가 일치하지 않음")
@@ -930,7 +952,14 @@ def adapt_b4(source_dir: Path) -> dict[str, Any]:
             if calculated is None or not _b4_summary_matches(entry, calculated):
                 failures.append("runs.json 재집계와 summary condition 수치가 일치하지 않음")
                 break
-    counts = {"attempted": attempted, "measured": measured, "errored": errored, "unresolved": unresolved}
+    counts = {
+        "attempted": attempted,
+        "measured": measured,
+        "errored": errored,
+        "unresolved": unresolved,
+        # For latency, a completed record is the contract-valid measurement.
+        "correct_measured": measured,
+    }
     axes: list[dict[str, Any]] = []
     for name in sorted(expected_names):
         entry = raw_by_name.get(name) or {}

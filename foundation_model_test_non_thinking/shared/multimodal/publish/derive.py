@@ -5,8 +5,10 @@ from __future__ import annotations
 import os
 import json
 import fcntl
+import subprocess
 from contextlib import contextmanager
 from datetime import datetime, timezone
+from functools import lru_cache
 from pathlib import Path
 from typing import Any, Callable, Iterable
 
@@ -48,9 +50,36 @@ def derived_sidecar_path(source: Path) -> Path:
     return sidecar_path(source_dir, source.stem if source.suffix == ".jsonl" else None)
 
 
+@lru_cache(maxsize=8)
+def _git_index_case_map(base_key: str) -> dict[str, str]:
+    """Map case-folded tracked paths/prefixes to unambiguous git spelling."""
+
+    result = subprocess.run(
+        ["git", "-C", base_key, "ls-files", "-z"],
+        capture_output=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        return {}
+    candidates: dict[str, set[str]] = {}
+    for raw in result.stdout.decode("utf-8").split("\0"):
+        if not raw:
+            continue
+        parts = Path(raw).parts
+        for index in range(1, len(parts) + 1):
+            prefix = Path(*parts[:index]).as_posix()
+            candidates.setdefault(prefix.casefold(), set()).add(prefix)
+    return {
+        key: next(iter(values))
+        for key, values in candidates.items()
+        if len(values) == 1
+    }
+
+
 def _relative(path: Path, base: Path) -> str:
     try:
-        return path.resolve().relative_to(base.resolve()).as_posix()
+        relative = path.resolve().relative_to(base.resolve()).as_posix()
+        return _git_index_case_map(str(base.resolve())).get(relative.casefold(), relative)
     except ValueError:
         return path.as_posix()
 

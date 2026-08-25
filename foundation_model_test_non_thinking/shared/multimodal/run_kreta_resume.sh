@@ -14,10 +14,13 @@ MODEL="${1:-qwen3-vl-8b-instruct}"
 SETTING="${2:-default}"
 BASE_URL="${3:-http://172.16.1.81:18090/v1}"
 
-# safe_model_name: replace '/', '-', ':' with '_'
-SAFE_MODEL="${MODEL//\//_}"
-SAFE_MODEL="${SAFE_MODEL//-/_}"
-SAFE_MODEL="${SAFE_MODEL//:/_}"
+SAFE_MODEL="$(python - "$SCRIPT_DIR/benches" "$BASE_DIR" "$MODEL" <<'PY'
+import sys
+sys.path.insert(0, sys.argv[1])
+from paths import results_model_dir_name
+print(results_model_dir_name(sys.argv[2], sys.argv[3]))
+PY
+)" || { echo "[kreta] results 모델 경로 해석 실패 — 중단"; exit 1; }
 
 # Timestamp 결정: EVAL_TIMESTAMP env > .eval_session 파일 > 새로 생성 + 저장
 if [ -n "${EVAL_TIMESTAMP:-}" ]; then
@@ -65,19 +68,29 @@ cd "$KRETA_REPO/eval" || { echo "ERROR: $KRETA_REPO/eval not found. Run install.
 # (원본 run_kreta.sh 는 jsonl 까지 삭제 → 처음부터 재실행. 여기선 의도적으로 보존.)
 mkdir -p ./output
 CHECKPOINT="./output/${MODEL}_${SETTING}.jsonl"
+# Fresh run이 results/에 보존한 checkpoint/context를 중앙 output이 지워진
+# 경우에도 같은 세션에 한해 복구한다.
+if [ ! -f "$CHECKPOINT" ] && [ -f "$DEST/$(basename "$CHECKPOINT")" ]; then
+  cp "$DEST/$(basename "$CHECKPOINT")" "$CHECKPOINT" || exit 1
+  echo "[multimodal/kreta] results/ 보존본에서 checkpoint 복구"
+fi
+if [ ! -f "./output/.resume_context.json" ] && [ -f "$DEST/.resume_context.json" ]; then
+  cp "$DEST/.resume_context.json" "./output/.resume_context.json" || exit 1
+  echo "[multimodal/kreta] results/ 보존본에서 resume context 복구"
+fi
 if [ ! -f "$CHECKPOINT" ] || [ ! -f "./output/.resume_context.json" ]; then
   echo "[multimodal/kreta] ERROR: 검증 가능한 checkpoint/context 없음 — 새 run_kreta.sh 실행 필요"
   exit 1
 fi
-if ! python - "./output/.resume_context.json" "$MODEL" "$SETTING" "$BASE_URL" "$TIMESTAMP" "$KRETA_MAX_TOKENS" <<'PY'
+if ! python - "$SCRIPT_DIR/benches" "$DEST/run_config.json" "./output/.resume_context.json" "$SETTING" "$TIMESTAMP" <<'PY'
 import json, sys
 from pathlib import Path
+sys.path.insert(0, sys.argv[1])
+from metadata import build_resume_context
 
-path = Path(sys.argv[1])
-expected = {
-    "model": sys.argv[2], "setting": sys.argv[3], "base_url": sys.argv[4],
-    "session": sys.argv[5], "max_tokens": int(sys.argv[6]),
-}
+config = json.loads(Path(sys.argv[2]).read_text(encoding="utf-8"))
+path = Path(sys.argv[3])
+expected = build_resume_context(config, setting=sys.argv[4], session=sys.argv[5])
 try:
     actual = json.loads(path.read_text(encoding="utf-8"))
 except Exception as exc:
@@ -102,9 +115,12 @@ if [ ! -f "$CHECKPOINT" ]; then
 fi
 DEST_JSONL="$DEST/$(basename "$CHECKPOINT")"
 cp "$CHECKPOINT" "$DEST_JSONL" || { echo "[multimodal/kreta] ERROR: checkpoint 보존 실패"; exit 1; }
+cp "./output/.resume_context.json" "$DEST/.resume_context.json" || { echo "[multimodal/kreta] ERROR: resume context 보존 실패"; exit 1; }
 
 if ! python "$PUBLISH_CLI" --base "$BASE_DIR" --source "$DEST_JSONL" --preflight-kreta --write; then
   echo "[multimodal/kreta] ERROR: raw preflight 실패 — checkpoint 보존, evaluate 스킵"
+  echo "[multimodal/kreta] 복구 ① 일시 오류: 동일 환경·동일 세션으로 run_kreta_resume.sh"
+  echo "[multimodal/kreta] 복구 ② 반복 diffusion None: 새 세션에서 SERVING_FORCE_SKIP_SPECIAL_TOKENS=false run_kreta.sh"
   exit 1
 fi
 if [ "$INFER_RC" -ne 0 ]; then

@@ -102,6 +102,15 @@ attempted = measured + errored + unresolved
 | `UNSCORED` | 채점이 존재하지 않음 | ❌ |
 
 우선순위: `REJECTED` > `UNSCORED` > `INSUFFICIENT_PROVENANCE` > `LEGACY_REVALIDATED` > `NATIVE`.
+`UNSCORED`는 채점 없는 **KOFFVQA / generation**에만 허용한다. 다른 벤치나 variant가
+UNSCORED를 내면 schema 위반이며 `--strict` 성공 예외가 아니다.
+
+publishable sidecar의 `counts`는 `attempted` / `measured` / `errored` /
+`unresolved` / `correct_measured` 비음수 정수를 모두 가져야 한다.
+`correct_measured <= measured <= attempted` 및
+`attempted = measured + errored + unresolved`를 단언한다. 정확도 벤치가 아닌 B3,
+B4, judge에서 `correct_measured`는 각각 schema 통과, 완주 latency, 유효 judge 점수처럼
+그 벤치의 계약상 유효한 primary measurement 수를 뜻한다.
 
 **`provisional=true`** (판정기 기준, 인간 검증 없음) 는 publishable 과 직교한다.
 발행 가능해도 반드시 PROVISIONAL 딱지를 붙인다.
@@ -162,6 +171,13 @@ repo commit이 갈리면 보고서 표 아래에 문항 집합은 동일하다�
 KOFFVQA `prediction_sha256`도 judge 결과와 모델별 prediction artifact의 결합 검증에만
 쓰며 protocol fingerprint에서는 제외한다.
 
+향후 NATIVE 런은 러너 인자가 아니라 `apply_serving_constraints()` 적용 **후** 실제
+전송된 decoding 설정을 `run_config.decoding`과 protocol fingerprint에 기록한다.
+원래 요청값은 `decoding_requested`에 보존한다. 제거된 파라미터 목록,
+`SERVING_MAX_OUTPUT_TOKENS`의 유효 상한, 최종 `skip_special_tokens` 값도
+`serving_constraints`로 지문에 포함한다. 명시적으로 제거된 파라미터는 `unknown`이
+아니며, 서로 다른 serving constraint를 같은 프로토콜로 비교하지 않는다.
+
 문항 집합 digest와 별도로 **기대 건수**도 벤치별 상수로 단언한다
 (KRETA 2577, K-MMBench 4329, K-DTCBench 240, KOFFVQA 275, MTVQA-KR 558).
 건수가 다르거나 문항 key가 누락·중복되면 `REJECTED`.
@@ -195,9 +211,11 @@ canonical id로 사용하면서 보고서에 경고한다. 특히 fp8과 non-fp8
 2. `publishable=true` 인 sidecar 만 후보.
 3. **원자적 선택** — overall / category / System1·2 축은 한 런에서 통째로 가져온다.
    카테고리별로 다른 런을 고르면 모델마다 유리한 카테고리가 조합된 모자이크가 된다.
-4. 같은 코호트에서 source-relative artifact role/path와 SHA-256 쌍의 집합 및
+4. 같은 코호트에서 **정규화한 session identity**(`.bad` 접미사만 제거),
+   source-relative artifact role/path와 SHA-256 쌍의 집합 및
    `counts`·`metrics`·`provisional` 측정 payload가 모두 같으면 동일 런의 복사본으로
-   접는다. payload가 같고 status만 다르면 `NATIVE`를 먼저 유지하며, 그 다음
+   접는다. session이 다르면 바이트와 payload가 같아도 독립 재실행이므로 접지 않고
+   재현성 비교에 남긴다. payload가 같고 status만 다르면 `NATIVE`를 먼저 유지하며, 그 다음
    `.bad` 접미사 없음, 짧은 경로, 사전순으로 정한다. SHA만 같거나 payload가 다르면
    절대 접지 않는다.
 5. 복사본을 접은 뒤 후보가 여럿이면 신뢰 가능한 `completed_at_utc` 최신 하나.
@@ -317,6 +335,14 @@ v1 에서 고쳤다: fuzzy substring 감지를 제거하고 `question` / `answer
 - publish 계층 writer는 sidecar별 POSIX advisory lock과 atomic replace를 함께 쓴다.
   passive derive는 lock 안에서 NATIVE를 재확인하므로 runner의 NATIVE 승격을 강등하지 않는다.
   publish 계층을 우회해 파일을 직접 쓰는 외부 프로세스에는 이 lock 보장이 적용되지 않는다.
-- KRETA resume은 `.resume_context.json`이 현재 세션·모델·모드·endpoint·max tokens와
-  정확히 같을 때만 checkpoint를 재사용한다. 이 규칙 도입 전 checkpoint는 context가
-  없으므로 resume하지 않고 새 `run_kreta.sh`로 시작한다.
+- KRETA resume은 `.resume_context.json`이 현재 세션·모델·모드·endpoint뿐 아니라
+  요청/유효 decoding, 제거 파라미터, 출력 상한, 최종 `skip_special_tokens`까지
+  정확히 같을 때만 checkpoint를 재사용한다. checkpoint와 context는 중앙
+  `data/KRETA/eval/output/` 및 해당 세션의 `results/.../kreta/`에 함께 보존하며,
+  중앙 사본이 지워졌으면 동일 세션의 results 보존본에서 복구한다.
+- raw preflight 실패가 일시 오류라면 **동일 환경·동일 세션**으로
+  `run_kreta_resume.sh`를 실행한다. diffusion 응답 `None`이 반복되면 기존 checkpoint에
+  다른 규약을 섞지 말고 **새 세션**에서
+  `SERVING_FORCE_SKIP_SPECIAL_TOKENS=false run_kreta.sh`를 실행한다. serving constraint가
+  달라진 checkpoint resume은 거부된다. 이 규칙 도입 전 context 없는 checkpoint도
+  resume하지 않고 새 `run_kreta.sh`로 시작한다.

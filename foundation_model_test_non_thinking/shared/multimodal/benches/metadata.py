@@ -13,7 +13,15 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
-from paths import safe_model_name
+try:
+    from .paths import safe_model_name
+except ImportError:  # direct script/facade import from benches/
+    from paths import safe_model_name
+
+SHARED_ROOT = Path(__file__).resolve().parents[2]
+if str(SHARED_ROOT) not in sys.path:
+    sys.path.insert(0, str(SHARED_ROOT))
+from serving.constraints import effective_decoding  # noqa: E402
 
 
 def get_hf_dataset_revision(dataset_id: str) -> Optional[str]:
@@ -119,6 +127,11 @@ def build_run_config(
     if eval_script_path and eval_script_hash is None:
         eval_script_hash = get_eval_script_hash(eval_script_path)
 
+    requested_decoding, applied_decoding, serving_constraints = effective_decoding(
+        temperature=temperature,
+        max_tokens=max_tokens,
+        seed=seed,
+    )
     cfg = {
         "benchmark": benchmark,
         "timestamp_utc": datetime.now(timezone.utc).isoformat(),
@@ -129,11 +142,9 @@ def build_run_config(
         "endpoint": {
             "base_url": base_url,
         },
-        "decoding": {
-            "temperature": temperature,
-            "max_tokens": max_tokens,
-            "seed": seed,
-        },
+        "decoding": applied_decoding,
+        "decoding_requested": requested_decoding,
+        "serving_constraints": serving_constraints,
         "request_policy": {
             "timeout": timeout,
             "retry_max": retry_max,
@@ -170,3 +181,19 @@ def build_run_config(
     if extra:
         cfg["extra"] = extra
     return cfg
+
+
+def build_resume_context(run_config: dict, *, setting: str, session: str) -> dict:
+    """Build the exact KRETA checkpoint request identity from run_config."""
+
+    decoding = run_config.get("decoding") or {}
+    return {
+        "model": (run_config.get("model") or {}).get("name"),
+        "setting": setting,
+        "base_url": (run_config.get("endpoint") or {}).get("base_url"),
+        "session": session,
+        "max_tokens": decoding.get("max_tokens"),
+        "decoding": decoding,
+        "decoding_requested": run_config.get("decoding_requested") or {},
+        "serving_constraints": run_config.get("serving_constraints") or {},
+    }

@@ -677,7 +677,7 @@
 ### 추론 복원 provenance
 
 - `results/Qwen3.5_122B_A10B_GPTQ_Int4/20260720_235721/vision/multimodal/k_dtcbench`: `{"split": {"basis": "k_dtcbench.py fixed load_dataset split", "value": "test"}}`
-- `results/google_gemma_4_26b_a4b_it/v2b_20260824/vision/multimodal/k_dtcbench`: `{"split": {"basis": "k_dtcbench.py fixed load_dataset split", "value": "test"}}`
+- `results/google_gemma_4_26B_A4B_it/v2b_20260824/vision/multimodal/k_dtcbench`: `{"split": {"basis": "k_dtcbench.py fixed load_dataset split", "value": "test"}}`
 - `results/qwen3.5_27b/20260525_145725/vision/multimodal/k_dtcbench`: `{"split": {"basis": "k_dtcbench.py fixed load_dataset split", "value": "test"}}`
 - `results/Qwen_Qwen3.6_35B_A3B/20260524_120652/vision/multimodal/k_dtcbench`: `{"split": {"basis": "k_dtcbench.py fixed load_dataset split", "value": "test"}}`
 - `results/qwen_qwen3.5_27b_fp8/20260705_082256/vision/multimodal/k_dtcbench`: `{"split": {"basis": "k_dtcbench.py fixed load_dataset split", "value": "test"}}`
@@ -700,7 +700,7 @@
 - `results/qwen_qwen3.5_35b_a3b_fp8/20260711_003523/vision/multimodal/kreta/qwen_qwen3.5_35b_a3b_fp8_default.jsonl`: `{"max_tokens": {"basis": "legacy run_kreta.sh: default mode default KRETA_MAX_TOKENS", "value": 4096}}`
 - `results/qwen_qwen3.6_35b_a3b_fp8/20260702_133909/vision/multimodal/kreta/qwen_qwen3.6_35b_a3b_fp8_default.jsonl`: `{"max_tokens": {"basis": "legacy run_kreta.sh: default mode default KRETA_MAX_TOKENS", "value": 4096}}`
 - `results/Qwen3.5_122B_A10B_GPTQ_Int4/20260720_235721/vision/multimodal/kreta/Qwen3.5_122B_A10B_GPTQ_Int4_direct.jsonl`: `{"max_tokens": {"basis": "legacy run_kreta.sh: direct mode default KRETA_MAX_TOKENS", "value": 32}}`
-- `results/google_gemma_4_26B_A4B_it/20260621_221741/vision/multimodal/kreta/google_gemma_4_26b_a4b_it_direct.jsonl`: `{"max_tokens": {"basis": "legacy run_kreta.sh: direct mode default KRETA_MAX_TOKENS", "value": 32}}`
+- `results/google_gemma_4_26b_a4b_it/20260621_221741/vision/multimodal/kreta/google_gemma_4_26b_a4b_it_direct.jsonl`: `{"max_tokens": {"basis": "legacy run_kreta.sh: direct mode default KRETA_MAX_TOKENS", "value": 32}}`
 - `results/google_gemma_4_31B_it/20260525_152204/vision/multimodal/kreta/google_gemma_4_31B_it_direct.jsonl`: `{"max_tokens": {"basis": "legacy run_kreta.sh: direct mode default KRETA_MAX_TOKENS", "value": 32}}`
 - `results/qwen3.5_27b/20260525_145725/vision/multimodal/kreta/qwen3.5_27b_direct.jsonl`: `{"max_tokens": {"basis": "legacy run_kreta.sh: direct mode default KRETA_MAX_TOKENS", "value": 32}}`
 - `results/Qwen_Qwen3.6_35B_A3B/20260524_120652/vision/multimodal/kreta/qwen3.6-35b-a3b_direct.jsonl`: `{"max_tokens": {"basis": "legacy run_kreta.sh: direct mode default KRETA_MAX_TOKENS", "value": 32}}`

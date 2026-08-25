@@ -2,7 +2,7 @@ diff --git aa/eval/infer/infer_gpt.py bb/eval/infer/infer_gpt.py
 index 5119c2c..e1adf83 100644
 --- aa/eval/infer/infer_gpt.py
 +++ bb/eval/infer/infer_gpt.py
-@@ -12,7 +12,46 @@ from tqdm import tqdm
+@@ -12,7 +12,68 @@ from tqdm import tqdm
  # Load API key and set endpoint - OPENAI
  load_dotenv()
  API_KEY = os.getenv("OPENAI_API_KEY")
@@ -20,37 +20,59 @@ index 5119c2c..e1adf83 100644
 +#     를 보내면 vllm/sampling_params.py 의 _validate_diffusion 이 400 을 낸다
 +#   - skip_special_tokens 기본값(True)이면 chat completions 응답의 content 가
 +#     None 으로 온다 (Gemma4 파서가 디토크나이즈된 문자열에서 경계를 못 찾음).
-+def _apply_serving_constraints(kwargs):
-+    for name in os.environ.get("SERVING_UNSUPPORTED_SAMPLING_PARAMS", "").split(","):
-+        name = name.strip()
-+        if name:
-+            kwargs.pop(name, None)
-+
++def _serving_constraints_snapshot():
++    """shared/serving/constraints.py와 같은 key/파싱/정렬 규칙."""
++    unsupported = sorted({
++        name.strip()
++        for name in os.environ.get("SERVING_UNSUPPORTED_SAMPLING_PARAMS", "").split(",")
++        if name.strip()
++    })
 +    cap_raw = os.environ.get("SERVING_MAX_OUTPUT_TOKENS", "").strip()
-+    if cap_raw:
-+        try:
-+            cap = int(cap_raw)
-+        except ValueError:
-+            cap = 0
++    try:
++        cap = int(cap_raw) if cap_raw else None
++    except ValueError:
++        cap = None
++    if cap is not None and cap <= 0:
++        cap = None
++    skip_raw = os.environ.get("SERVING_FORCE_SKIP_SPECIAL_TOKENS", "").strip().lower()
++    skip = None
++    if skip_raw in ("false", "0", "no"):
++        skip = False
++    elif skip_raw in ("true", "1", "yes"):
++        skip = True
++    return {
++        "unsupported_sampling_params": unsupported,
++        "max_output_tokens": cap,
++        "force_skip_special_tokens": skip,
++    }
++
++
++def _apply_serving_constraints(kwargs):
++    constraints = _serving_constraints_snapshot()
++    for name in constraints["unsupported_sampling_params"]:
++        kwargs.pop(name, None)
++
++    cap = constraints["max_output_tokens"]
++    if cap is not None:
 +        current = kwargs.get("max_tokens")
-+        if cap > 0 and isinstance(current, int) and current > cap:
++        if isinstance(current, int) and current > cap:
 +            kwargs["max_tokens"] = cap
 +
-+    skip_raw = os.environ.get("SERVING_FORCE_SKIP_SPECIAL_TOKENS", "").strip().lower()
-+    if skip_raw in ("false", "0", "no", "true", "1", "yes"):
++    skip = constraints["force_skip_special_tokens"]
++    if skip is not None:
 +        extra = kwargs.get("extra_body")
 +        if not isinstance(extra, dict):
 +            extra = {}
 +            kwargs["extra_body"] = extra
 +        # skip_special_tokens 는 OpenAI 표준 파라미터가 아니라 extra_body 로 보낸다.
-+        extra["skip_special_tokens"] = skip_raw in ("true", "1", "yes")
++        extra["skip_special_tokens"] = skip
 +
 +    return kwargs
 +# --- 로컬 수정 끝 ---------------------------------------------------------
  
  # Get model and setting from command line
  if len(sys.argv) == 3:
-@@ -29,7 +68,12 @@ else:
+@@ -29,7 +90,12 @@ else:
  MODEL_NAME = re.split(r"-\d{4}-\d{2}-\d{2}", MODEL)[0].upper()
  
  # Set number of workers
@@ -64,7 +86,7 @@ index 5119c2c..e1adf83 100644
  
  prompt_config = {
      "default": "Please select the correct answer from the options above. The last line of your response should be of the following format: 'Answer: LETTER' (without quotes) where LETTER is one of options.",
-@@ -76,6 +120,11 @@ def load_model(model_name="GPT4", base_url="", api_key="", model="gpt-4o-mini"):
+@@ -76,6 +142,11 @@ def load_model(model_name="GPT4", base_url="", api_key="", model="gpt-4o-mini"):
      model_components["model"] = model
      model_components["base_url"] = base_url
      model_components["api_key"] = api_key
@@ -76,7 +98,7 @@ index 5119c2c..e1adf83 100644
      return model_components
  
  
-@@ -83,35 +132,47 @@ def load_model(model_name="GPT4", base_url="", api_key="", model="gpt-4o-mini"):
+@@ -83,35 +154,47 @@ def load_model(model_name="GPT4", base_url="", api_key="", model="gpt-4o-mini"):
  def request_with_image(
      text,
      image,
@@ -145,7 +167,7 @@ index 5119c2c..e1adf83 100644
  
  
  def infer(prompt, image, max_tokens=4096, use_vllm=False, **kwargs):
-@@ -119,6 +180,7 @@ def infer(prompt, image, max_tokens=4096, use_vllm=False, **kwargs):
+@@ -119,6 +202,7 @@ def infer(prompt, image, max_tokens=4096, use_vllm=False, **kwargs):
      base_url = kwargs.get("base_url")
      api_key = kwargs.get("api_key")
      model_name = kwargs.get("model_name", None)
@@ -153,7 +175,7 @@ index 5119c2c..e1adf83 100644
  
      try:
          response = request_with_image(
-@@ -128,6 +190,7 @@ def infer(prompt, image, max_tokens=4096, use_vllm=False, **kwargs):
+@@ -128,6 +212,7 @@ def infer(prompt, image, max_tokens=4096, use_vllm=False, **kwargs):
              base_url=base_url,
              api_key=api_key,
              model=model,
@@ -161,7 +183,7 @@ index 5119c2c..e1adf83 100644
          )
      except Exception as e:
          print(f"Error: {e}")
-@@ -140,25 +203,10 @@ def process_prompt(data, model_components):
+@@ -140,25 +225,10 @@ def process_prompt(data, model_components):
      prompt = kotextvqa_doc_to_text(data)
      image = vision_kotextvqa_doc_to_visual(data)
  
@@ -188,7 +210,7 @@ index 5119c2c..e1adf83 100644
      dataset = load_dataset("tabtoyou/KoTextVQA", split="test")
      model_components = load_model(
          model_name=MODEL_NAME,
-@@ -168,32 +216,116 @@ def run_and_save():
+@@ -168,32 +238,116 @@ def run_and_save():
      )
  
      def process_and_save_part(part_data, part_name, model_components):

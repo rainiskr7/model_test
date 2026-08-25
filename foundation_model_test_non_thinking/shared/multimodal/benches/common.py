@@ -35,6 +35,7 @@ from textnorm import (
 from metadata import (
     get_hf_dataset_revision, get_git_commit, get_package_version,
     get_eval_script_hash, resolve_dataset_revision, build_run_config,
+    build_resume_context,
 )
 from shared.multimodal.publish import (
     native_sidecar_from_records,
@@ -51,6 +52,7 @@ __all__ = [
     "normalize_text", "normalize_number",
     "get_hf_dataset_revision", "get_git_commit", "get_package_version",
     "get_eval_script_hash", "resolve_dataset_revision", "build_run_config",
+    "build_resume_context",
     "native_sidecar_from_records", "native_sidecar_from_source",
     "summarize_records", "write_sidecar",
 ]

@@ -91,6 +91,65 @@ def test_model_identity_loader_rejects_fp8_or_size_erasing_alias(tmp_path):
         load_model_identity_map(tmp_path)
 
 
+@pytest.mark.parametrize("quantized", [
+    "qwen-35b-4bit", "qwen-35b-int8", "qwen-35b-8bit",
+    "qwen-35b-bnb-4bit", "qwen-35b-q4_k_m",
+])
+def test_model_identity_loader_rejects_extended_quantization_erasure(tmp_path, quantized):
+    config = tmp_path / "configs/model_identity.json"
+    config.parent.mkdir(parents=True)
+    config.write_text(
+        '{"' + quantized + '": "qwen-35b"}',
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="size/quantization markers"):
+        load_model_identity_map(tmp_path)
+
+
+def test_unscored_is_only_valid_for_koffvqa_generation():
+    base = {
+        "schema_version": 1,
+        "status": "UNSCORED",
+        "publishable": False,
+        "aggregation_allowed": False,
+        "protocol": make_protocol({}, {}, []),
+        "counts": {"attempted": 1, "measured": 1, "errored": 0, "unresolved": 0},
+    }
+    valid = {**base, "benchmark_id": "KOFFVQA", "variant": "generation"}
+    validate_sidecar(valid)
+    invalid = {**base, "benchmark_id": "KRETA", "variant": "direct"}
+    with pytest.raises(ValueError, match="only valid"):
+        validate_sidecar(invalid)
+
+
+def test_publishable_counts_are_complete_nonnegative_and_ordered():
+    sidecar = {
+        "schema_version": 1,
+        "benchmark_id": "K-DTCBench",
+        "status": "NATIVE",
+        "publishable": True,
+        "aggregation_allowed": False,
+        "protocol": make_protocol({}, {}, []),
+        "counts": {
+            "attempted": 1, "measured": 1, "errored": 0,
+            "unresolved": 0, "correct_measured": 1,
+        },
+        "metrics": {"axes": [{
+            "name": "overall", "numerator": 1, "denominator": 1,
+            "value": 1.0, "unit": "fraction",
+        }]},
+    }
+    validate_sidecar(sidecar)
+    for bad_counts in (
+        {},
+        {"attempted": 1, "measured": 1, "errored": 0, "unresolved": 0},
+        {"attempted": 1, "measured": 1, "errored": 0, "unresolved": 0, "correct_measured": 2},
+        {"attempted": 1, "measured": -1, "errored": 1, "unresolved": 1, "correct_measured": 0},
+    ):
+        invalid = {**sidecar, "counts": bad_counts}
+        with pytest.raises(ValueError, match="count"):
+            validate_sidecar(invalid)
+
 def test_publishable_accuracy_sidecar_requires_valid_overall_fraction():
     sidecar = {
         "schema_version": 1,

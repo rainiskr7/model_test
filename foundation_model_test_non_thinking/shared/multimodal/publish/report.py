@@ -594,7 +594,14 @@ def strict_failed(
 ) -> bool:
     blocking = [
         sidecar for sidecar in sidecars
-        if sidecar.get("status") not in {PublishStatus.NATIVE.value, PublishStatus.LEGACY_REVALIDATED.value, PublishStatus.UNSCORED.value}
+        if not (
+            sidecar.get("status") in {PublishStatus.NATIVE.value, PublishStatus.LEGACY_REVALIDATED.value}
+            or (
+                sidecar.get("status") == PublishStatus.UNSCORED.value
+                and sidecar.get("benchmark_id") == "KOFFVQA"
+                and sidecar.get("variant") == "generation"
+            )
+        )
     ]
     comparison = comparison_sidecars if comparison_sidecars is not None else sidecars
     scope_keys = {cohort_key(sidecar) for sidecar in sidecars if sidecar.get("publishable")}

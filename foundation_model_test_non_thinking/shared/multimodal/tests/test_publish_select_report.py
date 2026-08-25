@@ -116,8 +116,16 @@ def test_rejected_scores_never_render_and_unscored_alone_is_not_strict_failure()
     rejected["metrics"]["axes"] = [{"name": "overall", "value": 24.41, "unit": "score/10"}]
     markdown, ambiguous = render_markdown([rejected], [])
     assert "24.41" not in markdown
-    unscored = sidecar("generation", None, status="UNSCORED", score=0)
+    unscored = sidecar(
+        "generation", None, status="UNSCORED", score=0,
+        benchmark="KOFFVQA", variant="generation",
+    )
     assert strict_failed([unscored], [], []) is False
+    wrong_unscored = sidecar(
+        "generation", None, status="UNSCORED", score=0,
+        benchmark="KRETA", variant="direct",
+    )
+    assert strict_failed([wrong_unscored], [], []) is True
     assert strict_failed([rejected], [], ambiguous) is True
 
 
@@ -297,6 +305,36 @@ def test_identical_payload_prefers_native_before_copy_path_priority():
     assert ambiguous == []
     assert selected[0]["status"] == "NATIVE"
     assert selected[0]["source"]["unit"] == native["source"]["unit"]
+
+
+def test_same_artifact_and_payload_from_different_sessions_is_not_folded():
+    first = sidecar(
+        "session-a", "2026-01-01T00:00:00+00:00",
+        source="results/model/session-a/bench", artifact_sha="sha256:same",
+    )
+    second = sidecar(
+        "session-b", "2026-01-02T00:00:00+00:00",
+        source="results/model/session-b/bench", artifact_sha="sha256:same",
+    )
+    selected, ambiguous = select_representatives([first, second])
+    assert ambiguous == []
+    assert selected[0]["session"] == "session-b"
+    assert len(selected[0]["_selection"]["cohort_runs"]) == 2
+    assert selected[0]["_selection"]["folded_duplicates"] == []
+
+
+def test_bad_session_suffix_is_the_only_session_copy_normalization():
+    original = sidecar(
+        "same", "2026-01-01T00:00:00+00:00",
+        source="results/model/same/bench", artifact_sha="sha256:same",
+    )
+    copied = sidecar(
+        "same.bad", "2026-01-01T00:00:00+00:00",
+        source="results/model/same.bad/bench", artifact_sha="sha256:same",
+    )
+    selected, ambiguous = select_representatives([original, copied])
+    assert ambiguous == []
+    assert len(selected[0]["_selection"]["folded_duplicates"]) == 1
 
 
 def test_artifact_roles_are_part_of_exact_copy_signature():

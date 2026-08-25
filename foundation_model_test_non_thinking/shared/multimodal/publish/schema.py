@@ -106,7 +106,10 @@ ACCURACY_BENCHMARK_IDS = {"KRETA", "K-MMBench", "K-DTCBench", "MTVQA-KR"}
 def _model_identity_markers(name: str) -> set[str]:
     normalized = name.lower()
     markers = set(re.findall(r"\d+(?:\.\d+)?b", normalized))
-    markers.update(re.findall(r"fp8|gptq|int4|awq", normalized))
+    markers.update(re.findall(
+        r"(?:fp|int|uint)\d+|(?:\d+bit)|nf4|bnb|gptq|awq|gguf|q\d+(?:_[a-z0-9]+)*",
+        normalized,
+    ))
     return markers
 
 
@@ -283,6 +286,11 @@ def validate_sidecar(sidecar: Mapping[str, Any]) -> None:
         raise ValueError("invalid publication status") from exc
     if sidecar.get("publishable") is not status.publishable:
         raise ValueError("publishable does not match status")
+    if status is PublishStatus.UNSCORED and not (
+        sidecar.get("benchmark_id") == "KOFFVQA"
+        and sidecar.get("variant") == "generation"
+    ):
+        raise ValueError("UNSCORED is only valid for KOFFVQA / generation")
     if sidecar.get("aggregation_allowed") is not False:
         raise ValueError("aggregation_allowed must be false in v1")
     identity = sidecar.get("model_identity")
@@ -335,7 +343,14 @@ def validate_sidecar(sidecar: Mapping[str, Any]) -> None:
     measured = counts.get("measured")
     errored = counts.get("errored")
     unresolved = counts.get("unresolved")
-    if all(isinstance(x, int) for x in (attempted, measured, errored, unresolved)):
+    correct_measured = counts.get("correct_measured")
+    if status.publishable:
+        required_counts = (attempted, measured, errored, unresolved, correct_measured)
+        if any(isinstance(value, bool) or not isinstance(value, int) or value < 0 for value in required_counts):
+            raise ValueError("publishable counts must contain nonnegative integer attempted/measured/errored/unresolved/correct_measured")
+        if not correct_measured <= measured <= attempted:
+            raise ValueError("publishable count ordering invariant failed")
+    if all(isinstance(x, int) and not isinstance(x, bool) for x in (attempted, measured, errored, unresolved)):
         if attempted != measured + errored + unresolved:
             raise ValueError("attempted count invariant failed")
     if status.publishable and (errored or unresolved):

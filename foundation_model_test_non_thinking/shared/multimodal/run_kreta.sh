@@ -18,10 +18,14 @@ MODEL="${1:-qwen3-vl-8b-instruct}"
 SETTING="${2:-default}"
 BASE_URL="${3:-http://172.16.1.81:18090/v1}"
 
-# safe_model_name: replace '/', '-', ':' with '_'
-SAFE_MODEL="${MODEL//\//_}"
-SAFE_MODEL="${SAFE_MODEL//-/_}"
-SAFE_MODEL="${SAFE_MODEL//:/_}"
+# Linux에서도 기존 git 경로의 실제 casing을 재사용한다.
+SAFE_MODEL="$(python - "$SCRIPT_DIR/benches" "$BASE_DIR" "$MODEL" <<'PY'
+import sys
+sys.path.insert(0, sys.argv[1])
+from paths import results_model_dir_name
+print(results_model_dir_name(sys.argv[2], sys.argv[3]))
+PY
+)" || { echo "[kreta] results 모델 경로 해석 실패 — 중단"; exit 1; }
 
 # Timestamp 결정: EVAL_TIMESTAMP env > .eval_session 파일 > 새로 생성 + 저장
 if [ -n "${EVAL_TIMESTAMP:-}" ]; then
@@ -74,15 +78,15 @@ find ./output -maxdepth 1 -type f \( -name '*.jsonl' -o -name '*.jsonl.tmp' -o -
 echo "[multimodal/kreta] ./output stale 정리 완료"
 
 # resume은 이 정확한 실행 문맥에서 생성된 checkpoint만 이어받을 수 있다.
-python - "./output/.resume_context.json" "$MODEL" "$SETTING" "$BASE_URL" "$TIMESTAMP" "$KRETA_MAX_TOKENS" <<'PY' || exit 1
+python - "$SCRIPT_DIR/benches" "$DEST/run_config.json" "./output/.resume_context.json" "$SETTING" "$TIMESTAMP" <<'PY' || exit 1
 import json, os, sys
 from pathlib import Path
+sys.path.insert(0, sys.argv[1])
+from metadata import build_resume_context
 
-path = Path(sys.argv[1])
-value = {
-    "model": sys.argv[2], "setting": sys.argv[3], "base_url": sys.argv[4],
-    "session": sys.argv[5], "max_tokens": int(sys.argv[6]),
-}
+config = json.loads(Path(sys.argv[2]).read_text(encoding="utf-8"))
+path = Path(sys.argv[3])
+value = build_resume_context(config, setting=sys.argv[4], session=sys.argv[5])
 tmp = path.with_name(f".{path.name}.{os.getpid()}.tmp")
 tmp.write_text(json.dumps(value, ensure_ascii=False, sort_keys=True) + "\n", encoding="utf-8")
 os.replace(tmp, path)
@@ -97,10 +101,13 @@ if [ ! -f "$CHECKPOINT" ]; then
 fi
 DEST_JSONL="$DEST/$(basename "$CHECKPOINT")"
 cp "$CHECKPOINT" "$DEST_JSONL" || { echo "[multimodal/kreta] ERROR: checkpoint 보존 실패"; exit 1; }
+cp "./output/.resume_context.json" "$DEST/.resume_context.json" || { echo "[multimodal/kreta] ERROR: resume context 보존 실패"; exit 1; }
 
 # evaluate.py 전에 raw 타입/완주/id preflight. 실패 sidecar를 쓴 뒤 점수 계산을 막는다.
 if ! python "$PUBLISH_CLI" --base "$BASE_DIR" --source "$DEST_JSONL" --preflight-kreta --write; then
   echo "[multimodal/kreta] ERROR: raw preflight 실패 — checkpoint 보존, evaluate 스킵"
+  echo "[multimodal/kreta] 복구 ① 일시 오류: 동일 환경·동일 세션으로 run_kreta_resume.sh"
+  echo "[multimodal/kreta] 복구 ② 반복 diffusion None: 새 세션에서 SERVING_FORCE_SKIP_SPECIAL_TOKENS=false run_kreta.sh"
   exit 1
 fi
 if [ "$INFER_RC" -ne 0 ]; then

@@ -56,9 +56,11 @@ google_gemma_4_31B_it/  -> gemma_4_26b_a4b_it, gemma_4_31b_it, google_gemma_4_31
 
 ### A. 동일 런 중복 제거 (ambiguity 의 실제 원인)
 
-코호트 안에서 **source-relative artifact role/path와 SHA-256 쌍의 집합**이 같고,
-`counts`·`metrics`·`provisional` 측정 payload도 같으면 같은 런이다. 복사본이지
-서로 다른 측정이 아니므로 하나로 접는다. SHA만 같거나 payload가 다르면 접지 않는다.
+코호트 안에서 **`.bad`만 제거한 session identity**, source-relative artifact
+role/path와 SHA-256 쌍의 집합이 같고, `counts`·`metrics`·`provisional` 측정
+payload도 같으면 같은 런이다. 복사본이지 서로 다른 측정이 아니므로 하나로 접는다.
+session이 다르면 바이트와 payload가 같아도 독립 재실행이므로 접지 않는다. SHA만
+같거나 payload가 다르면 접지 않는다.
 
 - 접을 때 남길 경로 우선순위: `.bad` 접미사가 없는 것 > 경로가 짧은 것 > 사전순.
   선택 근거를 sidecar 가 아니라 **보고서 각주**에 남긴다(원본 불변).
