@@ -14,7 +14,18 @@ MODEL="${1:-qwen3-vl-8b-instruct}"
 SETTING="${2:-default}"
 BASE_URL="${3:-http://172.16.1.81:18090/v1}"
 
-SAFE_MODEL="$(python - "$SCRIPT_DIR/benches" "$BASE_DIR" "$MODEL" <<'PY'
+# 경로 해석에 쓸 인터프리터를 먼저 정한다. bare `python` 은 이 저장소의
+# 실행 환경(macOS·리눅스 모두)에 없을 수 있고, 없으면 DEST 를 만들기도 전에
+# 스크립트가 죽는다.
+PY="${PY:-}"
+if [ -z "$PY" ]; then
+  for candidate in "$BASE_DIR/.venv/bin/python" python3 python; do
+    if command -v "$candidate" >/dev/null 2>&1; then PY="$candidate"; break; fi
+  done
+fi
+[ -n "$PY" ] || { echo "[kreta] python 인터프리터를 찾지 못함 — 중단"; exit 1; }
+
+SAFE_MODEL="$("$PY" - "$SCRIPT_DIR/benches" "$BASE_DIR" "$MODEL" <<'PY'
 import sys
 sys.path.insert(0, sys.argv[1])
 from paths import results_model_dir_name

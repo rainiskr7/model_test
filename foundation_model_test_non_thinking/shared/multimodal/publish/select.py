@@ -112,11 +112,15 @@ def _with_selection_metadata(
     representative: dict[str, Any],
     candidates: list[dict[str, Any]],
     folded: list[dict[str, Any]],
+    ineligible: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     selected = dict(representative)
     selected["_selection"] = {
         "cohort_runs": candidates,
         "folded_duplicates": folded,
+        # Only runs that lost representative eligibility to a dated rival.  A
+        # lone undated run represents its own cohort, so it is not listed here.
+        "undated_candidates": ineligible or [],
     }
     return selected
 
@@ -149,12 +153,15 @@ def select_representatives(
             continue
         dated = [(stamp, candidate) for candidate in candidates if (stamp := _timestamp(candidate.get("completed_at_utc"))) is not None]
         undated = [candidate for candidate in candidates if _timestamp(candidate.get("completed_at_utc")) is None]
+        # A run without a completion time cannot be shown to be the most recent,
+        # so it is not eligible to *represent* a cohort that also holds a dated
+        # run — but it stays in cohort_runs and still counts toward the
+        # reproducibility spread.  Every reproduction of a legacy baseline mixes
+        # the two, and dropping the whole model from the table would lose a valid
+        # measurement to say nothing new.
+        ineligible: list[dict[str, Any]] = []
         if dated and undated:
-            ambiguous.append({
-                "key": key, "candidates": candidates, "folded_duplicates": folded,
-                "reason": "완료 시각이 있는 후보와 없는 후보가 섞여 있음",
-            })
-            continue
+            ineligible, undated = undated, []
         if undated:
             ambiguous.append({
                 "key": key, "candidates": candidates, "folded_duplicates": folded,
@@ -169,7 +176,9 @@ def select_representatives(
                 "reason": "동일한 최신 완료 시각 후보가 둘 이상",
             })
             continue
-        selected.append(_with_selection_metadata(latest_candidates[0], candidates, folded))
+        selected.append(
+            _with_selection_metadata(latest_candidates[0], candidates, folded, ineligible)
+        )
     selected.sort(key=cohort_key)
     ambiguous.sort(key=lambda item: item["key"])
     return selected, ambiguous

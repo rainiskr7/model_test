@@ -16,6 +16,7 @@ from .adapters import ADAPTERS, adapt_source
 from .schema import (
     PublishStatus,
     SCHEMA_VERSION,
+    STALE_FINGERPRINT_PREFIX,
     apply_model_identity,
     load_model_identity_map,
     sidecar_json,
@@ -125,14 +126,43 @@ def derive_source(source: Path, base: Path) -> tuple[Path, dict[str, Any]]:
 
 
 def native_sidecar_from_source(source: Path, base: Path) -> tuple[Path, dict[str, Any]]:
-    """Revalidate completed runner artifacts and promote a clean legacy result to NATIVE."""
+    """Revalidate completed runner artifacts and promote a clean legacy result to NATIVE.
+
+    The completion time is evidence about the run, not about this call.  Stamping
+    ``now()`` unconditionally moved it on every re-derive — a KRETA checkpoint
+    that finished at 14:27 carried 14:42 because a sidecar was rebuilt then — and
+    let an old artifact promoted today outrank a genuinely newer undated run.
+    Prefer what the artifact recorded, then keep what a previous sidecar already
+    established, and only stamp the wall clock for a first promotion that has
+    neither.  ``completed_at_source`` says which of the three it was.
+    """
 
     out_path, sidecar = derive_source(source, base)
-    sidecar["completed_at_utc"] = datetime.now(timezone.utc).isoformat()
+    stamp = sidecar.get("completed_at_utc")
+    origin = "artifact"
+    if not stamp:
+        stamp, origin = _previous_completion(out_path)
+    if not stamp:
+        stamp, origin = datetime.now(timezone.utc).isoformat(), "sidecar_write"
+    sidecar["completed_at_utc"] = stamp
+    sidecar["completed_at_source"] = origin
     if sidecar["status"] == PublishStatus.LEGACY_REVALIDATED:
         sidecar["status"] = PublishStatus.NATIVE
         sidecar["publishable"] = True
     return out_path, sidecar
+
+
+def _previous_completion(out_path: Path) -> tuple[str | None, str]:
+    """Return the completion time an earlier sidecar already established."""
+
+    try:
+        previous = json.loads(Path(out_path).read_text(encoding="utf-8"))
+    except Exception:
+        return None, ""
+    stamp = previous.get("completed_at_utc")
+    if not isinstance(stamp, str) or not stamp:
+        return None, ""
+    return stamp, str(previous.get("completed_at_source") or "sidecar_write")
 
 
 def rejected_sidecar_from_source(
@@ -290,10 +320,34 @@ def existing_native_sidecar(path: Path, base: Path) -> dict[str, Any] | None:
     return inspect_native_sidecar(path, base)[0]
 
 
+def migrate_stale_native(
+    source: Path,
+    base: Path,
+    native_damage: str | None,
+) -> tuple[Path, dict[str, Any]] | None:
+    """Recompute a NATIVE sidecar written under an older fingerprint algorithm.
+
+    Stale is not damaged: the artifacts still verify by SHA and the NATIVE
+    status was earned by the runner that produced them, so a change *we* made to
+    the hash must not reject a valid measurement.  Both the bulk and the
+    single-source entry points route through here so they cannot disagree about
+    what a stale sidecar means.
+    """
+
+    if not native_damage or STALE_FINGERPRINT_PREFIX not in native_damage:
+        return None
+    return native_sidecar_from_source(source, base)
+
+
 def reject_native_artifact_damage(sidecar: dict[str, Any], reason: str) -> dict[str, Any]:
     sidecar["status"] = PublishStatus.REJECTED
     sidecar["publishable"] = False
-    failure = f"기존 NATIVE artifact 무결성 실패: {reason}"
+    label = (
+        "기존 NATIVE sidecar 가 옛 지문 규약 — 재파생 필요"
+        if STALE_FINGERPRINT_PREFIX in reason
+        else "기존 NATIVE artifact 무결성 실패"
+    )
+    failure = f"{label}: {reason}"
     failures = list(sidecar.get("failures") or [])
     if failure not in failures:
         failures.append(failure)
@@ -317,6 +371,8 @@ def write_legacy_sidecar(
     path = _validate_output_path(path)
     with _sidecar_lock(path):
         native, native_damage = inspect_native_sidecar(path, base) if path.exists() else (None, None)
+        if native_damage and STALE_FINGERPRINT_PREFIX in native_damage:
+            native_damage = None  # re-derivable, not damaged
         if native is not None and not force:
             return False, native
         if native_damage:
@@ -348,6 +404,13 @@ def derive_all(
                 native = refreshed
             if on_native_skip is not None:
                 on_native_skip(path, native)
+            continue
+        migrated = migrate_stale_native(source, base, native_damage)
+        if migrated is not None:
+            native_damage = None
+            if write:
+                write_sidecar(path, migrated[1])
+            derived.append(migrated)
             continue
         item = derive_source(source, base)
         if native_damage:

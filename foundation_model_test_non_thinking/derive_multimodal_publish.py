@@ -16,6 +16,7 @@ from shared.multimodal.publish.derive import (
     native_sidecar_from_source,
     preflight_kreta_source,
     rejected_sidecar_from_source,
+    migrate_stale_native,
     reject_native_artifact_damage,
     write_legacy_sidecar,
     write_sidecar,
@@ -88,6 +89,13 @@ def main(argv: list[str] | None = None) -> int:
                     if args.native
                     else derive_source(args.source, args.base)
                 ]
+                migrated = (
+                    migrate_stale_native(args.source, args.base, native_damage)
+                    if not (args.native or args.reject_reason)
+                    else None
+                )
+                if migrated is not None:
+                    derived, native_damage = [migrated], None
                 if native_damage and not (args.native or args.reject_reason):
                     derived = [
                         (derived_path, reject_native_artifact_damage(sidecar, native_damage))

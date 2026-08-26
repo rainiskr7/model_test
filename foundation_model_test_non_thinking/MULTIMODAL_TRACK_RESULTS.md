@@ -28,9 +28,9 @@
 
 ## 헤드라인 — 벤치마크별 overall
 
-### KRETA — default, 2577문항 — protocol `4c2d67bae8bc`
+### KRETA — default, 2577문항 — protocol `163ee4cd4504`
 
-전체 protocol fingerprint: `sha256:4c2d67bae8bc79276ebc3ff1ec5fc2ade12264361c7654ed4a4bc7d753880b4b`
+전체 protocol fingerprint: `sha256:163ee4cd4504e498b92b629ee195dcc50e1f652c88a23818ef86065113d28f87`
 
 | 모델 | 결과 | 무답률 | 상태 |
 |---|---|---:|---|
@@ -42,9 +42,12 @@
 > 각주: `qwen_qwen3.5_35b_a3b_fp8` — 상류 parser와 91행 불일치(우리 무답 80, 다른 선택지 11) — 독립 재채점 점수임.
 > 각주: `qwen_qwen3.6_35b_a3b_fp8` — 상류 parser와 132행 불일치(우리 무답 113, 다른 선택지 19) — 독립 재채점 점수임.
 
-### KRETA — direct, 2577문항 — protocol `b5a8188c68cf`
+> 재현성: `qwen_qwen3.5_35b_a3b_fp8` — 이 코호트에 런 1개. 비교 대상 없음 — **UNVERIFIED**(발행은 유지; 산출물·채점 계약은 유효)
+> 재현성: `qwen_qwen3.6_35b_a3b_fp8` — 이 코호트에 런 1개. 비교 대상 없음 — **UNVERIFIED**(발행은 유지; 산출물·채점 계약은 유효)
 
-전체 protocol fingerprint: `sha256:b5a8188c68cf13518732860ce14af6af7eca3f90a7bd5bc9b55faeb27f81737f`
+### KRETA — direct, 2577문항 — protocol `8097cc67ee15`
+
+전체 protocol fingerprint: `sha256:8097cc67ee15fcb067ad01034e481ca525e36400a8bb9fefa727476e80639c48`
 
 | 모델 | 결과 | 무답률 | 상태 |
 |---|---|---:|---|
@@ -71,9 +74,30 @@
 > 각주: `qwen_qwen3.6_27b` — 상류 parser와 73행 불일치(우리 무답 72, 다른 선택지 1) — 독립 재채점 점수임.
 > 각주: `qwen_qwen3.6_27b_fp8` — 상류 parser와 14행 불일치(우리 무답 8, 다른 선택지 6) — 독립 재채점 점수임.
 
-### K-MMBench — full, 4329문항 — protocol `214f704b7c50`
+> 재현성: `Qwen3.5_122B_A10B_GPTQ_Int4` — 이 코호트에 런 1개. 비교 대상 없음 — **UNVERIFIED**(발행은 유지; 산출물·채점 계약은 유효)
+> 재현성: `gemma_4_26b_a4b_it` — 이 코호트에 런 1개. 비교 대상 없음 — **UNVERIFIED**(발행은 유지; 산출물·채점 계약은 유효)
+> 재현성: `gemma_4_31b_it` — 이 코호트에 런 1개. 비교 대상 없음 — **UNVERIFIED**(발행은 유지; 산출물·채점 계약은 유효)
+> 재현성: `qwen3.5_27b` — 이 코호트에 런 1개. 비교 대상 없음 — **UNVERIFIED**(발행은 유지; 산출물·채점 계약은 유효)
+> 재현성: `qwen3.6-35b-a3b` — 이 코호트에 런 1개. 비교 대상 없음 — **UNVERIFIED**(발행은 유지; 산출물·채점 계약은 유효)
+> 재현성: `qwen_qwen3.5_27b_fp8` — 이 코호트에 런 1개. 비교 대상 없음 — **UNVERIFIED**(발행은 유지; 산출물·채점 계약은 유효)
+> 재현성: `qwen_qwen3.5_35b_a3b` — 이 코호트에 런 1개. 비교 대상 없음 — **UNVERIFIED**(발행은 유지; 산출물·채점 계약은 유효)
+> 재현성: `qwen_qwen3.6_27b` — 이 코호트에 런 1개. 비교 대상 없음 — **UNVERIFIED**(발행은 유지; 산출물·채점 계약은 유효)
+> 재현성: `qwen_qwen3.6_27b_fp8` — 이 코호트에 런 1개. 비교 대상 없음 — **UNVERIFIED**(발행은 유지; 산출물·채점 계약은 유효)
 
-전체 protocol fingerprint: `sha256:214f704b7c50dee78777eb3c6bab002a8854889ec1f1c52d8d103e6c2401b35a`
+### K-MMBench — full, 4329문항 — protocol `54e6a6c9ad08`
+
+전체 protocol fingerprint: `sha256:54e6a6c9ad08ec4b7ead056833d60bf04373ba27df8ce42286dea9a908c30a2f`
+
+| 모델 | 결과 | 상태 |
+|---|---|---|
+| gemma_4_26b_a4b_it | 3758/4329 = 86.81% | LEGACY_REVALIDATED |
+
+> 중복 접기: `gemma_4_26b_a4b_it` — `results/gemma_4_26b_a4b_it/20260503_122218/vision/multimodal/k_mmbench` 유지; 동일 artifact role/SHA-256·측정 payload 복사본 `results/gemma_4_26b_a4b_it.bad/20260503_122218/vision/multimodal/k_mmbench` 접음.
+> 재현성: `gemma_4_26b_a4b_it` — 이 코호트에 런 1개. 비교 대상 없음 — **UNVERIFIED**(발행은 유지; 산출물·채점 계약은 유효)
+
+### K-MMBench — full, 4329문항 — protocol `aa74d55ecd55`
+
+전체 protocol fingerprint: `sha256:aa74d55ecd55e431459c1f5f572195c5b4e516d0a9462dd128f0cd12e4064a30`
 
 | 모델 | 결과 | 상태 |
 |---|---|---|
@@ -89,20 +113,36 @@
 | qwen_qwen3.5_35b_a3b | 3395/4329 = 78.42% | LEGACY_REVALIDATED |
 
 > 중복 접기: `gemma_4_26b_a4b_it` — `results/gemma_4_26b_a4b_it/20260505_124246/vision/multimodal/k_mmbench` 유지; 동일 artifact role/SHA-256·측정 payload 복사본 `results/google_gemma_4_26B_A4B_it/20260505_124246/vision/multimodal/k_mmbench`, `results/gemma_4_26b_a4b_it.bad/20260505_124246/vision/multimodal/k_mmbench`, `results/google_gemma_4_26B_A4B_it/20260505_124246.bad/vision/multimodal/k_mmbench` 접음.
+> 재현성: `Qwen3.5_122B_A10B_GPTQ_Int4` — 이 코호트에 런 1개. 비교 대상 없음 — **UNVERIFIED**(발행은 유지; 산출물·채점 계약은 유효)
+> 재현성: `gemma_4_26b_a4b_it` — 이 코호트에 런 1개. 비교 대상 없음 — **UNVERIFIED**(발행은 유지; 산출물·채점 계약은 유효)
+> 재현성: `qwen3.5_27b` — 이 코호트에 런 1개. 비교 대상 없음 — **UNVERIFIED**(발행은 유지; 산출물·채점 계약은 유효)
+> 재현성: `qwen3.6-35b-a3b` — 이 코호트에 런 1개. 비교 대상 없음 — **UNVERIFIED**(발행은 유지; 산출물·채점 계약은 유효)
+> 재현성: `qwen_qwen3.5_27b_fp8` — 이 코호트에 런 1개. 비교 대상 없음 — **UNVERIFIED**(발행은 유지; 산출물·채점 계약은 유효)
+> 재현성: `qwen_qwen3.5_35b_a3b` — 이 코호트에 런 1개. 비교 대상 없음 — **UNVERIFIED**(발행은 유지; 산출물·채점 계약은 유효)
+> 재현성: `qwen_qwen3.5_35b_a3b_fp8` — 이 코호트에 런 1개. 비교 대상 없음 — **UNVERIFIED**(발행은 유지; 산출물·채점 계약은 유효)
+> 재현성: `qwen_qwen3.6_27b` — 이 코호트에 런 1개. 비교 대상 없음 — **UNVERIFIED**(발행은 유지; 산출물·채점 계약은 유효)
+> 재현성: `qwen_qwen3.6_27b_fp8` — 이 코호트에 런 1개. 비교 대상 없음 — **UNVERIFIED**(발행은 유지; 산출물·채점 계약은 유효)
+> 재현성: `qwen_qwen3.6_35b_a3b_fp8` — 이 코호트에 런 1개. 비교 대상 없음 — **UNVERIFIED**(발행은 유지; 산출물·채점 계약은 유효)
 
-### K-MMBench — full, 4329문항 — protocol `2e65cebe14d4`
+### K-DTCBench — full, 240문항 — protocol `0d96dcdd622f`
 
-전체 protocol fingerprint: `sha256:2e65cebe14d400c2339ede83a524f79cc7c3a7587950dfb0122e27766aa7df43`
+전체 protocol fingerprint: `sha256:0d96dcdd622f6aad9fbf3619c30e03be87f0be3af65202af7d8d299cfa5124e6`
 
 | 모델 | 결과 | 상태 |
 |---|---|---|
-| gemma_4_26b_a4b_it | 3758/4329 = 86.81% | LEGACY_REVALIDATED |
+| gemma_4_26b_a4b_it | 205/240 = 85.42% | LEGACY_REVALIDATED |
 
-> 중복 접기: `gemma_4_26b_a4b_it` — `results/gemma_4_26b_a4b_it/20260503_122218/vision/multimodal/k_mmbench` 유지; 동일 artifact role/SHA-256·측정 payload 복사본 `results/gemma_4_26b_a4b_it.bad/20260503_122218/vision/multimodal/k_mmbench` 접음.
+> 중복 접기: `gemma_4_26b_a4b_it` — `results/gemma_4_26b_a4b_it/20260503_120151/vision/multimodal/k_dtcbench` 유지; 동일 artifact role/SHA-256·측정 payload 복사본 `results/gemma_4_26b_a4b_it.bad/20260503_120151/vision/multimodal/k_dtcbench` 접음.
+> 중복 접기: `gemma_4_26b_a4b_it` — `results/gemma_4_26b_a4b_it/20260503_120309/vision/multimodal/k_dtcbench` 유지; 동일 artifact role/SHA-256·측정 payload 복사본 `results/gemma_4_26b_a4b_it.bad/20260503_120309/vision/multimodal/k_dtcbench` 접음.
+> 재현성: `gemma_4_26b_a4b_it` — 이 코호트에 런 2개. 코호트 산포 2건 (0.83%p), 허용 3건 — **PASS**
+>   `20260503_120151`  203/240 = 84.58% (기준)
+>   `20260503_120309`  205/240 = 85.42% (대표)
+>   **주의:** `20260503_120151` 의 `split` 는 산출물에 기록된 값이 아니라 러너 규약에서 복원한 추론값이다. 요청 규약이 같았다는 증명은 아니다.
+>   **주의:** `20260503_120309` 의 `split` 는 산출물에 기록된 값이 아니라 러너 규약에서 복원한 추론값이다. 요청 규약이 같았다는 증명은 아니다.
 
-### K-DTCBench — full, 240문항 — protocol `4f3ddf3131ab`
+### K-DTCBench — full, 240문항 — protocol `a3fa0d693a36`
 
-전체 protocol fingerprint: `sha256:4f3ddf3131ab43c9a233de443d2e24c072421fd8fe0b01ec2d5ae3e470fdb0c5`
+전체 protocol fingerprint: `sha256:a3fa0d693a36a437873ca73a1aa224e76ecd220dc0c4fe1c88973ee13b6e8d6b`
 
 | 모델 | 결과 | 상태 |
 |---|---|---|
@@ -117,27 +157,23 @@
 | qwen_qwen3.5_35b_a3b_fp8 | 172/240 = 71.67% | LEGACY_REVALIDATED |
 
 > 중복 접기: `gemma_4_26b_a4b_it` — `results/gemma_4_26b_a4b_it/20260505_124246/vision/multimodal/k_dtcbench` 유지; 동일 artifact role/SHA-256·측정 payload 복사본 `results/google_gemma_4_26B_A4B_it/20260505_124246/vision/multimodal/k_dtcbench`, `results/gemma_4_26b_a4b_it.bad/20260505_124246/vision/multimodal/k_dtcbench`, `results/google_gemma_4_26B_A4B_it/20260505_124246.bad/vision/multimodal/k_dtcbench` 접음.
+> 재현성: `Qwen3.5_122B_A10B_GPTQ_Int4` — 이 코호트에 런 1개. 비교 대상 없음 — **UNVERIFIED**(발행은 유지; 산출물·채점 계약은 유효)
+> 재현성: `qwen3.5_27b` — 이 코호트에 런 1개. 비교 대상 없음 — **UNVERIFIED**(발행은 유지; 산출물·채점 계약은 유효)
+> 재현성: `qwen3.6-35b-a3b` — 이 코호트에 런 1개. 비교 대상 없음 — **UNVERIFIED**(발행은 유지; 산출물·채점 계약은 유효)
+> 재현성: `qwen_qwen3.5_27b_fp8` — 이 코호트에 런 1개. 비교 대상 없음 — **UNVERIFIED**(발행은 유지; 산출물·채점 계약은 유효)
+> 재현성: `qwen_qwen3.5_35b_a3b` — 이 코호트에 런 1개. 비교 대상 없음 — **UNVERIFIED**(발행은 유지; 산출물·채점 계약은 유효)
+> 재현성: `qwen_qwen3.5_35b_a3b_fp8` — 이 코호트에 런 1개. 비교 대상 없음 — **UNVERIFIED**(발행은 유지; 산출물·채점 계약은 유효)
+> 재현성: `qwen_qwen3.6_27b` — 이 코호트에 런 1개. 비교 대상 없음 — **UNVERIFIED**(발행은 유지; 산출물·채점 계약은 유효)
+> 재현성: `qwen_qwen3.6_35b_a3b_fp8` — 이 코호트에 런 1개. 비교 대상 없음 — **UNVERIFIED**(발행은 유지; 산출물·채점 계약은 유효)
 > 재현성: `gemma_4_26b_a4b_it` — 이 코호트에 런 2개. 코호트 산포 1건 (0.42%p), 허용 3건 — **PASS**
 >   `20260505_124246`  207/240 = 86.25% (기준)
 >   `v2b_20260824`  206/240 = 85.83% (대표)
+>   **주의:** `20260505_124246` 의 `split` 는 산출물에 기록된 값이 아니라 러너 규약에서 복원한 추론값이다. 요청 규약이 같았다는 증명은 아니다.
+>   **주의:** `v2b_20260824` 의 `split` 는 산출물에 기록된 값이 아니라 러너 규약에서 복원한 추론값이다. 요청 규약이 같았다는 증명은 아니다.
 
-### K-DTCBench — full, 240문항 — protocol `683c2a83a0e0`
+### MTVQA-KR — full, 558문항 — protocol `5db43694610d`
 
-전체 protocol fingerprint: `sha256:683c2a83a0e049dce79ca2ff7a12c7347047f6b3c316ee76dc6371d877a64b32`
-
-| 모델 | 결과 | 상태 |
-|---|---|---|
-| gemma_4_26b_a4b_it | 205/240 = 85.42% | LEGACY_REVALIDATED |
-
-> 중복 접기: `gemma_4_26b_a4b_it` — `results/gemma_4_26b_a4b_it/20260503_120151/vision/multimodal/k_dtcbench` 유지; 동일 artifact role/SHA-256·측정 payload 복사본 `results/gemma_4_26b_a4b_it.bad/20260503_120151/vision/multimodal/k_dtcbench` 접음.
-> 중복 접기: `gemma_4_26b_a4b_it` — `results/gemma_4_26b_a4b_it/20260503_120309/vision/multimodal/k_dtcbench` 유지; 동일 artifact role/SHA-256·측정 payload 복사본 `results/gemma_4_26b_a4b_it.bad/20260503_120309/vision/multimodal/k_dtcbench` 접음.
-> 재현성: `gemma_4_26b_a4b_it` — 이 코호트에 런 2개. 코호트 산포 2건 (0.83%p), 허용 3건 — **PASS**
->   `20260503_120151`  203/240 = 84.58% (기준)
->   `20260503_120309`  205/240 = 85.42% (대표)
-
-### MTVQA-KR — full, 558문항 — protocol `22d01e02a2f6`
-
-전체 protocol fingerprint: `sha256:22d01e02a2f6451f0043f54b2b361d974922523ed924c7830780bdbd9627aeb6`
+전체 protocol fingerprint: `sha256:5db43694610d33e25662146cd959377ac1f1a67d9dfdfb1cdae26ab070ac866d`
 
 | 모델 | 결과 | 상태 |
 |---|---|---|
@@ -155,6 +191,15 @@
 
 > 중복 접기: `gemma_4_26b_a4b_it` — `results/gemma_4_26b_a4b_it/20260505_124246/vision/multimodal/mtvqa_kr` 유지; 동일 artifact role/SHA-256·측정 payload 복사본 `results/google_gemma_4_26B_A4B_it/20260505_124246/vision/multimodal/mtvqa_kr`, `results/gemma_4_26b_a4b_it.bad/20260505_124246/vision/multimodal/mtvqa_kr`, `results/google_gemma_4_26B_A4B_it/20260505_124246.bad/vision/multimodal/mtvqa_kr` 접음.
 > 중복 접기: `gemma_4_31b_it` — `results/gemma_4_31b_it/20260505_130752/vision/multimodal/mtvqa_kr` 유지; 동일 artifact role/SHA-256·측정 payload 복사본 `results/google_gemma_4_31B_it/20260505_130752/vision/multimodal/mtvqa_kr` 접음.
+> 재현성: `Qwen3.5_122B_A10B_GPTQ_Int4` — 이 코호트에 런 1개. 비교 대상 없음 — **UNVERIFIED**(발행은 유지; 산출물·채점 계약은 유효)
+> 재현성: `qwen3.5_27b` — 이 코호트에 런 1개. 비교 대상 없음 — **UNVERIFIED**(발행은 유지; 산출물·채점 계약은 유효)
+> 재현성: `qwen3.6-35b-a3b` — 이 코호트에 런 1개. 비교 대상 없음 — **UNVERIFIED**(발행은 유지; 산출물·채점 계약은 유효)
+> 재현성: `qwen_qwen3.5_27b_fp8` — 이 코호트에 런 1개. 비교 대상 없음 — **UNVERIFIED**(발행은 유지; 산출물·채점 계약은 유효)
+> 재현성: `qwen_qwen3.5_35b_a3b` — 이 코호트에 런 1개. 비교 대상 없음 — **UNVERIFIED**(발행은 유지; 산출물·채점 계약은 유효)
+> 재현성: `qwen_qwen3.5_35b_a3b_fp8` — 이 코호트에 런 1개. 비교 대상 없음 — **UNVERIFIED**(발행은 유지; 산출물·채점 계약은 유효)
+> 재현성: `qwen_qwen3.6_27b` — 이 코호트에 런 1개. 비교 대상 없음 — **UNVERIFIED**(발행은 유지; 산출물·채점 계약은 유효)
+> 재현성: `qwen_qwen3.6_27b_fp8` — 이 코호트에 런 1개. 비교 대상 없음 — **UNVERIFIED**(발행은 유지; 산출물·채점 계약은 유효)
+> 재현성: `qwen_qwen3.6_35b_a3b_fp8` — 이 코호트에 런 1개. 비교 대상 없음 — **UNVERIFIED**(발행은 유지; 산출물·채점 계약은 유효)
 > 재현성: `gemma_4_26b_a4b_it` — 이 코호트에 런 2개. 코호트 산포 3건 (0.54%p), 허용 6건 — **PASS**
 >   `20260505_124246`  258/558 = 46.24% (기준)
 >   `v2b_20260824`  255/558 = 45.70% (대표)
@@ -177,9 +222,9 @@
 카테고리 및 System1/2 등 세부 축은 벤치별로 접어 두었다.
 
 <details>
-<summary>KRETA — default — protocol `4c2d67bae8bc`</summary>
+<summary>KRETA — default — protocol `163ee4cd4504`</summary>
 
-전체 protocol fingerprint: `sha256:4c2d67bae8bc79276ebc3ff1ec5fc2ade12264361c7654ed4a4bc7d753880b4b`
+전체 protocol fingerprint: `sha256:163ee4cd4504e498b92b629ee195dcc50e1f652c88a23818ef86065113d28f87`
 
 | 모델 | 축 | 결과 | 상태 |
 |---|---|---|---|
@@ -221,9 +266,9 @@
 </details>
 
 <details>
-<summary>KRETA — direct — protocol `b5a8188c68cf`</summary>
+<summary>KRETA — direct — protocol `8097cc67ee15`</summary>
 
-전체 protocol fingerprint: `sha256:b5a8188c68cf13518732860ce14af6af7eca3f90a7bd5bc9b55faeb27f81737f`
+전체 protocol fingerprint: `sha256:8097cc67ee15fcb067ad01034e481ca525e36400a8bb9fefa727476e80639c48`
 
 | 모델 | 축 | 결과 | 상태 |
 |---|---|---|---|
@@ -384,9 +429,39 @@
 </details>
 
 <details>
-<summary>K-MMBench — full — protocol `214f704b7c50`</summary>
+<summary>K-MMBench — full — protocol `54e6a6c9ad08`</summary>
 
-전체 protocol fingerprint: `sha256:214f704b7c50dee78777eb3c6bab002a8854889ec1f1c52d8d103e6c2401b35a`
+전체 protocol fingerprint: `sha256:54e6a6c9ad08ec4b7ead056833d60bf04373ba27df8ce42286dea9a908c30a2f`
+
+| 모델 | 축 | 결과 | 상태 |
+|---|---|---|---|
+| gemma_4_26b_a4b_it | category:action_recognition | 201/215 = 93.49% | LEGACY_REVALIDATED |
+| gemma_4_26b_a4b_it | category:attribute_comparison | 112/141 = 79.43% | LEGACY_REVALIDATED |
+| gemma_4_26b_a4b_it | category:attribute_recognition | 244/264 = 92.42% | LEGACY_REVALIDATED |
+| gemma_4_26b_a4b_it | category:celebrity_recognition | 381/396 = 96.21% | LEGACY_REVALIDATED |
+| gemma_4_26b_a4b_it | category:function_reasoning | 277/304 = 91.12% | LEGACY_REVALIDATED |
+| gemma_4_26b_a4b_it | category:future_prediction | 100/130 = 76.92% | LEGACY_REVALIDATED |
+| gemma_4_26b_a4b_it | category:identity_reasoning | 175/176 = 99.43% | LEGACY_REVALIDATED |
+| gemma_4_26b_a4b_it | category:image_emotion | 174/200 = 87.00% | LEGACY_REVALIDATED |
+| gemma_4_26b_a4b_it | category:image_quality | 93/150 = 62.00% | LEGACY_REVALIDATED |
+| gemma_4_26b_a4b_it | category:image_scene | 394/407 = 96.81% | LEGACY_REVALIDATED |
+| gemma_4_26b_a4b_it | category:image_style | 198/212 = 93.40% | LEGACY_REVALIDATED |
+| gemma_4_26b_a4b_it | category:image_topic | 137/140 = 97.86% | LEGACY_REVALIDATED |
+| gemma_4_26b_a4b_it | category:nature_relation | 165/179 = 92.18% | LEGACY_REVALIDATED |
+| gemma_4_26b_a4b_it | category:object_localization | 210/315 = 66.67% | LEGACY_REVALIDATED |
+| gemma_4_26b_a4b_it | category:ocr | 150/156 = 96.15% | LEGACY_REVALIDATED |
+| gemma_4_26b_a4b_it | category:physical_property_reasoning | 160/219 = 73.06% | LEGACY_REVALIDATED |
+| gemma_4_26b_a4b_it | category:physical_relation | 65/94 = 69.15% | LEGACY_REVALIDATED |
+| gemma_4_26b_a4b_it | category:social_relation | 132/172 = 76.74% | LEGACY_REVALIDATED |
+| gemma_4_26b_a4b_it | category:spatial_relationship | 135/177 = 76.27% | LEGACY_REVALIDATED |
+| gemma_4_26b_a4b_it | category:structuralized_imagetext_understanding | 255/282 = 90.43% | LEGACY_REVALIDATED |
+
+</details>
+
+<details>
+<summary>K-MMBench — full — protocol `aa74d55ecd55`</summary>
+
+전체 protocol fingerprint: `sha256:aa74d55ecd55e431459c1f5f572195c5b4e516d0a9462dd128f0cd12e4064a30`
 
 | 모델 | 축 | 결과 | 상태 |
 |---|---|---|---|
@@ -594,39 +669,22 @@
 </details>
 
 <details>
-<summary>K-MMBench — full — protocol `2e65cebe14d4`</summary>
+<summary>K-DTCBench — full — protocol `0d96dcdd622f`</summary>
 
-전체 protocol fingerprint: `sha256:2e65cebe14d400c2339ede83a524f79cc7c3a7587950dfb0122e27766aa7df43`
+전체 protocol fingerprint: `sha256:0d96dcdd622f6aad9fbf3619c30e03be87f0be3af65202af7d8d299cfa5124e6`
 
 | 모델 | 축 | 결과 | 상태 |
 |---|---|---|---|
-| gemma_4_26b_a4b_it | category:action_recognition | 201/215 = 93.49% | LEGACY_REVALIDATED |
-| gemma_4_26b_a4b_it | category:attribute_comparison | 112/141 = 79.43% | LEGACY_REVALIDATED |
-| gemma_4_26b_a4b_it | category:attribute_recognition | 244/264 = 92.42% | LEGACY_REVALIDATED |
-| gemma_4_26b_a4b_it | category:celebrity_recognition | 381/396 = 96.21% | LEGACY_REVALIDATED |
-| gemma_4_26b_a4b_it | category:function_reasoning | 277/304 = 91.12% | LEGACY_REVALIDATED |
-| gemma_4_26b_a4b_it | category:future_prediction | 100/130 = 76.92% | LEGACY_REVALIDATED |
-| gemma_4_26b_a4b_it | category:identity_reasoning | 175/176 = 99.43% | LEGACY_REVALIDATED |
-| gemma_4_26b_a4b_it | category:image_emotion | 174/200 = 87.00% | LEGACY_REVALIDATED |
-| gemma_4_26b_a4b_it | category:image_quality | 93/150 = 62.00% | LEGACY_REVALIDATED |
-| gemma_4_26b_a4b_it | category:image_scene | 394/407 = 96.81% | LEGACY_REVALIDATED |
-| gemma_4_26b_a4b_it | category:image_style | 198/212 = 93.40% | LEGACY_REVALIDATED |
-| gemma_4_26b_a4b_it | category:image_topic | 137/140 = 97.86% | LEGACY_REVALIDATED |
-| gemma_4_26b_a4b_it | category:nature_relation | 165/179 = 92.18% | LEGACY_REVALIDATED |
-| gemma_4_26b_a4b_it | category:object_localization | 210/315 = 66.67% | LEGACY_REVALIDATED |
-| gemma_4_26b_a4b_it | category:ocr | 150/156 = 96.15% | LEGACY_REVALIDATED |
-| gemma_4_26b_a4b_it | category:physical_property_reasoning | 160/219 = 73.06% | LEGACY_REVALIDATED |
-| gemma_4_26b_a4b_it | category:physical_relation | 65/94 = 69.15% | LEGACY_REVALIDATED |
-| gemma_4_26b_a4b_it | category:social_relation | 132/172 = 76.74% | LEGACY_REVALIDATED |
-| gemma_4_26b_a4b_it | category:spatial_relationship | 135/177 = 76.27% | LEGACY_REVALIDATED |
-| gemma_4_26b_a4b_it | category:structuralized_imagetext_understanding | 255/282 = 90.43% | LEGACY_REVALIDATED |
+| gemma_4_26b_a4b_it | category:chart | 58/80 = 72.50% | LEGACY_REVALIDATED |
+| gemma_4_26b_a4b_it | category:document | 75/80 = 93.75% | LEGACY_REVALIDATED |
+| gemma_4_26b_a4b_it | category:table | 72/80 = 90.00% | LEGACY_REVALIDATED |
 
 </details>
 
 <details>
-<summary>K-DTCBench — full — protocol `4f3ddf3131ab`</summary>
+<summary>K-DTCBench — full — protocol `a3fa0d693a36`</summary>
 
-전체 protocol fingerprint: `sha256:4f3ddf3131ab43c9a233de443d2e24c072421fd8fe0b01ec2d5ae3e470fdb0c5`
+전체 protocol fingerprint: `sha256:a3fa0d693a36a437873ca73a1aa224e76ecd220dc0c4fe1c88973ee13b6e8d6b`
 
 | 모델 | 축 | 결과 | 상태 |
 |---|---|---|---|
@@ -660,22 +718,10 @@
 
 </details>
 
-<details>
-<summary>K-DTCBench — full — protocol `683c2a83a0e0`</summary>
-
-전체 protocol fingerprint: `sha256:683c2a83a0e049dce79ca2ff7a12c7347047f6b3c316ee76dc6371d877a64b32`
-
-| 모델 | 축 | 결과 | 상태 |
-|---|---|---|---|
-| gemma_4_26b_a4b_it | category:chart | 58/80 = 72.50% | LEGACY_REVALIDATED |
-| gemma_4_26b_a4b_it | category:document | 75/80 = 93.75% | LEGACY_REVALIDATED |
-| gemma_4_26b_a4b_it | category:table | 72/80 = 90.00% | LEGACY_REVALIDATED |
-
-</details>
-
 
 ### 추론 복원 provenance
 
+- `results/gemma_4_26b_a4b_it/20260503_120309/vision/multimodal/k_dtcbench`: `{"split": {"basis": "k_dtcbench.py fixed load_dataset split", "value": "test"}}`
 - `results/Qwen3.5_122B_A10B_GPTQ_Int4/20260720_235721/vision/multimodal/k_dtcbench`: `{"split": {"basis": "k_dtcbench.py fixed load_dataset split", "value": "test"}}`
 - `results/google_gemma_4_26B_A4B_it/v2b_20260824/vision/multimodal/k_dtcbench`: `{"split": {"basis": "k_dtcbench.py fixed load_dataset split", "value": "test"}}`
 - `results/qwen3.5_27b/20260525_145725/vision/multimodal/k_dtcbench`: `{"split": {"basis": "k_dtcbench.py fixed load_dataset split", "value": "test"}}`
@@ -685,7 +731,7 @@
 - `results/qwen_qwen3.5_35b_a3b_fp8/20260711_003523/vision/multimodal/k_dtcbench`: `{"split": {"basis": "k_dtcbench.py fixed load_dataset split", "value": "test"}}`
 - `results/qwen_qwen3.6_27b/20260622_153150/vision/multimodal/k_dtcbench`: `{"split": {"basis": "k_dtcbench.py fixed load_dataset split", "value": "test"}}`
 - `results/qwen_qwen3.6_35b_a3b_fp8/20260702_133909/vision/multimodal/k_dtcbench`: `{"split": {"basis": "k_dtcbench.py fixed load_dataset split", "value": "test"}}`
-- `results/gemma_4_26b_a4b_it/20260503_120309/vision/multimodal/k_dtcbench`: `{"split": {"basis": "k_dtcbench.py fixed load_dataset split", "value": "test"}}`
+- `results/gemma_4_26b_a4b_it/20260503_122218/vision/multimodal/k_mmbench`: `{"split": {"basis": "k_mmbench.py fixed load_dataset split", "value": "dev"}}`
 - `results/Qwen3.5_122B_A10B_GPTQ_Int4/20260720_235721/vision/multimodal/k_mmbench`: `{"split": {"basis": "k_mmbench.py fixed load_dataset split", "value": "dev"}}`
 - `results/gemma_4_26b_a4b_it/20260505_124246/vision/multimodal/k_mmbench`: `{"split": {"basis": "k_mmbench.py fixed load_dataset split", "value": "dev"}}`
 - `results/qwen3.5_27b/20260525_145725/vision/multimodal/k_mmbench`: `{"split": {"basis": "k_mmbench.py fixed load_dataset split", "value": "dev"}}`
@@ -696,7 +742,6 @@
 - `results/qwen_qwen3.6_27b/20260622_153150/vision/multimodal/k_mmbench`: `{"split": {"basis": "k_mmbench.py fixed load_dataset split", "value": "dev"}}`
 - `results/qwen_qwen3.6_27b_fp8/20260704_081047/vision/multimodal/k_mmbench`: `{"split": {"basis": "k_mmbench.py fixed load_dataset split", "value": "dev"}}`
 - `results/qwen_qwen3.6_35b_a3b_fp8/20260702_133909/vision/multimodal/k_mmbench`: `{"split": {"basis": "k_mmbench.py fixed load_dataset split", "value": "dev"}}`
-- `results/gemma_4_26b_a4b_it/20260503_122218/vision/multimodal/k_mmbench`: `{"split": {"basis": "k_mmbench.py fixed load_dataset split", "value": "dev"}}`
 - `results/qwen_qwen3.5_35b_a3b_fp8/20260711_003523/vision/multimodal/kreta/qwen_qwen3.5_35b_a3b_fp8_default.jsonl`: `{"max_tokens": {"basis": "legacy run_kreta.sh: default mode default KRETA_MAX_TOKENS", "value": 4096}}`
 - `results/qwen_qwen3.6_35b_a3b_fp8/20260702_133909/vision/multimodal/kreta/qwen_qwen3.6_35b_a3b_fp8_default.jsonl`: `{"max_tokens": {"basis": "legacy run_kreta.sh: default mode default KRETA_MAX_TOKENS", "value": 4096}}`
 - `results/Qwen3.5_122B_A10B_GPTQ_Int4/20260720_235721/vision/multimodal/kreta/Qwen3.5_122B_A10B_GPTQ_Int4_direct.jsonl`: `{"max_tokens": {"basis": "legacy run_kreta.sh: direct mode default KRETA_MAX_TOKENS", "value": 32}}`
@@ -819,9 +864,47 @@
 
 정확도 헤드라인과 분리한다. 기본 표는 p50만 표시한다.
 
-### B4-latency-profile — latency — protocol `637d13ba3098`
+### B4-latency-profile — latency — protocol `30c7859181d0`
 
-전체 protocol fingerprint: `sha256:637d13ba309889f68c50a9e7557be4c1468c2edc5452637746a62ee2aa3a1b22`
+전체 protocol fingerprint: `sha256:30c7859181d0bfe69f2f1e084ef175a97bb12c924920ba390c3d376bf91522f5`
+
+#### p50
+
+| 모델 | condition | TTFT | total | tokens/sec | 상태 |
+|---|---|---:|---:|---:|---|
+| gemma_4_26b_a4b_it | image_1024px | 0.147s | 1.457s | 21.96 tokens/s | LEGACY_REVALIDATED |
+| gemma_4_26b_a4b_it | image_256px | 0.141s | 1.450s | 22.07 tokens/s | LEGACY_REVALIDATED |
+| gemma_4_26b_a4b_it | multi_image_3x512px | 0.151s | 1.309s | 21.40 tokens/s | LEGACY_REVALIDATED |
+| gemma_4_26b_a4b_it | text_only | 0.150s | 1.237s | 21.82 tokens/s | LEGACY_REVALIDATED |
+
+<details>
+<summary>p95 / p99 보기</summary>
+
+#### p95
+
+| 모델 | condition | TTFT | total | tokens/sec | 상태 |
+|---|---|---:|---:|---:|---|
+| gemma_4_26b_a4b_it | image_1024px | 0.167s | 1.486s | 22.19 tokens/s | LEGACY_REVALIDATED |
+| gemma_4_26b_a4b_it | image_256px | 0.156s | 1.475s | 22.30 tokens/s | LEGACY_REVALIDATED |
+| gemma_4_26b_a4b_it | multi_image_3x512px | 0.166s | 1.336s | 21.62 tokens/s | LEGACY_REVALIDATED |
+| gemma_4_26b_a4b_it | text_only | 0.171s | 1.303s | 22.14 tokens/s | LEGACY_REVALIDATED |
+
+#### p99
+
+| 모델 | condition | TTFT | total | tokens/sec | 상태 |
+|---|---|---:|---:|---:|---|
+| gemma_4_26b_a4b_it | image_1024px | 0.385s | 1.692s | 22.21 tokens/s | LEGACY_REVALIDATED |
+| gemma_4_26b_a4b_it | image_256px | 0.621s | 1.941s | 22.37 tokens/s | LEGACY_REVALIDATED |
+| gemma_4_26b_a4b_it | multi_image_3x512px | 0.887s | 2.054s | 21.64 tokens/s | LEGACY_REVALIDATED |
+| gemma_4_26b_a4b_it | text_only | 0.485s | 1.601s | 22.27 tokens/s | LEGACY_REVALIDATED |
+
+</details>
+
+> 중복 접기: `gemma_4_26b_a4b_it` — `results/gemma_4_26b_a4b_it/20260503_122218/vision/customB/b4_latency_profile` 유지; 동일 artifact role/SHA-256·측정 payload 복사본 `results/gemma_4_26b_a4b_it.bad/20260503_122218/vision/customB/b4_latency_profile` 접음.
+
+### B4-latency-profile — latency — protocol `80955a66c67e`
+
+전체 protocol fingerprint: `sha256:80955a66c67ef2b7fc8f5f5938a09dda13af9a01ae0acc1906acd24f4c05baf2`
 
 #### p50
 
@@ -964,41 +1047,3 @@
 </details>
 
 > 중복 접기: `gemma_4_31b_it` — `results/gemma_4_31b_it/20260505_130752/vision/customB/b4_latency_profile` 유지; 동일 artifact role/SHA-256·측정 payload 복사본 `results/google_gemma_4_31B_it/20260505_130752/vision/customB/b4_latency_profile` 접음.
-
-### B4-latency-profile — latency — protocol `c7f6965296a1`
-
-전체 protocol fingerprint: `sha256:c7f6965296a13755e35e7f86f50b35e0c7609c4bb6cb08f39461e68afdfcd034`
-
-#### p50
-
-| 모델 | condition | TTFT | total | tokens/sec | 상태 |
-|---|---|---:|---:|---:|---|
-| gemma_4_26b_a4b_it | image_1024px | 0.147s | 1.457s | 21.96 tokens/s | LEGACY_REVALIDATED |
-| gemma_4_26b_a4b_it | image_256px | 0.141s | 1.450s | 22.07 tokens/s | LEGACY_REVALIDATED |
-| gemma_4_26b_a4b_it | multi_image_3x512px | 0.151s | 1.309s | 21.40 tokens/s | LEGACY_REVALIDATED |
-| gemma_4_26b_a4b_it | text_only | 0.150s | 1.237s | 21.82 tokens/s | LEGACY_REVALIDATED |
-
-<details>
-<summary>p95 / p99 보기</summary>
-
-#### p95
-
-| 모델 | condition | TTFT | total | tokens/sec | 상태 |
-|---|---|---:|---:|---:|---|
-| gemma_4_26b_a4b_it | image_1024px | 0.167s | 1.486s | 22.19 tokens/s | LEGACY_REVALIDATED |
-| gemma_4_26b_a4b_it | image_256px | 0.156s | 1.475s | 22.30 tokens/s | LEGACY_REVALIDATED |
-| gemma_4_26b_a4b_it | multi_image_3x512px | 0.166s | 1.336s | 21.62 tokens/s | LEGACY_REVALIDATED |
-| gemma_4_26b_a4b_it | text_only | 0.171s | 1.303s | 22.14 tokens/s | LEGACY_REVALIDATED |
-
-#### p99
-
-| 모델 | condition | TTFT | total | tokens/sec | 상태 |
-|---|---|---:|---:|---:|---|
-| gemma_4_26b_a4b_it | image_1024px | 0.385s | 1.692s | 22.21 tokens/s | LEGACY_REVALIDATED |
-| gemma_4_26b_a4b_it | image_256px | 0.621s | 1.941s | 22.37 tokens/s | LEGACY_REVALIDATED |
-| gemma_4_26b_a4b_it | multi_image_3x512px | 0.887s | 2.054s | 21.64 tokens/s | LEGACY_REVALIDATED |
-| gemma_4_26b_a4b_it | text_only | 0.485s | 1.601s | 22.27 tokens/s | LEGACY_REVALIDATED |
-
-</details>
-
-> 중복 접기: `gemma_4_26b_a4b_it` — `results/gemma_4_26b_a4b_it/20260503_122218/vision/customB/b4_latency_profile` 유지; 동일 artifact role/SHA-256·측정 payload 복사본 `results/gemma_4_26b_a4b_it.bad/20260503_122218/vision/customB/b4_latency_profile` 접음.

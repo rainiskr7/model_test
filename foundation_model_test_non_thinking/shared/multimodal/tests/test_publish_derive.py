@@ -220,3 +220,45 @@ def test_strict_collection_is_scoped_to_requested_partial_session(tmp_path):
     old_sidecars, old_missing = collect(tmp_path, "old-session")
     assert old_sidecars == [] and len(old_missing) == 1
     assert strict_failed(old_sidecars, old_missing, []) is True
+
+
+def test_native_promotion_does_not_move_a_completion_time_it_already_established(tmp_path):
+    """Re-deriving must not restamp: the time describes the run, not the rebuild."""
+
+    from shared.multimodal.publish.derive import _previous_completion
+
+    out = tmp_path / "_derived" / "publish.json"
+    out.parent.mkdir(parents=True)
+    out.write_text(json.dumps({
+        "completed_at_utc": "2026-08-25T14:27:09+00:00",
+        "completed_at_source": "sidecar_write",
+    }), encoding="utf-8")
+    assert _previous_completion(out) == ("2026-08-25T14:27:09+00:00", "sidecar_write")
+    assert _previous_completion(tmp_path / "_derived" / "absent.json") == (None, "")
+
+
+def test_stale_and_damaged_native_are_not_the_same_condition():
+    """Both entry points must route through one rule, or they disagree in the field."""
+
+    from shared.multimodal.publish.derive import migrate_stale_native
+    from shared.multimodal.publish.schema import STALE_FINGERPRINT_PREFIX
+
+    repo = Path(__file__).resolve().parents[3]
+    # A run that is part of the tracked corpus, not a reproduction artifact that
+    # gets cleaned up: this regression must outlive any single measurement.
+    source = repo / "results/qwen_qwen3.5_35b_a3b_fp8/20260711_003523/vision/multimodal/k_mmbench"
+    assert source.is_dir()
+
+    assert migrate_stale_native(source, repo, None) is None
+    assert migrate_stale_native(source, repo, "ValueError: source artifact sha256 mismatch") is None
+
+    _, migrated = migrate_stale_native(
+        source, repo, f"ValueError: {STALE_FINGERPRINT_PREFIX} None != 2",
+    )
+    assert migrated["status"] == "NATIVE"
+    assert migrated["failures"] == []
+
+
+def test_the_cli_routes_stale_sidecars_through_the_shared_rule():
+    cli = (Path(__file__).resolve().parents[3] / "derive_multimodal_publish.py").read_text("utf-8")
+    assert "migrate_stale_native" in cli

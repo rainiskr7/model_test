@@ -32,10 +32,27 @@ BASE_DIR="${MODEL_TEST_BASE:-$(cd "$SCRIPT_DIR/../.." && pwd)}"
 MODEL="${1:?'MODEL required: ./run_koffvqa.sh MODEL [BASE_URL]'}"
 BASE_URL="${2:-http://172.16.1.81:18090/v1}"
 
-# safe_model_name: replace '/', '-', ':' with '_'
-SAFE_MODEL="${MODEL//\//_}"
-SAFE_MODEL="${SAFE_MODEL//-/_}"
-SAFE_MODEL="${SAFE_MODEL//:/_}"
+# 경로 해석에 쓸 인터프리터를 먼저 정한다. bare `python` 은 이 저장소의
+# 실행 환경(macOS·리눅스 모두)에 없을 수 있고, 없으면 DEST 를 만들기도 전에
+# 스크립트가 죽는다.
+PY="${PY:-}"
+if [ -z "$PY" ]; then
+  for candidate in "$BASE_DIR/.venv/bin/python" python3 python; do
+    if command -v "$candidate" >/dev/null 2>&1; then PY="$candidate"; break; fi
+  done
+fi
+[ -n "$PY" ] || { echo "[koffvqa] python 인터프리터를 찾지 못함 — 중단"; exit 1; }
+
+# Linux에서도 기존 git 경로의 실제 casing을 재사용한다. 문자열 치환으로 따로
+# 계산하면 macOS(대소문자 무시)에서는 같은 디렉토리를 가리키지만 리눅스에서는
+# Python 러너가 쓰는 경로와 갈라져 산출물이 두 디렉토리로 흩어진다.
+SAFE_MODEL="$("$PY" - "$SCRIPT_DIR/benches" "$BASE_DIR" "$MODEL" <<'PYEOF'
+import sys
+sys.path.insert(0, sys.argv[1])
+from paths import results_model_dir_name
+print(results_model_dir_name(sys.argv[2], sys.argv[3]))
+PYEOF
+)" || { echo "[koffvqa] results 모델 경로 해석 실패 — 중단"; exit 1; }
 
 # Timestamp 결정: EVAL_TIMESTAMP env > .eval_session 파일 > 새로 생성 + 저장
 if [ -n "${EVAL_TIMESTAMP:-}" ]; then
@@ -55,7 +72,7 @@ echo "[koffvqa] DEST=$DEST"
 echo "[koffvqa] MODEL=$MODEL"
 
 # 재현용 메타데이터
-python "$SCRIPT_DIR/benches/common.py" \
+"$PY" "$SCRIPT_DIR/benches/common.py" \
   --out "$DEST/run_config.json" \
   --benchmark "KOFFVQA" \
   --model "$MODEL" \
@@ -63,7 +80,6 @@ python "$SCRIPT_DIR/benches/common.py" \
   --repo-dir "$BASE_DIR/data/KOFFVQA" || { echo "[koffvqa] run_config 작성 실패 — 중단"; exit 1; }
 
 # 1) 자체 runner — 응답 생성
-PY="${PY:-$BASE_DIR/.venv/bin/python}"
 # KOFFVQA_TIMEOUT env 로 요청 timeout 조정 (default 600 — free-form 생성이라 길 수 있고,
 # 느린 HW(DGX Spark 등)에서 기본 60초로는 타임아웃 빈발. kreta KRETA_TIMEOUT 과 일관).
 # 재실행 시 koffvqa_run.py 가 idempotent resume → 에러/타임아웃 항목만 재시도.

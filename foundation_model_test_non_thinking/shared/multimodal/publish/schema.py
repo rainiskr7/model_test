@@ -13,6 +13,12 @@ from typing import Any, Iterable, Mapping
 
 
 SCHEMA_VERSION = 1
+# Bumped whenever the *meaning* of a fingerprint changes, so a sidecar written
+# by older code is recognizable as stale rather than as a damaged artifact.
+# 2: hash the effective protocol (recorded merged with inferred values, no-op
+#    serving constraints dropped) instead of the raw recorded/inferred blocks.
+FINGERPRINT_VERSION = 2
+STALE_FINGERPRINT_PREFIX = "protocol fingerprint version"
 SIDECAR_SUFFIX = ".publish.json"
 KRETA_ANSWER_PARSER_VERSION = "kreta-response-choice-v2"
 KRETA_ANSWER_PARSER_SPEC = {
@@ -83,6 +89,15 @@ FINGERPRINT_INFORMATIONAL_RECORDED = {
     # output rather than evaluation protocol and therefore must not split a
     # cohort per model.
     "prediction_sha256",
+    # External-judge provenance.  Recording *more* about a judge must not fork
+    # the cohort away from every run made before the field existed — the same
+    # rule that already applies to dataset provenance.  Judge identity still
+    # splits a cohort through `judge_model` and `judge_prompt_version`, and a
+    # template that changed under a stable version string is caught by the
+    # cohort drift check rather than by silently separating the runs.
+    "judge_base_url",
+    "judge_served_identity",
+    "judge_prompt_template_sha256",
 }
 
 
@@ -236,16 +251,87 @@ def dataset_item_digest(items: Iterable[str]) -> str:
     return hashlib.sha256(material).hexdigest()[:16]
 
 
+def _is_noop_serving_constraints(value: Any) -> bool:
+    """True when the snapshot means "no SERVING_* constraint was applied".
+
+    ``shared/serving/constraints.py`` is a documented no-op when its env vars are
+    unset, so a run that records an all-empty snapshot sent byte-identical
+    requests to a run made before the field existed.  Treating the two as
+    different protocols would fork every cohort at the moment the field landed.
+    ``force_skip_special_tokens=False`` is an applied constraint, not an absence,
+    so only ``None`` counts as unset.
+    """
+
+    if not isinstance(value, Mapping):
+        return value is None
+    if value.get("unsupported_sampling_params") or value.get("removed_parameters"):
+        return False
+    if any(
+        value.get(key) is not None
+        for key in ("max_output_tokens", "force_skip_special_tokens", "skip_special_tokens")
+    ):
+        return False
+    # A constraint this code does not know about must not be read as absence.
+    known = {
+        "unsupported_sampling_params",
+        "removed_parameters",
+        "max_output_tokens",
+        "force_skip_special_tokens",
+        "skip_special_tokens",
+    }
+    return not any(
+        key not in known and value.get(key) not in (None, [], {}, "")
+        for key in value
+    )
+
+
+def effective_protocol(recorded: Mapping[str, Any], inferred: Mapping[str, Any]) -> dict[str, Any]:
+    """Protocol facts keyed by value, not by how the value was learned.
+
+    ``inferred`` entries carry ``{"value", "basis"}``; only the value defines the
+    protocol.  A run that records ``max_tokens=32`` and a legacy run whose 32 was
+    restored from the runner convention issued the same requests, so they share a
+    cohort.  The recorded/inferred split stays in the sidecar for reporting —
+    honesty about provenance is a reporting duty, not an identity.
+    """
+
+    effective: dict[str, Any] = {}
+    # Keys a source declared but which carry no protocol meaning.  They must be
+    # remembered: a key dropped as a no-op is still "seen", so a later source
+    # claiming an applied value for it is a contradiction, not a first sighting.
+    dropped_as_noop: set[str] = set()
+    for source in (recorded, inferred):
+        is_inferred = source is inferred
+        for key, raw in source.items():
+            if key in FINGERPRINT_INFORMATIONAL_RECORDED:
+                continue
+            value = raw.get("value") if is_inferred and isinstance(raw, Mapping) else raw
+            noop = key == "serving_constraints" and _is_noop_serving_constraints(value)
+            if key in effective or key in dropped_as_noop:
+                # The two sources agree only when both are no-ops or both hold
+                # the same value.  Folding a disagreement away silently would
+                # publish a protocol identity contradicting its own provenance.
+                previous = effective.get(key)
+                if (key in dropped_as_noop and not noop) or (
+                    key in effective and previous != value
+                ):
+                    raise ValueError(
+                        f"protocol records and infers different {key}: "
+                        f"{previous!r} vs {value!r}"
+                    )
+                continue
+            if noop:
+                dropped_as_noop.add(key)
+                continue
+            effective[key] = value
+    return effective
+
+
 def protocol_fingerprint(recorded: Mapping[str, Any], inferred: Mapping[str, Any]) -> str:
     """Hash protocol facts only; model and run identifiers are intentionally absent."""
 
-    comparable_recorded = {
-        key: value
-        for key, value in recorded.items()
-        if key not in FINGERPRINT_INFORMATIONAL_RECORDED
-    }
     return sha256_bytes(
-        canonical_json({"recorded": comparable_recorded, "inferred": inferred}).encode("utf-8")
+        canonical_json({"protocol": effective_protocol(recorded, inferred)}).encode("utf-8")
     )
 
 
@@ -257,6 +343,7 @@ def make_protocol(
     unknown_sorted = sorted(set(unknown))
     return {
         "fingerprint": protocol_fingerprint(recorded, inferred),
+        "fingerprint_version": FINGERPRINT_VERSION,
         "recorded": dict(recorded),
         "inferred": dict(inferred),
         "unknown": unknown_sorted,
@@ -306,6 +393,15 @@ def validate_sidecar(sidecar: Mapping[str, Any]) -> None:
     protocol = sidecar.get("protocol")
     if not isinstance(protocol, Mapping):
         raise ValueError("protocol is required")
+    # Check the algorithm before the value.  A sidecar written by older code has
+    # a fingerprint this code would never produce, and reporting that as a
+    # mismatch reads as artifact corruption when it only needs re-deriving.
+    stored_version = protocol.get("fingerprint_version")
+    if stored_version != FINGERPRINT_VERSION:
+        raise ValueError(
+            f"{STALE_FINGERPRINT_PREFIX} {stored_version!r} != {FINGERPRINT_VERSION} "
+            "— re-derive required (원본 손상 아님)"
+        )
     expected_fp = protocol_fingerprint(protocol.get("recorded") or {}, protocol.get("inferred") or {})
     if protocol.get("fingerprint") != expected_fp:
         raise ValueError("protocol fingerprint mismatch")

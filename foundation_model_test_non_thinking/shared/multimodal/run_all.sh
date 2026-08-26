@@ -9,16 +9,20 @@
 #   results/<safe_model>/<timestamp>/vision/customB/{b3_structured_output,b4_latency_profile}/
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# benches/paths.py 가 MODEL_TEST_BASE 를 우선하므로 여기서도 같은 뿌리를 쓴다.
+BASE_DIR="${MODEL_TEST_BASE:-$(cd "$SCRIPT_DIR/../.." && pwd)}"
 MODEL="${1:?'MODEL required: ./run_all.sh MODEL [BASE_URL]'}"
 BASE_URL="${2:-http://172.16.1.81:18090/v1}"
 
 # 동일 timestamp 공유: EVAL_TIMESTAMP env > .eval_session 파일 > 새로 생성
 if [ -z "${EVAL_TIMESTAMP:-}" ]; then
-  if [ -f "$SCRIPT_DIR/../../.eval_session" ]; then
-    export EVAL_TIMESTAMP="$(cat "$SCRIPT_DIR/../../.eval_session")"
+  # 세션 파일은 결과가 쓰이는 뿌리와 같은 곳에 둔다. 다른 곳에 두면
+  # MODEL_TEST_BASE 를 쓸 때 세션 정체성과 results 루트가 갈린다.
+  if [ -f "$BASE_DIR/.eval_session" ]; then
+    export EVAL_TIMESTAMP="$(cat "$BASE_DIR/.eval_session")"
   else
     export EVAL_TIMESTAMP="$(date +%Y%m%d_%H%M%S)"
-    echo "$EVAL_TIMESTAMP" > "$SCRIPT_DIR/../../.eval_session"
+    echo "$EVAL_TIMESTAMP" > "$BASE_DIR/.eval_session"
     echo "[eval_session] 새 세션 생성: $EVAL_TIMESTAMP"
   fi
 fi
@@ -133,12 +137,30 @@ fi
 # ============================================================
 echo
 echo "=== 결과 sanity check (count==0 탐지) ==="
-RESULTS_ROOT="$SCRIPT_DIR/../../results"
-SAFE_MODEL="${MODEL//\//_}"
-SAFE_MODEL="${SAFE_MODEL//-/_}"
-SAFE_MODEL="${SAFE_MODEL//:/_}"
+RESULTS_ROOT="$BASE_DIR/results"
+# 경로 해석에 쓸 인터프리터를 먼저 정한다. bare `python` 은 이 저장소의
+# 실행 환경(macOS·리눅스 모두)에 없을 수 있고, 없으면 DEST 를 만들기도 전에
+# 스크립트가 죽는다.
+PY="${PY:-}"
+if [ -z "$PY" ]; then
+  for candidate in "$BASE_DIR/.venv/bin/python" python3 python; do
+    if command -v "$candidate" >/dev/null 2>&1; then PY="$candidate"; break; fi
+  done
+fi
+[ -n "$PY" ] || { echo "[run_all] python 인터프리터를 찾지 못함 — 중단"; exit 1; }
+
+# Linux에서도 기존 git 경로의 실제 casing을 재사용한다. 문자열 치환으로 따로
+# 계산하면 macOS(대소문자 무시)에서는 같은 디렉토리를 가리키지만 리눅스에서는
+# Python 러너가 쓰는 경로와 갈라져 산출물이 두 디렉토리로 흩어진다.
+SAFE_MODEL="$("$PY" - "$SCRIPT_DIR/benches" "$BASE_DIR" "$MODEL" <<'PYEOF'
+import sys
+sys.path.insert(0, sys.argv[1])
+from paths import results_model_dir_name
+print(results_model_dir_name(sys.argv[2], sys.argv[3]))
+PYEOF
+)" || { echo "[run_all] results 모델 경로 해석 실패 — 중단"; exit 1; }
 SESSION_DIR="$RESULTS_ROOT/$SAFE_MODEL/$EVAL_TIMESTAMP"
-if ! python - "$SESSION_DIR" "$MODEL" "$SCRIPT_DIR/benches" <<'PY'
+if ! "$PY" - "$SESSION_DIR" "$MODEL" "$SCRIPT_DIR/benches" <<'PY'
 import json, sys
 from pathlib import Path
 

@@ -230,3 +230,39 @@ def test_derive_relative_path_uses_git_index_casing(tmp_path):
     _git_index_case_map.cache_clear()
     differently_cased = tmp_path / "results/model_26b/session/results.json"
     assert _relative(differently_cased, tmp_path) == "results/Model_26B/session/results.json"
+
+
+def test_no_runner_script_computes_the_results_model_dir_by_string_substitution():
+    """The shell path must agree with the Python runner's on a case-sensitive FS.
+
+    macOS hides a divergence here: ``google_gemma_4_26b_a4b_it`` and the git
+    spelling ``google_gemma_4_26B_A4B_it`` are the same directory locally and two
+    directories on Linux, which splits one run's artifacts in half.
+    """
+
+    scripts = sorted((REPO / "shared" / "multimodal").glob("run_*.sh"))
+    assert scripts
+    offenders = [
+        script.name
+        for script in scripts
+        if "SAFE_MODEL=" in (text := script.read_text(encoding="utf-8"))
+        and "results_model_dir_name" not in text
+    ]
+    assert offenders == []
+
+
+def test_the_results_path_resolver_never_shells_out_to_bare_python():
+    """`python` is absent on a stock macOS PATH; only `python3` exists.
+
+    The rest of these scripts have always assumed a `python` on PATH, but the
+    path resolver runs before the destination directory exists — aborting there
+    is worse than the casing bug the resolver was added to fix.
+    """
+
+    resolvers = []
+    for script in sorted((REPO / "shared" / "multimodal").glob("run_*.sh")):
+        for number, line in enumerate(script.read_text(encoding="utf-8").splitlines(), 1):
+            if line.startswith("SAFE_MODEL="):
+                resolvers.append((f"{script.name}:{number}", line))
+    assert resolvers
+    assert [where for where, line in resolvers if '"$PY"' not in line] == []

@@ -262,7 +262,10 @@ def _add_decoding(config: Mapping[str, Any], recorded: dict[str, Any], unknown: 
         else:
             recorded[key] = value
     if isinstance(serving, Mapping):
-        recorded["serving_constraints"] = {
+        # Carry every key the run recorded, not a fixed projection: dropping a
+        # constraint this code does not know about would let a constrained run
+        # share a cohort with an unconstrained one.
+        snapshot = {
             key: serving.get(key)
             for key in (
                 "unsupported_sampling_params",
@@ -272,7 +275,25 @@ def _add_decoding(config: Mapping[str, Any], recorded: dict[str, Any], unknown: 
                 "skip_special_tokens",
             )
         }
+        snapshot.update({key: value for key, value in serving.items() if key not in snapshot})
+        recorded["serving_constraints"] = snapshot
     unknown.extend(("prompt_template_hash", "answer_parser_hash", "image_preprocessing_version"))
+
+
+def _session_of(path: Path) -> str | None:
+    """The results session a path belongs to: results/<model>/<session>/..."""
+
+    parts = Path(path).parts
+    if "results" in parts:
+        index = parts.index("results")
+        if len(parts) > index + 2:
+            return parts[index + 2]
+    return None
+
+
+def _prediction_session(summary: Mapping[str, Any], sibling: Path) -> str | None:
+    predfile = summary.get("predfile")
+    return _session_of(Path(predfile)) if predfile else _session_of(sibling)
 
 
 def _dataset_revision(config: Mapping[str, Any]) -> Any:
@@ -719,6 +740,14 @@ def adapt_koffvqa_judge(source_dir: Path) -> dict[str, Any]:
         generation_revision = _dataset_revision(_run_config(generation_summary, sibling))
     except Exception:
         generation_revision = None
+    # A judged run answers one of two different questions.  Regenerating the
+    # target responses and judging them measures the whole pipeline; re-judging
+    # bytes that already exist measures only the judge.  Both used to land in one
+    # cohort under one tolerance, so a spread could not be attributed.  The
+    # session that produced the predictions decides which this is.
+    prediction_session = _prediction_session(summary, sibling)
+    judge_session = _session_of(source_dir)
+    rejudge = bool(prediction_session and judge_session and prediction_session != judge_session)
     recorded = {
         "benchmark": "KOFFVQA-judge",
         "judge_model": summary.get("judge_model"),
@@ -727,7 +756,16 @@ def adapt_koffvqa_judge(source_dir: Path) -> dict[str, Any]:
         "dataset_item_digest": item_digest,
         "limit": (config.get("extra") or {}).get("limit"),
     }
+    for key in ("judge_prompt_template_sha256", "judge_base_url", "judge_served_identity"):
+        if summary.get(key):
+            recorded[key] = summary[key]
+    if rejudge:
+        # Diagnostic variant: the predictions are held fixed, so they are part of
+        # this protocol's identity rather than informational provenance.
+        recorded["rejudged_prediction_sha256"] = recorded_sha
     unknown = [key for key in ("judge_model", "judge_prompt_version") if not recorded.get(key)]
+    if not summary.get("judge_prompt_template_sha256"):
+        unknown.append("judge_prompt_template_hash")
     _add_decoding(config, recorded, unknown)
     if generation_revision:
         recorded["dataset_provenance"] = {"revision": generation_revision}
@@ -740,7 +778,7 @@ def adapt_koffvqa_judge(source_dir: Path) -> dict[str, Any]:
     model = str(summary.get("target_model") or (config.get("model") or {}).get("name") or source_dir.parents[3].name)
     return _base_result(
         benchmark_key="koffvqa_api_judge",
-        variant="api_judge",
+        variant="api_judge_rejudge" if rejudge else "api_judge_end_to_end",
         model=model,
         source_dir=source_dir,
         source_files=[raw_path, summary_path] + candidates,

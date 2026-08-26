@@ -32,6 +32,10 @@ except ImportError as e:
     raise SystemExit("pandas 미설치 — `uv pip install pandas openpyxl`") from e
 
 JUDGE_PROMPT_VERSION = "v3-anchored-with-examples"
+# The version string is written by hand and can stay put while the template
+# below is edited.  The hash cannot: it is the template itself.
+def _prompt_template_hash():
+    return "sha256:" + hashlib.sha256(JUDGE_PROMPT.encode("utf-8")).hexdigest()
 
 JUDGE_PROMPT = """아래는 한국어 시각 질의응답에 대한 객관적 채점 작업입니다.
 
@@ -86,6 +90,7 @@ def judge_one(client, judge_model: str, question: str, response: str, criteria,
         kwargs["seed"] = seed
     try:
         resp = client.chat.completions.create(**kwargs)
+        _record_served_identity(resp)
         text = resp.choices[0].message.content or ""
         m = re.search(r'\{[^{}]*"score"[^{}]*\}', text, re.DOTALL)
         if m:
@@ -100,6 +105,22 @@ def judge_one(client, judge_model: str, question: str, response: str, criteria,
         return None, None, "no JSON in judge response", text
     except Exception as e:
         return None, None, str(e), ""
+
+
+# What the endpoint reported serving, collected across the run.  A judged score
+# is only interpretable against the model that actually produced it.
+SERVED_IDENTITY = {"model": set(), "system_fingerprint": set(), "provider": set()}
+
+
+def _record_served_identity(resp):
+    for field in ("model", "system_fingerprint", "provider"):
+        value = getattr(resp, field, None)
+        if value:
+            SERVED_IDENTITY[field].add(str(value))
+
+
+def served_identity_snapshot():
+    return {field: sorted(values) for field, values in SERVED_IDENTITY.items() if values}
 
 
 def _detect_column(cols, name):
@@ -223,6 +244,9 @@ def main():
         "benchmark": "KOFFVQA (API judge)",
         "judge_model": args.judge_model,
         "judge_prompt_version": JUDGE_PROMPT_VERSION,
+        "judge_prompt_template_sha256": _prompt_template_hash(),
+        "judge_base_url": args.judge_base_url,
+        "judge_served_identity": served_identity_snapshot(),
         "target_model": args.target_model,
         "predfile": args.predfile,
         "prediction_sha256": file_sha256(args.predfile),

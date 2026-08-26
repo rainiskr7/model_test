@@ -102,13 +102,27 @@ def test_equal_timestamp_is_ambiguous_and_score_is_hidden():
     assert "100.00%" not in markdown
 
 
-def test_mixed_dated_and_undated_candidates_are_ambiguous():
+def test_undated_candidate_cannot_represent_but_stays_in_the_cohort():
+    """Every reproduction of a legacy baseline mixes a dated and an undated run."""
+
     dated = sidecar("dated", "2026-01-01T00:00:00+00:00")
     undated = sidecar("undated", None)
     selected, ambiguous = select_representatives([dated, undated])
+    assert ambiguous == []
+    assert len(selected) == 1
+    assert selected[0]["session"] == dated["session"]
+    selection = selected[0]["_selection"]
+    assert len(selection["cohort_runs"]) == 2
+    assert [run["session"] for run in selection["undated_candidates"]] == [undated["session"]]
+
+
+def test_all_undated_candidates_remain_ambiguous():
+    first = sidecar("undated-a", None)
+    second = sidecar("undated-b", None)
+    selected, ambiguous = select_representatives([first, second])
     assert selected == []
     assert len(ambiguous) == 1
-    assert "섞여 있음" in ambiguous[0]["reason"]
+    assert "완료 시각" in ambiguous[0]["reason"]
 
 
 def test_rejected_scores_never_render_and_unscored_alone_is_not_strict_failure():
@@ -503,3 +517,73 @@ def test_b4_is_explicitly_excluded_from_reproducibility_strict_check():
         axes=[{"name": "text_only:ttft:p50", "value": 9.9, "unit": "seconds"}],
     )
     assert strict_failed([second], [], [], [first, second]) is False
+
+
+def test_undated_run_renders_without_crashing_the_completion_sort():
+    """``datetime.min.astimezone()`` raises west of Greenwich; the sort must not use it."""
+
+    dated = sidecar("dated", "2026-01-01T00:00:00+00:00", benchmark="KRETA", variant="direct")
+    undated = sidecar("undated", None, benchmark="KRETA", variant="direct")
+    markdown, _ = render_markdown([dated, undated], [])
+    assert "대표 자격 제외" in markdown
+    assert "재현성" in markdown
+
+
+def test_lone_undated_run_represents_itself_without_an_exclusion_note():
+    only = sidecar("undated", None, benchmark="KRETA", variant="direct")
+    selected, ambiguous = select_representatives([only])
+    assert ambiguous == []
+    assert selected[0]["_selection"]["undated_candidates"] == []
+    markdown, _ = render_markdown([only], [])
+    assert "대표 자격 제외" not in markdown
+
+
+def test_inference_caveat_is_silent_for_a_key_the_artifact_also_records():
+    dated = sidecar("dated", "2026-01-01T00:00:00+00:00", benchmark="KRETA", variant="direct")
+    other = sidecar("other", "2026-01-02T00:00:00+00:00", benchmark="KRETA", variant="direct")
+    for run in (dated, other):
+        run["protocol"] = make_protocol(
+            {"dataset_item_digest": "digest-a", "max_tokens": 32},
+            {"max_tokens": {"value": 32, "basis": "runner default"}},
+            [],
+        )
+    markdown, _ = render_markdown([dated, other], [])
+    assert "재현성" in markdown
+    assert "추론값" not in markdown
+
+
+def test_a_lone_run_is_marked_unverified_rather_than_left_silent():
+    alone = sidecar("only", "2026-01-01T00:00:00+00:00", benchmark="KRETA", variant="direct")
+    markdown, _ = render_markdown([alone], [])
+    assert "UNVERIFIED" in markdown
+    assert "발행은 유지" in markdown
+
+
+def test_b4_latency_is_out_of_scope_not_unverified():
+    latency = sidecar(
+        "only", "2026-01-01T00:00:00+00:00",
+        benchmark="B4-latency-profile", variant="latency",
+        axes=[{"name": "text_only:ttft:p50", "value": 0.1, "unit": "seconds"}],
+    )
+    markdown, _ = render_markdown([latency], [])
+    assert "UNVERIFIED" not in markdown
+
+
+def test_a_judge_prompt_that_changed_under_a_stable_version_is_flagged():
+    def judged(session, template_hash):
+        run = sidecar(session, f"2026-01-0{session[-1]}T00:00:00+00:00",
+                      benchmark="KOFFVQA-judge", variant="api_judge_end_to_end",
+                      axes=[{"name": "rubric", "value": 8.7, "unit": "score/10",
+                             "numerator": 8, "denominator": 1}])
+        run["protocol"] = make_protocol(
+            {"dataset_item_digest": "digest-a", "judge_prompt_version": "v3",
+             "judge_prompt_template_sha256": template_hash},
+            {}, [],
+        )
+        return run
+
+    same = render_markdown([judged("run1", "sha256:aaa"), judged("run2", "sha256:aaa")], [])[0]
+    assert "템플릿 해시가 서로 다르다" not in same
+
+    drifted = render_markdown([judged("run1", "sha256:aaa"), judged("run2", "sha256:bbb")], [])[0]
+    assert "템플릿 해시가 서로 다르다" in drifted

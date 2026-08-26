@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import math
 from collections import Counter, defaultdict
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -182,13 +182,29 @@ def _selection_metadata(sidecar: dict[str, Any]) -> dict[str, Any]:
 def _duplicate_notes(cohort: list[dict[str, Any]]) -> list[str]:
     notes: list[str] = []
     for sidecar in sorted(cohort, key=_model):
-        for group in _selection_metadata(sidecar).get("folded_duplicates") or []:
+        selection = _selection_metadata(sidecar)
+        for group in selection.get("folded_duplicates") or []:
             folded = ", ".join(f"`{_escape(path)}`" for path in group.get("folded") or [])
             notes.append(
                 f"> 중복 접기: `{_escape(_model(sidecar))}` — `{_escape(group.get('kept'))}` 유지; "
                 f"동일 artifact role/SHA-256·측정 payload 복사본 {folded} 접음."
             )
+        undated = selection.get("undated_candidates") or []
+        if undated:
+            units = ", ".join(
+                f"`{_escape((run.get('source') or {}).get('unit'))}`" for run in undated
+            )
+            notes.append(
+                f"> 대표 자격 제외: `{_escape(_model(sidecar))}` — 완료 시각이 없어 최신임을 "
+                f"보일 수 없는 런 {units}. 재현성 산포에는 그대로 포함된다."
+            )
     return notes
+
+
+# A run with no completion time sorts before every dated run.  ``datetime.min``
+# must stay in UTC: ``astimezone()`` on it raises "year 0 is out of range" west
+# of Greenwich, which is where an undated legacy run first reaches this sort.
+_UNDATED = datetime.min.replace(tzinfo=timezone.utc)
 
 
 def _completed_sort_key(sidecar: dict[str, Any]) -> tuple[datetime, str]:
@@ -196,7 +212,9 @@ def _completed_sort_key(sidecar: dict[str, Any]) -> tuple[datetime, str]:
     try:
         stamp = datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
     except (TypeError, ValueError):
-        stamp = datetime.min.astimezone()
+        stamp = _UNDATED
+    if stamp.tzinfo is None:
+        stamp = stamp.replace(tzinfo=timezone.utc)
     return stamp, str((sidecar.get("source") or {}).get("unit"))
 
 
@@ -305,6 +323,19 @@ def reproducibility_checks(selected: list[dict[str, Any]]) -> list[dict[str, Any
 
 def _reproducibility_notes(cohort: list[dict[str, Any]]) -> list[str]:
     notes: list[str] = []
+    for representative in cohort:
+        # A cohort of one cannot be compared with anything.  Saying so beats an
+        # absent line: silence reads the same as "checked and fine".  B4 latency
+        # has no validated tolerance policy at all, so it is out of scope here
+        # rather than merely unverified.
+        if representative.get("benchmark_id") == "B4-latency-profile":
+            continue
+        runs = _selection_metadata(representative).get("cohort_runs") or []
+        if len(runs) < 2:
+            notes.append(
+                f"> 재현성: `{_escape(_model(representative))}` — 이 코호트에 런 1개. "
+                f"비교 대상 없음 — **UNVERIFIED**(발행은 유지; 산출물·채점 계약은 유효)"
+            )
     for check in reproducibility_checks(cohort):
         representative = check["representative"]
         result = "PASS" if check["passed"] else "FAIL"
@@ -337,7 +368,68 @@ def _reproducibility_notes(cohort: list[dict[str, Any]]) -> list[str]:
                 f">   `{_escape(run.get('session'))}`  "
                 f"{_escape(_metric(axis) if isinstance(axis, dict) else '비교 축 없음')}{suffix}"
             )
+        notes.extend(_inference_caveats(check["runs"]))
+        notes.extend(_judge_drift_notes(check["runs"]))
     return notes
+
+
+def _judge_drift_notes(runs: list[dict[str, Any]]) -> list[str]:
+    """Catch a judge whose prompt text moved under a stable version string.
+
+    The template hash is deliberately not part of the fingerprint: making it so
+    would fork the cohort away from every run recorded before the field existed.
+    Within a cohort it is still decisive — two runs judged by different prompt
+    text are not repeats of one measurement.
+    """
+
+    def _recorded(run, key):
+        return ((run.get("protocol") or {}).get("recorded") or {}).get(key)
+
+    hashes = {
+        str(_recorded(run, "judge_prompt_template_sha256"))
+        for run in runs
+        if _recorded(run, "judge_prompt_template_sha256")
+    }
+    if len(hashes) < 2:
+        return []
+    return [
+        "> **경고:** 이 코호트의 판정 프롬프트 템플릿 해시가 서로 다르다 "
+        f"({', '.join(f'`{value[7:19]}`' for value in sorted(hashes))}). "
+        "`judge_prompt_version` 은 같은데 본문이 바뀌었다는 뜻이므로 "
+        "두 런은 같은 측정의 반복이 아니다."
+    ]
+
+
+def _inference_caveats(runs: list[dict[str, Any]]) -> list[str]:
+    """Name the protocol facts a cohort agreed on by inference rather than record.
+
+    Two runs share a cohort when their effective protocol matches, and an
+    inferred value counts toward that match.  Inference restores a runner
+    convention (KRETA direct defaults to ``KRETA_MAX_TOKENS=32``), but the
+    runner also honours an environment override, so the artifact does not prove
+    the value.  A spread computed across such a cohort is evidence about the
+    server, not proof that both runs sent the same request — say so.
+    """
+
+    caveats: list[str] = []
+    for run in runs:
+        protocol = run.get("protocol") or {}
+        inferred = protocol.get("inferred") or {}
+        if not isinstance(inferred, dict) or not inferred:
+            continue
+        # A key the artifact also records is not an inference, even when an
+        # inferred duplicate agrees with it.  Naming it would state the opposite
+        # of what the sidecar shows.
+        recorded = protocol.get("recorded") or {}
+        names = [key for key in sorted(inferred) if key not in recorded]
+        if not names:
+            continue
+        keys = ", ".join(f"`{_escape(key)}`" for key in names)
+        caveats.append(
+            f">   **주의:** `{_escape(run.get('session'))}` 의 {keys} 는 산출물에 기록된 값이 "
+            f"아니라 러너 규약에서 복원한 추론값이다. 요청 규약이 같았다는 증명은 아니다."
+        )
+    return caveats
 
 
 def _unmapped_identity_names(sidecars: list[dict[str, Any]]) -> list[str]:
