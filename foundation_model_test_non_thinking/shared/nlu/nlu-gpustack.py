@@ -11,7 +11,23 @@ try:
     _dotenv = importlib.import_module("dotenv")
     _dotenv.load_dotenv()
 except Exception:
-    pass
+    # python-dotenv 는 선택 의존이고 실제로 없는 환경이 있다. 그때 조용히 넘어가면
+    # 자격증명 없이 `Bearer None` 을 보내고 엔드포인트는 401 만 돌려준다 —
+    # 인증 설정 문제가 서버 문제처럼 보인다. 최소 파서로 직접 읽는다.
+    for _candidate in (Path.cwd(), *Path.cwd().parents, Path(__file__).resolve().parent.parent.parent):
+        _env_file = _candidate / ".env"
+        if not _env_file.is_file():
+            continue
+        try:
+            for _line in _env_file.read_text(encoding="utf-8").splitlines():
+                _line = _line.strip()
+                if not _line or _line.startswith("#") or "=" not in _line:
+                    continue
+                _name, _, _value = _line.partition("=")
+                os.environ.setdefault(_name.strip(), _value.strip().strip("\"'"))
+        except Exception:
+            pass
+        break
 
 api_key = os.getenv("OPENAI_API_KEY")
 
@@ -268,6 +284,12 @@ def main():
         path if path.is_absolute() else (SCRIPT_DIR / path).resolve()
         for path in prompt_paths
     ]
+
+    if not api_key:
+        # 없는 채로 보내면 엔드포인트는 401 만 준다. 무엇이 없는지 여기서 말한다.
+        raise SystemExit(
+            "[nlu] OPENAI_API_KEY 가 없다 — 환경변수나 <BASE>/.env 에 설정하라."
+        )
 
     contract = load_contract()
     manifest_path = model_out_dir / MANIFEST_NAME

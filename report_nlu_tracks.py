@@ -69,12 +69,41 @@ def render_markdown(runs: list[dict[str, Any]], scorer) -> str:
         out.append("O = 정답 라벨 · X = 다른 라벨 · − = 계약 미준수(오답이 아니다)")
         out.append("")
 
-        out.append("## 이 항목들이 실제로 무엇을 갈랐나")
+        comp = scorer.compliance(scorable)
+        out.append("## 계약 준수")
+        out.append("")
+        out.append(
+            f"채점된 {comp['scored_runs']}런 · 항목 {comp['items']}개 중 "
+            f"**{comp['honored']}개가 형식을 지켰다** (미준수 {comp['invalid']}개)."
+        )
+        out.append("")
+        for model, info in sorted(comp["per_model"].items()):
+            honored = info["items"] - info["invalid"]
+            out.append(
+                f"- `{model}` — {info['runs']}런, {honored}/{info['items']} 준수"
+            )
+        out.append("")
+        out.append(
+            "준수 실패는 **오답이 아니다**. 미준수가 많으면 모델이 틀린 것이 아니라 "
+            "계약 문구를 고쳐야 한다는 뜻이다."
+        )
+        out.append("")
+
+        out.append("## 이 항목들이 모델을 갈랐나")
         out.append("")
         disc = scorer.discrimination(scorable)
         for item_id, info in disc.items():
-            if info["distinct_answers"]:
-                verdict = "**변별함**" if info["discriminating"] else "변별 못 함 — 모든 런이 같은 답"
+            if not info["assessable"]:
+                verdict = (
+                    f"판단 불가 — 채점된 모델이 {info['models']}개뿐이다 "
+                    "(변별은 모델 간 비교에서만 나온다)"
+                )
+                observed = ", ".join(info["distinct_answers"]) or "없음"
+            elif info["distinct_answers"]:
+                verdict = (
+                    "**변별함**" if info["discriminating"]
+                    else f"변별 못 함 — {info['models']}개 모델이 모두 같은 답"
+                )
                 observed = ", ".join(info["distinct_answers"])
             else:
                 verdict = "판단 불가 — 유효한 답이 하나도 없다"
@@ -82,6 +111,24 @@ def render_markdown(runs: list[dict[str, Any]], scorer) -> str:
             note = f", 계약 미준수 {info['invalid_runs']}런" if info["invalid_runs"] else ""
             out.append(f"- `{item_id}` — {verdict} (관측된 답: {observed}{note})")
         out.append("")
+
+        stab = scorer.stability(scorable)
+        repeated = {m: i for m, i in stab.items() if i["runs"] >= 2}
+        if repeated:
+            out.append("## 반복 실행 안정성 (같은 모델)")
+            out.append("")
+            out.append(
+                "**통과 수가 같다고 같은 측정이 아니다.** 항목별 답을 대조한다 — "
+                "다른 트랙에서 통과 건수가 같은데 통과 항목이 뒤집힌 사례를 겪었다."
+            )
+            out.append("")
+            for model, info in sorted(repeated.items()):
+                if info["status"] == "IDENTICAL":
+                    out.append(f"- `{model}` — {info['runs']}런 **IDENTICAL** (항목별 답이 전부 같다)")
+                else:
+                    items = ", ".join(f"`{k}`({'/'.join(v)})" for k, v in info["unstable_items"].items())
+                    out.append(f"- `{model}` — {info['runs']}런 **DIVERGED**: {items}")
+            out.append("")
 
     baseline = scorer.constant_baseline()
     out.append("## 상수 전략 기준선")

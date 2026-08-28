@@ -201,11 +201,11 @@ class NoScoreIsManufactured(unittest.TestCase):
 
     def test_an_item_every_model_answers_the_same_is_flagged_as_non_discriminating(self):
         runs = [
-            {"scorable": True, "items": [
+            {"scorable": True, "model": "m1", "items": [
                 {"item_id": "a", "status": "pass", "answer": "drive"},
                 {"item_id": "b", "status": "pass", "answer": "male"},
             ]},
-            {"scorable": True, "items": [
+            {"scorable": True, "model": "m2", "items": [
                 {"item_id": "a", "status": "fail", "answer": "walk"},
                 {"item_id": "b", "status": "pass", "answer": "male"},
             ]},
@@ -214,12 +214,65 @@ class NoScoreIsManufactured(unittest.TestCase):
         self.assertTrue(disc["a"]["discriminating"])
         self.assertFalse(disc["b"]["discriminating"])
 
+    def _run(self, model, **answers):
+        return {"scorable": True, "model": model, "items": [
+            {"item_id": k, "status": "pass", "answer": v} for k, v in answers.items()
+        ]}
+
+    def test_one_model_cannot_establish_that_an_item_fails_to_discriminate(self):
+        # 모델이 하나면 "모두 같은 답" 은 참이지만 아무 뜻도 없다. 비교 대상이
+        # 없다는 사실을 '변별 못 함' 이라는 결론으로 위장하면 안 된다.
+        one = [self._run("m1", a="drive")]
+        self.assertFalse(scorer.discrimination(one)["a"]["assessable"])
+        two = one + [self._run("m2", a="walk")]
+        self.assertTrue(scorer.discrimination(two)["a"]["assessable"])
+
+    def test_repeated_runs_of_one_model_are_not_read_as_failure_to_discriminate(self):
+        # 같은 모델을 5번 돌리면 답이 같은 게 당연하다. 그것을 '변별 못 함' 으로
+        # 보고하면 반복 실행이 항목의 결함으로 둔갑한다 — 실측에서 이렇게 나왔다.
+        runs = [self._run("m1", a="walk") for _ in range(5)]
+        info = scorer.discrimination(runs)["a"]
+        self.assertFalse(info["assessable"])
+        self.assertEqual(info["models"], 1)
+
+    def test_stability_compares_item_answers_not_pass_counts(self):
+        # 통과 수가 같아도 다른 항목을 맞힌 것이면 같은 측정이 아니다.
+        same = [self._run("m1", a="drive", b="male"), self._run("m1", a="drive", b="male")]
+        self.assertEqual(scorer.stability(same)["m1"]["status"], "IDENTICAL")
+        flipped = [
+            {"scorable": True, "model": "m1", "items": [
+                {"item_id": "a", "status": "pass", "answer": "drive"},
+                {"item_id": "b", "status": "fail", "answer": "female"}]},
+            {"scorable": True, "model": "m1", "items": [
+                {"item_id": "a", "status": "fail", "answer": "walk"},
+                {"item_id": "b", "status": "pass", "answer": "male"}]},
+        ]
+        report = scorer.stability(flipped)["m1"]
+        # 두 런 모두 통과 1개다. 건수만 보면 완벽한 재현으로 읽힌다.
+        self.assertEqual(report["status"], "DIVERGED")
+        self.assertEqual(sorted(report["unstable_items"]), ["a", "b"])
+
+    def test_a_single_run_of_a_model_is_unverified_not_identical(self):
+        self.assertEqual(scorer.stability([self._run("m1", a="drive")])["m1"]["status"], "UNVERIFIED")
+
+    def test_compliance_is_counted_apart_from_correctness(self):
+        # 계약을 못 지킨 것과 틀린 것을 합치면 계약 문구의 문제가 모델의 오답으로
+        # 보고된다.
+        runs = [{"scorable": True, "model": "m1", "counts": {"pass": 1, "fail": 1, "invalid": 3},
+                 "items": [{"item_id": str(i), "status": "invalid", "answer": None} for i in range(5)]}]
+        comp = scorer.compliance(runs)
+        self.assertEqual(comp["items"], 5)
+        self.assertEqual(comp["invalid"], 3)
+        self.assertEqual(comp["honored"], 2)
+
     def test_format_failure_is_not_counted_as_a_different_answer(self):
         # invalid 를 답의 한 종류로 세면, 모두가 같은 답을 낸 항목이 '변별함' 으로
         # 둔갑한다. 실제로 E2E 에서 이렇게 잘못 나왔다.
         runs = [
-            {"scorable": True, "items": [{"item_id": "b", "status": "pass", "answer": "male"}]},
-            {"scorable": True, "items": [{"item_id": "b", "status": "invalid", "answer": None}]},
+            {"scorable": True, "model": "m1", "items": [
+                {"item_id": "b", "status": "pass", "answer": "male"}]},
+            {"scorable": True, "model": "m2", "items": [
+                {"item_id": "b", "status": "invalid", "answer": None}]},
         ]
         disc = scorer.discrimination(runs)
         self.assertFalse(disc["b"]["discriminating"])

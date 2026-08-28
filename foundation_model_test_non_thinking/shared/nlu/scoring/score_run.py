@@ -24,7 +24,10 @@ except ImportError:  # 파일 하나만 단독 로드할 때
     _sys.path.insert(0, str(Path(__file__).resolve().parent))
     from contract import items_for, load_answer_key, load_contract, parse_answers
 
-__all__ = ["score_item", "score_run", "load_run_records", "discrimination", "constant_baseline"]
+__all__ = [
+    "score_item", "score_run", "load_run_records",
+    "discrimination", "stability", "compliance", "constant_baseline",
+]
 
 SCORING_VERSION = "nlu-v1"
 
@@ -134,35 +137,102 @@ def score_run(run_dir: Path, contract=None, answer_key=None) -> dict[str, Any]:
 
 
 def discrimination(scored_runs: Iterable[Mapping[str, Any]]) -> dict[str, Any]:
-    """어떤 항목이 실제로 모델을 갈랐는지.
+    """어떤 항목이 **모델을** 갈랐는지.
 
-    모든 모델이 같은 답을 낸 항목은 이 모델 집합에서 정보를 주지 않는다. 그 사실을
-    함께 내지 않으면 벡터가 실제보다 넓은 것을 재는 것처럼 보인다.
+    런 단위로 세면 안 된다. 같은 모델을 5번 돌리면 답이 같은 게 당연한데, 그것을
+    '변별 못 함' 으로 보고하면 반복 실행이 항목의 결함으로 둔갑한다. 변별은
+    서로 다른 모델 사이에서만 뜻이 있다 — 런 간 차이는 stability 가 따로 낸다.
     """
 
-    by_item: dict[str, set[str]] = {}
+    scored_runs = [run for run in scored_runs if run.get("scorable")]
+    by_item: dict[str, dict[str, set[str]]] = {}
     invalid_counts: dict[str, int] = {}
     for run in scored_runs:
-        if not run.get("scorable"):
-            continue
+        model = str(run.get("model"))
         for entry in run["items"]:
             item_id = entry["item_id"]
-            by_item.setdefault(item_id, set())
+            by_item.setdefault(item_id, {}).setdefault(model, set())
             invalid_counts.setdefault(item_id, 0)
             if entry["status"] == "invalid":
                 # 형식을 못 지킨 것은 **다른 답이 아니다**. invalid 를 답의 한 종류로
-                # 세면 모두가 같은 답을 낸 항목이 '변별함' 으로 둔갑한다 — 이 트랙이
-                # 피하려는 바로 그 혼동이다.
+                # 세면 모두가 같은 답을 낸 항목이 '변별함' 으로 둔갑한다.
                 invalid_counts[item_id] += 1
                 continue
-            by_item[item_id].add(str(entry.get("answer")))
-    return {
-        item_id: {
+            by_item[item_id][model].add(str(entry.get("answer")))
+
+    models = {str(run.get("model")) for run in scored_runs}
+    # 모델이 하나뿐이면 변별은 판단할 수 없다. 비교 대상이 없다는 사실을
+    # '변별 못 함' 이라는 결론으로 위장하지 않는다.
+    comparable = len(models) >= 2
+    result: dict[str, Any] = {}
+    for item_id, per_model in sorted(by_item.items()):
+        answers = {answer for values in per_model.values() for answer in values}
+        result[item_id] = {
             "distinct_answers": sorted(answers),
-            "discriminating": len(answers) > 1,
+            "discriminating": comparable and len(answers) > 1,
+            "assessable": comparable,
+            "models": len(per_model),
             "invalid_runs": invalid_counts[item_id],
         }
-        for item_id, answers in sorted(by_item.items())
+    return result
+
+
+def stability(scored_runs: Iterable[Mapping[str, Any]]) -> dict[str, Any]:
+    """같은 모델을 여러 번 돌렸을 때 항목별 답이 흔들리는가.
+
+    다른 트랙에서 통과 **건수**가 같은데 통과한 **항목**이 뒤집힌 사례를 세 번
+    겪었다. 여기서도 같은 것을 본다 — 통과 수가 아니라 항목별 답을 대조한다.
+    """
+
+    scored_runs = [run for run in scored_runs if run.get("scorable")]
+    by_model: dict[str, list[Mapping[str, Any]]] = {}
+    for run in scored_runs:
+        by_model.setdefault(str(run.get("model")), []).append(run)
+
+    report: dict[str, Any] = {}
+    for model, runs in sorted(by_model.items()):
+        if len(runs) < 2:
+            report[model] = {"runs": len(runs), "status": "UNVERIFIED",
+                             "reason": "이 모델을 한 번만 돌렸다 — 비교 대상이 없다"}
+            continue
+        unstable: dict[str, list[str]] = {}
+        for item_id in {e["item_id"] for run in runs for e in run["items"]}:
+            seen = sorted({
+                entry.get("answer") or f"<{entry['status']}>"
+                for run in runs for entry in run["items"] if entry["item_id"] == item_id
+            })
+            if len(seen) > 1:
+                unstable[item_id] = seen
+        report[model] = {
+            "runs": len(runs),
+            "status": "IDENTICAL" if not unstable else "DIVERGED",
+            "unstable_items": unstable,
+        }
+    return report
+
+
+def compliance(scored_runs: Iterable[Mapping[str, Any]]) -> dict[str, Any]:
+    """계약 준수율 — 형식을 지킨 항목의 비율.
+
+    오답과 별개로 센다. 계약을 못 지키는 모델이 많으면 계약 문구를 고쳐야지,
+    모델이 틀렸다고 읽으면 안 된다.
+    """
+
+    scored_runs = [run for run in scored_runs if run.get("scorable")]
+    total = sum(len(run["items"]) for run in scored_runs)
+    invalid = sum(run["counts"]["invalid"] for run in scored_runs)
+    per_model: dict[str, dict[str, int]] = {}
+    for run in scored_runs:
+        bucket = per_model.setdefault(str(run.get("model")), {"items": 0, "invalid": 0, "runs": 0})
+        bucket["items"] += len(run["items"])
+        bucket["invalid"] += run["counts"]["invalid"]
+        bucket["runs"] += 1
+    return {
+        "scored_runs": len(scored_runs),
+        "items": total,
+        "invalid": invalid,
+        "honored": total - invalid,
+        "per_model": per_model,
     }
 
 
