@@ -20,6 +20,7 @@ codex 지적을 반영한 설계:
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import random
@@ -29,7 +30,7 @@ import urllib.error
 import urllib.request
 from collections import Counter, defaultdict
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Mapping, Optional, List, Optional
 
 VERDICT_SCHEMA = {
     "name": "verdict",
@@ -69,6 +70,54 @@ def render_prompt(rubric: str, item: Dict[str, Any]) -> str:
     )
 
 
+JUDGE_ENDPOINT = "https://openrouter.ai/api/v1/chat/completions"
+
+# 엔드포인트가 실제로 무엇을 서빙했는지 모아 둔다. `openai/gpt-4.1-mini` 는 alias 라
+# 문자열이 그대로여도 서빙 리비전이 바뀔 수 있다. 판정 점수는 그 모델이 만든 것이므로
+# 무엇이 돌았는지 남기지 않으면 나중에 같은 점수인지 확인할 방법이 없다.
+SERVED_IDENTITY: Dict[str, set] = {"model": set(), "system_fingerprint": set(), "provider": set()}
+
+
+def record_served_identity(payload: Dict[str, Any]) -> None:
+    for field in ("model", "system_fingerprint", "provider"):
+        value = payload.get(field)
+        if value:
+            SERVED_IDENTITY[field].add(str(value))
+
+
+def reset_served_identity(previous: Optional[Mapping[str, Any]] = None) -> None:
+    """한 판정 실행의 시작점을 잡는다.
+
+    모듈 전역이므로 리셋하지 않으면 같은 프로세스의 앞선 실행 기록이 다음 산출물로
+    샌다. 반대로 ``--retry-unresolved`` 는 이전 실행의 판정을 그대로 물려받으므로,
+    기존 judge.json 의 기록을 넘겨 **합쳐야** 한다 — 새 프로세스의 스냅샷만 쓰면
+    이미 해결된 항목을 어느 리비전이 판정했는지가 사라진다.
+    """
+
+    for values in SERVED_IDENTITY.values():
+        values.clear()
+    for field, values in (previous or {}).items():
+        if field in SERVED_IDENTITY:
+            SERVED_IDENTITY[field].update(str(value) for value in values or [])
+
+
+def served_identity_snapshot() -> Dict[str, Any]:
+    return {field: sorted(values) for field, values in SERVED_IDENTITY.items() if values}
+
+
+def rubric_digest(rubrics: Dict[str, str]) -> Dict[str, str]:
+    """루브릭 **본문**의 해시.
+
+    지금은 "upstream data/rubric_{type}.txt (unmodified)" 라는 문장만 남는데,
+    그것은 검증되지 않은 주장이다. 파일이 수정돼도 문장은 그대로다. 해시는 그럴 수 없다.
+    """
+
+    return {
+        kind: "sha256:" + hashlib.sha256(text.encode("utf-8")).hexdigest()[:32]
+        for kind, text in sorted(rubrics.items())
+    }
+
+
 def call_judge(
     prompt: str, model: str, api_key: str, timeout: float, retries: int
 ) -> Dict[str, Any]:
@@ -85,7 +134,7 @@ def call_judge(
     last_error = None
     for attempt in range(max(1, retries)):
         req = urllib.request.Request(
-            "https://openrouter.ai/api/v1/chat/completions",
+            JUDGE_ENDPOINT,
             data=body,
             headers={
                 "Authorization": f"Bearer {api_key}",
@@ -95,6 +144,7 @@ def call_judge(
         try:
             with urllib.request.urlopen(req, timeout=timeout) as resp:
                 payload = json.loads(resp.read().decode("utf-8"))
+            record_served_identity(payload)
             content = payload["choices"][0]["message"]["content"]
             parsed = json.loads(content)
             # 구조화 출력을 요청했다고 지켜졌다는 보장은 없다. **직접 검증한다.**

@@ -29,8 +29,12 @@ from typing import Any, Dict, List, Optional
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from judge_pilot import (  # noqa: E402
+    JUDGE_ENDPOINT,
+    reset_served_identity,
     VERDICT_SCHEMA,
     call_judge,
+    rubric_digest,
+    served_identity_snapshot,
     collect_items,
     load_rubrics,
     render_prompt,
@@ -105,6 +109,11 @@ def main(argv: Optional[List[str]] = None) -> int:
         }
         items = [i for i in items if i.get("serial_num") in unresolved]
         print(f"[judge] 재판정 대상 {len(items)}건 (기존 판정 불가)")
+
+    # 서빙 정체성 기록의 시작점을 잡는다. 리셋하지 않으면 같은 프로세스의 앞선
+    # 실행이 새 산출물로 새고, 재판정에서 이전 기록을 안 물려받으면 이미 확정된
+    # 항목을 어느 리비전이 판정했는지가 사라진다.
+    reset_served_identity(((previous or {}).get("judge") or {}).get("served_identity"))
 
     print(f"[judge] 대상 {len(items)}건, 판정기 {args.judge_model}, 반복 {args.repeats}")
 
@@ -209,7 +218,12 @@ def main(argv: Optional[List[str]] = None) -> int:
             "votes_per_item": None,  # 아래에서 실측으로 채운다
             "temperature": 0,
             "output_contract": "json_schema strict {verdict, justification_ko}",
-            "rubric_source": "upstream data/rubric_{type}.txt (unmodified)",
+            "rubric_source": "upstream data/rubric_{type}.txt",
+            # "unmodified" 라고 적어두는 것은 주장일 뿐이다. 본문 해시를 남긴다.
+            "rubric_sha256": rubric_digest(rubrics),
+            "endpoint": JUDGE_ENDPOINT,
+            # 요청한 alias 가 아니라 엔드포인트가 실제로 서빙했다고 보고한 값.
+            "served_identity": served_identity_snapshot(),
             "human_validation": "not performed",
         },
         "caveat": (

@@ -4172,7 +4172,76 @@ def test_agent_tracks_report_lists_every_tied_run_when_three_share_a_denominator
         assert f"`{name}`" in markdown, name
 
 
+def test_agent_tracks_report_surfaces_reproducibility_divergence():
+    """대표 런 표만으로는 반복 실행의 흔들림이 보이지 않는다."""
+
+    module = _load_agent_tracks_report()
+    rows = [_track_row("functionchat", "m", "fcfull", "exact", 670, num=600)]
+    repro = [{
+        "model": "m", "scoring_version": "functionchat_exact_v1",
+        "runs": ["r1", "r2"], "status": "DIVERGED",
+        "passed_counts": [553, 553], "count_spread": 0, "stable_passed": 548,
+        "unstable_items": ["i%d" % i for i in range(10)],
+        "reason": "통과 항목이 런마다 다르다 (10건)",
+    }]
+    markdown = module.render_markdown(rows, repro)
+    assert "## 재현성" in markdown
+    assert "DIVERGED" in markdown
+    assert "[553, 553]" in markdown, "건수가 같다는 사실도 보여야 한다"
+    assert "뒤집힌 항목 10건" in markdown
+
+
+def test_agent_tracks_report_omits_the_section_when_there_is_nothing_to_compare():
+    module = _load_agent_tracks_report()
+    rows = [_track_row("functionchat", "m", "only", "exact", 600)]
+    assert "## 재현성" not in module.render_markdown(rows, [])
+    assert "## 재현성" not in module.render_markdown(rows)
+
+
+def test_agent_tracks_reproducibility_reads_real_artifacts():
+    """모듈이 실제 산출물에서 반복 런을 찾아내는지 — 배선이 끊기면 조용히 빈다."""
+
+    module = _load_agent_tracks_report()
+    report = module.collect_reproducibility(TREE_ROOT)
+    assert report, "functionchat 반복 런을 하나도 못 찾았다"
+    assert any(check["status"] == "DIVERGED" for check in report), report
+
+
+def test_agent_tracks_report_flags_judged_axes_without_provenance():
+    """판정 점수는 판정기가 만든 값이다 — 무엇이 만들었는지 없으면 재확인할 수 없다."""
+
+    module = _load_agent_tracks_report()
+    row = _track_row("functionchat", "m", "run", "judged", 636, num=544)
+    row["axes"] = [("judged", 544, 636, True)]
+    row["judge_provenance_missing"] = ["endpoint", "rubric_sha256"]
+    markdown = module.render_markdown([row])
+    assert "프로비넌스 없음(endpoint, rubric_sha256)" in markdown, markdown
+
+    row["judge_provenance_missing"] = []
+    assert "프로비넌스 없음" not in module.render_markdown([row])
+
+
+def test_agent_tracks_report_survives_a_broken_reproducibility_layer(tmp_path=None):
+    """재현성은 부가 정보다 — 못 읽는다고 발행 수치 보고 전체를 막으면 안 된다."""
+
+    import tempfile
+
+    module = _load_agent_tracks_report()
+    with tempfile.TemporaryDirectory() as tmp:
+        base = Path(tmp)
+        scoring = base / "shared" / "functionchat" / "scoring"
+        scoring.mkdir(parents=True)
+        (scoring / "repro.py").write_text("this is not python(", encoding="utf-8")
+        with contextlib.redirect_stderr(io.StringIO()):
+            assert module.collect_reproducibility(base) == []
+
+
 TESTS = [
+    test_agent_tracks_report_flags_judged_axes_without_provenance,
+    test_agent_tracks_report_survives_a_broken_reproducibility_layer,
+    test_agent_tracks_report_surfaces_reproducibility_divergence,
+    test_agent_tracks_report_omits_the_section_when_there_is_nothing_to_compare,
+    test_agent_tracks_reproducibility_reads_real_artifacts,
     test_agent_tracks_report_tie_state_survives_every_input_order,
     test_agent_tracks_report_lists_every_tied_run_when_three_share_a_denominator,
     test_agent_tracks_report_never_breaks_ties_by_run_name,

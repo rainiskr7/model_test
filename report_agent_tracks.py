@@ -18,6 +18,7 @@ gemma telecom 0.4615 를 요약 파일만 보고 최종 수치로 여러 번 인
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import json
 import sys
 from pathlib import Path
@@ -80,6 +81,14 @@ def collect(base: Path) -> List[Dict[str, Any]]:
                 row["axes"].append(("judged", jo.get("passed"), jo.get("judged"), unvalidated))
                 row["judge_errors"] = jo.get("judge_errors")
                 row["unstable"] = jo.get("unstable")
+                # 판정 점수는 판정기가 만든 값이다. 어느 엔드포인트가 무엇을 서빙해
+                # 어떤 루브릭으로 냈는지 산출물에 없으면, 그 점수는 재확인할 수 없다.
+                judge_meta = judge.get("judge") or {}
+                row["judge_provenance_missing"] = [
+                    field
+                    for field in ("endpoint", "served_identity", "rubric_sha256")
+                    if not judge_meta.get(field)
+                ]
         else:
             row["axes"] = []
             for domain, entry in sorted((d.get("by_domain") or {}).items()):
@@ -98,7 +107,53 @@ def collect(base: Path) -> List[Dict[str, Any]]:
     return rows
 
 
-def render_markdown(rows: List[Dict[str, Any]]) -> str:
+def collect_reproducibility(base: Path) -> List[Dict[str, Any]]:
+    """functionchat 반복 실행의 통과 항목 집합을 대조한다.
+
+    이 저장소에는 반복 런이 이미 있었는데(gemma 3개, qwen 5개) 아무도 산포를 내지
+    않았다. 대표 런 표만으로는 그 사실이 보이지 않는다 — 대표는 항상 커버리지가
+    가장 넓은 런 하나이고, 반복은 다른 scoring_version 에 있다.
+    """
+
+    scoring_dir = base / "shared" / "functionchat" / "scoring"
+    module_path = scoring_dir / "repro.py"
+    if not module_path.exists():
+        return []
+    spec = importlib.util.spec_from_file_location("functionchat_repro", module_path)
+    if spec is None or spec.loader is None:
+        return []
+    module = importlib.util.module_from_spec(spec)
+    sys.path.insert(0, str(scoring_dir))
+    try:
+        spec.loader.exec_module(module)
+    except Exception as exc:
+        # 재현성은 부가 정보다. 그것을 못 읽는다고 발행 가능한 수치 보고 전체를
+        # 막으면, 도구를 쓰지 않고 summary.json 을 직접 읽는 경로로 되돌아간다 —
+        # 이 스크립트가 존재하는 이유가 바로 그 경로를 막는 것이다.
+        print(f"[report] 재현성 계층을 읽지 못했다: {type(exc).__name__}: {exc}", file=sys.stderr)
+        return []
+    finally:
+        try:
+            sys.path.remove(str(scoring_dir))
+        except ValueError:
+            pass
+        # 임시로 올린 경로에서 끌어온 모듈을 남기면 나중의 평범한 import 를 가린다.
+        for name in ("exact_match", "score_run"):
+            loaded = sys.modules.get(name)
+            if loaded is not None and getattr(loaded, "__file__", "").startswith(str(scoring_dir)):
+                del sys.modules[name]
+    runs = []
+    for run_dir in sorted(base.glob("results/*/*/language/functionchat")):
+        loaded = module.load_run(run_dir)
+        if loaded:
+            runs.append(loaded)
+    return module.reproducibility_report(runs)
+
+
+def render_markdown(
+    rows: List[Dict[str, Any]],
+    repro_report: Optional[List[Dict[str, Any]]] = None,
+) -> str:
     """명령을 돌리지 않고도 읽을 수 있는 보고서를 만든다.
 
     수치는 전부 산출물에서 읽는다. 이 함수에 숫자를 적어 넣지 않는다 — 그렇게 하면
@@ -171,6 +226,8 @@ def render_markdown(rows: List[Dict[str, Any]]) -> str:
             )
             continue
         state = "PROVISIONAL — 판정기 기준, 인간 검증 없음" if provisional else "확정"
+        if provisional and r.get("judge_provenance_missing"):
+            state += f" · 프로비넌스 없음({', '.join(r['judge_provenance_missing'])})"
         out.append(
             f"| {track} | {model} | {r['run']} | {name} | "
             f"{fraction(num, den)} | {state} |"
@@ -189,12 +246,46 @@ def render_markdown(rows: List[Dict[str, Any]]) -> str:
                 out.append(f"  - {reason}")
         out.append("")
 
+    if repro_report:
+        out.append("## 재현성 (반복 실행)")
+        out.append("")
+        out.append(
+            "**건수가 같다고 같은 측정이 아니다.** 통과한 **항목 집합**을 대조한다 — "
+            "실측으로 통과 건수가 5런 내내 동일한데 통과 항목이 10개 뒤집힌 사례가 있다."
+        )
+        out.append("")
+        for check in repro_report:
+            label = {
+                "IDENTICAL": "**IDENTICAL** — 통과 항목 집합이 완전히 같다",
+                "DIVERGED": "**DIVERGED**",
+                "UNVERIFIED": "**UNVERIFIED**",
+            }.get(str(check["status"]), str(check["status"]))
+            runs = ", ".join(f"`{session}`" for session in check["runs"])
+            out.append(
+                f"- `{check['model']}` · `{check['scoring_version']}` — {label}"
+            )
+            out.append(f"  - 런 {len(check['runs'])}개: {runs}")
+            if check.get("passed_counts"):
+                out.append(
+                    f"  - 통과 건수 {check['passed_counts']} (산포 {check['count_spread']}) · "
+                    f"항상 통과 {check['stable_passed']}건"
+                )
+            if check.get("unstable_items"):
+                out.append(f"  - 런마다 뒤집힌 항목 {len(check['unstable_items'])}건")
+            if check.get("reason"):
+                out.append(f"  - {check['reason']}")
+        out.append("")
+
     out.append("## 읽는 법")
     out.append("")
     out.append("- 분자/분모를 함께 본다. 반올림된 점수만으로는 표본 크기가 사라진다.")
     out.append("- **축을 합산하거나 평균하지 않는다.** 서로 다른 능력을 잰다.")
     out.append("- PROVISIONAL 은 인간 검증 전이다. 정답률이 아니라 판정기 기준 점수다.")
     out.append("- 거부된 런의 숫자는 존재하더라도 인용하지 않는다.")
+    out.append(
+        "- 재현성은 **대표 런과 다른 코호트**일 수 있다. 대표가 `UNVERIFIED` 인데 "
+        "다른 scoring_version 이 `DIVERGED` 라면, 발행 중인 수치에는 재현 근거가 없다는 뜻이다."
+    )
     return "\n".join(out) + "\n"
 
 
@@ -211,12 +302,13 @@ def main(argv: Optional[List[str]] = None) -> int:
     args = ap.parse_args(argv)
 
     rows = collect(args.base)
+    repro_report = collect_reproducibility(args.base)
     if not rows:
         print("산출물이 없습니다.", file=sys.stderr)
         return 2
 
     if args.write_markdown:
-        args.write_markdown.write_text(render_markdown(rows), encoding="utf-8")
+        args.write_markdown.write_text(render_markdown(rows, repro_report), encoding="utf-8")
         print(f"  wrote {args.write_markdown}")
 
     published = [r for r in rows if r["publishable"]]

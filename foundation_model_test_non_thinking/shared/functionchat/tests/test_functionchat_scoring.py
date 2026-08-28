@@ -372,7 +372,249 @@ def test_judge_rejects_non_enum_verdict():
     _assert('("pass", "fail")' in src, "verdict 값을 검증하지 않는다")
 
 
+judge_pilot = _load(
+    "functionchat_judge_pilot_under_test",
+    EXACT_PATH.parent.parent / "judge" / "judge_pilot.py",
+)
+
+
+def test_judge_records_what_the_endpoint_actually_served():
+    """`openai/gpt-4.1-mini` 는 alias 다 — 문자열이 그대로여도 리비전은 바뀐다."""
+
+    judge_pilot.SERVED_IDENTITY["model"].clear()
+    judge_pilot.SERVED_IDENTITY["provider"].clear()
+    judge_pilot.SERVED_IDENTITY["system_fingerprint"].clear()
+    _assert(judge_pilot.served_identity_snapshot() == {}, "초기 상태가 비어 있어야 한다")
+
+    judge_pilot.record_served_identity(
+        {"model": "openai/gpt-4.1-mini-2025-04-14", "provider": "OpenAI"}
+    )
+    judge_pilot.record_served_identity({"model": "openai/gpt-4.1-mini-2025-04-14"})
+    snapshot = judge_pilot.served_identity_snapshot()
+    _assert(snapshot["model"] == ["openai/gpt-4.1-mini-2025-04-14"], snapshot)
+    _assert(snapshot["provider"] == ["OpenAI"], snapshot)
+
+    # 런 도중 서빙이 바뀌면 둘 다 남는다 — 하나로 덮으면 그 사실이 사라진다.
+    judge_pilot.record_served_identity({"model": "openai/gpt-4.1-mini-2026-01-01"})
+    _assert(len(judge_pilot.served_identity_snapshot()["model"]) == 2, "변경 이력이 남아야 한다")
+
+
+def test_rubric_digest_changes_when_the_rubric_text_changes():
+    """"unmodified" 라는 문장은 주장일 뿐이고, 본문이 바뀌어도 그대로다."""
+
+    first = judge_pilot.rubric_digest({"singlecall": "본문", "dialog": "다른 본문"})
+    same = judge_pilot.rubric_digest({"dialog": "다른 본문", "singlecall": "본문"})
+    changed = judge_pilot.rubric_digest({"singlecall": "본문 수정됨", "dialog": "다른 본문"})
+    _assert(first == same, "키 순서가 해시를 바꾸면 안 된다")
+    _assert(first["singlecall"] != changed["singlecall"], "본문이 바뀌면 해시가 바뀌어야 한다")
+    _assert(first["dialog"] == changed["dialog"], "안 바뀐 루브릭은 그대로여야 한다")
+
+
+def test_judge_endpoint_is_recorded_not_hardcoded_at_the_call_site():
+    source = (EXACT_PATH.parent.parent / "judge" / "judge_pilot.py").read_text(encoding="utf-8")
+    call_site = source.split("def call_judge")[1]
+    _assert(
+        "https://openrouter.ai" not in call_site,
+        "호출부에 URL 을 박으면 산출물에 어디로 보냈는지 남지 않는다",
+    )
+    _assert("JUDGE_ENDPOINT" in call_site, "상수를 써야 judge 블록에 기록할 수 있다")
+
+
+repro = _load(
+    "functionchat_repro_under_test", EXACT_PATH.parent / "repro.py"
+)
+
+
+def _run(session, model, version, items):
+    return {"session": session, "model": model, "scoring_version": version,
+            "publishable": True, "items": items}
+
+
+def test_repro_compares_item_sets_not_counts():
+    """실측: qwen 5런이 전부 553 인데 통과 항목은 10개가 뒤집혔다."""
+
+    a = _run("r1", "m", "v1", {"i1": True, "i2": True, "i3": False})
+    b = _run("r2", "m", "v1", {"i1": True, "i2": False, "i3": True})
+    [report] = repro.reproducibility_report([a, b])
+    _assert(report["status"] == "DIVERGED", report)
+    _assert(report["passed_counts"] == [2, 2], report)
+    _assert(report["count_spread"] == 0, "건수만 보면 완벽 재현으로 보인다")
+    _assert(report["unstable_items"] == ["i2", "i3"], report)
+    _assert(report["stable_passed"] == 1, report)
+
+
+def test_repro_identical_when_the_same_items_pass():
+    same = {"i1": True, "i2": False}
+    [report] = repro.reproducibility_report([_run("r1", "m", "v1", same),
+                                             _run("r2", "m", "v1", dict(same))])
+    _assert(report["status"] == "IDENTICAL", report)
+    _assert(report["unstable_items"] == [], report)
+
+
+def test_repro_never_mixes_scoring_versions():
+    """v1 은 600문항, v2 는 670문항이다 — 같은 이름의 다른 측정이다."""
+
+    reports = repro.reproducibility_report([
+        _run("r1", "m", "functionchat_exact_v1", {"i1": True}),
+        _run("r2", "m", "functionchat_exact_v2", {"i1": True}),
+    ])
+    _assert(len(reports) == 2, reports)
+    _assert(all(r["status"] == "UNVERIFIED" for r in reports), reports)
+
+
+def test_repro_separates_models():
+    """후보를 코호트 키에서 빼면 서로 다른 모델이 서로의 반복 실행이 된다."""
+
+    reports = repro.reproducibility_report([
+        _run("r1", "a", "v1", {"i1": True}),
+        _run("r2", "b", "v1", {"i1": False}),
+    ])
+    _assert({r["model"] for r in reports} == {"a", "b"}, reports)
+    _assert(all(r["status"] == "UNVERIFIED" for r in reports), reports)
+
+
+def test_repro_ignores_unmeasured_items_rather_than_failing_them():
+    """하네스 장애를 실패로 세면 모델 점수로 둔갑한다."""
+
+    import json as _json
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as tmp:
+        run_dir = Path(tmp) / "results" / "m" / "s" / "language" / "functionchat"
+        run_dir.mkdir(parents=True)
+        (run_dir / "summary.json").write_text(
+            _json.dumps({"model": "m", "scoring_version": "v1",
+                         "publish_status": {"publishable": True}}), encoding="utf-8")
+        (run_dir / "singlecall.json").write_text(_json.dumps({"results": [
+            {"item_id": "ok", "evaluation_status": "measured", "type_of_output": "call",
+             "raw_response": "{}", "error": None,
+             "ground_truth": None, "model_output": None},
+            # 채점 대상이 아닌 유형 — 점수에 들어가지 않는다
+            {"item_id": "other_type", "evaluation_status": "not_measured",
+             "type_of_output": "relevance", "raw_response": "{}", "error": None},
+            # **API 실패.** evaluation_status 는 여전히 measured 다. 이것을 오답으로
+            # 세면 타임아웃 하나가 모델 오답 하나로 둔갑한다.
+            {"item_id": "api_failed", "evaluation_status": "measured",
+             "type_of_output": "call", "raw_response": None, "error": "timeout",
+             "ground_truth": None, "model_output": None},
+        ]}), encoding="utf-8")
+        loaded = repro.load_run(run_dir)
+    _assert(loaded["session"] == "s", loaded)
+    _assert(set(loaded["items"]) == {"ok"}, loaded["items"])
+
+
+def test_results_path_reuses_the_existing_directory_spelling():
+    """리눅스에서는 대소문자가 다르면 한 런의 산출물이 두 디렉토리로 갈린다."""
+
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as tmp:
+        base = Path(tmp)
+        (base / "results" / "Google_Gemma_4_26B_A4B_it").mkdir(parents=True)
+        resolved = score.results_model_dir_name(base, "google/gemma-4-26b-a4b-it")
+        _assert(resolved == "Google_Gemma_4_26B_A4B_it", resolved)
+        # 새 모델은 정규화한 이름을 그대로 쓴다
+        _assert(score.results_model_dir_name(base, "new/model:v1") == "new_model_v1", "신규")
+
+
+def test_no_functionchat_entry_point_computes_the_path_by_substitution():
+    for path in (RUNNER_PATH, SCORE_PATH):
+        text = path.read_text(encoding="utf-8")
+        if "safe_model_name" not in text:
+            continue
+        _assert(
+            "results_model_dir_name" in text,
+            f"{path.name} 이 문자열 치환으로 결과 경로를 만든다",
+        )
+
+
+def test_repro_and_scorer_agree_on_which_items_count():
+    """규칙이 두 곳에 흩어지면 한쪽만 고쳐져 조용히 어긋난다."""
+
+    items = [
+        {"item_id": "a", "type_of_output": "call", "raw_response": "{}", "error": None,
+         "ground_truth": None, "model_output": None},
+        {"item_id": "b", "type_of_output": "relevance", "raw_response": "{}", "error": None},
+        {"item_id": "c", "type_of_output": "call", "raw_response": None, "error": "timeout"},
+    ]
+    summary = score.score_items(items)
+    _assert(summary["measured"] == 1, summary)
+    _assert(summary["generation_errors"] == 1, summary)
+    scorable = [i for i in items if score.scorable_status(i) == "scorable"]
+    _assert([i["item_id"] for i in scorable] == ["a"], scorable)
+
+
+def test_served_identity_resets_between_runs_and_merges_a_retry():
+    """모듈 전역이라 리셋하지 않으면 앞선 실행이 다음 산출물로 샌다."""
+
+    judge_pilot.record_served_identity({"model": "leftover-from-previous-run"})
+
+    # 새 실행: 이전 기록 없이 시작한다
+    judge_pilot.reset_served_identity(None)
+    _assert(judge_pilot.served_identity_snapshot() == {}, "리셋이 비우지 않았다")
+
+    # 재판정: 기존 judge.json 의 기록을 물려받아야 이미 확정된 항목의 출처가 남는다
+    judge_pilot.reset_served_identity({"model": ["rev-a"], "provider": ["OpenAI"]})
+    judge_pilot.record_served_identity({"model": "rev-b"})
+    snapshot = judge_pilot.served_identity_snapshot()
+    _assert(snapshot["model"] == ["rev-a", "rev-b"], snapshot)
+    _assert(snapshot["provider"] == ["OpenAI"], snapshot)
+    _assert("leftover-from-previous-run" not in snapshot["model"], snapshot)
+    judge_pilot.reset_served_identity(None)
+
+
+def test_repro_says_coverage_differed_instead_of_just_unverified():
+    """항목 집합이 다르면 코호트가 갈린다 — 그 사유를 말하지 않으면
+    "한 번만 돌렸다"로 읽혀 반복 실행이 있었다는 사실이 사라진다."""
+
+    reports = repro.reproducibility_report([
+        _run("r1", "m", "v1", {"i1": True, "i2": True}),
+        _run("r2", "m", "v1", {"i1": True}),          # 항목 하나가 빠졌다
+    ])
+    _assert(len(reports) == 2, reports)
+    _assert(all(r["status"] == "UNVERIFIED" for r in reports), reports)
+    _assert(any("코호트가 2개로 갈렸다" in r["reason"] for r in reports), reports)
+
+
+def test_repro_reports_which_dataset_file_could_not_be_read():
+    """조용히 건너뛰면 읽기 실패가 재현성 결론으로 둔갑한다."""
+
+    import json as _json
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as tmp:
+        run_dir = Path(tmp) / "results" / "m" / "s" / "language" / "functionchat"
+        run_dir.mkdir(parents=True)
+        (run_dir / "summary.json").write_text(
+            _json.dumps({"model": "m", "scoring_version": "v1",
+                         "publish_status": {"publishable": True}}), encoding="utf-8")
+        (run_dir / "singlecall.json").write_text(_json.dumps({"results": [
+            {"item_id": "ok", "evaluation_status": "measured", "type_of_output": "call",
+             "raw_response": "{}", "error": None,
+             "ground_truth": None, "model_output": None}]}), encoding="utf-8")
+        (run_dir / "call_decision.json").write_text("{ 깨진", encoding="utf-8")
+        loaded = repro.load_run(run_dir)
+    _assert(loaded["unreadable_datasets"] == ["call_decision.json: JSONDecodeError"], loaded)
+
+    [report] = repro.reproducibility_report([loaded])
+    _assert("읽지 못한 산출물" in report["reason"], report["reason"])
+
+
 TESTS = [
+    test_served_identity_resets_between_runs_and_merges_a_retry,
+    test_repro_says_coverage_differed_instead_of_just_unverified,
+    test_repro_reports_which_dataset_file_could_not_be_read,
+    test_repro_and_scorer_agree_on_which_items_count,
+    test_results_path_reuses_the_existing_directory_spelling,
+    test_no_functionchat_entry_point_computes_the_path_by_substitution,
+    test_repro_compares_item_sets_not_counts,
+    test_repro_identical_when_the_same_items_pass,
+    test_repro_never_mixes_scoring_versions,
+    test_repro_separates_models,
+    test_repro_ignores_unmeasured_items_rather_than_failing_them,
+    test_judge_records_what_the_endpoint_actually_served,
+    test_rubric_digest_changes_when_the_rubric_text_changes,
+    test_judge_endpoint_is_recorded_not_hardcoded_at_the_call_site,
     test_three_acceptable_argument_sentinels_are_empty,
     test_hallucinated_argument_key_fails,
     test_real_korean_string_ignores_spaces_and_case,
