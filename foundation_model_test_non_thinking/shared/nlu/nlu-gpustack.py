@@ -23,6 +23,8 @@ DEFAULT_ENDPOINT = "http://172.16.1.81:18090/v1/chat/completions"
 sys.path.insert(0, str(SCRIPT_DIR.parent))
 from serving.constraints import apply as apply_serving_constraints  # noqa: E402
 from serving.constraints import constraint_snapshot  # noqa: E402
+sys.path.insert(0, str(SCRIPT_DIR / "scoring"))
+from contract import digest as _digest, items_for, load_contract, render  # noqa: E402
 
 
 def get_base_dir() -> Path:
@@ -228,6 +230,11 @@ def main():
     )
     parser.add_argument("--endpoint", default=DEFAULT_ENDPOINT, help=f"Chat completions endpoint (default: {DEFAULT_ENDPOINT})")
     parser.add_argument(
+        "--no-contract",
+        action="store_true",
+        help="응답 형식 계약을 덧붙이지 않는다 (계약 도입 이전 규약을 그대로 재현).",
+    )
+    parser.add_argument(
         "--overwrite",
         action="store_true",
         help="같은 세션의 기존 산출물을 다시 만든다 (기본은 완료된 프롬프트를 건너뛴다).",
@@ -262,6 +269,7 @@ def main():
         for path in prompt_paths
     ]
 
+    contract = load_contract()
     manifest_path = model_out_dir / MANIFEST_NAME
     manifest = load_manifest(manifest_path)
     check_no_clobber(manifest, model, endpoint)
@@ -286,6 +294,12 @@ def main():
         # 형제 트랙은 `python` 을 부르는데 그 이름이 없는 환경이 실재한다.
         # 어떤 인터프리터가 이 산출물을 만들었는지는 재현할 때 필요하다.
         "python_executable": sys.executable,
+        # 계약이 있는 런과 없는 런은 다른 규약이다. 채점기는 계약이 기록되지
+        # 않은 런을 채점 대상에서 뺀다 — 섞이면 둘 다 못 믿는다.
+        "answer_contract": None if args.no_contract else {
+            "version": contract["version"],
+            "sha256": {stem: _digest(render(contract, stem)) for stem in expected},
+        },
         "expected_prompts": expected,
         "completed_prompts": done,
         # 완결 여부를 파일 개수로 추정하지 않는다 — 한 개짜리 정상 런과
@@ -316,6 +330,11 @@ def main():
             with open(prompt_path, "r", encoding="utf-8") as f:
                 prompt = f.read()
 
+            # 본문은 바이트 그대로 두고 계약만 뒤에 덧붙인다. 본문을 고치면 이미
+            # 커밋된 산출물과 비교할 수 없게 된다.
+            addendum = "" if args.no_contract else render(contract, prompt_path.stem)
+            sent = prompt + addendum
+
             print("프롬프트 파일:", str(prompt_path))
             print("프롬프트:")
             print(prompt)
@@ -324,7 +343,7 @@ def main():
             # API 호출
             request_snapshot: dict = {}
             response, served = get_response(
-                prompt, model, endpoint, request_snapshot=request_snapshot
+                sent, model, endpoint, request_snapshot=request_snapshot
             )
 
             # 결과 저장
@@ -336,6 +355,14 @@ def main():
                 "prompt": prompt,
                 "response": response,
                 "prompt_sha256": hashlib.sha256(prompt.encode("utf-8")).hexdigest(),
+                # 실제로 보낸 본문 = prompt + 계약. 둘을 따로 적어야 계약을 바꿨을 때
+                # 무엇이 달라졌는지가 보인다.
+                "prompt_sent_sha256": hashlib.sha256(sent.encode("utf-8")).hexdigest(),
+                "answer_contract": None if not addendum else {
+                    "version": contract["version"],
+                    "sha256": _digest(addendum),
+                    "items": [item["id"] for item in items_for(contract, prompt_path.stem)],
+                },
                 "endpoint": endpoint,
                 "served_identity": served,
                 "request": request_snapshot,
