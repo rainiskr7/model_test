@@ -23,6 +23,34 @@ def safe_model_name(model: str) -> str:
     return model.replace("/", "_").replace("-", "_").replace(":", "_")
 
 
+def results_model_dir_name(base_dir: Path, model: str) -> str:
+    """이미 있는 모델 디렉토리의 **실제 표기**를 재사용한다.
+
+    문자열 치환만 하면 macOS 에서는 대소문자를 무시해 드러나지 않지만, 리눅스에서는
+    ``results/google_gemma_4_26b_a4b_it`` 와 ``results/google_gemma_4_26B_A4B_it`` 가
+    서로 다른 디렉토리가 되어 한 런의 산출물이 둘로 갈린다. 이 저장소에는 이미 두
+    표기가 모두 git 에 들어 있다. multimodal 트랙에서 같은 결함을 실증하고 고쳤고,
+    같은 규칙을 여기서도 쓴다 — 규칙을 복제하지 말고 동작을 맞춘다.
+    """
+
+    requested = safe_model_name(model)
+    results_root = Path(base_dir) / "results"
+    if not results_root.is_dir():
+        return requested
+    matches = sorted(
+        entry.name
+        for entry in results_root.iterdir()
+        if entry.is_dir() and entry.name.casefold() == requested.casefold()
+    )
+    if len(matches) == 1:
+        return matches[0]
+    if len(matches) > 1:
+        raise ValueError(
+            f"case-fold ambiguous results model directory for {requested!r}: {matches}"
+        )
+    return requested
+
+
 def normalize_api_base(base_url: str) -> str:
     """LiteLLM OpenAI provider가 기대하는 API root로 정규화한다."""
     value = base_url.rstrip("/")
@@ -193,7 +221,7 @@ def build_upstream_command(
         "--task-ids",
         *selected_ids,
         "--num-trials",
-        "1",
+        str(args.trials),
         "--max-steps",
         str(args.max_steps),
         "--timeout",
@@ -330,6 +358,18 @@ def parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
     parser.add_argument(
         "--split", default=os.environ.get("TAUBENCH_SPLIT", DEFAULT_SPLIT)
     )
+    # 사용자 시뮬레이터 인자는 후보에서 물려받지 않는다. 상류 제출 요건이
+    # "모든 도메인에서 동일한 agent 모델과 사용자 시뮬레이터를 identical
+    # arguments 로" 이므로, 후보 설정이 바뀌면 사용자 설정도 따라 바뀌는 구조는
+    # 모델 비교 자체를 무효로 만든다. 2026-08-23 실측: 같은 gpt-4.1-mini 인데
+    # gemma 런은 timeout 600s/8192 tokens, qwen 런은 120s/16384 tokens 였다.
+    # 반복 시행. 상류는 4회 이상을 권장한다 — Pass^k 는 반복이 있어야 정의된다.
+    # 실측(2026-08-27): airline 20과제를 같은 프로토콜로 두 번 돌렸더니 통과 과제가
+    # 4~6건 뒤집혔다. 1회 시행 점수로는 모델 간 10점 차를 실력 차로 읽을 수 없다.
+    parser.add_argument("--trials", type=int, default=1)
+    parser.add_argument("--user-request-timeout", type=float, default=120.0)
+    parser.add_argument("--user-max-tokens", type=int, default=16384)
+    # 값 검증은 _validate_args 에서 후보 인자와 같은 규칙으로 한다.
     parser.add_argument("--request-timeout", type=float, default=60.0)
     parser.add_argument("--task-timeout", type=float, default=600.0)
     parser.add_argument("--max-retries", type=int, default=0)
@@ -356,6 +396,15 @@ def _validate_args(args: argparse.Namespace) -> None:
         )
     if args.max_tokens < 1 or args.max_concurrency < 1 or args.max_steps < 1:
         raise ValueError("max tokens/concurrency/steps must be positive")
+    if args.trials < 1:
+        raise ValueError("trials must be positive")
+    # 사용자 인자도 후보와 같은 규칙으로 검증한다. 검증하지 않으면 음수/0 이
+    # 그대로 litellm 으로 넘어가고, 산출물에는 그 값이 "고정된 프로토콜" 로 남는다.
+    if args.mode == "standard":
+        if args.user_request_timeout <= 0:
+            raise ValueError("user request timeout must be positive")
+        if args.user_max_tokens < 1:
+            raise ValueError("user max tokens must be positive")
 
 
 def main(argv: Optional[list[str]] = None) -> int:
@@ -388,7 +437,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         results_dir = (
             base_dir
             / "results"
-            / safe_model_name(args.model)
+            / results_model_dir_name(base_dir, args.model)
             / timestamp
             / "language"
             / args.track_name
@@ -399,7 +448,20 @@ def main(argv: Optional[list[str]] = None) -> int:
 
         # 사용자 시뮬레이터 llm_args. 별도 엔드포인트를 주면 그쪽으로, 아니면
         # 에이전트와 같은 곳으로 보낸다. 키는 환경변수에서만 읽는다.
-        user_llm_args = dict(llm_args)
+        #
+        # **후보의 llm_args 를 복사하지 않는다.** 복사하면 후보의 timeout/max_tokens
+        # 가 사용자 시뮬레이터에 흘러들어, 모델마다 다른 사용자 프로토콜로 비교하게
+        # 된다. 사용자 인자는 --user-* 로만 정해지고 후보 설정과 독립이다.
+        user_llm_args = build_litellm_args(
+            api_base, args.user_request_timeout, args.user_max_tokens
+        )
+        if args.mode == "standard":
+            # 상류는 사용자 시뮬레이터에 temperature=0 을 명시한다
+            # (config.py DEFAULT_LLM_ARGS_USER). 우리는 --user-llm-args 를 통째로
+            # 넘기므로 여기서 넣지 않으면 상류 기본값까지 덮여, 사용자가 서버
+            # 기본 temperature 로 비결정적으로 돈다. 예전에는 외부 API 분기에서만
+            # 넣어서 로컬 standard 런이 이 구멍에 빠졌다.
+            user_llm_args["temperature"] = 0.0
         if args.mode == "standard":
             user_model = args.user_model or args.model
             is_external = "/" in user_model and not user_model.startswith("openai/")
@@ -429,9 +491,6 @@ def main(argv: Optional[list[str]] = None) -> int:
                     )
                 # litellm 이 읽을 자리에 옮겨 담는다. 자식 프로세스 env 로만 전달된다.
                 os.environ.setdefault("OPENROUTER_API_KEY", user_api_key)
-                # 상류는 사용자 시뮬레이터에 temperature=0 을 명시한다
-                # (config.py DEFAULT_LLM_ARGS_USER). 외부 API 는 이를 받는다.
-                user_llm_args["temperature"] = 0.0
         manifest: dict[str, Any] = {
             "status": "running",
             "model": args.model,
@@ -470,6 +529,22 @@ def main(argv: Optional[list[str]] = None) -> int:
                     None
                     if args.mode == "solo"
                     else litellm_model_name(args.user_model or args.model)
+                ),
+                # 사용자 프로토콜을 산출물에 새긴다. 이것이 같아야 두 모델의
+                # 점수를 나란히 놓을 수 있다.
+                "user_request_timeout": (
+                    None if args.mode == "solo" else args.user_request_timeout
+                ),
+                "user_max_tokens": None if args.mode == "solo" else args.user_max_tokens,
+                "user_args_inherited_from_candidate": False,
+                "trials": args.trials,
+                # 사용자 프로토콜은 모델명만이 아니다. 엔드포인트와 temperature 가
+                # 다르면 같은 alias 라도 다른 실험 조건이다.
+                "user_temperature": (
+                    None if args.mode == "solo" else user_llm_args.get("temperature")
+                ),
+                "user_api_base": (
+                    None if args.mode == "solo" else user_llm_args.get("api_base")
                 ),
                 "provider": "litellm_openai_compatible",
                 "model_requested": args.model,

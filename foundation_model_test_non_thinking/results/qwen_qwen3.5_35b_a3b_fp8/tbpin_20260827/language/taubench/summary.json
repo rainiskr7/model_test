@@ -1,0 +1,446 @@
+{
+  "benchmark": "sierra-research/tau2-bench (state/action, agent-user-tools)",
+  "model": "qwen_qwen3.5_35b_a3b_fp8",
+  "track": "taubench",
+  "scoring_version": "taubench_state_v1",
+  "score_provenance": "upstream tau2 reward_info.reward; no local reward recomputation",
+  "harness_integrity": {
+    "architecture": "upstream_tau2_framework",
+    "mode": "standard",
+    "agent_implementation": "llm_agent",
+    "user_implementation": "user_simulator",
+    "user_model_sent_to_litellm": "openrouter/openai/gpt-4.1-mini",
+    "user_request_timeout": 120.0,
+    "user_max_tokens": 16384,
+    "user_args_inherited_from_candidate": false,
+    "provider": "litellm_openai_compatible",
+    "model_requested": "qwen_qwen3.5_35b_a3b_fp8",
+    "model_sent_to_litellm": "openai/qwen_qwen3.5_35b_a3b_fp8",
+    "api_base": "http://192.168.0.8:18023/v1",
+    "api_key_source": "OPENAI_API_KEY environment variable",
+    "request_timeout": 120.0,
+    "task_timeout": 900.0,
+    "framework_max_retries": 0,
+    "litellm_num_retries": 0,
+    "max_tokens": 16384,
+    "temperature_sent": false,
+    "serving_profile_applied": false,
+    "serving_profile_observable": false,
+    "max_concurrency": 1,
+    "max_steps": 100,
+    "tau2_version": "1.0.1",
+    "litellm_version": "1.82.6",
+    "openai_sdk_version": "3.2.0",
+    "successful_request_logs": true,
+    "failed_request_attempts_observable": false,
+    "absorbed_timeout_counter_observable": false,
+    "upstream_result_evidence": {
+      "agent_implementation": "llm_agent",
+      "user_implementation": "user_simulator",
+      "agent_model": "openai/qwen_qwen3.5_35b_a3b_fp8",
+      "request_timeout": 120.0,
+      "litellm_num_retries": 0,
+      "max_tokens": 16384,
+      "temperature_sent": false,
+      "user_protocol": {
+        "user_model": "openrouter/openai/gpt-4.1-mini",
+        "user_request_timeout": 120.0,
+        "user_max_tokens": 16384,
+        "pinned": true
+      },
+      "source": "tau2 results.info.agent_info/user_info"
+    },
+    "manifest_only_not_in_upstream_info": [
+      "task_timeout",
+      "framework_max_retries",
+      "max_concurrency",
+      "package_versions"
+    ]
+  },
+  "split": {
+    "domain": "airline",
+    "name": "test",
+    "source": "data/tau2/domains/airline/split_tasks.json",
+    "task_count": 20,
+    "runnable_task_count": 20,
+    "task_ids": [
+      "2",
+      "6",
+      "8",
+      "13",
+      "16",
+      "18",
+      "19",
+      "22",
+      "24",
+      "25",
+      "26",
+      "29",
+      "30",
+      "31",
+      "32",
+      "35",
+      "37",
+      "44",
+      "45",
+      "48"
+    ],
+    "not_measured_task_count": 0,
+    "not_measured_tasks": []
+  },
+  "overall": {
+    "pass_rate": 0.75,
+    "measured": 20,
+    "passed": 15,
+    "failed": 5
+  },
+  "by_domain": {
+    "airline": {
+      "status": "measured",
+      "reason": null,
+      "pass_rate": 0.75,
+      "pass_rate_source": "tau2 results.simulations[].reward_info.reward",
+      "pass_rate_strict": 0.75,
+      "pass_rate_strict_denominator": 20,
+      "pass_rate_strict_reason": null,
+      "pass_rate_strict_definition": "passed / (measured + 모델 귀책 미완주). upstream pass_rate 와 달리 모델이 스스로 망가져 못 끝낸 태스크를 실패로 센다. 환경 귀책 오류가 있으면 null.",
+      "incompletion_attribution": {
+        "candidate": {},
+        "environment": {},
+        "unclassified": {}
+      },
+      "runnable_tasks": 20,
+      "result_records": 20,
+      "measured": 20,
+      "passed": 15,
+      "failed": 5,
+      "not_measured_result_records": {},
+      "termination_reasons": {
+        "user_stop": 20
+      },
+      "request_observability": {
+        "successful_calls": 261,
+        "latency_seconds": {
+          "average": 5.749468408961436,
+          "min": 0.705803457996808,
+          "max": 94.6654762919934
+        },
+        "failed_request_attempts": null,
+        "absorbed_timeouts": null
+      },
+      "task_results": [
+        {
+          "task_id": "2",
+          "reward_basis": [
+            "COMMUNICATE",
+            "DB"
+          ],
+          "evaluation_status": "measured",
+          "upstream_reward": 1.0,
+          "termination_reason": "user_stop",
+          "passed": true
+        },
+        {
+          "task_id": "6",
+          "reward_basis": [
+            "COMMUNICATE",
+            "DB"
+          ],
+          "evaluation_status": "measured",
+          "upstream_reward": 1.0,
+          "termination_reason": "user_stop",
+          "passed": true
+        },
+        {
+          "task_id": "8",
+          "reward_basis": [
+            "COMMUNICATE",
+            "DB"
+          ],
+          "evaluation_status": "measured",
+          "upstream_reward": 0.0,
+          "termination_reason": "user_stop",
+          "passed": false
+        },
+        {
+          "task_id": "13",
+          "reward_basis": [
+            "COMMUNICATE",
+            "DB"
+          ],
+          "evaluation_status": "measured",
+          "upstream_reward": 1.0,
+          "termination_reason": "user_stop",
+          "passed": true
+        },
+        {
+          "task_id": "16",
+          "reward_basis": [
+            "COMMUNICATE",
+            "DB"
+          ],
+          "evaluation_status": "measured",
+          "upstream_reward": 1.0,
+          "termination_reason": "user_stop",
+          "passed": true
+        },
+        {
+          "task_id": "18",
+          "reward_basis": [
+            "COMMUNICATE",
+            "DB"
+          ],
+          "evaluation_status": "measured",
+          "upstream_reward": 0.0,
+          "termination_reason": "user_stop",
+          "passed": false
+        },
+        {
+          "task_id": "19",
+          "reward_basis": [
+            "COMMUNICATE",
+            "DB"
+          ],
+          "evaluation_status": "measured",
+          "upstream_reward": 1.0,
+          "termination_reason": "user_stop",
+          "passed": true
+        },
+        {
+          "task_id": "22",
+          "reward_basis": [
+            "COMMUNICATE",
+            "DB"
+          ],
+          "evaluation_status": "measured",
+          "upstream_reward": 0.0,
+          "termination_reason": "user_stop",
+          "passed": false
+        },
+        {
+          "task_id": "24",
+          "reward_basis": [
+            "COMMUNICATE",
+            "DB"
+          ],
+          "evaluation_status": "measured",
+          "upstream_reward": 1.0,
+          "termination_reason": "user_stop",
+          "passed": true
+        },
+        {
+          "task_id": "25",
+          "reward_basis": [
+            "COMMUNICATE",
+            "DB"
+          ],
+          "evaluation_status": "measured",
+          "upstream_reward": 1.0,
+          "termination_reason": "user_stop",
+          "passed": true
+        },
+        {
+          "task_id": "26",
+          "reward_basis": [
+            "COMMUNICATE",
+            "DB"
+          ],
+          "evaluation_status": "measured",
+          "upstream_reward": 1.0,
+          "termination_reason": "user_stop",
+          "passed": true
+        },
+        {
+          "task_id": "29",
+          "reward_basis": [
+            "COMMUNICATE",
+            "DB"
+          ],
+          "evaluation_status": "measured",
+          "upstream_reward": 0.0,
+          "termination_reason": "user_stop",
+          "passed": false
+        },
+        {
+          "task_id": "30",
+          "reward_basis": [
+            "COMMUNICATE",
+            "DB"
+          ],
+          "evaluation_status": "measured",
+          "upstream_reward": 1.0,
+          "termination_reason": "user_stop",
+          "passed": true
+        },
+        {
+          "task_id": "31",
+          "reward_basis": [
+            "COMMUNICATE",
+            "DB"
+          ],
+          "evaluation_status": "measured",
+          "upstream_reward": 1.0,
+          "termination_reason": "user_stop",
+          "passed": true
+        },
+        {
+          "task_id": "32",
+          "reward_basis": [
+            "COMMUNICATE",
+            "DB"
+          ],
+          "evaluation_status": "measured",
+          "upstream_reward": 1.0,
+          "termination_reason": "user_stop",
+          "passed": true
+        },
+        {
+          "task_id": "35",
+          "reward_basis": [
+            "COMMUNICATE",
+            "DB"
+          ],
+          "evaluation_status": "measured",
+          "upstream_reward": 1.0,
+          "termination_reason": "user_stop",
+          "passed": true
+        },
+        {
+          "task_id": "37",
+          "reward_basis": [
+            "COMMUNICATE",
+            "DB"
+          ],
+          "evaluation_status": "measured",
+          "upstream_reward": 1.0,
+          "termination_reason": "user_stop",
+          "passed": true
+        },
+        {
+          "task_id": "44",
+          "reward_basis": [
+            "COMMUNICATE",
+            "DB"
+          ],
+          "evaluation_status": "measured",
+          "upstream_reward": 0.0,
+          "termination_reason": "user_stop",
+          "passed": false
+        },
+        {
+          "task_id": "45",
+          "reward_basis": [
+            "COMMUNICATE",
+            "DB"
+          ],
+          "evaluation_status": "measured",
+          "upstream_reward": 1.0,
+          "termination_reason": "user_stop",
+          "passed": true
+        },
+        {
+          "task_id": "48",
+          "reward_basis": [
+            "COMMUNICATE",
+            "DB"
+          ],
+          "evaluation_status": "measured",
+          "upstream_reward": 1.0,
+          "termination_reason": "user_stop",
+          "passed": true
+        }
+      ],
+      "benchmark_eligible": true,
+      "coverage": {
+        "measured": 20,
+        "runnable_task_count": 20,
+        "official_task_count": 20
+      }
+    },
+    "banking_knowledge": {
+      "status": "not_measured",
+      "reason": "not selected for this run",
+      "pass_rate": null,
+      "runnable_tasks": 0,
+      "result_records": 0,
+      "measured": 0,
+      "passed": 0,
+      "failed": 0,
+      "task_results": []
+    },
+    "retail": {
+      "status": "not_measured",
+      "reason": "not selected for this run",
+      "pass_rate": null,
+      "runnable_tasks": 0,
+      "result_records": 0,
+      "measured": 0,
+      "passed": 0,
+      "failed": 0,
+      "task_results": []
+    },
+    "telecom": {
+      "status": "not_measured",
+      "reason": "not selected for this run",
+      "pass_rate": null,
+      "runnable_tasks": 0,
+      "result_records": 0,
+      "measured": 0,
+      "passed": 0,
+      "failed": 0,
+      "task_results": []
+    }
+  },
+  "not_measured": {
+    "selected_split": {
+      "count": 0,
+      "reason": "chosen split tasks whose reward basis is not judge-free",
+      "tasks": []
+    },
+    "banking_knowledge": {
+      "count": 97,
+      "reason": "judge-free rewards exist, but the domain rejects no-user solo mode"
+    },
+    "retail": {
+      "count": 116,
+      "reason": "NL_ASSERTION reward basis requires an LLM judge"
+    },
+    "airline": {
+      "count": 52,
+      "reason": "COMMUNICATE reward basis is outside this no-judge track"
+    }
+  },
+  "source_inventory": {
+    "telecom": {
+      "total_records": 4592,
+      "reward_basis_counts": {
+        "ENV_ASSERTION": 4524,
+        "ACTION+ENV_ASSERTION": 66
+      }
+    },
+    "banking_knowledge": {
+      "total_records": 97,
+      "reward_component_counts": {
+        "DB": 88,
+        "ACTION": 9
+      }
+    },
+    "retail": {
+      "total_records": 116
+    },
+    "airline": {
+      "total_records": 52
+    }
+  },
+  "source": {
+    "repository": "sierra-research/tau2-bench",
+    "commit": "c3398666e6559e3a063da3fc04b5acf7f941464e",
+    "license": "MIT"
+  },
+  "publish_status": {
+    "publishable": true,
+    "failures": [],
+    "warnings": [],
+    "gate_scoring_version": "taubench_state_v1"
+  }
+}

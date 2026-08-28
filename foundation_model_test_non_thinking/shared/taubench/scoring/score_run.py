@@ -7,6 +7,15 @@ import os
 import sys
 import tempfile
 from collections import Counter
+
+try:  # 패키지로 임포트될 때
+    from .passk import pass_hat_k_table
+except ImportError:  # 파일 하나만 단독 로드할 때 (테스트 로더)
+    import sys as _sys
+    from pathlib import Path as _Path
+
+    _sys.path.insert(0, str(_Path(__file__).resolve().parent))
+    from passk import pass_hat_k_table
 from pathlib import Path
 from typing import Any, Iterable, Mapping, Optional
 
@@ -20,7 +29,9 @@ DECLARED_INVENTORY = {
         "reward_basis_counts": {"ENV_ASSERTION": 4524, "ACTION+ENV_ASSERTION": 66},
     },
     "banking_knowledge": {
-        "total_records": 98,
+        # 실측 97 (tasks.json 고유 id 97개). 예전에는 98 로 적혀 있어 자기 구성요소
+        # 합(88+9=97)과도 어긋났다.
+        "total_records": 97,
         "reward_component_counts": {"DB": 88, "ACTION": 9},
     },
     "retail": {"total_records": 116},
@@ -87,6 +98,7 @@ def _validate_upstream_integrity(
     agent = info.get("agent_info") or {}
     user = info.get("user_info") or {}
     args = agent.get("llm_args") or {}
+    user_args = user.get("llm_args") or {}
     integrity = manifest.get("harness_integrity") or {}
     expected = {
         # 하드코딩하지 않는다 — 매니페스트가 기록한 모드에서 파생시킨다.
@@ -113,11 +125,84 @@ def _validate_upstream_integrity(
         )
     if "temperature" in args:
         raise ValueError("upstream results show that temperature was sent")
+    user_observed = _validate_user_protocol(user, user_args, integrity)
     return {
         **observed,
         "temperature_sent": False,
+        "user_protocol": user_observed,
         "source": "tau2 results.info.agent_info/user_info",
     }
+
+
+def _validate_user_protocol(
+    user: Mapping[str, Any],
+    user_args: Mapping[str, Any],
+    integrity: Mapping[str, Any],
+) -> dict[str, Any]:
+    """사용자 시뮬레이터의 실제 요청 설정을 매니페스트와 대조한다.
+
+    모델 비교가 성립하려면 **후보만 달라야 한다.** 상류 제출 요건도 "모든
+    도메인에서 동일한 agent 모델과 사용자 시뮬레이터를 identical arguments 로"
+    를 요구한다. 예전 러너는 사용자 인자를 후보 인자에서 복사했기 때문에 후보
+    설정이 바뀌면 사용자 프로토콜도 따라 바뀌었다 — 같은 gpt-4.1-mini 인데 한쪽은
+    timeout 600s/8192 tokens, 다른 쪽은 120s/16384 tokens 로 돌아간 실측이 있다.
+    구버전 산출물은 매니페스트에 사용자 인자가 없으므로 관측값만 남기고 통과시킨다.
+    """
+
+    # 모델·타임아웃·토큰만 보면 "고정" 이 아니다. 러너는 사용자에게 temperature 와
+    # api_base 도 보낸다 — 엔드포인트가 다르면 같은 alias 라도 다른 백엔드이고,
+    # temperature 가 다르면 사용자 발화가 결정론적이지 않다. 둘 다 대조 대상이다.
+    observed = {
+        "user_model": user.get("llm"),
+        "user_request_timeout": user_args.get("timeout"),
+        "user_max_tokens": user_args.get("max_tokens"),
+        "user_temperature": user_args.get("temperature"),
+        "user_api_base": user_args.get("api_base"),
+    }
+    declared_timeout = integrity.get("user_request_timeout")
+    declared_max_tokens = integrity.get("user_max_tokens")
+    if declared_timeout is None and declared_max_tokens is None:
+        observed["pinned"] = False
+        observed["reason"] = (
+            "사용자 인자를 기록하지 않는 구버전 러너가 만든 산출물이다. "
+            "다른 런과 같은 사용자 프로토콜이었다는 증거가 없다."
+        )
+        return observed
+    # 사용자 **모델**이 비교의 핵심이다. 인자만 대조하고 모델을 빼면, 시뮬레이터가
+    # 통째로 바뀌어도 pinned 로 통과한다. 이 트랙은 사용자 시뮬레이터 교체만으로
+    # 같은 모델 점수가 0.475 -> 0.900 으로 뛴 전례가 있다.
+    expected = {
+        "user_model": integrity.get("user_model_sent_to_litellm"),
+        "user_request_timeout": declared_timeout,
+        "user_max_tokens": declared_max_tokens,
+    }
+    actual = {
+        "user_model": observed["user_model"],
+        "user_request_timeout": observed["user_request_timeout"],
+        "user_max_tokens": observed["user_max_tokens"],
+    }
+    # 선언한 적 없는 항목은 대조하지 않되, 관측값은 남겨 코호트가 읽을 수 있게 한다.
+    for key in ("user_temperature", "user_api_base"):
+        declared = integrity.get(key)
+        if declared is not None:
+            expected[key] = declared
+            actual[key] = observed[key]
+    observed["pinned"] = True
+    if actual != expected:
+        # **예외를 던지지 않는다.** build_summary 안에서 터지면 main 이 exit 2 로
+        # 끝나며 summary.json 을 아예 쓰지 않는다. 이 파일의 원칙은 "발행 불가여도
+        # 산출물은 남긴다 — 진단에 필요하다" 이고, 후보도 아닌 사용자 시뮬레이터
+        # 설정 때문에 진단 근거를 없애는 것은 그 원칙과 어긋난다.
+        # 게이트(validate_summary)가 이 필드를 읽어 발행을 막는다.
+        observed["mismatch"] = {"declared": expected, "observed": actual}
+    return observed
+
+
+def _trials_per_task(task_results):
+    """과제별 시행 수의 분포. 값이 하나면 균일하게 돌린 것이다."""
+
+    counts = Counter(str(record["task_id"]) for record in task_results)
+    return sorted(set(counts.values())) if counts else []
 
 
 def score_domain(
@@ -222,6 +307,17 @@ def score_domain(
         },
         "runnable_tasks": runnable_tasks,
         "result_records": len(simulations),
+        # 반복 시행이면 시뮬레이션 수와 과제 수가 다르다. 커버리지는 **과제** 단위로
+        # 봐야 한다 — 20과제를 4회 돌린 것을 "80과제를 쟀다" 로 세면 게이트가
+        # 무의미해진다. Pass^k 도 과제별 성공 횟수에서 나온다.
+        "distinct_tasks": len({str(record["task_id"]) for record in task_results}),
+        "distinct_tasks_measured": len({
+            str(record["task_id"])
+            for record in task_results
+            if record.get("evaluation_status") == "measured"
+        }),
+        "trials": _trials_per_task(task_results),
+        "pass_hat_k": pass_hat_k_table(task_results),
         "measured": measured,
         "passed": passed,
         "failed": failed,
@@ -275,14 +371,19 @@ def build_summary(
     # (예전에는 retail/airline 을 뒤에 무조건 넣어서, retail 을 실행하면 그 결과가
     #  하드코딩된 not_measured 로 덮어써졌다 — 2026-08-23 retail 첫 런에서 29건을
     #  돌려놓고 0건 측정으로 집계됐다.)
+    # 실행하지 않은 도메인의 사유는 **"이번 런에서 고르지 않았다"** 뿐이다.
+    # 예전에는 판정 필요 여부를 여기에 하드코딩했는데 그게 거짓이 됐다:
+    #   airline = "LLM judge required for every task in the test split"
+    # 실제 airline test 는 20건이고 전부 판정 불필요다(tbair 런이 20/20 측정).
+    # 커밋 4cf6eb7 이 이미 "airline 은 판정이 필요 없다" 로 바로잡았는데 이 문자열만
+    # 남아, telecom 을 돌릴 때마다 보고서에 거짓이 출력됐다. 도메인별 판정 필요
+    # 여부는 그 도메인을 실제로 고를 때 resolve_task_split 이 내용으로 판정한다.
+    # banking 은 매니페스트가 사유를 적었으면 그것을 쓴다 — 모드에 따라 다르다.
     _fallback_reasons = {
-        "banking_knowledge": (
-            (domain_scope.get("banking_knowledge") or {}).get("reason")
-            or "banking_knowledge has no supported no-user mode"
-        ),
-        "retail": "not selected for this run",
-        "airline": "LLM judge required for every task in the test split",
-        "telecom": "not selected for this run",
+        name: (
+            (domain_scope.get(name) or {}).get("reason") or "not selected for this run"
+        )
+        for name in ("banking_knowledge", "retail", "airline", "telecom")
     }
     domains = {
         run_domain: score_domain(
@@ -292,6 +393,25 @@ def build_summary(
     for name, reason in _fallback_reasons.items():
         if name != run_domain:
             domains[name] = score_domain(name, None, 0, reason)
+
+    # 완주와 "도메인을 다 쟀다"는 다르다. runnable 은 우리가 돌리기로 고른 판정
+    # 불필요 부분집합이고, split.task_count 가 공식 크기다. 실측: retail test 는
+    # 40 중 29 만 판정 없이 채점된다. 부분집합 점수를 도메인 이름으로 발행하면
+    # 공식 split 성적으로 오독되므로, 자격을 산출물에 새긴다.
+    official = split.get("task_count")
+    entry = domains[run_domain]
+    if official and runnable_task_count:
+        entry["benchmark_eligible"] = int(runnable_task_count) == int(official)
+        entry["coverage"] = {
+            "measured": entry.get("measured"),
+            "runnable_task_count": int(runnable_task_count),
+            "official_task_count": int(official),
+        }
+        if not entry["benchmark_eligible"]:
+            entry["coverage"]["reason"] = (
+                "판정 불필요 부분집합만 측정했다 — 공식 도메인 점수가 아니다"
+            )
+
     measured = sum(entry["measured"] for entry in domains.values())
     passed = sum(entry["passed"] for entry in domains.values())
     failed = sum(entry["failed"] for entry in domains.values())
@@ -491,6 +611,22 @@ def validate_summary(summary: dict) -> tuple:
     failures = []
     warnings = []
 
+    user_protocol = (
+        ((summary.get("harness_integrity") or {}).get("upstream_result_evidence") or {})
+        .get("user_protocol") or {}
+    )
+    if user_protocol.get("mismatch"):
+        failures.append(
+            "사용자 시뮬레이터 프로토콜이 선언과 다르다 — 다른 런과 비교할 수 없다: "
+            f"{user_protocol['mismatch']}"
+        )
+    elif user_protocol and not user_protocol.get("pinned"):
+        # 측정 자체는 유효하므로 거부하지 않는다. 다만 이 런은 다른 후보와
+        # 나란히 놓을 수 없다 — 같은 사용자 프로토콜이었다는 증거가 없다.
+        warnings.append(
+            "사용자 시뮬레이터 인자가 기록돼 있지 않다 — 이 런은 모델 간 비교에 쓸 수 없다"
+        )
+
     overall = summary.get("overall") or {}
     if overall.get("pass_rate") is None or not overall.get("measured"):
         failures.append(
@@ -511,9 +647,34 @@ def validate_summary(summary: dict) -> tuple:
                 f"by_domain.{domain}.status = not_measured "
                 f"({entry.get('reason') or '사유 미기록'})"
             )
-        elif runnable and measured != runnable:
-            failures.append(
-                f"by_domain.{domain}: {runnable}건 중 {measured}건만 측정됐다 — 부분 실행이다"
+        else:
+            # 반복 시행이면 measured 는 시뮬레이션 수다. 커버리지는 과제 수로 본다.
+            covered = entry.get("distinct_tasks_measured")
+            covered = measured if covered is None else covered
+            if runnable and covered != runnable:
+                failures.append(
+                    f"by_domain.{domain}: {runnable}개 과제 중 {covered}개만 측정됐다 — 부분 실행이다"
+                )
+            # 과제 하나에 측정 기록이 하나라도 있으면 통과시키면 안 된다. 4회 시행에서
+            # 과제마다 1건만 살아남아도 "모든 과제를 쟀다"가 되고, Pass^k 는 죽은
+            # 시행을 분모에서 빼므로 pass^1=100% 까지 나올 수 있다. 상류 검증기도
+            # 과제마다 정확히 num_trials 건을 요구한다
+            # (verify_trajectories_public.check_num_trials).
+            declared_trials = (summary.get("harness_integrity") or {}).get("trials")
+            observed_trials = entry.get("trials") or []
+            if declared_trials and observed_trials and set(observed_trials) != {int(declared_trials)}:
+                failures.append(
+                    f"by_domain.{domain}: 시행 수가 과제마다 다르다 "
+                    f"(선언 {declared_trials}, 관측 {observed_trials}) — Pass^k 를 낼 수 없다"
+                )
+
+        # 자격은 build_summary 가 이미 새겼다. 게이트는 읽기만 한다 — 검증 함수가
+        # 요약을 변형하면 "무엇이 계산이고 무엇이 판정인가" 가 흐려진다.
+        coverage = entry.get("coverage") or {}
+        if entry.get("benchmark_eligible") is False and coverage.get("official_task_count"):
+            warnings.append(
+                f"by_domain.{domain}: 공식 split {coverage['official_task_count']}건 중 "
+                f"{runnable}건만 대상이다 — 도메인 점수가 아니라 부분집합 점수로만 인용할 것"
             )
 
         infra = (entry.get("termination_reasons") or {}).get("infrastructure_error")
