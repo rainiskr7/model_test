@@ -1,4 +1,5 @@
 import requests
+import hashlib
 import json
 import os
 import sys
@@ -21,6 +22,7 @@ DEFAULT_ENDPOINT = "http://172.16.1.81:18090/v1/chat/completions"
 # shared/ 를 import path 에 추가 (vsm/nlu 는 shared/nlu 로의 symlink 라 resolve 필요)
 sys.path.insert(0, str(SCRIPT_DIR.parent))
 from serving.constraints import apply as apply_serving_constraints  # noqa: E402
+from serving.constraints import constraint_snapshot  # noqa: E402
 
 
 def get_base_dir() -> Path:
@@ -62,12 +64,15 @@ def get_timestamp() -> str:
     return ts
 
 
-def get_response(prompt, model, endpoint: str, timeout: float = 600.0):
+def get_response(prompt, model, endpoint: str, timeout: float = 600.0,
+                 request_snapshot: dict | None = None):
     """프롬프트를 입력받아 모델의 응답을 반환
 
     timeout: 네트워크 hang 방지용 (default 600초 = 10분)
     큰 모델 (27B dense) + max_tokens 8192 조합에서 120초로는 부족했음.
     """
+    if request_snapshot is None:
+        request_snapshot = {}
     payload = {
         "model": model,
         "messages": [
@@ -80,8 +85,12 @@ def get_response(prompt, model, endpoint: str, timeout: float = 600.0):
         "max_tokens": 8192,        # 긴 한국어 응답 안전 상한
         "top_p": None
     }
-    # 서빙 백엔드 제약 적용 (SERVING_* env 미설정 시 no-op)
+    # 서빙 백엔드 제약 적용 (SERVING_* env 미설정 시 no-op).
+    # 제약은 파라미터를 지우거나 상한을 낮춘다 — 그래서 기록해야 하는 것은 위에서
+    # 적은 요청값이 아니라 **적용 후 실제로 보낸 값**이다.
     apply_serving_constraints(payload)
+    request_snapshot.clear()
+    request_snapshot.update({k: v for k, v in payload.items() if k != "messages"})
 
     response = requests.post(
         url=endpoint,
@@ -97,7 +106,17 @@ def get_response(prompt, model, endpoint: str, timeout: float = 600.0):
     response.raise_for_status()
     result = response.json()
     content = result['choices'][0]['message']['content'].strip()
-    return content
+    # 요청한 이름이 아니라 **엔드포인트가 서빙했다고 말한 것**을 들고 나온다.
+    # `qwen/qwen3-32b` 같은 이름은 alias 라 문자열이 그대로여도 리비전이 바뀐다 —
+    # 응답의 model/id/system_fingerprint 가 없으면 산출물만 보고는 두 런이 같은
+    # 가중치에서 나왔는지 말할 수 없다.
+    served = {
+        "model": result.get("model"),
+        "id": result.get("id"),
+        "system_fingerprint": result.get("system_fingerprint"),
+        "usage": result.get("usage"),
+    }
+    return content, {key: value for key, value in served.items() if value is not None}
 
 
 def safe_model_name(model: str) -> str:
@@ -110,6 +129,95 @@ def safe_model_name(model: str) -> str:
     return model.replace("/", "_").replace("-", "_").replace(":", "_")
 
 
+MANIFEST_NAME = "run.json"
+MANIFEST_SCHEMA_VERSION = 1
+
+
+def results_model_dir_name(base_dir: Path, model: str) -> str:
+    """이미 있는 모델 디렉토리의 **실제 표기**를 재사용한다.
+
+    macOS 는 대소문자를 무시해 드러나지 않지만 리눅스에서는
+    ``results/google_gemma_4_26B_A4B_it`` 와 ``results/google_gemma_4_26b_a4b_it`` 가
+    서로 다른 디렉토리가 되어 한 런의 산출물이 둘로 갈린다. 이 저장소의 results/ 에는
+    두 표기가 실제로 모두 들어 있다.
+    """
+
+    requested = safe_model_name(model)
+    results_root = Path(base_dir) / "results"
+    if not results_root.is_dir():
+        return requested
+    matches = sorted(
+        entry.name
+        for entry in results_root.iterdir()
+        if entry.is_dir() and entry.name.casefold() == requested.casefold()
+    )
+    if len(matches) == 1:
+        return matches[0]
+    if len(matches) > 1:
+        raise ValueError(
+            f"case-fold ambiguous results model directory for {requested!r}: {matches}"
+        )
+    return requested
+
+
+def write_json_atomic(path: Path, payload) -> None:
+    """임시 파일에 쓰고 rename 한다.
+
+    직접 쓰기는 중간에 끊기면 잘린 JSON 을 남기는데, 그 파일은 "런이 실패했다" 가
+    아니라 "산출물이 깨졌다" 로 보인다 — 나중에 읽는 쪽에서 구분할 수 없다.
+    """
+
+    tmp = path.with_name(path.name + ".tmp")
+    with open(tmp, "w", encoding="utf-8") as handle:
+        json.dump(payload, handle, ensure_ascii=False, indent=2)
+    os.replace(tmp, path)
+
+
+def repo_relative(base_dir: Path, path: Path) -> str:
+    """저장소 상대 경로. 실패하면 절대 경로 그대로.
+
+    절대 경로를 그대로 적으면 산출물에 실행 호스트의 홈 디렉토리가 박힌다 — 실제로
+    커밋된 파일들에 ``/home/rainis/...`` 가 남아 있고, 그래서 내용이 같은 산출물이
+    경로 차이만으로 서로 다른 파일로 갈렸다.
+    """
+
+    try:
+        return str(path.resolve().relative_to(Path(base_dir).resolve()))
+    except ValueError:
+        return str(path)
+
+
+def load_manifest(path: Path):
+    if not path.exists():
+        return None
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        # 읽을 수 없는 매니페스트를 "없음"으로 취급하면 덮어쓰기 방어가 사라진다.
+        raise SystemExit(f"[nlu] 기존 매니페스트를 읽을 수 없다: {path}")
+
+
+def check_no_clobber(manifest, model: str, endpoint: str) -> None:
+    """같은 디렉토리를 다른 런이 이미 쓰고 있으면 멈춘다.
+
+    ``safe_model_name`` 은 ``/``, ``-``, ``:`` 를 모두 ``_`` 로 보낸다. 따라서
+    ``a/b``, ``a-b``, ``a:b`` 는 한 디렉토리를 가리킨다. 매핑 자체는 바꿀 수 없다 —
+    저장소의 results/ 트리 전체가 그 표기로 되어 있다. 대신 요청한 이름과
+    엔드포인트를 매니페스트에 남겨서, 조용한 덮어쓰기를 **실패**로 바꾼다.
+    """
+
+    if manifest is None:
+        return
+    for field, current in (("requested_model", model), ("endpoint", endpoint)):
+        previous = manifest.get(field)
+        if previous is not None and previous != current:
+            raise SystemExit(
+                f"[nlu] 이 세션 디렉토리는 이미 다른 런의 것이다 — {field}: "
+                f"{previous!r} vs {current!r}. 덮어쓰면 앞선 산출물이 사라진다. "
+                "EVAL_TIMESTAMP 로 다른 세션을 지정하라."
+            )
+
+
 def main():
     parser = argparse.ArgumentParser(description="NLU evaluation client (gpustack endpoint).")
     parser.add_argument("--model", default="qwen/qwen3-32b", help="Model name (default: qwen/qwen3-32b)")
@@ -119,6 +227,11 @@ def main():
         help="Prompt YAML file path. Omit to run all ./prompt/*.yaml (or fallback to jjajangmyeon.yaml).",
     )
     parser.add_argument("--endpoint", default=DEFAULT_ENDPOINT, help=f"Chat completions endpoint (default: {DEFAULT_ENDPOINT})")
+    parser.add_argument(
+        "--overwrite",
+        action="store_true",
+        help="같은 세션의 기존 산출물을 다시 만든다 (기본은 완료된 프롬프트를 건너뛴다).",
+    )
     args = parser.parse_args()
 
     model = args.model
@@ -134,45 +247,115 @@ def main():
 
     base_dir = get_base_dir()
     timestamp = get_timestamp()
-    model_out_dir = base_dir / "results" / safe_model_name(model) / timestamp / "language" / "nlu"
+    model_out_dir = (
+        base_dir / "results" / results_model_dir_name(base_dir, model)
+        / timestamp / "language" / "nlu"
+    )
     model_out_dir.mkdir(parents=True, exist_ok=True)
 
     print(f"[nlu] BASE={base_dir}")
     print(f"[nlu] OUTPUT={model_out_dir}")
 
-    for prompt_path in prompt_paths:
-        # 상대 경로면 nlu_test 기준으로 해석
-        if not prompt_path.is_absolute():
-            candidate = (SCRIPT_DIR / prompt_path).resolve()
-            prompt_path = candidate
+    # 상대 경로면 nlu 스크립트 기준으로 해석 — 루프 전에 확정해야 기대 목록을 적을 수 있다.
+    prompt_paths = [
+        path if path.is_absolute() else (SCRIPT_DIR / path).resolve()
+        for path in prompt_paths
+    ]
 
-        with open(prompt_path, "r", encoding="utf-8") as f:
-            prompt = f.read()
+    manifest_path = model_out_dir / MANIFEST_NAME
+    manifest = load_manifest(manifest_path)
+    check_no_clobber(manifest, model, endpoint)
 
-        print("프롬프트 파일:", str(prompt_path))
-        print("프롬프트:")
-        print(prompt)
-        print("\n" + "=" * 50 + "\n")
+    expected = [path.stem for path in prompt_paths]
+    done = [] if args.overwrite else list((manifest or {}).get("completed_prompts") or [])
+    if manifest is not None and sorted((manifest.get("expected_prompts") or [])) != sorted(expected):
+        # 프롬프트 집합이 다르면 같은 시도가 아니다. 이어붙이면 한 디렉토리 안에서
+        # 두 다른 측정이 섞여 완결된 한 런처럼 보인다.
+        raise SystemExit(
+            f"[nlu] 이 세션의 프롬프트 집합이 다르다: "
+            f"{manifest.get('expected_prompts')} vs {expected}. "
+            "EVAL_TIMESTAMP 로 다른 세션을 지정하라."
+        )
 
-        # API 호출
-        response = get_response(prompt, model, endpoint)
+    manifest = {
+        "schema_version": MANIFEST_SCHEMA_VERSION,
+        # 요청한 원본 이름. 디렉토리 이름은 손실 변환이라 여기서만 복구할 수 있다.
+        "requested_model": model,
+        "endpoint": endpoint,
+        "serving_constraints": constraint_snapshot(),
+        # 형제 트랙은 `python` 을 부르는데 그 이름이 없는 환경이 실재한다.
+        # 어떤 인터프리터가 이 산출물을 만들었는지는 재현할 때 필요하다.
+        "python_executable": sys.executable,
+        "expected_prompts": expected,
+        "completed_prompts": done,
+        # 완결 여부를 파일 개수로 추정하지 않는다 — 한 개짜리 정상 런과
+        # 두 개 중 하나만 성공한 런이 구분되지 않기 때문이다.
+        "status": "running",
+        "started_at": datetime.now().astimezone().isoformat(),
+        "completed_at": None,
+        "failure": None,
+    }
+    write_json_atomic(manifest_path, manifest)
 
-        # 결과 저장
-        output = {
-            "model": model,
-            "prompt_file": str(prompt_path),
-            "prompt": prompt,
-            "response": response,
-        }
+    def finalize(failure=None) -> None:
+        manifest["status"] = (
+            "complete"
+            if not failure and sorted(manifest["completed_prompts"]) == sorted(expected)
+            else "partial"
+        )
+        manifest["completed_at"] = datetime.now().astimezone().isoformat()
+        manifest["failure"] = failure
+        write_json_atomic(manifest_path, manifest)
 
-        out_name = f"{prompt_path.stem}.json"
-        output_file = model_out_dir / out_name
-        with open(output_file, "w", encoding="utf-8") as f:
-            json.dump(output, f, ensure_ascii=False, indent=2)
+    try:
+        for prompt_path in prompt_paths:
+            if prompt_path.stem in done:
+                print(f"[nlu] 이미 완료됨, 건너뜀: {prompt_path.stem} (--overwrite 로 재실행)")
+                continue
 
-        print("응답:")
-        print(response)
-        print(f"\nResults saved to {output_file}")
+            with open(prompt_path, "r", encoding="utf-8") as f:
+                prompt = f.read()
+
+            print("프롬프트 파일:", str(prompt_path))
+            print("프롬프트:")
+            print(prompt)
+            print("\n" + "=" * 50 + "\n")
+
+            # API 호출
+            request_snapshot: dict = {}
+            response, served = get_response(
+                prompt, model, endpoint, request_snapshot=request_snapshot
+            )
+
+            # 결과 저장
+            output = {
+                "model": model,
+                # 기존 산출물과의 호환을 위해 남기되, 호스트 홈 디렉토리가 박히지
+                # 않도록 저장소 상대 경로로 적는다.
+                "prompt_file": repo_relative(base_dir, prompt_path),
+                "prompt": prompt,
+                "response": response,
+                "prompt_sha256": hashlib.sha256(prompt.encode("utf-8")).hexdigest(),
+                "endpoint": endpoint,
+                "served_identity": served,
+                "request": request_snapshot,
+                "serving_constraints": constraint_snapshot(),
+            }
+
+            output_file = model_out_dir / f"{prompt_path.stem}.json"
+            write_json_atomic(output_file, output)
+            manifest["completed_prompts"].append(prompt_path.stem)
+            write_json_atomic(manifest_path, manifest)
+
+            print("응답:")
+            print(response)
+            print(f"\nResults saved to {output_file}")
+    except BaseException as exc:
+        # 실패해도 종료코드는 그대로 전파한다. 매니페스트는 남은 파일이 부분
+        # 산출물이라는 사실만 기록한다.
+        finalize(f"{type(exc).__name__}: {exc}")
+        raise
+    finalize()
 
 
 if __name__ == "__main__":
