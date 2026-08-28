@@ -856,5 +856,81 @@ class TestPassHatK(unittest.TestCase):
         self.assertEqual(table["pass_hat_k"], {})
 
 
+class TestReportStrict(unittest.TestCase):
+    """taubench 를 분리하면서 report_agent_tracks --strict 의 CI 검사가 사라졌었다."""
+
+    def _cli(self, tmp, publishable):
+        run = tmp / "results" / "m" / "s" / "language" / "taubench"
+        run.mkdir(parents=True)
+        (run / "summary.json").write_text(json.dumps({
+            "benchmark": "tau2", "scoring_version": "v1", "model": "m",
+            "split": {"domain": "telecom", "name": "test", "task_count": 1,
+                      "runnable_task_count": 1, "task_ids": ["t1"]},
+            "harness_integrity": {"mode": "standard", "user_implementation": "user_simulator"},
+            "by_domain": {"telecom": {"status": "measured", "pass_rate": 0.5,
+                                      "passed": 1, "measured": 2,
+                                      "task_results": [{"task_id": "t1", "passed": True}]}},
+            "publish_status": {"publishable": publishable,
+                               "failures": [] if publishable else ["부분 실행이다"]},
+        }, ensure_ascii=False), encoding="utf-8")
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(
+            "report_taubench_cli", TAUBENCH_DIR.parent.parent / "report_taubench_tracks.py"
+        )
+        module = importlib.util.module_from_spec(spec)
+        sys.path.insert(0, str(TAUBENCH_DIR.parent.parent))
+        try:
+            spec.loader.exec_module(module)
+            with mock.patch("sys.stdout"), mock.patch("sys.stderr"):
+                return module.main(["--base", str(tmp), "--strict"])
+        finally:
+            sys.path.remove(str(TAUBENCH_DIR.parent.parent))
+
+    def test_a_rejected_run_fails_strict(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.assertEqual(self._cli(Path(tmp), publishable=False), 1)
+
+    def test_a_clean_run_passes_strict(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.assertEqual(self._cli(Path(tmp), publishable=True), 0)
+
+    def test_an_unreadable_artifact_fails_strict(self):
+        """읽을 수 없는 산출물이 조용히 통과하면 게이트의 의미가 없다.
+
+        깨진 summary.json 은 "발행 가능한 런이 하나 줄었다" 가 아니라 "무엇이 있었는지
+        모른다" 는 뜻이다. 거부와 같은 무게로 CI 를 실패시킨다.
+        """
+
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            run = base / "results" / "m" / "s" / "language" / "taubench"
+            run.mkdir(parents=True)
+            (run / "summary.json").write_text("{ 깨진 JSON", encoding="utf-8")
+            import importlib.util
+
+            spec = importlib.util.spec_from_file_location(
+                "report_taubench_cli_bad", TAUBENCH_DIR.parent.parent / "report_taubench_tracks.py"
+            )
+            module = importlib.util.module_from_spec(spec)
+            sys.path.insert(0, str(TAUBENCH_DIR.parent.parent))
+            try:
+                spec.loader.exec_module(module)
+                with mock.patch("sys.stdout"), mock.patch("sys.stderr"):
+                    self.assertEqual(module.main(["--base", str(base), "--strict"]), 1)
+            finally:
+                sys.path.remove(str(TAUBENCH_DIR.parent.parent))
+
+    def test_collect_records_why_an_artifact_could_not_be_read(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            run = base / "results" / "m" / "s" / "language" / "taubench"
+            run.mkdir(parents=True)
+            (run / "summary.json").write_text("{ 깨진 JSON", encoding="utf-8")
+            summaries, unreadable = reporter.collect(base)
+            self.assertEqual(summaries, [])
+            self.assertEqual(len(unreadable), 1)
+            self.assertIn("JSONDecodeError", unreadable[0]["reason"])
+
+
 if __name__ == "__main__":
     unittest.main()

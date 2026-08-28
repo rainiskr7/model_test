@@ -4080,7 +4080,104 @@ def test_level_report_says_when_all_five_diagnostics_are_zero_or_absent():
     )
 
 
+def _load_agent_tracks_report():
+    path = TREE_ROOT.parent / "report_agent_tracks.py"
+    spec = importlib.util.spec_from_file_location("report_agent_tracks_under_test", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def _track_row(track, model, run, axis, den, num=1):
+    return {
+        "model": model, "run": run, "track": track, "publishable": True,
+        "failures": [], "has_gate_record": True,
+        "axes": [(axis, num, den, False)],
+    }
+
+
+def test_agent_tracks_report_never_breaks_ties_by_run_name():
+    """분모가 같으면 이름 정렬이 대표를 정하고 있었다.
+
+    실측: taubench qwen/telecom 은 분모 40 인 런이 5개였고 점수가 0.900 과 0.475 로
+    갈렸다. 어느 쪽이 대표가 되는지를 런 이름이 정하면 근거가 없다.
+    """
+
+    module = _load_agent_tracks_report()
+    rows = [
+        _track_row("functionchat", "m", "aaa_run", "exact", 600, num=500),
+        _track_row("functionchat", "m", "zzz_run", "exact", 600, num=300),
+    ]
+    markdown = module.render_markdown(rows)
+    assert "대표 선정 불가" in markdown, markdown
+    # 어느 쪽 수치도 대표로 발행되지 않는다
+    assert "500/600" not in markdown.split("## 발행 가능한 수치")[1].split("## ")[0]
+    assert "`aaa_run`" in markdown and "`zzz_run`" in markdown
+
+
+def test_agent_tracks_report_still_picks_the_widest_coverage():
+    module = _load_agent_tracks_report()
+    rows = [
+        _track_row("functionchat", "m", "small", "exact", 600, num=500),
+        _track_row("functionchat", "m", "full", "exact", 670, num=600),
+    ]
+    markdown = module.render_markdown(rows)
+    assert "대표 선정 불가" not in markdown
+    assert "600/670" in markdown
+
+
+def test_agent_tracks_report_leaves_taubench_to_its_own_layer():
+    """한 트랙을 두 스크립트가 다른 규칙으로 보고하면 반드시 어긋난다."""
+
+    module = _load_agent_tracks_report()
+    source = (TREE_ROOT.parent / "report_agent_tracks.py").read_text(encoding="utf-8")
+    assert 'track != "functionchat"' in source, "taubench 를 다시 끌어들이면 안 된다"
+    collected = module.collect(TREE_ROOT)
+    assert collected, "functionchat 산출물을 하나도 못 찾았다"
+    assert {row["track"] for row in collected} == {"functionchat"}
+
+
+def test_agent_tracks_report_tie_state_survives_every_input_order():
+    """동률 -> 더 큰 분모 -> 다시 동률 순서에서 ambiguous 가 낡으면 안 된다.
+
+    collect 은 glob 정렬 순서로 런을 넘기므로 입력 순서를 고를 수 없다. 어떤 순열로
+    들어와도 같은 결론이어야 한다.
+    """
+
+    import itertools
+
+    module = _load_agent_tracks_report()
+    rows = [
+        _track_row("functionchat", "m", "a", "exact", 600),
+        _track_row("functionchat", "m", "b", "exact", 600),
+        _track_row("functionchat", "m", "c", "exact", 670),
+        _track_row("functionchat", "m", "d", "exact", 670),
+    ]
+    seen = set()
+    for perm in itertools.permutations(rows):
+        segment = module.render_markdown(list(perm)).split("## 발행 가능한 수치")[1].split("## ")[0]
+        seen.add(tuple(sorted(l for l in segment.splitlines() if l.startswith("| functionchat"))))
+    assert len(seen) == 1, f"입력 순서에 따라 결과가 달라진다: {seen}"
+    only = next(iter(seen))
+    assert any("670" in line and "대표 선정 불가" in line for line in only), only
+    assert not any("600" in line for line in only), "작은 분모의 동률이 남아 있다"
+
+
+def test_agent_tracks_report_lists_every_tied_run_when_three_share_a_denominator():
+    module = _load_agent_tracks_report()
+    rows = [_track_row("functionchat", "m", name, "exact", 600) for name in ("a", "b", "c")]
+    markdown = module.render_markdown(rows)
+    assert "대표 선정 불가" in markdown
+    for name in ("a", "b", "c"):
+        assert f"`{name}`" in markdown, name
+
+
 TESTS = [
+    test_agent_tracks_report_tie_state_survives_every_input_order,
+    test_agent_tracks_report_lists_every_tied_run_when_three_share_a_denominator,
+    test_agent_tracks_report_never_breaks_ties_by_run_name,
+    test_agent_tracks_report_still_picks_the_widest_coverage,
+    test_agent_tracks_report_leaves_taubench_to_its_own_layer,
     test_level_report_prefers_clean_run_over_newer_errored_run,
     test_level_report_lists_model_with_only_errored_run_and_note,
     test_level_report_has_no_composite_or_rank_field,

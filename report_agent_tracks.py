@@ -45,7 +45,12 @@ def collect(base: Path) -> List[Dict[str, Any]]:
     rows: List[Dict[str, Any]] = []
     for summary_path in sorted(base.glob("results/*/*/language/*/summary.json")):
         track = summary_path.parent.name
-        if track not in ("functionchat", "taubench"):
+        # taubench 는 report_taubench_tracks.py 가 다룬다. 한 트랙을 두 스크립트가
+        # 서로 다른 규칙으로 보고하면 반드시 어긋난다 — 전용 계층은 사용자
+        # 시뮬레이터 프로토콜 고정 여부, 공식 split 커버리지, 코호트 분리를 보는데
+        # 여기서는 그중 아무것도 보지 않는다. 실측: 사용자 시뮬레이터가 달라 0.475 와
+        # 0.900 으로 갈리는 런들이 여기서는 한 표에 섞였다.
+        if track != "functionchat":
             continue
         d = load(summary_path)
         if d is None:
@@ -111,7 +116,8 @@ def render_markdown(rows: List[Dict[str, Any]]) -> str:
     )
     out.append("")
     out.append(
-        f"발행 가능 **{len(published)}** / 거부 **{len(rejected)}**. "
+        f"발행 가능한 **런** {len(published)}개 / 거부 {len(rejected)}개. "
+        "아래 표는 축별 대표 런만 보여주므로 행 수는 이보다 적다. "
         "판단 기준은 [`AGENT_TRACK_CLOSEOUT.md`](AGENT_TRACK_CLOSEOUT.md)."
     )
     out.append("")
@@ -122,14 +128,34 @@ def render_markdown(rows: List[Dict[str, Any]]) -> str:
     # **축 단위로 고른다.** taubench 는 telecom/retail/airline 이 서로 다른 런이므로
     # "모델당 1런" 으로 접으면 두 도메인이 사라진다 (실제로 발생).
     # 같은 축에 여러 런이 있으면 분모가 큰 쪽(=커버리지가 넓은 쪽)을 대표로 삼는다.
+    # **런 이름을 tie-break 로 쓰지 않는다.** 예전에는 (분모, 런 이름) 튜플을
+    # 비교해서, 분모가 같으면 이름이 사전순으로 뒤인 런이 대표가 됐다. 이름은
+    # 측정의 성질이 아니므로 어느 쪽이 뽑히든 근거가 없다. 실측: taubench
+    # qwen/telecom 은 분모 40 인 런이 5개인데 점수가 0.900 과 0.475 로 갈렸고,
+    # 어느 것이 대표가 되는지를 이름 정렬이 정하고 있었다.
+    #
+    # 분모가 같으면 자동 선정하지 않고 후보를 그대로 드러낸다 — 무엇을 골라야
+    # 하는지는 사람이 안다(어느 런이 어떤 규약으로 돌았는지).
     best: Dict[tuple, tuple] = {}
+    ambiguous: Dict[tuple, list] = {}
     for r in published:
         for name, num, den, provisional in r["axes"]:
             key = (r["track"], r["model"], name)
-            cand = (den or 0, r["run"])
-            if key not in best or cand > best[key][0]:
+            cand = den or 0
+            current = best.get(key)
+            if current is None or cand > current[0]:
                 best[key] = (cand, r, (name, num, den, provisional))
+                ambiguous.pop(key, None)
+            elif cand == current[0]:
+                ambiguous.setdefault(key, [current[1]["run"]]).append(r["run"])
 
+    out.append(
+        "> taubench 는 이 보고서에 없다. 사용자 시뮬레이터 프로토콜 고정 여부와 공식 "
+        "split 커버리지를 보는 전용 계층이 판정을 갖는다 — "
+        "`foundation_model_test_non_thinking/TAUBENCH_TRACK_RESULTS.md` "
+        "(`report_taubench_tracks.py` 가 생성)."
+    )
+    out.append("")
     out.append("## 발행 가능한 수치 (축별 대표 런)")
     out.append("")
     out.append("| 트랙 | 모델 | 런 | 축 | 결과 | 상태 |")
@@ -137,6 +163,13 @@ def render_markdown(rows: List[Dict[str, Any]]) -> str:
     for key in sorted(best):
         _, r, (name, num, den, provisional) = best[key]
         track, model, _ = key
+        if key in ambiguous:
+            runs = ", ".join(f"`{run}`" for run in sorted(ambiguous[key]))
+            out.append(
+                f"| {track} | {model} | — | {name} | 대표 선정 불가 | "
+                f"분모 {den} 인 런이 여럿이다: {runs} |"
+            )
+            continue
         state = "PROVISIONAL — 판정기 기준, 인간 검증 없음" if provisional else "확정"
         out.append(
             f"| {track} | {model} | {r['run']} | {name} | "

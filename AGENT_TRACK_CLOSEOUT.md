@@ -1,15 +1,25 @@
 # agent 트랙 종료 보고 (2026-08-23)
 
-이 문서가 **어떤 숫자를 믿어도 되는지에 대한 유일한 기준**이다. 결과 디렉토리에는
-거부된 런과 진단용 런이 섞여 있으므로, 여기 없는 숫자는 인용하지 않는다.
+이 문서는 **functionchat 에 대해** 어떤 숫자를 믿어도 되는지의 기준이다. 결과
+디렉토리에는 거부된 런과 진단용 런이 섞여 있으므로, 여기 없는 숫자는 인용하지 않는다.
+
+**taubench 는 2026-08-28 부터 이 문서의 관할이 아니다.** 사용자 시뮬레이터 프로토콜
+고정 여부, 공식 split 커버리지, 코호트 분리를 판정하는 전용 계층이 생겼고 그쪽이
+기준을 갖는다 — `foundation_model_test_non_thinking/TAUBENCH_TRACK_RESULTS.md`.
 
 **다만 문서는 무시할 수 있다.** 실제로 게이트가 거부한 gemma telecom 0.4615 를 요약
 파일만 보고 여러 차례 인용했다. 그래서 규칙을 코드로 옮겼다:
 
 ```
-python3 report_agent_tracks.py            # 발행 가능한 수치만 출력
+python3 report_agent_tracks.py            # functionchat — 발행 가능한 수치만 출력
 python3 report_agent_tracks.py --strict   # 거부된 런이 있으면 exit 1 (CI)
+
+cd foundation_model_test_non_thinking
+python3 report_taubench_tracks.py --strict   # taubench — 같은 역할 (CI)
 ```
+
+**CI 는 두 명령을 모두 돌려야 한다.** taubench 를 분리하면서 이 문서가 약속한
+`--strict` 검사가 그쪽에서 사라졌었다 — 거부된 런 4건이 exit 0 으로 통과했다.
 
 이 도구는 `publish_status.publishable != true` 인 런의 **점수를 출력하지 않는다.**
 판정 축에는 인간 검증 전까지 자동으로 PROVISIONAL 딱지가 붙는다. 수치를 인용할 때는
@@ -43,11 +53,22 @@ Ko-AgentBench 를 폐기하고 두 트랙으로 교체했다. 파이프라인 �
 표준 모드(agent-user-tools), 공식 test 분할, 고정 사용자 시뮬레이터
 `openrouter/openai/gpt-4.1-mini` (temperature 0).
 
-| 도메인 | qwen | gemma | 상태 |
+> ⚠️ **2026-08-28: 아래 taubench 비교는 무효다.** 이후 밝혀진 바로 러너가 사용자
+> 시뮬레이터 인자를 후보 인자에서 복사하고 있었다 — 같은 `gpt-4.1-mini` 인데
+> gemma 런은 timeout 600s/8192 tokens, qwen 런은 120s/16384 tokens 로 돌았다.
+> 즉 이 표는 후보만 다른 비교가 아니다. 프로토콜을 고정해 다시 재면 airline 격차가
+> 35점에서 10점으로 줄었고, 반복 실행에서 통과 과제가 4~6건 뒤집혀 그 10점조차
+> 변동폭 안이었다. `retail` 도 공식 split 40 중 29만 잰 부분집합이라 도메인 점수가
+> 아니다.
+>
+> **현재 판정은 `TAUBENCH_TRACK_RESULTS.md`(`report_taubench_tracks.py` 가 생성)가
+> 갖는다.** 아래 수치는 당시 기록으로만 남긴다.
+
+| 도메인 | qwen | gemma | 당시 상태 |
 |---|---|---|---|
 | telecom | 36/40 = 0.9000 | **18/39 — REJECTED** | qwen만 publishable |
-| retail | 21/29 = 0.7241 | 22/29 = 0.7586 | **publishable** |
-| airline | 17/20 = 0.8500 | 10/20 = 0.5000 | **publishable** |
+| retail | 21/29 = 0.7241 | 22/29 = 0.7586 | publishable (실제로는 29/40 부분집합) |
+| airline | 17/20 = 0.8500 | 10/20 = 0.5000 | publishable (실제로는 프로토콜 미고정) |
 
 산출물: `results/<model>/{tbfix,tbretail,tbair}_20260823/language/taubench/summary.json`
 
