@@ -43,7 +43,31 @@ def collect(base: Path) -> tuple[list[dict[str, Any]], Any]:
     return runs, scorer
 
 
-def render_markdown(runs: list[dict[str, Any]], scorer) -> str:
+def _claims(base: Path):
+    """shared/publish/claims 로드."""
+
+    shared = Path(base) / "shared"
+    if str(shared) not in sys.path:
+        sys.path.insert(0, str(shared))
+    from publish.claims import comparable, credential  # noqa: PLC0415
+
+    return credential, comparable
+
+
+def credentials(base: Path, scorable: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    """모델별 클레임 자격. 항목 벡터가 1급 관측 대상이다."""
+
+    credential, _ = _claims(base)
+    by_model: dict[str, list[dict[str, Any]]] = {}
+    for run in scorable:
+        by_model.setdefault(str(run.get("model")), []).append({
+            "run_id": run.get("session"),
+            "items": {e["item_id"]: e["status"] == "pass" for e in run["items"]},
+        })
+    return {model: credential(runs) for model, runs in sorted(by_model.items())}
+
+
+def render_markdown(runs: list[dict[str, Any]], scorer, base: Path | None = None) -> str:
     scorable = [r for r in runs if r["scorable"]]
     out: list[str] = ["# NLU 항목별 판정", ""]
     out.append(
@@ -137,6 +161,54 @@ def render_markdown(runs: list[dict[str, Any]], scorer) -> str:
                     )
             out.append("")
 
+    if scorable and base is not None:
+        creds = credentials(base, scorable)
+        _, comparable = _claims(base)
+        out.append("## 클레임 등급")
+        out.append("")
+        out.append(
+            "**1회 실행 숫자는 순위표에 올리지 않는다.** 저장·표시·역사 인용은 되지만 "
+            "우열 주장의 근거는 아니다. 반복 3회 이상이어야 반복성을 관측했다고 말한다."
+        )
+        out.append("")
+        for model, cred in creds.items():
+            if cred["claim_class"] != "repeatability_observed":
+                out.append(f"- `{model}` — `{cred['claim_class']}` (k={cred['k']}) · {cred['reason']}")
+                continue
+            lo, hi = cred["instability_envelope"]
+            out.append(
+                f"- `{model}` — `{cred['claim_class']}` (k={cred['k']}) · "
+                f"다수결 {cred['majority_passed']}/{cred['measured_items']} · "
+                f"건수범위 {cred['count_range']} · 뒤집힘 {len(cred['unstable_items'])}건 · "
+                f"불안정 예산 {lo}–{hi}"
+            )
+        out.append("")
+
+        verified = [(m, c) for m, c in creds.items()
+                    if c["claim_class"] == "repeatability_observed"]
+        out.append("### 발행 가능한 우열 주장")
+        out.append("")
+        published = False
+        for i in range(len(verified)):
+            for j in range(i + 1, len(verified)):
+                (left, cl), (right, cr) = verified[i], verified[j]
+                verdict = comparable(cl, cr)
+                if not verdict["comparable"]:
+                    out.append(f"- `{left}` vs `{right}` — **발행 불가**: {verdict['reason']}")
+                    continue
+                published = True
+                winner = left if verdict["winner"] == "left" else right
+                out.append(f"- `{winner}` 우세 — {verdict['reason']}")
+        if not published and len(verified) < 2:
+            out.append("- 반복 관측된 모델이 2개 미만이라 비교할 대상이 없다.")
+        out.append("")
+        out.append(
+            "> 이것은 가설검정이 아니다. 신뢰구간도 p-value 도 아니다. "
+            "**관측된 불안정으로 설명이 끝나는 우열 주장을 거절하는 규칙**일 뿐이며, "
+            "거절되지 않았다고 '유의하다'는 뜻이 아니고 거절됐다고 '두 모델이 같다'는 뜻도 아니다."
+        )
+        out.append("")
+
     baseline = scorer.constant_baseline()
     out.append("## 상수 전략 기준선")
     out.append("")
@@ -176,7 +248,7 @@ def main(argv=None) -> int:
     args = parser.parse_args(argv)
 
     runs, scorer = collect(args.base)
-    print(render_markdown(runs, scorer))
+    print(render_markdown(runs, scorer, args.base))
     rejected = [r for r in runs if not r["scorable"]]
     if args.strict and rejected:
         print(f"\n[strict] 채점하지 못한 런 {len(rejected)}개", file=sys.stderr)

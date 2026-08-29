@@ -107,6 +107,99 @@ def collect(base: Path) -> List[Dict[str, Any]]:
     return rows
 
 
+def collect_claims(base: Path) -> Dict[str, Any]:
+    """모델별 클레임 자격과 발행 가능한 우열 주장.
+
+    1급 관측 대상은 스칼라 점수가 아니라 **항목별 통과 벡터**다. 실측: 어떤
+    모델은 통과 건수가 5런 내내 553 으로 같아 표본표준편차가 0 이었는데 통과
+    항목 10개가 뒤집혔다. 건수만 보면 완벽한 재현으로 읽힌다.
+    """
+
+    scoring_dir = base / "shared" / "functionchat" / "scoring"
+    module_path = scoring_dir / "repro.py"
+    if not module_path.exists():
+        return {}
+    spec = importlib.util.spec_from_file_location("functionchat_repro_claims", module_path)
+    if spec is None or spec.loader is None:
+        return {}
+    module = importlib.util.module_from_spec(spec)
+    sys.path.insert(0, str(scoring_dir))
+    sys.path.insert(0, str(base / "shared"))
+    try:
+        spec.loader.exec_module(module)
+        from publish.claims import comparable, credential
+    except Exception as exc:
+        print(f"[report] 클레임 계층을 읽지 못했다: {type(exc).__name__}: {exc}", file=sys.stderr)
+        return {}
+    finally:
+        for path in (str(scoring_dir), str(base / "shared")):
+            try:
+                sys.path.remove(path)
+            except ValueError:
+                pass
+
+    grouped: Dict[Any, List[Dict[str, Any]]] = {}
+    for run_dir in sorted(base.glob("results/*/*/language/functionchat")):
+        loaded = module.load_run(run_dir)
+        if loaded:
+            grouped.setdefault(module.cohort_key(loaded), []).append(loaded)
+
+    creds = {
+        key: credential([{"run_id": r["session"], "items": r["items"]} for r in members])
+        for key, members in sorted(grouped.items())
+    }
+    verified = [(key, cred) for key, cred in creds.items()
+                if cred["claim_class"] == "repeatability_observed"]
+    verdicts = []
+    for i in range(len(verified)):
+        for j in range(i + 1, len(verified)):
+            (ka, ca), (kb, cb) = verified[i], verified[j]
+            verdicts.append((ka[2], kb[2], comparable(ca, cb)))
+    return {"credentials": creds, "verdicts": verdicts}
+
+
+def render_claims(claims: Dict[str, Any]) -> List[str]:
+    if not claims:
+        return []
+    out = ["## 클레임 등급", ""]
+    out.append(
+        "**1회 실행 숫자는 순위표에 올리지 않는다.** 저장·표시·역사 인용은 되지만 "
+        "우열 주장의 근거는 아니다. 반복 3회 이상이어야 반복성을 관측했다고 말한다."
+    )
+    out.append("")
+    for key, cred in claims["credentials"].items():
+        model, version = key[2], key[0]
+        if cred["claim_class"] != "repeatability_observed":
+            out.append(f"- `{model}` (`{version}`) — `{cred['claim_class']}` (k={cred['k']}) · {cred['reason']}")
+            continue
+        lo, hi = cred["instability_envelope"]
+        out.append(
+            f"- `{model}` (`{version}`) — `{cred['claim_class']}` (k={cred['k']}) · "
+            f"다수결 {cred['majority_passed']}/{cred['measured_items']} · "
+            f"건수범위 {cred['count_range']} · 뒤집힘 {len(cred['unstable_items'])}건 · "
+            f"불안정 예산 {lo}–{hi}"
+        )
+    out.append("")
+    out.append("### 발행 가능한 우열 주장")
+    out.append("")
+    if not claims["verdicts"]:
+        out.append("- 반복 관측된 코호트가 2개 미만이라 비교할 대상이 없다.")
+    for left, right, verdict in claims["verdicts"]:
+        if verdict["comparable"]:
+            winner = left if verdict["winner"] == "left" else right
+            out.append(f"- `{winner}` 우세 — {verdict['reason']}")
+        else:
+            out.append(f"- `{left}` vs `{right}` — **발행 불가**: {verdict['reason']}")
+    out.append("")
+    out.append(
+        "> 가설검정이 아니다. 신뢰구간도 p-value 도 아니다. **관측된 불안정으로 "
+        "설명이 끝나는 우열 주장을 거절하는 규칙**일 뿐이며, 거절되지 않았다고 "
+        "'유의하다'는 뜻이 아니고 거절됐다고 '두 모델이 같다'는 뜻도 아니다."
+    )
+    out.append("")
+    return out
+
+
 def collect_reproducibility(base: Path) -> List[Dict[str, Any]]:
     """functionchat 반복 실행의 통과 항목 집합을 대조한다.
 
@@ -153,6 +246,7 @@ def collect_reproducibility(base: Path) -> List[Dict[str, Any]]:
 def render_markdown(
     rows: List[Dict[str, Any]],
     repro_report: Optional[List[Dict[str, Any]]] = None,
+    claims: Optional[Dict[str, Any]] = None,
 ) -> str:
     """명령을 돌리지 않고도 읽을 수 있는 보고서를 만든다.
 
@@ -283,6 +377,8 @@ def render_markdown(
                 )
         out.append("")
 
+    out.extend(render_claims(claims or {}))
+
     out.append("## 읽는 법")
     out.append("")
     out.append("- 분자/분모를 함께 본다. 반올림된 점수만으로는 표본 크기가 사라진다.")
@@ -310,12 +406,13 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     rows = collect(args.base)
     repro_report = collect_reproducibility(args.base)
+    claims = collect_claims(args.base)
     if not rows:
         print("산출물이 없습니다.", file=sys.stderr)
         return 2
 
     if args.write_markdown:
-        args.write_markdown.write_text(render_markdown(rows, repro_report), encoding="utf-8")
+        args.write_markdown.write_text(render_markdown(rows, repro_report, claims), encoding="utf-8")
         print(f"  wrote {args.write_markdown}")
 
     published = [r for r in rows if r["publishable"]]

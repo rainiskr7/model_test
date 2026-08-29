@@ -4,6 +4,7 @@ import importlib.util
 import json
 import os
 import sys
+import sys as _sys
 from pathlib import Path
 
 
@@ -793,7 +794,54 @@ def test_reproducibility_does_not_stop_at_the_first_dataset():
     _assert("temperature" in loaded["removed_sampling_params"], loaded)
 
 
+def test_the_report_refuses_to_rank_a_single_run_model():
+    """1회 실행 숫자가 순위표에 오르던 것이 이 저장소의 결함이었다."""
+
+    import importlib.util as _il
+
+    root = EXACT_PATH.parents[4]
+    spec = _il.spec_from_file_location("report_agent_claims_test", root / "report_agent_tracks.py")
+    module = _il.module_from_spec(spec)
+    _sys.path.insert(0, str(root))
+    try:
+        spec.loader.exec_module(module)
+    finally:
+        _sys.path.remove(str(root))
+
+    snapshot = {"claim_class": "snapshot", "k": 1, "reason": "반복 1회"}
+    observed = {
+        "claim_class": "repeatability_observed", "k": 3, "measured_items": 10,
+        "majority_passed": 9, "count_range": [9, 9], "unstable_items": [],
+        "instability_envelope": [9, 9],
+    }
+    lines = module.render_claims({
+        "credentials": {("v1", "d", "m1"): snapshot, ("v1", "d", "m2"): observed},
+        "verdicts": [],
+    })
+    text = "\n".join(lines)
+    _assert("snapshot" in text, text)
+    _assert("비교할 대상이 없다" in text, "k<3 모델만 있으면 비교가 없어야 한다")
+
+
+def test_the_report_states_the_rule_is_not_a_significance_test():
+    import importlib.util as _il
+
+    root = EXACT_PATH.parents[4]
+    spec = _il.spec_from_file_location("report_agent_claims_test2", root / "report_agent_tracks.py")
+    module = _il.module_from_spec(spec)
+    _sys.path.insert(0, str(root))
+    try:
+        spec.loader.exec_module(module)
+    finally:
+        _sys.path.remove(str(root))
+    text = "\n".join(module.render_claims({"credentials": {}, "verdicts": []}))
+    _assert("가설검정이 아니다" in text, "면책 문구가 없으면 독자가 유의성으로 읽는다")
+    _assert("같다" in text and "뜻도 아니다" in text, "거절이 동등을 뜻하지 않음을 밝혀야 한다")
+
+
 TESTS = [
+    test_the_report_refuses_to_rank_a_single_run_model,
+    test_the_report_states_the_rule_is_not_a_significance_test,
     test_a_limit_larger_than_every_dataset_is_not_a_subset_run,
     test_the_predicate_never_claims_determinism_only_its_absence,
     test_reproducibility_does_not_stop_at_the_first_dataset,
