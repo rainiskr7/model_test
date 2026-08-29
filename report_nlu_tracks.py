@@ -128,6 +128,13 @@ def render_markdown(runs: list[dict[str, Any]], scorer) -> str:
                 else:
                     items = ", ".join(f"`{k}`({'/'.join(v)})" for k, v in info["unstable_items"].items())
                     out.append(f"- `{model}` — {info['runs']}런 **DIVERGED**: {items}")
+                if not info.get("decoding_controlled", True):
+                    removed = ", ".join(info.get("removed_sampling_params") or []) or "일부"
+                    out.append(
+                        f"  - 이 백엔드는 `{removed}` 를 거부해 **결정론 제어가 없다**. "
+                        "흔들림은 모델 결함이 아니라 구조적 성질이며, "
+                        "이 모델의 **단일 런 숫자는 측정이 아니다**."
+                    )
             out.append("")
 
     baseline = scorer.constant_baseline()

@@ -118,9 +118,23 @@ def score_run(run_dir: Path, contract=None, answer_key=None) -> dict[str, Any]:
         for item in defined:
             items.append(score_item(item, answers, answer_key["items"][item["id"]]["expected"]))
 
+    # 결정론 제어가 살아 있었는지. diffusion 백엔드는 temperature 를 거부하므로
+    # 그 모델은 **구조적으로** 같은 요청에 다른 답을 낼 수 있다. 실측: 요청 바이트가
+    # 동일한 5런에서 한 항목이 walk/drive/depends 세 갈래로 나왔다. 이 사실을 옆에
+    # 두지 않으면 한 번 돌린 숫자가 측정으로 읽힌다.
+    sample = next(iter(records.values()), None) or {}
+    removed = set((sample.get("serving_constraints") or {}).get("unsupported_sampling_params") or [])
+    request = sample.get("request") or {}
+    decoding_controlled = "temperature" in request or (
+        bool(sample) and "temperature" not in removed
+    )
+
     return {
         "scoring_version": SCORING_VERSION,
         "contract_version": contract["version"],
+        # 이 런이 재현 가능한 조건에서 나왔는지.
+        "decoding_controlled": decoding_controlled,
+        "removed_sampling_params": sorted(removed),
         "answer_key_version": answer_key["version"],
         "session": run_dir.parents[1].name if len(run_dir.parents) > 1 else None,
         "model": (manifest or {}).get("requested_model"),
@@ -207,6 +221,12 @@ def stability(scored_runs: Iterable[Mapping[str, Any]]) -> dict[str, Any]:
             "runs": len(runs),
             "status": "IDENTICAL" if not unstable else "DIVERGED",
             "unstable_items": unstable,
+            # 흔들림이 우연인지 구조적인지 구분한다. 결정론 제어가 없는 백엔드에서는
+            # 반복 실행이 다르게 나오는 것이 정상이며, 그때 단일 런은 측정이 아니다.
+            "decoding_controlled": all(run.get("decoding_controlled", True) for run in runs),
+            "removed_sampling_params": sorted({
+                param for run in runs for param in run.get("removed_sampling_params") or []
+            }),
         }
     return report
 

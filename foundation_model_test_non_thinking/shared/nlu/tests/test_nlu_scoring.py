@@ -255,6 +255,34 @@ class NoScoreIsManufactured(unittest.TestCase):
     def test_a_single_run_of_a_model_is_unverified_not_identical(self):
         self.assertEqual(scorer.stability([self._run("m1", a="drive")])["m1"]["status"], "UNVERIFIED")
 
+    def test_instability_is_attributed_to_the_backend_when_control_is_gone(self):
+        # diffusion 백엔드는 temperature 를 거부한다 — 같은 요청에 다른 답이 나오는
+        # 것이 정상이다. 실측: 요청 바이트가 동일한 5런에서 한 항목이 세 갈래로
+        # 갈렸다. 이 구분이 없으면 구조적 흔들림이 모델 결함으로 읽힌다.
+        runs = [
+            {"scorable": True, "model": "d", "decoding_controlled": False,
+             "removed_sampling_params": ["temperature"],
+             "items": [{"item_id": "a", "status": "fail", "answer": "walk"}]},
+            {"scorable": True, "model": "d", "decoding_controlled": False,
+             "removed_sampling_params": ["temperature"],
+             "items": [{"item_id": "a", "status": "pass", "answer": "drive"}]},
+        ]
+        info = scorer.stability(runs)["d"]
+        self.assertEqual(info["status"], "DIVERGED")
+        self.assertFalse(info["decoding_controlled"])
+        self.assertIn("temperature", info["removed_sampling_params"])
+
+    def test_a_controlled_backend_is_not_excused_for_instability(self):
+        runs = [
+            {"scorable": True, "model": "q", "decoding_controlled": True,
+             "items": [{"item_id": "a", "status": "fail", "answer": "walk"}]},
+            {"scorable": True, "model": "q", "decoding_controlled": True,
+             "items": [{"item_id": "a", "status": "pass", "answer": "drive"}]},
+        ]
+        info = scorer.stability(runs)["q"]
+        self.assertEqual(info["status"], "DIVERGED")
+        self.assertTrue(info["decoding_controlled"])
+
     def test_compliance_is_counted_apart_from_correctness(self):
         # 계약을 못 지킨 것과 틀린 것을 합치면 계약 문구의 문제가 모델의 오답으로
         # 보고된다.
