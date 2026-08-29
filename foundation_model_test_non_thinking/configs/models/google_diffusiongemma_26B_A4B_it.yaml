@@ -90,6 +90,29 @@ backend_reference:
       - decoder(생성) 모드   : bidirectional attention, canvas denoising
     diffusion 은 *생성 단계에만* 개입한다.
 
+    ⚠️ **단일 런의 숫자는 측정이 아니다** (2026-08-29 실측).
+       이 백엔드는 temperature 를 400 으로 거부하므로 평가 코드가 그것을 제거한다
+       (serving_profiles/vllm_diffusion.yaml). 즉 **결정론 제어 수단이 없다.**
+       요청 바이트가 완전히 동일한 반복 실행에서 결과가 갈린다:
+
+         nlu (프롬프트 2개, 5런)
+           carwash_choice: walk / depends / walk / drive / walk
+           통과 4/5 · 4/5 · 4/5 · 5/5 · 4/5
+           → 5분의 1 확률로 정반대 결론이 나온다.
+
+         functionchat (앞 60항목 × 3데이터셋, 3런)
+           통과 137/139 · 138/139 · 139/139  (산포 2)
+           뒤집힌 항목 3건 — call_decision:36(XOO), :51(OXO), dialog:14(XOO)
+           → 단조 개선이 아니라 무작위. 런마다 다른 항목이 뒤집힌다.
+
+       대조군: 같은 조건의 qwen_qwen3.5_35b_a3b_fp8(temperature=0.0)은
+       nlu 5런 항목별 답이 전부 동일했다. 흔들림은 모델 결함이 아니라
+       이 백엔드의 구조적 성질이다.
+
+       **이 모델의 점수를 인용하려면 반복 실행하고 산포를 함께 적어야 한다.**
+       각 트랙의 재현성 계층이 산출물의 `decoding.deterministic_controls` 를 읽어
+       DIVERGED 의 원인을 구분한다.
+
     트랙별 영향:
       - harness : 영향 없음. lm_eval local-completions 의 loglikelihood 채점은
                   echo prompt-logprob → prefill 포워드 패스만 사용하고,
@@ -99,7 +122,10 @@ backend_reference:
       - nlu/agent : 동작하나 생성 단위가 다름. commit 스텝에서 canvas 단위로
                   최대 256 토큰이 한 번에 확정(diffusion_gemma.py:604) →
                   nlu 의 max_tokens 8192 는 canvas 약 32회 commit.
-                  정확도엔 영향 없으나 지연 패턴이 기존 모델과 다르다.
+                  지연 패턴이 기존 모델과 다르다.
+                  ⚠️ "정확도엔 영향 없다" 고 적혀 있었으나 **사실이 아니다.**
+                  결정 경계에 가까운 항목은 런마다 뒤집힌다(위 실측 참조).
+                  한 번 돌린 정확도는 재현되지 않는다.
       - multimodal : 정확도 벤치(k_mmbench/koffvqa/mtvqa_kr/k_dtcbench) 영향 없음.
                   단 b4_latency_profile.py 의 TTFT/ITL 은 재해석 필요 —
                   토큰이 256개씩 버스트로 도착해 블록 내부 ITL≈0, 경계에서 큰 갭.
