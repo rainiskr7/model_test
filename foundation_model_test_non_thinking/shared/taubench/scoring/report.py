@@ -25,12 +25,18 @@ from pathlib import Path
 from typing import Any, Iterable, Mapping
 
 try:  # 패키지로 임포트될 때 (report_taubench_tracks.py)
-    from .cohort import comparison_fingerprint, reproducibility_report
+    from .cohort import (
+        comparison_fingerprint, is_multi_trial, replicate_key, reproducibility_report,
+    )
+    from ...publish.claims import comparable, credential
 except ImportError:  # 파일 하나만 단독 로드할 때 (테스트 로더)
     import sys as _sys
 
     _sys.path.insert(0, str(Path(__file__).resolve().parent))
+    _sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
     from cohort import comparison_fingerprint, reproducibility_report
+    from cohort import is_multi_trial, replicate_key
+    from publish.claims import comparable, credential
 
 __all__ = ["collect", "render_markdown"]
 
@@ -126,6 +132,118 @@ def _blockers(summary: Mapping[str, Any]) -> list[str]:
     return reasons
 
 
+def _task_vector(summary: Mapping[str, Any]) -> dict[str, bool]:
+    """도메인 산출물이 실제로 기록한 전체 과제 벡터를 읽는다."""
+
+    domain, entry = _domain_entry(summary)
+    return {
+        str(result["task_id"]): result.get("passed") is True
+        for result in entry.get("task_results") or []
+        if isinstance(result, Mapping) and "task_id" in result
+    }
+
+
+def _claims(summaries: Iterable[Mapping[str, Any]]) -> dict[str, Any]:
+    """단일 시행 코호트만 항목 벡터 기반 클레임 자격으로 바꾼다."""
+
+    grouped: dict[tuple[str, str], list[Mapping[str, Any]]] = defaultdict(list)
+    excluded: list[dict[str, str]] = []
+    for summary in summaries:
+        if is_multi_trial(summary):
+            excluded.append({
+                "model": str(summary.get("model")),
+                "session": str(summary.get("_session") or summary.get("session") or "?"),
+                "reason": "다중 시행 산출물이다 — 통과 집합 비교는 Pass^k 를 대신할 수 없다",
+            })
+            continue
+        grouped[replicate_key(summary)].append(summary)
+
+    credentials: list[dict[str, Any]] = []
+    for (fingerprint, model), members in sorted(grouped.items()):
+        protocol = comparison_fingerprint(members[0])
+        credentials.append({
+            "fingerprint": fingerprint,
+            "model": model,
+            "protocol": protocol,
+            "credential": credential([
+                {
+                    "run_id": str(member.get("_session") or member.get("session") or "?"),
+                    "items": _task_vector(member),
+                }
+                for member in members
+            ]),
+        })
+
+    verdicts: list[dict[str, Any]] = []
+    by_protocol: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for entry in credentials:
+        by_protocol[entry["fingerprint"]].append(entry)
+    for entries in by_protocol.values():
+        for index, left in enumerate(entries):
+            for right in entries[index + 1:]:
+                left_protocol, right_protocol = left["protocol"], right["protocol"]
+                if not (
+                    left_protocol["comparable_across_candidates"]
+                    and right_protocol["comparable_across_candidates"]
+                ):
+                    reasons = [
+                        protocol["reason"]
+                        for protocol in (left_protocol, right_protocol)
+                        if not protocol["comparable_across_candidates"]
+                    ]
+                    verdict = {"comparable": False, "reason": "; ".join(dict.fromkeys(reasons))}
+                else:
+                    verdict = comparable(left["credential"], right["credential"])
+                verdicts.append({"left": left["model"], "right": right["model"], "verdict": verdict})
+    return {"credentials": credentials, "excluded": excluded, "verdicts": verdicts}
+
+
+def _render_claims(claims: Mapping[str, Any]) -> list[str]:
+    """항목 벡터를 보존한 반복 관측만 우열 문장으로 나아가게 한다."""
+
+    out = ["## 클레임 등급", ""]
+    out.append(
+        "**1회 실행 숫자는 순위표에 올리지 않는다.** 저장·표시·역사 인용은 되지만 "
+        "우열 주장의 근거는 아니다. 반복 3회 이상이어야 반복성을 관측했다고 말한다."
+    )
+    out.append("")
+    for entry in claims["credentials"]:
+        cred = entry["credential"]
+        label = f"`{entry['model']}` · protocol `{entry['fingerprint']}`"
+        if cred["claim_class"] != "repeatability_observed":
+            out.append(f"- {label} — `{cred['claim_class']}` (k={cred['k']}) · {cred['reason']}")
+            continue
+        lo, hi = cred["instability_envelope"]
+        out.append(
+            f"- {label} — `{cred['claim_class']}` (k={cred['k']}) · "
+            f"다수결 {cred['majority_passed']}/{cred['measured_items']} · "
+            f"건수범위 {cred['count_range']} · 뒤집힘 {len(cred['unstable_items'])}건 · "
+            f"불안정 예산 {lo}–{hi}"
+        )
+    for excluded in claims["excluded"]:
+        out.append(
+            f"- `{excluded['model']}` / `{excluded['session']}` — **제외**: {excluded['reason']}"
+        )
+    out += ["", "### 발행 가능한 우열 주장", ""]
+    if not claims["verdicts"]:
+        out.append("- 반복 관측된 코호트가 2개 미만이라 비교할 대상이 없다.")
+    for entry in claims["verdicts"]:
+        left, right, verdict = entry["left"], entry["right"], entry["verdict"]
+        if verdict["comparable"]:
+            winner = left if verdict["winner"] == "left" else right
+            out.append(f"- `{winner}` 우세 — {verdict['reason']}")
+        else:
+            out.append(f"- `{left}` vs `{right}` — **발행 불가**: {verdict['reason']}")
+    out += [
+        "",
+        "> 가설검정이 아니다. 신뢰구간도 p-value 도 아니다. **관측된 불안정으로 "
+        "설명이 끝나는 우열 주장을 거절하는 규칙**일 뿐이며, 거절되지 않았다고 "
+        "'유의하다'는 뜻이 아니고 거절됐다고 '두 모델이 같다'는 뜻도 아니다.",
+        "",
+    ]
+    return out
+
+
 def render_markdown(summaries: Iterable[dict[str, Any]], unreadable: list[dict[str, str]]) -> str:
     summaries = list(summaries)
     out: list[str] = [
@@ -203,6 +321,8 @@ def render_markdown(summaries: Iterable[dict[str, Any]], unreadable: list[dict[s
         if check.get("reason"):
             out.append(f"  - {check['reason']}")
     out.append("")
+
+    out.extend(_render_claims(_claims(summaries)))
 
     if unreadable:
         out += ["## 읽을 수 없는 산출물", ""]

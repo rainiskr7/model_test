@@ -47,6 +47,7 @@ __all__ = [
     "REPEATABILITY_OBSERVED",
     "MIN_REPEATS",
     "credential",
+    "aggregate_credential",
     "comparable",
 ]
 
@@ -132,6 +133,53 @@ def credential(runs: Iterable[Mapping[str, Any]]) -> dict[str, Any]:
         "majority_passed": center,
         # 이것은 신뢰구간이 아니다. 아래 comparable() 의 주석을 읽을 것.
         "instability_envelope": envelope,
+    }
+
+
+def aggregate_credential(values: Iterable[float], *, k_runs: int) -> dict[str, Any]:
+    """항목 벡터가 없는 집계 축의 관측값 범위만으로 클레임 자격을 만든다.
+
+    값이 같아도 서로 다른 항목을 맞혔을 수 있다. 실제로 functionchat 은 통과 건수가
+    553으로 5런 모두 같았지만 통과 항목 10개가 뒤집혔다. 그래서 이 envelope 는
+    항목별 뒤집힘을 보지 못한 **실제 불안정의 하한**이며, 겹치지 않는다는 사실도
+    exact-match 축보다 약한 근거다.
+    """
+
+    values = [float(value) for value in values]
+    if k_runs != len(values):
+        raise ValueError("기록한 런 수와 관측값 수가 다르다")
+    if not values:
+        return {
+            "claim_class": SNAPSHOT,
+            "k": 0,
+            "observed_values": [],
+            "reason": "런이 없다",
+            "envelope_is_lower_bound": True,
+        }
+
+    envelope = [min(values), max(values)]
+    common = {
+        "k": k_runs,
+        "observed_values": values,
+        "aggregate_range": envelope,
+        "instability_envelope": envelope,
+        # comparable() 은 항목 수 불일치를 막지만, 이 축에는 그런 항목 벡터가 없다.
+        "measured_items": None,
+        "envelope_is_lower_bound": True,
+    }
+    if k_runs < MIN_REPEATS:
+        return {
+            "claim_class": SNAPSHOT,
+            **common,
+            "reason": (
+                f"반복 {k_runs}회 — 반복성을 관측하려면 {MIN_REPEATS}회가 필요하다; "
+                "항목 벡터가 없어 관측 범위는 실제 불안정의 하한이다"
+            ),
+        }
+    return {
+        "claim_class": REPEATABILITY_OBSERVED,
+        **common,
+        "reason": "항목 벡터가 없어 관측 범위는 실제 불안정의 하한이다",
     }
 
 

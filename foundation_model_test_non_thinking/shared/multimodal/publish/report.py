@@ -20,6 +20,7 @@ from .schema import (
     validate_sidecar,
 )
 from .select import cohort_key, select_representatives
+from ...publish.claims import aggregate_credential
 
 
 def _expected_sidecar(source: Path) -> Path:
@@ -248,7 +249,7 @@ def _repro_axis(sidecar: dict[str, Any]) -> tuple[dict[str, Any] | None, str | N
 
 
 def reproducibility_checks(selected: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Compare the full spread of exact-run-distinct cohort candidates."""
+    """집계값 범위만 기록해 multimodal 코호트의 클레임 자격을 만든다."""
 
     checks: list[dict[str, Any]] = []
     for representative in selected:
@@ -288,36 +289,39 @@ def reproducibility_checks(selected: list[dict[str, Any]]) -> list[dict[str, Any
             })
             continue
         denominator = next(iter(denominators))
+        values = (
+            [float(axis["numerator"]) for axis in typed_axes]
+            if unit == "fraction"
+            else [float(axis["value"]) for axis in typed_axes]
+        )
+        spread = max(values) - min(values)
+        # 허용대는 **측정된 신뢰구간이 아니라 정책값**이다. 그래도 유지한다 —
+        # `passed` 는 publish_blocked() 가 읽는 값이라(이 파일의 reproduction_failed),
+        # 무조건 True 로 두면 산포가 아무리 커도 차단되지 않는다. 임계가 임의적이라는
+        # 것은 그것을 지울 이유가 아니라 정책값이라고 표시할 이유다.
         if unit == "fraction":
-            numerators = [axis["numerator"] for axis in typed_axes]
-            spread = max(numerators) - min(numerators)
             tolerance = math.ceil(0.01 * denominator)
-            checks.append({
-                "representative": representative,
-                "runs": runs,
-                "axes": axes,
-                "comparable": True,
-                "comparator": "fraction",
-                "spread": spread,
-                "spread_pp": 100 * spread / denominator,
-                "tolerance": tolerance,
-                "passed": spread <= tolerance,
-            })
-        elif unit == "score/10":
-            averages = [float(axis["value"]) for axis in typed_axes]
-            spread = max(averages) - min(averages)
+            passed = spread <= tolerance
+            spread_pp = 100 * spread / denominator
+        else:
             tolerance = 0.10
-            checks.append({
-                "representative": representative,
-                "runs": runs,
-                "axes": axes,
-                "comparable": True,
-                "comparator": "score/10",
-                "spread": spread,
-                "spread_pp": 100 * spread / 10,
-                "tolerance": tolerance,
-                "passed": spread <= tolerance + 1e-12,
-            })
+            passed = spread <= tolerance + 1e-12
+            spread_pp = 100 * spread / 10
+        checks.append({
+            "representative": representative,
+            "runs": runs,
+            "axes": axes,
+            "comparable": True,
+            "unit": unit,
+            "comparator": unit,
+            "credential": aggregate_credential(values, k_runs=len(runs)),
+            "spread": spread,
+            "spread_pp": spread_pp,
+            # 정책 허용대. 관측된 불확실성 한계가 아니다.
+            "tolerance": tolerance,
+            "tolerance_is_policy": True,
+            "passed": passed,
+        })
     return checks
 
 
@@ -338,25 +342,26 @@ def _reproducibility_notes(cohort: list[dict[str, Any]]) -> list[str]:
             )
     for check in reproducibility_checks(cohort):
         representative = check["representative"]
-        result = "PASS" if check["passed"] else "FAIL"
         if not check.get("comparable"):
             notes.append(
                 f"> 재현성: `{_escape(_model(representative))}` — 이 코호트에 런 {len(check['runs'])}개. "
                 f"비교 불가 — **FAIL**"
             )
             notes.append(f">   **사유:** {_escape(check.get('reason'))}")
-        elif check.get("comparator") == "fraction":
-            notes.append(
-                f"> 재현성: `{_escape(_model(representative))}` — 이 코호트에 런 {len(check['runs'])}개. "
-                f"코호트 산포 {check['spread']}건 ({check['spread_pp']:.2f}%p), "
-                f"허용 {check['tolerance']}건 — **{result}**"
-            )
         else:
+            credential = check["credential"]
+            lo, hi = credential["instability_envelope"]
+            result = "PASS" if check["passed"] else "FAIL"
             notes.append(
                 f"> 재현성: `{_escape(_model(representative))}` — 이 코호트에 런 {len(check['runs'])}개. "
-                f"평균 점수 산포 {check['spread']:.3f}/10 (전체 척도 {check['spread_pp']:.2f}%p), "
-                f"허용 {check['tolerance']:.2f}/10 — **{result}**"
+                f"`{credential['claim_class']}` · 관측 범위 {lo:g}–{hi:g} ({check['unit']}) · "
+                f"산포 {check['spread']:g} / 정책 허용 {check['tolerance']:g} — **{result}**"
             )
+            if credential["envelope_is_lower_bound"]:
+                notes.append(
+                    ">   **주의:** 항목 벡터가 없어 값이 같아도 서로 다른 문항을 맞혔는지 알 수 없다. "
+                    "이 관측 범위는 실제 불안정의 **하한**이며, exact-match 축보다 약한 근거다."
+                )
         for index, (run, axis) in enumerate(zip(check["runs"], check["axes"])):
             labels = []
             if index == 0:

@@ -13,6 +13,7 @@ from publish.claims import (  # noqa: E402
     MIN_REPEATS,
     REPEATABILITY_OBSERVED,
     SNAPSHOT,
+    aggregate_credential,
     comparable,
     credential,
 )
@@ -155,6 +156,22 @@ class CoverageDifferencesAreNotInstability(unittest.TestCase):
         self.assertEqual(cred["measured_items"], 1)
         self.assertEqual(cred["coverage_dropped"], ["b"])
         self.assertEqual(cred["unstable_items"], [])
+
+
+class AggregateCredentialsRemainLowerBoundOnly(unittest.TestCase):
+    def test_equal_aggregate_values_do_not_claim_item_level_identity(self):
+        # 통과 건수가 553으로 같아도 항목 10개가 뒤집힌 실측이 있다.
+        cred = aggregate_credential([553, 553, 553], k_runs=3)
+        self.assertEqual(cred["claim_class"], REPEATABILITY_OBSERVED)
+        self.assertEqual(cred["instability_envelope"], [553.0, 553.0])
+        self.assertTrue(cred["envelope_is_lower_bound"])
+        self.assertNotIn("unstable_items", cred)
+
+    def test_aggregate_snapshot_keeps_the_observed_range_without_inventing_items(self):
+        cred = aggregate_credential([7.1, 7.3], k_runs=2)
+        self.assertEqual(cred["claim_class"], SNAPSHOT)
+        self.assertEqual(cred["aggregate_range"], [7.1, 7.3])
+        self.assertTrue(cred["envelope_is_lower_bound"])
 
 
 if __name__ == "__main__":

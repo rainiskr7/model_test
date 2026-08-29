@@ -198,7 +198,18 @@ def discrimination(scored_runs: Iterable[Mapping[str, Any]]) -> dict[str, Any]:
     return result
 
 
-def stability(scored_runs: Iterable[Mapping[str, Any]]) -> dict[str, Any]:
+def _stability_key(run: Mapping[str, Any]) -> tuple[str, Any, tuple[str, ...] | None]:
+    """계약 또는 샘플링 제약이 다른 런을 한 측정으로 섞지 않는다."""
+
+    removed = run.get("removed_sampling_params")
+    return (
+        str(run.get("model")),
+        run.get("contract_version"),
+        None if removed is None else tuple(sorted(str(value) for value in removed)),
+    )
+
+
+def stability(scored_runs: Iterable[Mapping[str, Any]]) -> dict[tuple[str, Any, tuple[str, ...] | None], Any]:
     """같은 모델을 여러 번 돌렸을 때 항목별 답이 흔들리는가.
 
     다른 트랙에서 통과 **건수**가 같은데 통과한 **항목**이 뒤집힌 사례를 세 번
@@ -206,15 +217,22 @@ def stability(scored_runs: Iterable[Mapping[str, Any]]) -> dict[str, Any]:
     """
 
     scored_runs = [run for run in scored_runs if run.get("scorable")]
-    by_model: dict[str, list[Mapping[str, Any]]] = {}
+    by_model: dict[tuple[str, Any, tuple[str, ...] | None], list[Mapping[str, Any]]] = {}
     for run in scored_runs:
-        by_model.setdefault(str(run.get("model")), []).append(run)
+        by_model.setdefault(_stability_key(run), []).append(run)
 
     report: dict[str, Any] = {}
-    for model, runs in sorted(by_model.items()):
+    for (model, contract_version, removed_sampling_params), runs in sorted(
+        by_model.items(), key=lambda entry: repr(entry[0])
+    ):
         if len(runs) < 2:
-            report[model] = {"runs": len(runs), "status": "UNVERIFIED",
-                             "reason": "이 모델을 한 번만 돌렸다 — 비교 대상이 없다"}
+            report[(model, contract_version, removed_sampling_params)] = {
+                "model": model,
+                "contract_version": contract_version,
+                "removed_sampling_params": removed_sampling_params,
+                "runs": len(runs), "status": "UNVERIFIED",
+                "reason": "이 규약으로 이 모델을 한 번만 돌렸다 — 비교 대상이 없다",
+            }
             continue
         unstable: dict[str, list[str]] = {}
         for item_id in {e["item_id"] for run in runs for e in run["items"]}:
@@ -224,7 +242,9 @@ def stability(scored_runs: Iterable[Mapping[str, Any]]) -> dict[str, Any]:
             })
             if len(seen) > 1:
                 unstable[item_id] = seen
-        report[model] = {
+        report[(model, contract_version, removed_sampling_params)] = {
+            "model": model,
+            "contract_version": contract_version,
             "runs": len(runs),
             "status": "IDENTICAL" if not unstable else "DIVERGED",
             "unstable_items": unstable,

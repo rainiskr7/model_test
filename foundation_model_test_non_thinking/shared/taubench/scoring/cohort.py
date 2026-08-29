@@ -130,12 +130,17 @@ def comparison_fingerprint(summary: Mapping[str, Any]) -> dict[str, Any]:
         facts["user_request_timeout"] is not None and facts["user_max_tokens"] is not None
     ) or facts["mode"] == "solo"
     pinned = facts.pop("user_protocol_pinned")
-    return {
+    result = {
         "fingerprint": _digest(facts)[:16],
         "facts": facts,
         "user_protocol_pinned": pinned,
         "comparable_across_candidates": pinned,
     }
+    if not pinned:
+        # 비교 자격을 잃은 이유도 지문과 함께 남긴다. 호출부가 임의의 문구를
+        # 보태면, 기록이 없는 과거 산출물의 결론이 보고마다 달라질 수 있다.
+        result["reason"] = "사용자 프로토콜 고정 기록이 없다"
+    return result
 
 
 def replicate_key(summary: Mapping[str, Any]) -> tuple[str, str]:

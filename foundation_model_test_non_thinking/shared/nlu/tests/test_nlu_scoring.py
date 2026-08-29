@@ -224,6 +224,9 @@ class NoScoreIsManufactured(unittest.TestCase):
             {"item_id": k, "status": "pass", "answer": v} for k, v in answers.items()
         ]}
 
+    def _stability(self, runs, model):
+        return next(entry for entry in scorer.stability(runs).values() if entry["model"] == model)
+
     def test_one_model_cannot_establish_that_an_item_fails_to_discriminate(self):
         # 모델이 하나면 "모두 같은 답" 은 참이지만 아무 뜻도 없다. 비교 대상이
         # 없다는 사실을 '변별 못 함' 이라는 결론으로 위장하면 안 된다.
@@ -243,7 +246,7 @@ class NoScoreIsManufactured(unittest.TestCase):
     def test_stability_compares_item_answers_not_pass_counts(self):
         # 통과 수가 같아도 다른 항목을 맞힌 것이면 같은 측정이 아니다.
         same = [self._run("m1", a="drive", b="male"), self._run("m1", a="drive", b="male")]
-        self.assertEqual(scorer.stability(same)["m1"]["status"], "IDENTICAL")
+        self.assertEqual(self._stability(same, "m1")["status"], "IDENTICAL")
         flipped = [
             {"scorable": True, "model": "m1", "items": [
                 {"item_id": "a", "status": "pass", "answer": "drive"},
@@ -252,13 +255,28 @@ class NoScoreIsManufactured(unittest.TestCase):
                 {"item_id": "a", "status": "fail", "answer": "walk"},
                 {"item_id": "b", "status": "pass", "answer": "male"}]},
         ]
-        report = scorer.stability(flipped)["m1"]
+        report = self._stability(flipped, "m1")
         # 두 런 모두 통과 1개다. 건수만 보면 완벽한 재현으로 읽힌다.
         self.assertEqual(report["status"], "DIVERGED")
         self.assertEqual(sorted(report["unstable_items"]), ["a", "b"])
 
     def test_a_single_run_of_a_model_is_unverified_not_identical(self):
-        self.assertEqual(scorer.stability([self._run("m1", a="drive")])["m1"]["status"], "UNVERIFIED")
+        self.assertEqual(self._stability([self._run("m1", a="drive")], "m1")["status"], "UNVERIFIED")
+
+    def test_stability_never_mixes_contract_or_sampling_constraint_cohorts(self):
+        """같은 모델명으로는 계약과 서빙 제약이 다른 측정을 구분할 수 없다."""
+
+        runs = [
+            {**self._run("m1", a="drive"), "contract_version": 1,
+             "removed_sampling_params": []},
+            {**self._run("m1", a="drive"), "contract_version": 2,
+             "removed_sampling_params": []},
+            {**self._run("m1", a="drive"), "contract_version": 1,
+             "removed_sampling_params": ["temperature"]},
+        ]
+        report = scorer.stability(runs)
+        self.assertEqual(len(report), 3)
+        self.assertTrue(all(entry["status"] == "UNVERIFIED" for entry in report.values()))
 
     def test_the_predicate_never_claims_determinism_only_its_absence(self):
         # temperature=0 을 보냈다고 결정론이 보장되지 않는다 — 배치 구성, MoE
@@ -280,7 +298,7 @@ class NoScoreIsManufactured(unittest.TestCase):
              "removed_sampling_params": ["temperature"],
              "items": [{"item_id": "a", "status": "pass", "answer": "drive"}]},
         ]
-        info = scorer.stability(runs)["d"]
+        info = self._stability(runs, "d")
         self.assertEqual(info["status"], "DIVERGED")
         self.assertTrue(info["sampling_controls_removed"])
         self.assertIn("temperature", info["removed_sampling_params"])
@@ -292,7 +310,7 @@ class NoScoreIsManufactured(unittest.TestCase):
             {"scorable": True, "model": "q", "sampling_controls_removed": False,
              "items": [{"item_id": "a", "status": "pass", "answer": "drive"}]},
         ]
-        info = scorer.stability(runs)["q"]
+        info = self._stability(runs, "q")
         self.assertEqual(info["status"], "DIVERGED")
         self.assertFalse(info["sampling_controls_removed"])
 

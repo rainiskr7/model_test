@@ -4191,6 +4191,27 @@ def test_agent_tracks_report_surfaces_reproducibility_divergence():
     assert "뒤집힌 항목 10건" in markdown
 
 
+def test_agent_tracks_report_keeps_judge_claims_off_the_exact_axis():
+    """judge 의 내부 표 갈림을 exact-match 반복 런의 뒤집힘으로 표시하면 안 된다."""
+
+    module = _load_agent_tracks_report()
+    claims = {
+        "credentials": {}, "verdicts": [],
+        "judge_credentials": [{
+            "model": "m", "run": "r", "provisional": True,
+            "credential": {
+                "claim_class": "repeatability_observed", "k": 1,
+                "majority_passed": 5, "measured_items": 7,
+                "unstable_items": ["a"], "instability_envelope": [4, 6],
+            },
+        }],
+    }
+    markdown = module.render_markdown([_track_row("functionchat", "m", "r", "exact", 7)], claims=claims)
+    assert "### exact-match 축" in markdown
+    assert "### judge 축 — 런 내부 3표" in markdown
+    assert "PROVISIONAL — 판정기 기준, 인간 검증 없음" in markdown
+
+
 def test_agent_tracks_report_omits_the_section_when_there_is_nothing_to_compare():
     module = _load_agent_tracks_report()
     rows = [_track_row("functionchat", "m", "only", "exact", 600)]
@@ -4202,7 +4223,7 @@ def test_agent_tracks_reproducibility_reads_real_artifacts():
     """모듈이 실제 산출물에서 반복 런을 찾아내는지 — 배선이 끊기면 조용히 빈다."""
 
     module = _load_agent_tracks_report()
-    report = module.collect_reproducibility(TREE_ROOT)
+    report = module.collect_functionchat_reproducibility(TREE_ROOT)
     assert report, "functionchat 반복 런을 하나도 못 찾았다"
     assert any(check["status"] == "DIVERGED" for check in report), report
 
@@ -4233,15 +4254,49 @@ def test_agent_tracks_report_survives_a_broken_reproducibility_layer(tmp_path=No
         scoring.mkdir(parents=True)
         (scoring / "repro.py").write_text("this is not python(", encoding="utf-8")
         with contextlib.redirect_stderr(io.StringIO()):
-            assert module.collect_reproducibility(base) == []
+            assert module.collect_functionchat_reproducibility(base) == []
+
+
+def test_agent_repro_uses_level_qualified_task_vectors_and_protocol_cohorts():
+    """같은 task_id 가 레벨마다 있어도 서로 다른 측정 항목으로 남아야 한다."""
+
+    repro = _load_module("repro")
+    with tempfile.TemporaryDirectory() as tmp:
+        run = Path(tmp) / "results" / "m" / "r1" / "language" / "agent_v4run"
+        run.mkdir(parents=True)
+        metadata = {"model": "m", "native_tool_calling": True,
+                    "decoding": {"constraints": {"removed_parameters": []}}}
+        for level, success in (("L1", True), ("L2", False)):
+            (run / f"{level}.json").write_text(json.dumps({
+                "metadata": metadata,
+                "results": [{"task_id": "same-id", "success": success}],
+            }), encoding="utf-8")
+        loaded = repro.load_run(run)
+    assert loaded is not None
+    assert loaded["items"] == {"L1:same-id": True, "L2:same-id": False}
+    assert repro.cohort_key(loaded)[0:4] == ("agent_v4run", "m", True, ((),))
+
+
+def test_agent_repro_treats_missing_decoding_as_unknown_not_no_removals():
+    """예전 산출물의 미기록을 제약 없음으로 바꾸면 다른 코호트와 섞인다."""
+
+    repro = _load_module("repro")
+    base = {"track": "agent_v4run", "model": "m", "native_tool_calling": True,
+            "items": {"L1:t": True}}
+    unknown = repro.cohort_key(base)
+    known = repro.cohort_key({**base, "removed_parameters": ((),)})
+    assert unknown != known
 
 
 TESTS = [
     test_agent_tracks_report_flags_judged_axes_without_provenance,
     test_agent_tracks_report_survives_a_broken_reproducibility_layer,
     test_agent_tracks_report_surfaces_reproducibility_divergence,
+    test_agent_tracks_report_keeps_judge_claims_off_the_exact_axis,
     test_agent_tracks_report_omits_the_section_when_there_is_nothing_to_compare,
     test_agent_tracks_reproducibility_reads_real_artifacts,
+    test_agent_repro_uses_level_qualified_task_vectors_and_protocol_cohorts,
+    test_agent_repro_treats_missing_decoding_as_unknown_not_no_removals,
     test_agent_tracks_report_tie_state_survives_every_input_order,
     test_agent_tracks_report_lists_every_tied_run_when_three_share_a_denominator,
     test_agent_tracks_report_never_breaks_ties_by_run_name,

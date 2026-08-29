@@ -12,7 +12,10 @@ from shared.taubench.scoring.report import collect, render_markdown
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--base", type=Path, default=Path("."))
+    # 이 스크립트는 저장소 루트에서 `python3 foundation_model_test_non_thinking/...`로
+    # 실행한다. `.`를 기본값으로 두면 실제 산출물 아래가 아니라 호출 위치를 읽어
+    # "산출물이 없다"고 끝난다.
+    parser.add_argument("--base", type=Path, default=Path(__file__).resolve().parent)
     parser.add_argument("--write-markdown", type=Path)
     parser.add_argument(
         "--strict",

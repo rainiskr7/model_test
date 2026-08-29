@@ -426,15 +426,18 @@ def test_reproducibility_tolerance_boundary_and_strict_failure():
     selected, ambiguous = select_representatives([baseline, boundary])
     assert strict_failed([boundary], [], [], [baseline, boundary]) is False
     markdown, _ = render_markdown([baseline, boundary], [])
-    assert "코호트 산포 3건 (1.25%p), 허용 3건 — **PASS**" in markdown
+    assert "`snapshot` · 관측 범위 200–203 (fraction) · 산포 3 / 정책 허용 3 — **PASS**" in markdown
+    assert "실제 불안정의 **하한**" in markdown
     assert "`baseline`  200/240 = 83.33% (기준)" in markdown
     assert "`boundary`  203/240 = 84.58% (대표)" in markdown
 
     outside = measured("outside", "2026-01-03T00:00:00+00:00", 204, "sha256:outside")
+    # 허용대는 정책값이지만 게이트다. 클레임 등급이 생겼다고 이 차단을 끄면,
+    # 산포가 아무리 커도 발행이 막히지 않는다.
     assert strict_failed([outside], [], [], [baseline, outside]) is True
 
 
-def test_reproducibility_uses_full_cohort_spread_for_three_runs():
+def test_reproducibility_uses_full_cohort_spread_and_earns_a_claim_class():
     def measured(session, timestamp, numerator):
         return sidecar(
             session, timestamp, benchmark="K-DTCBench",
@@ -450,7 +453,7 @@ def test_reproducibility_uses_full_cohort_spread_for_three_runs():
     high = measured("high", "2026-01-03T00:00:00+00:00", 103)
     assert strict_failed([high], [], [], [baseline, low, high]) is True
     markdown, _ = render_markdown([baseline, low, high], [])
-    assert "코호트 산포 6건 (2.50%p), 허용 3건 — **FAIL**" in markdown
+    assert "`repeatability_observed` · 관측 범위 97–103 (fraction) · 산포 6 / 정책 허용 3 — **FAIL**" in markdown
 
 
 def test_missing_or_unsupported_repro_axis_is_not_comparable_failure():
@@ -483,7 +486,7 @@ def test_score_over_ten_uses_average_scale_not_score_sum_counts():
     close = judged("close", "2026-01-02T00:00:00+00:00", 5.02, "sha256:close")
     assert strict_failed([close], [], [], [baseline, close]) is False
     markdown, _ = render_markdown([baseline, close], [])
-    assert "평균 점수 산포 0.020/10 (전체 척도 0.20%p), 허용 0.10/10 — **PASS**" in markdown
+    assert "`snapshot` · 관측 범위 5–5.02 (score/10) · 산포 0.02 / 정책 허용 0.1 — **PASS**" in markdown
 
     far = judged("far", "2026-01-03T00:00:00+00:00", 5.11, "sha256:far")
     assert strict_failed([far], [], [], [baseline, far]) is True
@@ -501,7 +504,7 @@ def test_scoped_report_renders_comparison_failure_that_causes_strict_exit():
         axes=[{"name": "overall", "numerator": 190, "denominator": 240, "value": 190 / 240, "unit": "fraction"}],
     )
     markdown, ambiguous = render_markdown([current], [], [baseline, current])
-    assert "코호트 산포 10건 (4.17%p), 허용 3건 — **FAIL**" in markdown
+    assert "`snapshot` · 관측 범위 190–200 (fraction) · 산포 10 / 정책 허용 3 — **FAIL**" in markdown
     assert strict_failed([current], [], ambiguous, [baseline, current]) is True
 
 

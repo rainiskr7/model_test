@@ -155,7 +155,22 @@ def collect_claims(base: Path) -> Dict[str, Any]:
         for j in range(i + 1, len(verified)):
             (ka, ca), (kb, cb) = verified[i], verified[j]
             verdicts.append((ka[2], kb[2], comparable(ca, cb)))
-    return {"credentials": creds, "verdicts": verdicts}
+    judge_credentials = []
+    for run_dir in sorted(base.glob("results/*/*/language/functionchat")):
+        judge = load(run_dir / "judge.json")
+        if not judge:
+            continue
+        judge_credentials.append({
+            "model": run_dir.parents[2].name,
+            "run": run_dir.parents[1].name,
+            "credential": module.judge_credential(judge.get("records") or []),
+            "provisional": (judge.get("judge") or {}).get("human_validation") == UNVALIDATED,
+        })
+    return {
+        "credentials": creds,
+        "verdicts": verdicts,
+        "judge_credentials": judge_credentials,
+    }
 
 
 def render_claims(claims: Dict[str, Any]) -> List[str]:
@@ -166,6 +181,8 @@ def render_claims(claims: Dict[str, Any]) -> List[str]:
         "**1회 실행 숫자는 순위표에 올리지 않는다.** 저장·표시·역사 인용은 되지만 "
         "우열 주장의 근거는 아니다. 반복 3회 이상이어야 반복성을 관측했다고 말한다."
     )
+    out.append("")
+    out.append("### exact-match 축")
     out.append("")
     for key, cred in claims["credentials"].items():
         model, version = key[2], key[0]
@@ -180,6 +197,25 @@ def render_claims(claims: Dict[str, Any]) -> List[str]:
             f"불안정 예산 {lo}–{hi}"
         )
     out.append("")
+    judge_credentials = claims.get("judge_credentials") or []
+    if judge_credentials:
+        out.append("### judge 축 — 런 내부 3표")
+        out.append("")
+        out.append(
+            "판정 축은 exact-match 축과 합치지 않는다. 이 예산은 반복 실행 간 뒤집힘이 아니라, "
+            "같은 런에서 항목별 3표가 갈린 수로 만든 판정기 내부 불안정이다."
+        )
+        out.append("")
+        for entry in judge_credentials:
+            cred = entry["credential"]
+            lo, hi = cred["instability_envelope"]
+            provisional = " · **PROVISIONAL — 판정기 기준, 인간 검증 없음**" if entry["provisional"] else ""
+            out.append(
+                f"- `{entry['model']}` / `{entry['run']}` — `{cred['claim_class']}` "
+                f"(런 내부 3표, k={cred['k']}) · 다수결 {cred['majority_passed']}/{cred['measured_items']} · "
+                f"표 갈림 {len(cred['unstable_items'])}건 · 불안정 예산 {lo}–{hi}{provisional}"
+            )
+        out.append("")
     out.append("### 발행 가능한 우열 주장")
     out.append("")
     if not claims["verdicts"]:
@@ -200,7 +236,7 @@ def render_claims(claims: Dict[str, Any]) -> List[str]:
     return out
 
 
-def collect_reproducibility(base: Path) -> List[Dict[str, Any]]:
+def collect_functionchat_reproducibility(base: Path) -> List[Dict[str, Any]]:
     """functionchat 반복 실행의 통과 항목 집합을 대조한다.
 
     이 저장소에는 반복 런이 이미 있었는데(gemma 3개, qwen 5개) 아무도 산포를 내지
@@ -405,7 +441,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     args = ap.parse_args(argv)
 
     rows = collect(args.base)
-    repro_report = collect_reproducibility(args.base)
+    repro_report = collect_functionchat_reproducibility(args.base)
     claims = collect_claims(args.base)
     if not rows:
         print("산출물이 없습니다.", file=sys.stderr)

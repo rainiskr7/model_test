@@ -685,6 +685,57 @@ def test_reproducibility_does_not_claim_control_for_pre_provenance_runs():
     _assert(entry["sampling_controls_removed"] is None, entry)
 
 
+def test_repro_cohort_never_mixes_recorded_execution_protocols():
+    """같은 모델·문항이라도 도구 경로와 시간 제한이 다르면 같은 측정이 아니다."""
+
+    # 시간 제한은 **실제로 걸렸을 때만** 규약의 일부다. 걸리지 않은 값으로 코호트를
+    # 가르면 같은 측정이 쪼개진다(qwen 5런이 k=4+k=1 로 갈려 뒤집힘 10건이 사라진
+    # 실측이 있다). 그래서 여기서는 타임아웃이 관측된 런으로 검사한다.
+    common = {
+        "session": "s", "model": "m", "scoring_version": "v1", "items": {"a": True},
+        "native_tool_calling": True, "request_timeout": 60, "task_timeout": 120,
+        "removed_parameters": ((),), "endpoint": "http://served-a",
+        "timeouts_observed": True,
+    }
+    baseline = repro.cohort_key(common)
+    for field, changed in (
+        ("native_tool_calling", False),
+        ("request_timeout", 90),
+        ("task_timeout", 180),
+        ("removed_parameters", (("temperature",),)),
+        ("endpoint", "http://served-b"),
+    ):
+        candidate = dict(common)
+        candidate[field] = changed
+        _assert(repro.cohort_key(candidate) != baseline, f"{field} 차이가 코호트에서 사라졌다")
+
+
+def test_repro_cohort_preserves_unknown_legacy_protocol_as_unknown():
+    """메타데이터가 없던 산출물을 '제거 없음'이나 기본 시간 제한으로 단정하지 않는다."""
+
+    legacy = {"model": "m", "scoring_version": "v1", "items": {"a": True}}
+    key = repro.cohort_key(legacy)
+    _assert(key[3:] == (None, None, None, None, None), key)
+    # 타임아웃 기록이 없다고 "걸리지 않았다"로 단정하지도 않는다 — 어느 쪽이든
+    # 정체성에서 빠지므로 예전 산출물끼리는 여전히 한 코호트다.
+
+
+def test_judge_credential_uses_internal_vote_instability_not_exact_runs():
+    """판정기 3표가 갈린 항목은 한 런 안에서도 불안정 예산에 들어간다."""
+
+    cred = repro.judge_credential([
+        {"serial_num": "a", "status": "judged", "verdict": "pass", "unstable": True},
+        {"serial_num": "b", "status": "judged", "verdict": "fail", "unstable": True},
+        {"serial_num": "c", "status": "judged", "verdict": "pass", "unstable": False},
+        {"serial_num": "lost", "status": "judge_error", "verdict": None, "unstable": False},
+    ])
+    _assert(cred["k"] == 1, cred)
+    _assert(cred["measured_items"] == 3, cred)
+    _assert(cred["majority_passed"] == 2, cred)
+    _assert(cred["unstable_items"] == ["a", "b"], cred)
+    _assert(cred["instability_envelope"] == [0, 4], cred)
+
+
 def test_a_subset_run_is_never_publishable():
     """부분 실행은 진단용이다 — 전량 런과 같은 축에 놓으면 표본 크기가 사라진다."""
 
@@ -839,7 +890,56 @@ def test_the_report_states_the_rule_is_not_a_significance_test():
     _assert("같다" in text and "뜻도 아니다" in text, "거절이 동등을 뜻하지 않음을 밝혀야 한다")
 
 
+def test_a_timeout_that_never_fired_does_not_split_a_cohort():
+    """걸리지 않은 타임아웃은 결과에 영향을 주지 않았으므로 규약의 일부가 아니다.
+
+    실측: qwen 5런 중 하나만 task_timeout 600s(나머지 900s)였는데 1106항목에
+    타임아웃 흔적이 0건이었다. 그런데도 코호트 키에 넣자 k=5 가 k=4+k=1 로 갈렸고
+    **뒤집힌 항목 10건이 0건으로 사라졌다** — 이 계층이 존재하는 이유였던 관측이
+    통째로 안 보이게 됐다.
+    """
+
+    base = {
+        "scoring_version": "v1", "model": "m", "items": {"a": True},
+        "native_tool_calling": True, "request_timeout": 120.0,
+        "removed_parameters": None, "endpoint": "http://e/v1",
+    }
+    slow = dict(base, task_timeout=900.0, timeouts_observed=False)
+    fast = dict(base, task_timeout=600.0, timeouts_observed=False)
+    _assert(repro.cohort_key(slow) == repro.cohort_key(fast), "no-op 타임아웃이 코호트를 갈랐다")
+
+
+def test_a_timeout_that_actually_fired_does_split_a_cohort():
+    # 걸렸다면 결과를 바꿨을 수 있다 — 그때는 다른 측정이다.
+    base = {
+        "scoring_version": "v1", "model": "m", "items": {"a": True},
+        "native_tool_calling": True, "request_timeout": 120.0,
+        "removed_parameters": None, "endpoint": "http://e/v1",
+    }
+    slow = dict(base, task_timeout=900.0, timeouts_observed=True)
+    fast = dict(base, task_timeout=600.0, timeouts_observed=True)
+    _assert(repro.cohort_key(slow) != repro.cohort_key(fast), "실제로 걸린 타임아웃은 갈라야 한다")
+
+
+def test_a_real_protocol_difference_still_splits_a_cohort():
+    # 완화가 다른 규약까지 뭉개면 안 된다.
+    base = {
+        "scoring_version": "v1", "model": "m", "items": {"a": True},
+        "request_timeout": 120.0, "task_timeout": 900.0,
+        "removed_parameters": None, "endpoint": "http://e/v1",
+        "timeouts_observed": False,
+    }
+    _assert(
+        repro.cohort_key(dict(base, native_tool_calling=True))
+        != repro.cohort_key(dict(base, native_tool_calling=False)),
+        "툴콜 모드가 다르면 다른 측정이다",
+    )
+
+
 TESTS = [
+    test_a_timeout_that_never_fired_does_not_split_a_cohort,
+    test_a_timeout_that_actually_fired_does_split_a_cohort,
+    test_a_real_protocol_difference_still_splits_a_cohort,
     test_the_report_refuses_to_rank_a_single_run_model,
     test_the_report_states_the_rule_is_not_a_significance_test,
     test_a_limit_larger_than_every_dataset_is_not_a_subset_run,
@@ -854,6 +954,9 @@ TESTS = [
     test_decoding_provenance_says_controlled_when_nothing_is_removed,
     test_reproducibility_distinguishes_structural_drift_from_chance,
     test_reproducibility_does_not_claim_control_for_pre_provenance_runs,
+    test_repro_cohort_never_mixes_recorded_execution_protocols,
+    test_repro_cohort_preserves_unknown_legacy_protocol_as_unknown,
+    test_judge_credential_uses_internal_vote_instability_not_exact_runs,
     test_served_identity_resets_between_runs_and_merges_a_retry,
     test_repro_says_coverage_differed_instead_of_just_unverified,
     test_repro_reports_which_dataset_file_could_not_be_read,

@@ -782,6 +782,37 @@ class TestReportEnforcement(unittest.TestCase):
         self.assertIn("발행 불가", markdown)
         self.assertNotIn("50.00", markdown)
 
+    def test_claims_use_the_full_task_vector_not_only_passed_tasks(self):
+        """실패 과제가 벡터에서 빠지면 커버리지 차이가 재현성처럼 보인다."""
+
+        run = self._summary("m")
+        run["by_domain"]["telecom"]["task_results"] = [
+            {"task_id": "pass", "passed": True}, {"task_id": "fail", "passed": False},
+        ]
+        claims = reporter._claims([run])
+        cred = claims["credentials"][0]["credential"]
+        self.assertEqual(cred["measured_items"], 2)
+        self.assertEqual(cred["pass_counts"], [1])
+
+    def test_multi_trial_claims_are_excluded_and_reported(self):
+        """Pass^k 산출물을 통과 집합으로 접어 우열 근거로 만들면 안 된다."""
+
+        run = self._summary("m")
+        run["by_domain"]["telecom"]["task_results"] = [
+            {"task_id": "t1", "passed": True}, {"task_id": "t1", "passed": False},
+        ]
+        markdown = reporter.render_markdown([run], [])
+        self.assertIn("**제외**", markdown)
+        self.assertIn("Pass^k 를 대신할 수 없다", markdown)
+
+    def test_unpinned_claims_do_not_call_the_comparison_rule(self):
+        """프로토콜 미고정은 불안정 예산을 볼 단계 이전의 비교 불가 사유다."""
+
+        runs = [self._summary("a", pinned=False), self._summary("b", pinned=False)]
+        claims = reporter._claims(runs)
+        self.assertFalse(claims["verdicts"][0]["verdict"]["comparable"])
+        self.assertIn("사용자", claims["verdicts"][0]["verdict"]["reason"])
+
 
 class TestResultsPathCasing(unittest.TestCase):
     """문자열 치환만 하면 리눅스에서 한 런의 산출물이 두 디렉토리로 갈린다."""
