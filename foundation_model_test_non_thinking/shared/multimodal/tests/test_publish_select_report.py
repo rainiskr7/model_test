@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from shared.multimodal.publish.report import render_markdown, strict_failed
+from shared.multimodal.publish.report import comparison_notes, render_markdown, strict_failed
 from shared.multimodal.publish.schema import make_protocol
 from shared.multimodal.publish.select import select_representatives
 
@@ -506,6 +506,45 @@ def test_scoped_report_renders_comparison_failure_that_causes_strict_exit():
     markdown, ambiguous = render_markdown([current], [], [baseline, current])
     assert "`snapshot` · 관측 범위 190–200 (fraction) · 산포 10 / 정책 허용 3 — **FAIL**" in markdown
     assert strict_failed([current], [], ambiguous, [baseline, current]) is True
+
+
+def test_comparison_between_models_needs_repeats_on_both_sides():
+    """자격만 내고 비교를 내지 않으면 독자가 표에서 눈으로 두 숫자를 견준다."""
+
+    def run(model, session, numerator, sha):
+        return sidecar(
+            session, f"2026-01-0{session[-1]}T00:00:00+00:00", benchmark="K-DTCBench",
+            model=model, artifact_sha=sha,
+            axes=[{"name": "overall", "numerator": numerator, "denominator": 240,
+                   "value": numerator / 240, "unit": "fraction"}],
+        )
+
+    strong = [run("alpha", f"a{i}", 206 + (i % 2), f"sha256:a{i}") for i in range(1, 4)]
+    weak = [run("beta", f"b{i}", 193 + (i % 2), f"sha256:b{i}") for i in range(1, 4)]
+    selected, _ = select_representatives(strong + weak)
+    notes = "\n".join(comparison_notes(selected))
+    assert "모델 간 우열" in notes, notes
+    assert "우세" in notes, notes
+    # 집계 축의 약한 근거임을 반드시 함께 말한다.
+    assert "exact-match 축보다 약한 근거" in notes, notes
+    assert "가설검정도 신뢰구간도 아니다" in notes, notes
+
+
+def test_a_two_run_cohort_cannot_win_a_comparison():
+    def run(model, session, numerator, sha):
+        return sidecar(
+            session, f"2026-02-0{session[-1]}T00:00:00+00:00", benchmark="K-DTCBench",
+            model=model, artifact_sha=sha,
+            axes=[{"name": "overall", "numerator": numerator, "denominator": 240,
+                   "value": numerator / 240, "unit": "fraction"}],
+        )
+
+    pair = [run("alpha", f"a{i}", 206, f"sha256:p{i}") for i in range(1, 3)]
+    trio = [run("beta", f"b{i}", 193 + (i % 2), f"sha256:t{i}") for i in range(1, 4)]
+    selected, _ = select_representatives(pair + trio)
+    notes = "\n".join(comparison_notes(selected))
+    assert "발행 불가" in notes, notes
+    assert "반복 2회로는 비교 근거가 없다" in notes, notes
 
 
 def test_b4_is_explicitly_excluded_from_reproducibility_strict_check():

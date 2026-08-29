@@ -20,7 +20,7 @@ from .schema import (
     validate_sidecar,
 )
 from .select import cohort_key, select_representatives
-from ...publish.claims import aggregate_credential
+from ...publish.claims import aggregate_credential, comparable
 
 
 def _expected_sidecar(source: Path) -> Path:
@@ -325,6 +325,59 @@ def reproducibility_checks(selected: list[dict[str, Any]]) -> list[dict[str, Any
     return checks
 
 
+def comparison_notes(cohort: list[dict[str, Any]]) -> list[str]:
+    """같은 벤치 안에서 모델 간 우열을 발행해도 되는지.
+
+    자격만 내고 비교를 내지 않으면 독자가 표에서 눈으로 두 숫자를 견준다 — 그것이
+    바로 이 계층이 막으려던 일이다. 실측(K-DTCBench, 2026-08-30):
+
+        gemma_4_26b_a4b_it        k=3  관측 범위 206–207
+        diffusiongemma_26B_A4B_it k=3  관측 범위 193–194
+
+    예산이 겹치지 않으므로 gemma 우세를 발행할 수 있다. 반대로 겹치면 그 차이는
+    이 반복 횟수의 흔들림으로 설명이 끝나므로 발행하지 않는다.
+
+    **가설검정이 아니다.** 게다가 집계 축이라 항목 벡터가 없어 예산이 하한이다 —
+    exact-match 축보다 약한 근거다.
+    """
+
+    by_benchmark: dict[Any, list[tuple[str, dict[str, Any]]]] = {}
+    for check in reproducibility_checks(cohort):
+        if not check.get("comparable"):
+            continue
+        representative = check["representative"]
+        by_benchmark.setdefault(
+            (representative.get("benchmark_id"), check.get("unit")), []
+        ).append((_model(representative), check["credential"]))
+
+    notes: list[str] = []
+    for (benchmark, unit), entries in sorted(by_benchmark.items(), key=lambda item: str(item[0])):
+        verdicts: list[str] = []
+        for index, (left_model, left) in enumerate(entries):
+            for right_model, right in entries[index + 1:]:
+                if left_model == right_model:
+                    continue
+                verdict = comparable(left, right)
+                if verdict["comparable"]:
+                    winner = left_model if verdict["winner"] == "left" else right_model
+                    verdicts.append(f">   `{_escape(winner)}` 우세 — {verdict['reason']}")
+                else:
+                    verdicts.append(
+                        f">   `{_escape(left_model)}` vs `{_escape(right_model)}` — "
+                        f"**발행 불가**: {verdict['reason']}"
+                    )
+        if not verdicts:
+            continue
+        notes.append(f"> 모델 간 우열 — `{_escape(str(benchmark))}` ({unit})")
+        notes.extend(verdicts)
+        notes.append(
+            ">   **주의:** 집계 축이라 항목 벡터가 없다. 값이 같아도 서로 다른 문항을 "
+            "맞혔는지 알 수 없으므로 이 판정은 exact-match 축보다 약한 근거다. "
+            "가설검정도 신뢰구간도 아니다."
+        )
+    return notes
+
+
 def _reproducibility_notes(cohort: list[dict[str, Any]]) -> list[str]:
     notes: list[str] = []
     for representative in cohort:
@@ -498,7 +551,11 @@ def _headline(
             notes = _kreta_notes(cohort)
             if notes:
                 out.extend(notes + [""])
-        selection_notes = _duplicate_notes(cohort) + _reproducibility_notes(cohort)
+        selection_notes = (
+            _duplicate_notes(cohort)
+            + _reproducibility_notes(cohort)
+            + comparison_notes(cohort)
+        )
         if selection_notes:
             out.extend(selection_notes + [""])
 

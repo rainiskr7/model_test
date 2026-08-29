@@ -143,6 +143,10 @@ def aggregate_credential(values: Iterable[float], *, k_runs: int) -> dict[str, A
     553으로 5런 모두 같았지만 통과 항목 10개가 뒤집혔다. 그래서 이 envelope 는
     항목별 뒤집힘을 보지 못한 **실제 불안정의 하한**이며, 겹치지 않는다는 사실도
     exact-match 축보다 약한 근거다.
+
+    실측(2026-08-30): multimodal 사이드카 124개 → 대표 54개 중 재현성 검사가 붙는
+    코호트가 4개 있고 모두 k=2 다. 즉 이 함수의 ``snapshot`` 분기는 실데이터로
+    돌지만 ``repeatability_observed`` 분기는 아직 실런으로 확인되지 않았다.
     """
 
     values = [float(value) for value in values]

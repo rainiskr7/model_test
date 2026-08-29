@@ -11,6 +11,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from publish.claims import (  # noqa: E402
     MIN_REPEATS,
+    aggregate_credential,
     REPEATABILITY_OBSERVED,
     SNAPSHOT,
     aggregate_credential,
@@ -77,6 +78,38 @@ class TheCounterexampleThatKillsScalarSpread(unittest.TestCase):
         cred = credential([run(f"r{i}", a=True, b=False) for i in range(4)])
         lo, hi = cred["instability_envelope"]
         self.assertEqual(hi - lo, 0, "뒤집힘이 없으면 예산도 0이어야 한다")
+
+
+class AggregateAxesAdmitTheirBlindSpot(unittest.TestCase):
+    """항목 벡터가 없는 축은 자기 한계를 말해야 한다."""
+
+    def test_an_aggregate_credential_always_marks_its_envelope_a_lower_bound(self):
+        for k in (1, 2, 3, 5):
+            cred = aggregate_credential([1.0] * k, k_runs=k)
+            self.assertTrue(cred["envelope_is_lower_bound"], k)
+
+    def test_identical_aggregate_values_do_not_prove_the_same_items_were_right(self):
+        # functionchat 실측: 통과 건수 553 이 5런 동일한데 항목 10개가 뒤집혔다.
+        # 집계값만 보는 축에서는 그 사실이 원리적으로 보이지 않는다.
+        cred = aggregate_credential([553.0] * 5, k_runs=5)
+        self.assertEqual(cred["instability_envelope"], [553.0, 553.0])
+        self.assertTrue(cred["envelope_is_lower_bound"])
+        self.assertIn("하한", cred["reason"])
+
+    def test_a_mismatch_between_run_count_and_values_is_refused(self):
+        # 조용히 맞추면 k 가 산출물과 다른 자격이 만들어진다.
+        with self.assertRaises(ValueError):
+            aggregate_credential([1.0, 2.0], k_runs=3)
+
+    def test_an_aggregate_axis_is_never_compared_against_an_item_vector_axis(self):
+        # 한쪽은 measured_items 가 None 이고 다른 쪽은 정수다. 같은 축인 척하면
+        # 커버리지 검사가 무력해진다.
+        agg = aggregate_credential([9.0, 9.0, 9.0], k_runs=3)
+        items = {f"i{n}": n < 9 for n in range(10)}
+        vec = credential([{"run_id": f"r{i}", "items": items} for i in range(3)])
+        self.assertIsNone(agg["measured_items"])
+        self.assertEqual(vec["measured_items"], 10)
+        self.assertFalse(comparable(agg, vec)["comparable"])
 
 
 class Comparability(unittest.TestCase):
