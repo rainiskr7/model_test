@@ -936,7 +936,66 @@ def test_a_real_protocol_difference_still_splits_a_cohort():
     )
 
 
+def test_the_report_publishes_verdicts_for_both_axes_and_flags_disagreement():
+    """한 축의 승자만 보이면 그것이 곧 과대 주장이다.
+
+    실측: 같은 두 모델에서 exact 축은 qwen(예산 543–563 vs 529–541), judge 축은
+    gemma(592–604 vs 534–554)가 앞섰다. exact 만 내면 독자는 "qwen 이 낫다"로
+    읽는다.
+    """
+
+    import importlib.util as _il
+
+    root = EXACT_PATH.parents[4]
+    spec = _il.spec_from_file_location("report_agent_axes_test", root / "report_agent_tracks.py")
+    module = _il.module_from_spec(spec)
+    _sys.path.insert(0, str(root))
+    try:
+        spec.loader.exec_module(module)
+    finally:
+        _sys.path.remove(str(root))
+
+    def cred(lo, hi):
+        return {
+            "claim_class": "repeatability_observed", "k": 3, "measured_items": 600,
+            "majority_passed": (lo + hi) // 2, "count_range": [lo, hi],
+            "unstable_items": [], "instability_envelope": [lo, hi],
+        }
+
+    text = "\n".join(module.render_claims({
+        "credentials": {},
+        "verdicts": [("gemma", "qwen", {"comparable": True, "winner": "right", "reason": "r1"})],
+        "judge_credentials": [],
+        "judge_verdicts": [("gemma", "qwen", {"comparable": True, "winner": "left", "reason": "r2"})],
+    }))
+    _assert("exact-match 축" in text, text)
+    _assert("judge 축" in text, text)
+    _assert("두 축의 승자가 다르다" in text, "축 불일치를 알리지 않으면 한쪽만 인용된다")
+
+
+def test_the_report_stays_quiet_when_both_axes_agree():
+    import importlib.util as _il
+
+    root = EXACT_PATH.parents[4]
+    spec = _il.spec_from_file_location("report_agent_axes_test2", root / "report_agent_tracks.py")
+    module = _il.module_from_spec(spec)
+    _sys.path.insert(0, str(root))
+    try:
+        spec.loader.exec_module(module)
+    finally:
+        _sys.path.remove(str(root))
+    text = "\n".join(module.render_claims({
+        "credentials": {},
+        "verdicts": [("gemma", "qwen", {"comparable": True, "winner": "right", "reason": "r1"})],
+        "judge_credentials": [],
+        "judge_verdicts": [("gemma", "qwen", {"comparable": True, "winner": "right", "reason": "r2"})],
+    }))
+    _assert("두 축의 승자가 다르다" not in text, "승자가 같은데 경고를 내면 경고가 무뎌진다")
+
+
 TESTS = [
+    test_the_report_publishes_verdicts_for_both_axes_and_flags_disagreement,
+    test_the_report_stays_quiet_when_both_axes_agree,
     test_a_timeout_that_never_fired_does_not_split_a_cohort,
     test_a_timeout_that_actually_fired_does_split_a_cohort,
     test_a_real_protocol_difference_still_splits_a_cohort,

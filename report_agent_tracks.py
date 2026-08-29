@@ -166,10 +166,24 @@ def collect_claims(base: Path) -> Dict[str, Any]:
             "credential": module.judge_credential(judge.get("records") or []),
             "provisional": (judge.get("judge") or {}).get("human_validation") == UNVALIDATED,
         })
+    # judge 축의 우열도 낸다. 내지 않으면 독자는 exact 축의 승자만 보고 "이 모델이
+    # 낫다"로 읽는다. 실측에서 두 축의 승자가 서로 달랐다 — exact 는 qwen,
+    # judge 는 gemma 가 앞섰다. 한쪽만 보이면 그것이 곧 과대 주장이 된다.
+    judge_verdicts = []
+    for i in range(len(judge_credentials)):
+        for j in range(i + 1, len(judge_credentials)):
+            left, right = judge_credentials[i], judge_credentials[j]
+            if left["model"] == right["model"]:
+                continue
+            judge_verdicts.append((
+                left["model"], right["model"],
+                comparable(left["credential"], right["credential"]),
+            ))
     return {
         "credentials": creds,
         "verdicts": verdicts,
         "judge_credentials": judge_credentials,
+        "judge_verdicts": judge_verdicts,
     }
 
 
@@ -218,6 +232,8 @@ def render_claims(claims: Dict[str, Any]) -> List[str]:
         out.append("")
     out.append("### 발행 가능한 우열 주장")
     out.append("")
+    out.append("**exact-match 축**")
+    out.append("")
     if not claims["verdicts"]:
         out.append("- 반복 관측된 코호트가 2개 미만이라 비교할 대상이 없다.")
     for left, right, verdict in claims["verdicts"]:
@@ -227,6 +243,33 @@ def render_claims(claims: Dict[str, Any]) -> List[str]:
         else:
             out.append(f"- `{left}` vs `{right}` — **발행 불가**: {verdict['reason']}")
     out.append("")
+    judge_verdicts = claims.get("judge_verdicts") or []
+    if judge_verdicts:
+        out.append("**judge 축** (판정기 기준, 인간 검증 없음)")
+        out.append("")
+        judge_winners = set()
+        for left, right, verdict in judge_verdicts:
+            if verdict["comparable"]:
+                winner = left if verdict["winner"] == "left" else right
+                judge_winners.add(winner)
+                out.append(f"- `{winner}` 우세 — {verdict['reason']}")
+            else:
+                out.append(f"- `{left}` vs `{right}` — **발행 불가**: {verdict['reason']}")
+        out.append("")
+        exact_winners = {
+            (left if verdict["winner"] == "left" else right)
+            for left, right, verdict in (claims.get("verdicts") or [])
+            if verdict["comparable"]
+        }
+        if exact_winners and judge_winners and exact_winners != judge_winners:
+            out.append(
+                f"> **두 축의 승자가 다르다** — exact: {', '.join(f'`{m}`' for m in sorted(exact_winners))} / "
+                f"judge: {', '.join(f'`{m}`' for m in sorted(judge_winners))}. "
+                "한 축만 인용하면 그 자체가 과대 주장이다. 두 축은 다른 채점기로 다른 것을 "
+                "재며, 어느 쪽이 '진짜'인지 이 데이터는 말하지 않는다."
+            )
+            out.append("")
+
     out.append(
         "> 가설검정이 아니다. 신뢰구간도 p-value 도 아니다. **관측된 불안정으로 "
         "설명이 끝나는 우열 주장을 거절하는 규칙**일 뿐이며, 거절되지 않았다고 "
