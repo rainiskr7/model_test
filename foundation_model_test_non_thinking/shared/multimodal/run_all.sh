@@ -62,7 +62,16 @@ if [ -n "${SKIP_BENCHES:-}" ]; then
   echo "[run_all] SKIP_BENCHES=$SKIP_BENCHES"
 fi
 
-# 가장 가벼운 것부터
+# 2026-07-20: KRETA 를 맨 앞으로 옮겼다(원래는 K-MMBench 다음, 5번째).
+#   이유 = 직전 런에서 KMMLU 가 chat-template 오염으로 폐기됐고, 같이 재실행하는
+#   KRETA(direct) 결과를 조기에 확인하기 위함. 원복하려면 이 블록을 아래
+#   K-MMBench 다음 자리로 되돌리면 된다.
+echo "=== KRETA (mode=${KRETA_SETTING:-default}) ==="
+# KRETA 프롬프트 모드: KRETA_SETTING env 로 override (기본 default).
+#   direct → 글자만 답(빠름, Spark/느린 HW 권장) / default → 추론 후 답.
+run_checked "KRETA" bash "$SCRIPT_DIR/run_kreta.sh" "$MODEL" "${KRETA_SETTING:-default}" "$BASE_URL"
+
+# 이하 가장 가벼운 것부터
 echo "=== K-DTCBench (240) ==="
 run_checked "K-DTCBench" bash "$SCRIPT_DIR/run_k_dtcbench.sh" "$MODEL" "$BASE_URL"
 
@@ -74,11 +83,6 @@ run_checked "MTVQA-KR" bash "$SCRIPT_DIR/run_mtvqa_kr.sh" "$MODEL" "$BASE_URL"
 
 echo "=== K-MMBench (4,329) ==="
 run_checked "K-MMBench" bash "$SCRIPT_DIR/run_k_mmbench.sh" "$MODEL" "$BASE_URL"
-
-echo "=== KRETA (mode=${KRETA_SETTING:-default}) ==="
-# KRETA 프롬프트 모드: KRETA_SETTING env 로 override (기본 default).
-#   direct → 글자만 답(빠름, Spark/느린 HW 권장) / default → 추론 후 답.
-run_checked "KRETA" bash "$SCRIPT_DIR/run_kreta.sh" "$MODEL" "${KRETA_SETTING:-default}" "$BASE_URL"
 
 # KO-VLM-Benchmark — stub (외부 코드 OpenAI-compat 미지원, 별도 작업 필요)
 echo "=== KO-VLM-Benchmark (stub — skip) ==="
