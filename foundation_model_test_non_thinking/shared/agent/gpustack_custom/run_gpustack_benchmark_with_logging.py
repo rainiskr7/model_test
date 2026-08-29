@@ -314,6 +314,42 @@ def simplify_result(result: Dict[str, Any]) -> Dict[str, Any]:
     return simplified
 
 
+def _decoding_provenance(max_tokens, temperature=0.0):
+    """요청한 디코딩 설정과 **실제로 보낸** 설정을 함께 남긴다.
+
+    어댑터(openai_compat_adapter)는 payload 를 serving.constraints.apply 로
+    통과시킨다. diffusion 백엔드에서는 그 과정에서 temperature 가 제거되고
+    max_tokens 가 상한으로 잘린다. 요청값만 적으면 산출물이 거짓을 말한다 —
+    커밋된 diffusiongemma 런이 `max_tokens: 16384` 이라고 적고 있는데 실제로
+    보낸 값은 4096 이다.
+
+    temperature 가 제거됐다는 것은 **결정론 제어가 없다**는 뜻이다. 그 런의 단일
+    숫자는 재현되지 않으며, 그 사실은 산출물에서 읽을 수 있어야 한다.
+    """
+
+    try:
+        from serving.constraints import effective_decoding
+    except Exception:
+        try:
+            _shared = Path(__file__).resolve().parents[2]
+            if str(_shared) not in sys.path:
+                sys.path.insert(0, str(_shared))
+            from serving.constraints import effective_decoding
+        except Exception:
+            return {"available": False}
+    requested, effective, constraints = effective_decoding(
+        temperature=temperature, max_tokens=max_tokens, seed=None
+    )
+    removed = list(constraints.get("removed_parameters") or [])
+    return {
+        "available": True,
+        "requested": requested,
+        "effective": effective,
+        "constraints": constraints,
+        "deterministic_controls": "temperature" not in removed,
+    }
+
+
 def save_detailed_results(
     results: List[Dict[str, Any]],
     model_name: str,
@@ -435,7 +471,10 @@ def save_detailed_results(
             "unparsed_tool_call_candidates": unparsed_tool_call_candidates,
             "request_timeout": request_timeout,
             "task_timeout": task_timeout,
+            # 요청값이다. 실제로 보낸 값은 decoding.effective 를 봐야 한다 —
+            # 서빙 제약이 이 값을 잘라낼 수 있다.
             "max_tokens": max_tokens,
+            "decoding": _decoding_provenance(max_tokens),
             "max_retries": max_retries,
             "openai_sdk_version": openai_sdk_version,
             "sdk_max_retries": sdk_max_retries,

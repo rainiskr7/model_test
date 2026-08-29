@@ -72,11 +72,17 @@ def _load_adapter_parse_class():
 def _load_save_detailed_results():
     """벤치 선택 의존성 없이 실제 artifact 저장 함수를 로드한다."""
     parsed = ast.parse(RUNNER_PATH.read_text(encoding="utf-8"), filename=str(RUNNER_PATH))
-    function = next(
+    # 디코딩 프로비넌스 헬퍼도 **실제 구현으로** 함께 로드한다. 스텁으로 때우면
+    # 산출물이 실제로 무엇을 기록하는지 이 테스트가 검증하지 못한다.
+    wanted = ("_decoding_provenance", "save_detailed_results")
+    functions = [
         node
         for node in parsed.body
-        if isinstance(node, ast.FunctionDef) and node.name == "save_detailed_results"
-    )
+        if isinstance(node, ast.FunctionDef) and node.name in wanted
+    ]
+    missing = set(wanted) - {node.name for node in functions}
+    if missing:
+        raise AssertionError(f"러너에서 함수를 찾지 못했다: {sorted(missing)}")
     namespace = {
         "Any": Any,
         "Dict": Dict,
@@ -86,13 +92,17 @@ def _load_save_detailed_results():
         "datetime": datetime,
         "json": json,
         "os": os,
+        "sys": sys,
+        # 실제 모듈과 같은 위치에서 실행되는 것처럼 만든다 — 헬퍼가 shared/ 를
+        # __file__ 기준으로 찾는다.
+        "__file__": str(RUNNER_PATH),
         "simplify_result": lambda result: dict(result),
         "build_observability_metadata": lambda _results: {
             "tasks_with_length_finish_reason": 0
         },
     }
     exec(
-        compile(ast.Module(body=[function], type_ignores=[]), str(RUNNER_PATH), "exec"),
+        compile(ast.Module(body=functions, type_ignores=[]), str(RUNNER_PATH), "exec"),
         namespace,
     )
     return namespace["save_detailed_results"]
@@ -265,6 +275,43 @@ def test_unparsed_candidate_counter_is_persisted_in_level_metadata():
     )
 
 
+def test_artifact_records_what_was_sent_not_only_what_was_asked():
+    """서빙 제약이 요청을 바꾸면 산출물이 그 사실을 말해야 한다.
+
+    커밋된 diffusiongemma 런이 `max_tokens: 16384` 이라고 적고 있는데, 그 런이
+    diffusion 엔드포인트에서 성공했다는 것 자체가 프로파일이 켜져 있었다는
+    증거다 — 켜지면 4096 으로 잘린다. 요청값만 적힌 산출물은 거짓을 말한다.
+    """
+
+    save_detailed_results = _load_save_detailed_results()
+    saved = {k: os.environ.get(k) for k in (
+        "SERVING_UNSUPPORTED_SAMPLING_PARAMS", "SERVING_MAX_OUTPUT_TOKENS")}
+    os.environ["SERVING_UNSUPPORTED_SAMPLING_PARAMS"] = "temperature,seed"
+    os.environ["SERVING_MAX_OUTPUT_TOKENS"] = "4096"
+    try:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = save_detailed_results(
+                [{}], "test/model", "L1", tmpdir, "test_timestamp",
+                unparsed_tool_call_candidates=0, request_timeout=60,
+                task_timeout=120, max_tokens=16384, max_retries=2,
+                openai_sdk_version="test", sdk_max_retries=0,
+            )
+            metadata = json.loads(Path(path).read_text(encoding="utf-8"))["metadata"]
+    finally:
+        for key, value in saved.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
+
+    decoding = metadata.get("decoding") or {}
+    _assert(decoding.get("available"), "디코딩 프로비넌스가 없다")
+    _assert(decoding["requested"]["max_tokens"] == 16384, decoding)
+    _assert(decoding["effective"]["max_tokens"] == 4096, "실제로 보낸 값이 기록돼야 한다")
+    # 이 한 줄이 결론이다 — 이 런의 단일 숫자는 재현되지 않는다.
+    _assert(decoding["deterministic_controls"] is False, decoding)
+
+
 def test_unparsed_candidate_counter_is_wired_from_adapter_to_artifact():
     adapter_tree = ast.parse(
         ADAPTER_PATH.read_text(encoding="utf-8"), filename=str(ADAPTER_PATH)
@@ -416,6 +463,7 @@ TESTS = [
     test_truncated_text_forms_are_unparsed_candidates,
     test_ordinary_prose_is_not_unparsed_candidate,
     test_unparsed_candidate_counter_is_persisted_in_level_metadata,
+    test_artifact_records_what_was_sent_not_only_what_was_asked,
     test_unparsed_candidate_counter_is_wired_from_adapter_to_artifact,
     test_broken_json_warns_without_raising,
     test_missing_name_is_skipped,

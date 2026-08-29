@@ -269,6 +269,54 @@ def _preflight_model(adapter: Any, model: str, request_timeout: float) -> None:
     print(f"[functionchat] preflight OK: MODEL={model}")
 
 
+def _load_effective_decoding():
+    """shared/serving/constraints.effective_decoding 로드 (없으면 no-op)."""
+
+    shared_dir = Path(__file__).resolve().parents[2]
+    module_path = shared_dir / "serving" / "constraints.py"
+    if not module_path.is_file():
+        return None
+    added = str(shared_dir) not in sys.path
+    if added:
+        sys.path.insert(0, str(shared_dir))
+    try:
+        from serving.constraints import effective_decoding  # noqa: PLC0415
+
+        return effective_decoding
+    except Exception:
+        return None
+
+
+def _decoding_provenance(args: argparse.Namespace) -> Dict[str, Any]:
+    """요청한 디코딩 설정과 **실제로 보낸** 설정을 함께 남긴다.
+
+    어댑터는 payload 를 shared/serving/constraints.apply 로 통과시킨다. diffusion
+    백엔드에서는 그 과정에서 temperature 가 제거되고 max_tokens 가 상한으로 잘린다.
+    요청값만 적으면 산출물이 거짓을 말한다 — 실제로 커밋된 diffusiongemma 런이
+    `max_tokens: 16384` 이라고 적고 있는데 보낸 값은 4096 이다.
+
+    temperature 가 제거됐다는 것은 **결정론 제어가 없다**는 뜻이기도 하다. 그 런의
+    단일 숫자는 재현되지 않으며, 그 사실은 산출물에서 읽을 수 있어야 한다.
+    """
+
+    effective_decoding = _load_effective_decoding()
+    if effective_decoding is None:
+        return {"available": False}
+    requested, effective, constraints = effective_decoding(
+        temperature=0.0, max_tokens=args.max_tokens, seed=None
+    )
+    removed = list(constraints.get("removed_parameters") or [])
+    return {
+        "available": True,
+        "requested": requested,
+        "effective": effective,
+        "constraints": constraints,
+        # 이 한 줄이 결론이다. False 면 반복 실행이 달라지는 것이 정상이고,
+        # 단일 런 숫자를 인용하면 안 된다.
+        "deterministic_controls": "temperature" not in removed,
+    }
+
+
 def _metadata(args: argparse.Namespace, adapter: Any, dataset: str) -> Dict[str, Any]:
     return {
         "timestamp": datetime.now().isoformat(),
@@ -277,7 +325,10 @@ def _metadata(args: argparse.Namespace, adapter: Any, dataset: str) -> Dict[str,
         "request_timeout": args.request_timeout,
         "task_timeout": args.task_timeout,
         "max_retries": args.max_retries,
+        # 요청값이다. 실제로 보낸 값은 아래 decoding.effective 를 봐야 한다 —
+        # 서빙 제약이 이 값을 잘라낼 수 있다.
         "max_tokens": args.max_tokens,
+        "decoding": _decoding_provenance(args),
         "native_tool_calling": args.native_tool_calling,
         "sdk_max_retries": adapter.sdk_max_retries,
         "openai_sdk_version": adapter.openai_sdk_version,

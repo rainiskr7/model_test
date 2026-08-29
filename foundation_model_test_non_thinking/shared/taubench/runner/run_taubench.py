@@ -69,6 +69,44 @@ def litellm_model_name(model: str) -> str:
     return model if "/" in model else f"openai/{model}"
 
 
+def _unsupported_sampling_params() -> list[str]:
+    """서빙 백엔드가 거부하는 sampling 파라미터. 미설정이면 빈 목록."""
+
+    shared_dir = Path(__file__).resolve().parents[2]
+    if str(shared_dir) not in sys.path:
+        sys.path.insert(0, str(shared_dir))
+    try:
+        from serving.constraints import unsupported_sampling_params
+
+        return sorted(unsupported_sampling_params())
+    except Exception:
+        return []
+
+
+def apply_user_serving_constraints(user_llm_args: dict) -> list[str]:
+    """로컬 엔드포인트로 가는 사용자 시뮬레이터 인자에서 거부 파라미터를 뺀다.
+
+    후보에는 temperature 를 보내지 않지만(`temperature_sent: False`) 사용자
+    시뮬레이터에는 상류 기본값을 지키려고 temperature=0.0 을 넣는다. 그런데
+    ``user_model`` 에 provider 접두사가 없으면 외부로 분류되지 않아 ``api_base``
+    가 로컬 서빙 주소로 남는다. 그 백엔드가 diffusion 이면 **매 사용자 턴이 400**
+    이다 — 실측 응답: "The temperature, min_p, seed, ... are not yet supported
+    with diffusion models."
+
+    외부 엔드포인트로 가는 경우(api_base 가 제거된 경우)에는 건드리지 않는다.
+    그쪽 제약은 이 프로파일이 말하는 대상이 아니다.
+    """
+
+    if not user_llm_args.get("api_base"):
+        return []
+    removed = [
+        name for name in _unsupported_sampling_params() if name in user_llm_args
+    ]
+    for name in removed:
+        user_llm_args.pop(name, None)
+    return removed
+
+
 def build_litellm_args(
     api_base: str, request_timeout: float, max_tokens: int
 ) -> dict[str, Any]:
@@ -491,6 +529,20 @@ def main(argv: Optional[list[str]] = None) -> int:
                     )
                 # litellm 이 읽을 자리에 옮겨 담는다. 자식 프로세스 env 로만 전달된다.
                 os.environ.setdefault("OPENROUTER_API_KEY", user_api_key)
+        # 엔드포인트가 정해진 **뒤에** 적용한다 — 로컬로 가는지 외부로 가는지
+        # 알아야 어느 제약을 걸지 정할 수 있다.
+        user_removed_params = (
+            apply_user_serving_constraints(user_llm_args)
+            if args.mode == "standard"
+            else []
+        )
+        if user_removed_params:
+            print(
+                "[taubench] 사용자 시뮬레이터 인자에서 서빙 백엔드가 거부하는 "
+                f"파라미터를 제거했다: {', '.join(user_removed_params)}",
+                file=sys.stderr,
+            )
+
         manifest: dict[str, Any] = {
             "status": "running",
             "model": args.model,
@@ -557,8 +609,18 @@ def main(argv: Optional[list[str]] = None) -> int:
                 "litellm_num_retries": 0,
                 "max_tokens": args.max_tokens,
                 "temperature_sent": False,
+                # 후보 경로에는 여전히 프로파일을 적용하지 않는다(temperature 를
+                # 애초에 보내지 않으므로 diffusion 에서도 400 이 나지 않는다).
+                # 사용자 시뮬레이터 경로는 다르다 — 아래에 실제로 무엇을 뺐는지
+                # 남긴다. 비어 있으면 뺀 것이 없다는 뜻이고, 값이 있으면 그 런은
+                # **결정론 제어 없이** 돌았다는 뜻이다.
                 "serving_profile_applied": False,
                 "serving_profile_observable": False,
+                "user_removed_sampling_params": user_removed_params,
+                "user_decoding_controlled": (
+                    None if args.mode == "solo"
+                    else "temperature" not in user_removed_params
+                ),
                 "max_concurrency": args.max_concurrency,
                 "max_steps": args.max_steps,
                 "tau2_version": _package_version("tau2"),

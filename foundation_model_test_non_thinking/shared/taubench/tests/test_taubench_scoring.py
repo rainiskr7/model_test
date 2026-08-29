@@ -932,5 +932,38 @@ class TestReportStrict(unittest.TestCase):
             self.assertIn("JSONDecodeError", unreadable[0]["reason"])
 
 
+class UserSimulatorServingConstraints(unittest.TestCase):
+    """diffusion 백엔드는 temperature 를 400 으로 거부한다."""
+
+    def test_a_local_user_simulator_drops_the_rejected_parameter(self):
+        # user_model 에 provider 접두사가 없으면 외부로 분류되지 않아 api_base 가
+        # 로컬로 남는다. 그대로 두면 매 사용자 턴이 400 이다.
+        args = {"api_base": "http://local:18023/v1", "temperature": 0.0, "max_tokens": 512}
+        with mock.patch.dict(
+            os.environ, {"SERVING_UNSUPPORTED_SAMPLING_PARAMS": "temperature,seed"}
+        ):
+            removed = runner.apply_user_serving_constraints(args)
+        self.assertEqual(removed, ["temperature"])
+        self.assertNotIn("temperature", args)
+        self.assertEqual(args["max_tokens"], 512, "관계없는 인자를 건드리면 안 된다")
+
+    def test_an_external_user_simulator_is_left_alone(self):
+        # 외부 엔드포인트의 제약은 이 프로파일이 말하는 대상이 아니다.
+        args = {"temperature": 0.0}
+        with mock.patch.dict(
+            os.environ, {"SERVING_UNSUPPORTED_SAMPLING_PARAMS": "temperature"}
+        ):
+            removed = runner.apply_user_serving_constraints(args)
+        self.assertEqual(removed, [])
+        self.assertEqual(args["temperature"], 0.0)
+
+    def test_an_unconstrained_backend_keeps_temperature(self):
+        args = {"api_base": "http://local:18023/v1", "temperature": 0.0}
+        with mock.patch.dict(os.environ, {"SERVING_UNSUPPORTED_SAMPLING_PARAMS": ""}):
+            removed = runner.apply_user_serving_constraints(args)
+        self.assertEqual(removed, [])
+        self.assertEqual(args["temperature"], 0.0)
+
+
 if __name__ == "__main__":
     unittest.main()

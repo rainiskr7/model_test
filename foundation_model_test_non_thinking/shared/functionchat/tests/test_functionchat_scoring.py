@@ -600,7 +600,95 @@ def test_repro_reports_which_dataset_file_could_not_be_read():
     _assert("읽지 못한 산출물" in report["reason"], report["reason"])
 
 
+def test_decoding_provenance_records_what_was_sent_not_what_was_asked():
+    """요청값만 적으면 산출물이 거짓을 말한다.
+
+    실제로 커밋된 diffusiongemma agent 런이 `max_tokens: 16384` 이라고 적고 있는데,
+    그 런이 diffusion 엔드포인트에서 성공했다는 것 자체가 서빙 프로파일이 켜져
+    있었다는 증거다 — 프로파일이 켜지면 4096 으로 잘린다.
+    """
+
+    import argparse
+    import os
+
+    runner_mod = _load(
+        "functionchat_runner_under_test",
+        EXACT_PATH.parent.parent / "runner" / "run_functionchat.py",
+    )
+    saved = {k: os.environ.get(k) for k in (
+        "SERVING_UNSUPPORTED_SAMPLING_PARAMS", "SERVING_MAX_OUTPUT_TOKENS")}
+    os.environ["SERVING_UNSUPPORTED_SAMPLING_PARAMS"] = "temperature,seed"
+    os.environ["SERVING_MAX_OUTPUT_TOKENS"] = "4096"
+    try:
+        got = runner_mod._decoding_provenance(argparse.Namespace(max_tokens=16384))
+    finally:
+        for key, value in saved.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
+
+    _assert(got["available"], got)
+    _assert(got["requested"]["max_tokens"] == 16384, got)
+    _assert(got["effective"]["max_tokens"] == 4096, "실제로 보낸 값이 기록돼야 한다")
+    _assert(got["effective"]["temperature"] is None, "제거된 파라미터는 None 이어야 한다")
+    # 이 한 줄이 결론이다 — 이 런의 단일 숫자는 재현되지 않는다.
+    _assert(got["deterministic_controls"] is False, got)
+
+
+def test_decoding_provenance_says_controlled_when_nothing_is_removed():
+    import argparse
+    import os
+
+    runner_mod = _load(
+        "functionchat_runner_under_test2",
+        EXACT_PATH.parent.parent / "runner" / "run_functionchat.py",
+    )
+    saved = os.environ.pop("SERVING_UNSUPPORTED_SAMPLING_PARAMS", None)
+    try:
+        got = runner_mod._decoding_provenance(argparse.Namespace(max_tokens=16384))
+    finally:
+        if saved is not None:
+            os.environ["SERVING_UNSUPPORTED_SAMPLING_PARAMS"] = saved
+    _assert(got["deterministic_controls"] is True, got)
+    _assert(got["effective"]["temperature"] == 0.0, got)
+
+
+def test_reproducibility_distinguishes_structural_drift_from_chance():
+    """결정론 제어가 없으면 흔들림은 모델 결함이 아니다."""
+
+    runs = [
+        {"session": "s1", "model": "d", "scoring_version": "v1", "publishable": True,
+         "items": {"a": True, "b": False}, "decoding_controlled": False,
+         "removed_sampling_params": ["temperature"]},
+        {"session": "s2", "model": "d", "scoring_version": "v1", "publishable": True,
+         "items": {"a": False, "b": True}, "decoding_controlled": False,
+         "removed_sampling_params": ["temperature"]},
+    ]
+    report = repro.reproducibility_report(runs)
+    entry = next(e for e in report if e["model"] == "d")
+    _assert(entry["status"] == "DIVERGED", entry)
+    _assert(entry["decoding_controlled"] is False, entry)
+    _assert("temperature" in entry["removed_sampling_params"], entry)
+
+
+def test_reproducibility_does_not_claim_control_for_pre_provenance_runs():
+    # 디코딩 기록이 없는 예전 산출물을 "제어됐다" 로 단정하면 안 된다.
+    runs = [
+        {"session": "s1", "model": "q", "scoring_version": "v1", "publishable": True,
+         "items": {"a": True}, "decoding_controlled": None},
+        {"session": "s2", "model": "q", "scoring_version": "v1", "publishable": True,
+         "items": {"a": True}, "decoding_controlled": None},
+    ]
+    entry = next(e for e in repro.reproducibility_report(runs) if e["model"] == "q")
+    _assert(entry["decoding_controlled"] is None, entry)
+
+
 TESTS = [
+    test_decoding_provenance_records_what_was_sent_not_what_was_asked,
+    test_decoding_provenance_says_controlled_when_nothing_is_removed,
+    test_reproducibility_distinguishes_structural_drift_from_chance,
+    test_reproducibility_does_not_claim_control_for_pre_provenance_runs,
     test_served_identity_resets_between_runs_and_merges_a_retry,
     test_repro_says_coverage_differed_instead_of_just_unverified,
     test_repro_reports_which_dataset_file_could_not_be_read,
