@@ -124,7 +124,23 @@ def render_markdown(summaries: list[dict[str, Any]], folded: list[dict[str, Any]
 
     published = [summary for summary in summaries if summary["publish_status"]["publishable"]]
     rejected = [summary for summary in summaries if not summary["publish_status"]["publishable"]]
-    ordered = sorted(published, key=lambda summary: -(summary["macro"]["accuracy"] or 0))
+    # **프롬프트 프로토콜이 다르면 같은 표에 정렬하지 않는다.** 러너 기본값은
+    # `--apply_chat_template` 이고, 채팅 템플릿을 씌운 프롬프트와 raw 프롬프트는
+    # 같은 문항이라도 다른 시험이다. 실측: 18런 중 4런이 미적용이며, 그중 2런이
+    # 적용 런들과 한 표에 정렬돼 2위·4위를 차지하고 있었다. 커버리지 미달이나
+    # n-shot 혼재와 같은 종류의 문제인데 정렬만으로는 드러나지 않는다.
+    def _chat_applied(summary):
+        values = summary["protocol"].get("chat_template_applied") or []
+        return values == [True]
+
+    ordered = sorted(
+        [s for s in published if _chat_applied(s)],
+        key=lambda summary: -(summary["macro"]["accuracy"] or 0),
+    )
+    other_protocol = sorted(
+        [s for s in published if not _chat_applied(s)],
+        key=lambda summary: -(summary["macro"]["accuracy"] or 0),
+    )
     out = ["# KMMLU (lm-eval-harness, 5-shot)", ""]
     out.append("**공식 점수는 45과목 5-shot macro 하나다.** 문항가중은 보조 수치이며 KMMLU 점수의 헤드라인·정렬에 쓰지 않는다.")
     out.append("")
@@ -143,8 +159,34 @@ def render_markdown(summaries: list[dict[str, Any]], folded: list[dict[str, Any]
             )
         out.extend(["", "macro의 ±는 **과목 간 표준오차**이고 문항가중의 ±는 **문항 표집 이항 표준오차**다. lm-eval `acc_stderr`를 평균한 값이 아니며, 어느 쪽도 재실행 재현성이 아니다.", ""])
 
+        if other_protocol:
+            out.append("### 다른 프롬프트 프로토콜로 돌린 런")
+            out.append("")
+            out.append(
+                "아래 런은 `--apply_chat_template` **없이** 돌았다(러너 기본값은 적용). "
+                "채팅 템플릿을 씌운 프롬프트와 raw 프롬프트는 같은 문항이라도 다른 "
+                "시험이므로 **위 표와 같은 축에 놓을 수 없다.** 무효라는 뜻은 아니다 — "
+                "다른 조건의 측정이다."
+            )
+            out.append("")
+            out.extend([
+                "| 모델 | 세션 | macro (과목 간) | 보조: 문항가중 | 과목 | 문항 |",
+                "|---|---|---|---|---|---|",
+            ])
+            for summary in other_protocol:
+                out.append(
+                    f"| `{summary['model']}` | `{summary['session']}` | "
+                    f"{_pm(summary['macro']['accuracy'], summary['macro']['stderr'])} | "
+                    f"{_pm(summary['micro']['accuracy'], summary['micro']['stderr'])} | "
+                    f"{summary['macro']['subjects']}/{summary['coverage']['expected_subjects']} | "
+                    f"{summary['micro']['items']:,} |"
+                )
+            out.append("")
+
         # 채점기가 경고를 내도 보고가 렌더링하지 않으면 독자에게는 없는 것과 같다.
-        warned = [s for s in ordered if s["publish_status"]["warnings"]]
+        # 두 표 모두를 대상으로 한다. 주 표만 보면 다른 프로토콜 런의 경고가
+        # 조용히 사라진다.
+        warned = [s for s in ordered + other_protocol if s["publish_status"]["warnings"]]
         if warned:
             out.append("### 발행하되 감사할 수 없는 것")
             out.append("")

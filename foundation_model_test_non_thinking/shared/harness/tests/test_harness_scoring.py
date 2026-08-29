@@ -144,6 +144,62 @@ class ReportNeverPlacesRejectedRunInPrimaryTable(unittest.TestCase):
         self.assertNotIn("| `model` | `s` |", text)
 
 
+class ADifferentPromptProtocolIsADifferentExam(unittest.TestCase):
+    """`--apply_chat_template` 유무는 기록 누락이 아니라 다른 시험이다.
+
+    lm-eval 은 템플릿을 적용했을 때만 `chat_template` 원문과 그 sha 를 남긴다.
+    실측: 18런 중 4런이 미적용이고, 그중 2런이 적용 런들과 한 표에 정렬돼 2위·4위를
+    차지하고 있었다. 커버리지 미달이나 n-shot 혼재와 같은 종류인데 정렬만으로는
+    드러나지 않는다.
+    """
+
+    def _summary(self, tmp, model, applied):
+        payloads = {}
+        for task in ("a", "b"):
+            payload = artifact(task, 0.8, model_name=model)
+            if applied:
+                payload["chat_template"] = "{{ messages }}"
+                payload["chat_template_sha"] = "sha256:abc"
+            payloads[task] = payload
+        return scorer.score_run(write_run(tmp, model, "s", payloads), ["a", "b"])
+
+    def test_the_protocol_records_whether_the_template_was_applied(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            on = self._summary(tmp, "m1", True)
+            off = self._summary(tmp, "m2", False)
+        self.assertEqual(on["protocol"]["chat_template_applied"], [True])
+        self.assertEqual(off["protocol"]["chat_template_applied"], [False])
+
+    def test_both_remain_publishable_because_neither_is_invalid(self):
+        # 템플릿 미적용은 러너의 다른 모드일 뿐 무효가 아니다.
+        with tempfile.TemporaryDirectory() as tmp:
+            off = self._summary(tmp, "m2", False)
+        self.assertTrue(off["publish_status"]["publishable"], off["publish_status"]["failures"])
+
+    def test_the_report_does_not_sort_the_two_protocols_into_one_table(self):
+        report = load_module("report_harness_protocol_test", REPO_ROOT / "report_harness_tracks.py")
+        with tempfile.TemporaryDirectory() as tmp:
+            on = self._summary(tmp, "with_template", True)
+            off = self._summary(tmp, "no_template", False)
+            with contextlib.redirect_stderr(io.StringIO()):
+                text = report.render_markdown([on, off], [], scorer, HARNESS_DIR.parents[1])
+        self.assertIn("다른 프롬프트 프로토콜로 돌린 런", text)
+        head, _, tail = text.partition("### 다른 프롬프트 프로토콜로 돌린 런")
+        self.assertIn("`with_template`", head, "적용 런은 주 표에 있어야 한다")
+        self.assertNotIn("`no_template`", head, "미적용 런이 주 표에 섞였다")
+        self.assertIn("`no_template`", tail)
+
+    def test_a_missing_template_sha_is_not_double_reported_as_a_gap(self):
+        # 미적용이면 sha 가 없는 것이 당연하다. 그것을 "기록 누락"으로도 경고하면
+        # 같은 사실이 두 번, 서로 다른 뜻으로 보고된다.
+        with tempfile.TemporaryDirectory() as tmp:
+            off = self._summary(tmp, "m2", False)
+        self.assertFalse(
+            any("chat_template_sha" in w for w in off["publish_status"]["warnings"]),
+            off["publish_status"]["warnings"],
+        )
+
+
 class MissingProvenanceIsNotEvidenceOfSameness(unittest.TestCase):
     """필드가 통째로 없는 것과 값이 일치하는 것은 다르다.
 
@@ -158,6 +214,10 @@ class MissingProvenanceIsNotEvidenceOfSameness(unittest.TestCase):
         payloads = {}
         for task in ("a", "b"):
             payload = artifact(task, 0.8)
+            # 템플릿은 적용된 상태로 둔다 — 이 클래스가 보려는 것은 "프로토콜이
+            # 다르다"가 아니라 "기록이 비어 있다"이다.
+            payload["chat_template"] = "{{ messages }}"
+            payload["chat_template_sha"] = "sha256:abc"
             payload.update(overrides)
             payloads[task] = payload
         run = write_run(tmp, "m", "s", payloads)
@@ -165,19 +225,19 @@ class MissingProvenanceIsNotEvidenceOfSameness(unittest.TestCase):
 
     def test_a_wholly_absent_protocol_field_warns_but_does_not_block(self):
         with tempfile.TemporaryDirectory() as tmp:
-            summary = self._summary(tmp, chat_template_sha=None)
+            summary = self._summary(tmp, max_length=None)
         status = summary["publish_status"]
         self.assertTrue(status["publishable"], status["failures"])
         self.assertTrue(
-            any("chat_template_sha" in w and "감사할 수 없다" in w for w in status["warnings"]),
+            any("max_length" in w and "감사할 수 없다" in w for w in status["warnings"]),
             status["warnings"],
         )
 
     def test_a_recorded_field_produces_no_such_warning(self):
         with tempfile.TemporaryDirectory() as tmp:
-            summary = self._summary(tmp, chat_template_sha="sha256:abc")
+            summary = self._summary(tmp, max_length=4095)
         self.assertFalse(
-            any("chat_template_sha" in w for w in summary["publish_status"]["warnings"]),
+            any("max_length" in w for w in summary["publish_status"]["warnings"]),
             summary["publish_status"]["warnings"],
         )
 
@@ -186,7 +246,7 @@ class MissingProvenanceIsNotEvidenceOfSameness(unittest.TestCase):
         # 건너뛰고 산출물을 직접 읽는다 — 게이트가 무력해진다.
         report = load_module("report_harness_degrade_test", REPO_ROOT / "report_harness_tracks.py")
         with tempfile.TemporaryDirectory() as tmp:
-            summary = self._summary(tmp, chat_template_sha="sha256:abc")
+            summary = self._summary(tmp, max_length=4095)
             with contextlib.redirect_stderr(io.StringIO()):
                 text = report.render_markdown([summary], [], scorer, Path(tmp))
         self.assertIn("KMMLU", text, "클레임을 못 읽어도 표는 나와야 한다")
@@ -195,11 +255,11 @@ class MissingProvenanceIsNotEvidenceOfSameness(unittest.TestCase):
         # 채점기가 경고를 내도 보고가 렌더링하지 않으면 독자에게는 없는 것과 같다.
         report = load_module("report_harness_warn_test", REPO_ROOT / "report_harness_tracks.py")
         with tempfile.TemporaryDirectory() as tmp:
-            summary = self._summary(tmp, chat_template_sha=None)
+            summary = self._summary(tmp, max_length=None)
             # base 는 실제 저장소여야 claims 계층을 찾는다.
             text = report.render_markdown([summary], [], scorer, HARNESS_DIR.parents[1])
         self.assertIn("발행하되 감사할 수 없는 것", text)
-        self.assertIn("chat_template_sha", text)
+        self.assertIn("max_length", text)
 
 
 if __name__ == "__main__":

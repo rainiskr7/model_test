@@ -21,7 +21,7 @@ HARNESS_DIR = Path(__file__).resolve().parent.parent
 METRIC_KEY = "acc,none"
 PROTOCOL_FIELDS = (
     "n_shot", "task_version", "lm_eval_version", "config_model", "max_length",
-    "chat_template_sha", "metric_key", "model_name",
+    "chat_template_sha", "chat_template_applied", "metric_key", "model_name",
 )
 
 
@@ -57,6 +57,11 @@ def _subject(payload: Mapping[str, Any], task: str, result: Mapping[str, Any], f
 
     samples = (payload.get("n-samples") or {}).get(task) or {}
     configured = payload.get("config") or {}
+    # `--apply_chat_template` 을 썼는지. lm-eval 은 적용했을 때만 chat_template
+    # 원문과 그 sha 를 남긴다. 이것은 **기록 누락이 아니라 다른 프로토콜**이다 —
+    # 같은 문항이라도 채팅 템플릿을 씌운 프롬프트와 raw 프롬프트는 다른 시험이다.
+    # 실측: 18런 중 4런이 미적용이고, 그중 2런이 적용 런들과 같은 표에 정렬돼 있었다.
+    chat_template_applied = bool(payload.get("chat_template"))
     declared_name = payload.get("model_name")
     return {
         "task": task,
@@ -71,6 +76,7 @@ def _subject(payload: Mapping[str, Any], task: str, result: Mapping[str, Any], f
         "config_model": configured.get("model"),
         "max_length": payload.get("max_length"),
         "chat_template_sha": payload.get("chat_template_sha"),
+        "chat_template_applied": chat_template_applied,
         "metric_key": METRIC_KEY if METRIC_KEY in result else None,
         "model_name": fallback if declared_name is None else declared_name,
         "model_name_fallback": declared_name is None,
@@ -248,6 +254,10 @@ def validate_summary(summary: Mapping[str, Any]) -> tuple[list[str], list[str]]:
     # 실측: chat_template_sha 가 통째로 없는 런이 4개이고 그중 2개가 표에 실린다.
     # 이 세션 내내 지킨 규율과 같다 — 기록의 부재를 같음의 증거로 쓰지 않는다.
     for field in PROTOCOL_FIELDS:
+        # chat_template_sha 의 부재는 기록 누락이 아니라 템플릿 미적용이라는 사실이다.
+        # 그것은 chat_template_applied 가 이미 말하므로 여기서 중복 경고하지 않는다.
+        if field == "chat_template_sha":
+            continue
         values = summary["protocol"].get(field) or []
         if values and all(value is None for value in values):
             warnings.append(
