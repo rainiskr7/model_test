@@ -329,6 +329,9 @@ def _metadata(args: argparse.Namespace, adapter: Any, dataset: str) -> Dict[str,
         # 서빙 제약이 이 값을 잘라낼 수 있다.
         "max_tokens": args.max_tokens,
         "decoding": _decoding_provenance(args),
+        # None 이면 전량이다. 값이 있으면 부분 실행이고, 채점기가 발행을 막는다.
+        # 산출물이 스스로 말하지 않으면 나중에 구분할 방법이 없다.
+        "subset_limit": args.limit,
         "native_tool_calling": args.native_tool_calling,
         "sdk_max_retries": adapter.sdk_max_retries,
         "openai_sdk_version": adapter.openai_sdk_version,
@@ -404,6 +407,16 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     parser.add_argument("--max-retries", type=int, default=2)
     parser.add_argument("--max-tokens", type=int, default=16384)
     parser.add_argument(
+        "--limit",
+        type=int,
+        default=None,
+        help=(
+            "데이터셋마다 앞에서 N 항목만 실행한다 (진단 전용). "
+            "이렇게 만든 산출물은 발행 불가로 표시된다 — 전량 런의 점수와 같은 "
+            "축에 놓을 수 없다."
+        ),
+    )
+    parser.add_argument(
         "--native-tool-calling",
         action="store_true",
         default=_env_flag("AGENT_NATIVE_TOOL_CALLING"),
@@ -420,6 +433,8 @@ def _validate_args(args: argparse.Namespace) -> None:
         raise ValueError("max retries must be at least 1")
     if args.max_tokens < 1:
         raise ValueError("max tokens must be at least 1")
+    if args.limit is not None and args.limit < 1:
+        raise ValueError("limit must be at least 1")
 
 
 def main(argv: Optional[List[str]] = None) -> int:
@@ -458,6 +473,19 @@ def main(argv: Optional[List[str]] = None) -> int:
                 data_dir / "FunctionChat-Dialog.jsonl", system_prompt
             ),
         }
+        if args.limit is not None:
+            # 무작위 표본이 아니라 앞에서 N 개다. 두 런이 같은 항목을 덮어야
+            # 항목 단위로 대조할 수 있다 — 표본이 다르면 재현성이 아니라 다른
+            # 측정을 비교하는 것이 된다.
+            datasets = {
+                name: items[: args.limit] for name, items in datasets.items()
+            }
+            print(
+                f"[functionchat] --limit {args.limit}: 데이터셋마다 앞 {args.limit}항목만 "
+                "실행한다. 이 산출물은 발행 대상이 아니다.",
+                file=sys.stderr,
+            )
+
         timestamp = _timestamp(base_dir)
         results_dir = (
             base_dir

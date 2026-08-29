@@ -118,6 +118,22 @@ def _identity(value: Any) -> str:
     return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
 
 
+def _nonzero(counts: Mapping[str, Any]) -> Dict[str, Any]:
+    """0 인 항목을 지운 사본.
+
+    선언 쪽(coverage)은 유형을 열거하며 0 도 명시하는데, 관측 쪽은 항목이 없으면
+    키 자체가 생기지 않는다. 그대로 비교하면 ``{'relevance': 0}`` 과 ``{}`` 가
+    다르다고 판정돼, 실제로는 일치하는 커버리지가 불일치로 죽는다. 어떤 유형이
+    한 건도 없는 산출물에서 항상 터진다.
+
+    0 을 지우고 비교해도 교차검증은 그대로다 — 0 이 아닌 값의 불일치는 여전히
+    잡힌다. 이것이 잡으려던 결함(러너가 시나리오 수 45 를 항목 수 130 대신 적던
+    것)은 0 이 아닌 값의 불일치였다.
+    """
+
+    return {key: value for key, value in (counts or {}).items() if value}
+
+
 def _shared_integrity(raw_by_dataset: Mapping[str, Mapping[str, Any]]) -> Dict[str, Any]:
     metadata = {
         name: dict(data.get("metadata") or {}) for name, data in raw_by_dataset.items()
@@ -144,6 +160,15 @@ def build_summary(
 
     present = [name for name in RAW_DATASETS if name in raw_by_dataset]
     integrity = _shared_integrity(raw_by_dataset)
+    # 부분 실행 표시. INTEGRITY_FIELDS 에는 넣지 않는다 — 넣으면 이 필드가 없는
+    # 기존 산출물이 전부 "metadata.subset_limit missing" 으로 죽는다.
+    subset_limits = {
+        name: (raw_by_dataset[name].get("metadata") or {}).get("subset_limit")
+        for name in present
+    }
+    subset_limit = next(
+        (value for value in subset_limits.values() if value is not None), None
+    )
     by_dataset = {
         name: score_items(raw_by_dataset[name].get("results") or [])
         for name in present
@@ -155,7 +180,7 @@ def build_summary(
     declared_not_measured = coverage.get("not_measured") or {}
     decision_declared = dict(declared_not_measured.get("call_decision") or {})
     decision_observed = by_dataset["call_decision"]["not_measured"]
-    if decision_declared != decision_observed:
+    if _nonzero(decision_declared) != _nonzero(decision_observed):
         raise ValueError(
             "CallDecision not-measured counts disagree: "
             f"coverage={decision_declared}, raw={decision_observed}"
@@ -166,7 +191,7 @@ def build_summary(
     # 45 로 집계돼 total_items 가 551(실제 636)로 발행됐다.
     if "dialog" in by_dataset:
         dialog_observed = by_dataset["dialog"]["not_measured"]
-        if dialog_declared != dialog_observed:
+        if _nonzero(dialog_declared) != _nonzero(dialog_observed):
             raise ValueError(
                 "Dialog not-measured counts disagree: "
                 f"coverage={dialog_declared}, raw={dialog_observed}"
@@ -183,6 +208,8 @@ def build_summary(
         ),
         "native_tool_calling": integrity["native_tool_calling"],
         "harness_integrity": integrity,
+        # None 이면 전량. 값이 있으면 진단용 부분 실행이며 발행 대상이 아니다.
+        "subset_limit": subset_limit,
         "overall": {
             "accuracy": passed / measured if measured else None,
             "measured": measured,
@@ -272,6 +299,14 @@ def validate_summary(summary: dict) -> tuple:
     """
     failures = []
     warnings = []
+
+    if summary.get("subset_limit") is not None:
+        # 부분 실행은 진단용이다. 전량 런의 점수와 같은 축에 놓으면 표본 크기가
+        # 사라진 수를 비교하게 된다. 산출물은 남기되 발행은 막는다.
+        failures.append(
+            f"부분 실행 산출물이다 (--limit {summary['subset_limit']}) — "
+            "전량 런의 점수와 같은 축에 놓을 수 없다"
+        )
 
     overall = summary.get("overall") or {}
     measured = overall.get("measured")

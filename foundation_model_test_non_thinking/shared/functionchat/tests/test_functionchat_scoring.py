@@ -684,7 +684,60 @@ def test_reproducibility_does_not_claim_control_for_pre_provenance_runs():
     _assert(entry["decoding_controlled"] is None, entry)
 
 
+def test_a_subset_run_is_never_publishable():
+    """부분 실행은 진단용이다 — 전량 런과 같은 축에 놓으면 표본 크기가 사라진다."""
+
+    failures, _ = score.validate_summary({
+        "subset_limit": 5,
+        "overall": {"measured": 10, "passed": 8, "failed": 2},
+    })
+    _assert(any("부분 실행" in f for f in failures), failures)
+
+
+def test_a_full_run_is_not_blocked_by_the_subset_gate():
+    failures, _ = score.validate_summary({
+        "subset_limit": None,
+        "overall": {"measured": 600, "passed": 553, "failed": 47},
+    })
+    _assert(not any("부분 실행" in f for f in failures), failures)
+
+
+def test_a_pre_limit_artifact_without_the_field_is_not_treated_as_a_subset():
+    # subset_limit 를 INTEGRITY_FIELDS 에 넣으면 기존 산출물이 전부 죽는다.
+    failures, _ = score.validate_summary({
+        "overall": {"measured": 600, "passed": 553, "failed": 47},
+    })
+    _assert(not any("부분 실행" in f for f in failures), failures)
+
+
+def test_a_category_with_zero_items_does_not_break_the_coverage_cross_check():
+    """선언은 0 을 명시하고 관측은 키를 생략한다 — 그대로 비교하면 죽는다.
+
+    실측: --limit 6 산출물에서 call_decision 의 relevance/slot 이 한 건도 없자
+    coverage={'relevance': 0, 'slot': 0} vs raw={} 로 ValueError 가 났다. 어떤
+    유형이 0 건인 산출물이면 언제든 터진다.
+    """
+
+    _assert(score._nonzero({"relevance": 0, "slot": 0}) == {}, "0 은 지워야 한다")
+    _assert(score._nonzero({}) == {}, "빈 dict 는 그대로")
+    _assert(score._nonzero({"relevance": 0, "slot": 3}) == {"slot": 3}, "0 만 지운다")
+
+
+def test_the_coverage_cross_check_still_catches_a_real_disagreement():
+    # 이 검사가 잡으려던 결함(러너가 시나리오 수 45 를 항목 수 130 대신 적던 것)은
+    # 0 이 아닌 값의 불일치였다 — 정규화 후에도 여전히 잡혀야 한다.
+    _assert(
+        score._nonzero({"multi_turn": 45}) != score._nonzero({"multi_turn": 130}),
+        "0 이 아닌 불일치는 여전히 달라야 한다",
+    )
+
+
 TESTS = [
+    test_a_category_with_zero_items_does_not_break_the_coverage_cross_check,
+    test_the_coverage_cross_check_still_catches_a_real_disagreement,
+    test_a_subset_run_is_never_publishable,
+    test_a_full_run_is_not_blocked_by_the_subset_gate,
+    test_a_pre_limit_artifact_without_the_field_is_not_treated_as_a_subset,
     test_decoding_provenance_records_what_was_sent_not_what_was_asked,
     test_decoding_provenance_says_controlled_when_nothing_is_removed,
     test_reproducibility_distinguishes_structural_drift_from_chance,
