@@ -111,6 +111,21 @@ def comparison_fingerprint(summary: Mapping[str, Any]) -> dict[str, Any]:
             "comparable_across_candidates": pinned,
             "reason": "선언한 사용자 프로토콜과 실제 실행이 다르다",
         }
+    # 선언한 temperature 가 서빙 제약에 걸려 제거됐다면, 적어놓은 사용자
+    # 프로토콜은 실제로 실행된 것이 아니다. 지문에 섞지 않는 이유는 위와 같다 —
+    # 섞으면 같은 모델의 반복 실행끼리도 갈라진다. 대신 **비교 자격**을 뺀다.
+    if integrity.get("user_removed_sampling_params"):
+        return {
+            "fingerprint": _digest(facts)[:16],
+            "facts": facts,
+            "user_protocol_pinned": False,
+            "comparable_across_candidates": False,
+            "reason": (
+                "사용자 시뮬레이터의 샘플링 파라미터가 서빙 제약으로 제거됐다 "
+                f"({', '.join(integrity['user_removed_sampling_params'])}) — "
+                "선언한 사용자 프로토콜이 실제로 실행되지 않았다"
+            ),
+        }
     facts["user_protocol_pinned"] = bool(observed.get("pinned")) or (
         facts["user_request_timeout"] is not None and facts["user_max_tokens"] is not None
     ) or facts["mode"] == "solo"

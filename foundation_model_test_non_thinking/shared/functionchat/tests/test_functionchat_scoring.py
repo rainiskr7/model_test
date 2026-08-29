@@ -633,7 +633,7 @@ def test_decoding_provenance_records_what_was_sent_not_what_was_asked():
     _assert(got["effective"]["max_tokens"] == 4096, "실제로 보낸 값이 기록돼야 한다")
     _assert(got["effective"]["temperature"] is None, "제거된 파라미터는 None 이어야 한다")
     # 이 한 줄이 결론이다 — 이 런의 단일 숫자는 재현되지 않는다.
-    _assert(got["deterministic_controls"] is False, got)
+    _assert(got["sampling_controls_removed"] is True, got)
 
 
 def test_decoding_provenance_says_controlled_when_nothing_is_removed():
@@ -650,7 +650,7 @@ def test_decoding_provenance_says_controlled_when_nothing_is_removed():
     finally:
         if saved is not None:
             os.environ["SERVING_UNSUPPORTED_SAMPLING_PARAMS"] = saved
-    _assert(got["deterministic_controls"] is True, got)
+    _assert(got["sampling_controls_removed"] is False, got)
     _assert(got["effective"]["temperature"] == 0.0, got)
 
 
@@ -659,16 +659,16 @@ def test_reproducibility_distinguishes_structural_drift_from_chance():
 
     runs = [
         {"session": "s1", "model": "d", "scoring_version": "v1", "publishable": True,
-         "items": {"a": True, "b": False}, "decoding_controlled": False,
+         "items": {"a": True, "b": False}, "sampling_controls_removed": True,
          "removed_sampling_params": ["temperature"]},
         {"session": "s2", "model": "d", "scoring_version": "v1", "publishable": True,
-         "items": {"a": False, "b": True}, "decoding_controlled": False,
+         "items": {"a": False, "b": True}, "sampling_controls_removed": True,
          "removed_sampling_params": ["temperature"]},
     ]
     report = repro.reproducibility_report(runs)
     entry = next(e for e in report if e["model"] == "d")
     _assert(entry["status"] == "DIVERGED", entry)
-    _assert(entry["decoding_controlled"] is False, entry)
+    _assert(entry["sampling_controls_removed"] is True, entry)
     _assert("temperature" in entry["removed_sampling_params"], entry)
 
 
@@ -676,12 +676,12 @@ def test_reproducibility_does_not_claim_control_for_pre_provenance_runs():
     # 디코딩 기록이 없는 예전 산출물을 "제어됐다" 로 단정하면 안 된다.
     runs = [
         {"session": "s1", "model": "q", "scoring_version": "v1", "publishable": True,
-         "items": {"a": True}, "decoding_controlled": None},
+         "items": {"a": True}, "sampling_controls_removed": None},
         {"session": "s2", "model": "q", "scoring_version": "v1", "publishable": True,
-         "items": {"a": True}, "decoding_controlled": None},
+         "items": {"a": True}, "sampling_controls_removed": None},
     ]
     entry = next(e for e in repro.reproducibility_report(runs) if e["model"] == "q")
-    _assert(entry["decoding_controlled"] is None, entry)
+    _assert(entry["sampling_controls_removed"] is None, entry)
 
 
 def test_a_subset_run_is_never_publishable():
@@ -732,7 +732,71 @@ def test_the_coverage_cross_check_still_catches_a_real_disagreement():
     )
 
 
+def test_a_limit_larger_than_every_dataset_is_not_a_subset_run():
+    """``items[:1000]`` 은 500개짜리를 그대로 돌려준다 — 전량인데 거부되면 안 된다."""
+
+    import argparse
+
+    runner_mod = _load(
+        "functionchat_runner_limit_test",
+        EXACT_PATH.parent.parent / "runner" / "run_functionchat.py",
+    )
+    args = argparse.Namespace(
+        max_tokens=16384, limit=1000, model="m/x", request_timeout=60.0,
+        task_timeout=120.0, max_retries=2, native_tool_calling=True,
+    )
+    full = runner_mod._metadata(args, _FakeAdapter(), "singlecall", truncated=False)
+    part = runner_mod._metadata(args, _FakeAdapter(), "singlecall", truncated=True)
+    _assert(full["subset_limit"] is None, "실제로 자르지 않았으면 전량이다")
+    _assert(part["subset_limit"] == 1000, part)
+
+
+class _FakeAdapter:
+    sdk_max_retries = 0
+    openai_sdk_version = "test"
+
+
+def test_the_predicate_never_claims_determinism_only_its_absence():
+    # temperature=0 을 보냈다고 결정론이 보장되지 않는다 — 배치 구성, MoE 라우팅,
+    # 부동소수점 비결합성. 이름이 "제어됐는가" 여서는 안 된다.
+    for path in (
+        EXACT_PATH.parent.parent / "runner" / "run_functionchat.py",
+        EXACT_PATH.parent.parent / "scoring" / "repro.py",
+    ):
+        text = path.read_text(encoding="utf-8")
+        _assert("deterministic_controls" not in text, f"{path.name}: 결정론을 주장하는 이름이 남았다")
+        _assert("decoding_controlled" not in text, f"{path.name}: 옛 이름이 남았다")
+
+
+def test_reproducibility_does_not_stop_at_the_first_dataset():
+    # 데이터셋마다 다른 제약으로 돌았다면 그 사실 자체가 중요한데, 하나만 보고
+    # 끝내면 나머지가 사라진다.
+    import json as _json
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as tmp:
+        run = Path(tmp) / "s" / "language" / "functionchat"
+        run.mkdir(parents=True)
+        (run / "summary.json").write_text(_json.dumps({"model": "m", "scoring_version": "v1"}))
+        # 첫 데이터셋은 제거 없음, 두 번째가 temperature 제거.
+        (run / "singlecall.json").write_text(_json.dumps({
+            "metadata": {"decoding": {"available": True, "constraints": {"removed_parameters": []}}},
+            "results": [],
+        }))
+        (run / "call_decision.json").write_text(_json.dumps({
+            "metadata": {"decoding": {"available": True,
+                                      "constraints": {"removed_parameters": ["temperature"]}}},
+            "results": [],
+        }))
+        loaded = repro.load_run(run)
+    _assert(loaded["sampling_controls_removed"] is True, loaded)
+    _assert("temperature" in loaded["removed_sampling_params"], loaded)
+
+
 TESTS = [
+    test_a_limit_larger_than_every_dataset_is_not_a_subset_run,
+    test_the_predicate_never_claims_determinism_only_its_absence,
+    test_reproducibility_does_not_stop_at_the_first_dataset,
     test_a_category_with_zero_items_does_not_break_the_coverage_cross_check,
     test_the_coverage_cross_check_still_catches_a_real_disagreement,
     test_a_subset_run_is_never_publishable,

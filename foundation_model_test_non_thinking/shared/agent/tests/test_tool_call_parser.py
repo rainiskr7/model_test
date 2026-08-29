@@ -309,7 +309,11 @@ def test_artifact_records_what_was_sent_not_only_what_was_asked():
     _assert(decoding["requested"]["max_tokens"] == 16384, decoding)
     _assert(decoding["effective"]["max_tokens"] == 4096, "실제로 보낸 값이 기록돼야 한다")
     # 이 한 줄이 결론이다 — 이 런의 단일 숫자는 재현되지 않는다.
-    _assert(decoding["deterministic_controls"] is False, decoding)
+    # 이름이 "제거됐는가" 여야 한다. temperature=0 을 보냈다고 결정론이 보장되지
+    # 않으므로(배치 구성·MoE 라우팅·부동소수점) 그 방향의 주장은 하지 않는다.
+    _assert(decoding["sampling_controls_removed"] is True, decoding)
+    source = RUNNER_PATH.read_text(encoding="utf-8")
+    _assert("deterministic_controls" not in source, "결정론을 주장하는 이름이 남았다")
 
 
 def test_unparsed_candidate_counter_is_wired_from_adapter_to_artifact():

@@ -174,15 +174,20 @@ class RunGating(unittest.TestCase):
             self.assertEqual(by_id["speaker_gender_basis"]["status"], "fail")
             self.assertEqual(result["counts"], {"pass": 4, "fail": 1, "invalid": 0})
 
-    def test_a_missing_response_file_is_invalid_for_every_item_of_that_prompt(self):
+    def test_a_missing_response_file_blocks_scoring_it_is_not_a_format_failure(self):
+        # 산출물이 없는 것은 계약 미준수가 아니다. invalid 로 세면 준수율이
+        # 모델의 형식 실패처럼 떨어지고, 없는 파일이 오답으로 둔갑한다.
         with tempfile.TemporaryDirectory() as tmp:
             run = self._run(tmp, self._complete_manifest(), {
                 "carwash": "[ANSWER]\ncarwash_choice: drive\n[/ANSWER]",
             })
             result = scorer.score_run(run)
-            by_id = {e["item_id"]: e for e in result["items"]}
-            self.assertEqual(by_id["mother_reason"]["status"], "invalid")
-            self.assertEqual(by_id["carwash_choice"]["status"], "pass")
+            self.assertFalse(result["scorable"])
+            self.assertTrue(
+                any("jjajangmyeon" in b and "산출물이 없다" in b for b in result["blockers"]),
+                result["blockers"],
+            )
+            self.assertEqual(result["counts"]["invalid"], 0, "미준수로 세면 안 된다")
 
 
 class NoScoreIsManufactured(unittest.TestCase):
@@ -255,33 +260,41 @@ class NoScoreIsManufactured(unittest.TestCase):
     def test_a_single_run_of_a_model_is_unverified_not_identical(self):
         self.assertEqual(scorer.stability([self._run("m1", a="drive")])["m1"]["status"], "UNVERIFIED")
 
+    def test_the_predicate_never_claims_determinism_only_its_absence(self):
+        # temperature=0 을 보냈다고 결정론이 보장되지 않는다 — 배치 구성, MoE
+        # 라우팅, 부동소수점 비결합성. 그래서 필드 이름이 "제거됐는가" 여야 하고
+        # "제어됐는가" 여서는 안 된다.
+        source = (NLU_DIR / "scoring" / "score_run.py").read_text(encoding="utf-8")
+        self.assertNotIn("decoding_controlled", source, "결정론을 주장하는 이름이 남아 있다")
+        self.assertIn("sampling_controls_removed", source)
+
     def test_instability_is_attributed_to_the_backend_when_control_is_gone(self):
         # diffusion 백엔드는 temperature 를 거부한다 — 같은 요청에 다른 답이 나오는
         # 것이 정상이다. 실측: 요청 바이트가 동일한 5런에서 한 항목이 세 갈래로
         # 갈렸다. 이 구분이 없으면 구조적 흔들림이 모델 결함으로 읽힌다.
         runs = [
-            {"scorable": True, "model": "d", "decoding_controlled": False,
+            {"scorable": True, "model": "d", "sampling_controls_removed": True,
              "removed_sampling_params": ["temperature"],
              "items": [{"item_id": "a", "status": "fail", "answer": "walk"}]},
-            {"scorable": True, "model": "d", "decoding_controlled": False,
+            {"scorable": True, "model": "d", "sampling_controls_removed": True,
              "removed_sampling_params": ["temperature"],
              "items": [{"item_id": "a", "status": "pass", "answer": "drive"}]},
         ]
         info = scorer.stability(runs)["d"]
         self.assertEqual(info["status"], "DIVERGED")
-        self.assertFalse(info["decoding_controlled"])
+        self.assertTrue(info["sampling_controls_removed"])
         self.assertIn("temperature", info["removed_sampling_params"])
 
     def test_a_controlled_backend_is_not_excused_for_instability(self):
         runs = [
-            {"scorable": True, "model": "q", "decoding_controlled": True,
+            {"scorable": True, "model": "q", "sampling_controls_removed": False,
              "items": [{"item_id": "a", "status": "fail", "answer": "walk"}]},
-            {"scorable": True, "model": "q", "decoding_controlled": True,
+            {"scorable": True, "model": "q", "sampling_controls_removed": False,
              "items": [{"item_id": "a", "status": "pass", "answer": "drive"}]},
         ]
         info = scorer.stability(runs)["q"]
         self.assertEqual(info["status"], "DIVERGED")
-        self.assertTrue(info["decoding_controlled"])
+        self.assertFalse(info["sampling_controls_removed"])
 
     def test_compliance_is_counted_apart_from_correctness(self):
         # 계약을 못 지킨 것과 틀린 것을 합치면 계약 문구의 문제가 모델의 오답으로

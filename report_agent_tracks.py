@@ -274,10 +274,10 @@ def render_markdown(
                 out.append(f"  - 런마다 뒤집힌 항목 {len(check['unstable_items'])}건")
             if check.get("reason"):
                 out.append(f"  - {check['reason']}")
-            if check.get("decoding_controlled") is False:
+            if check.get("sampling_controls_removed"):
                 removed = ", ".join(check.get("removed_sampling_params") or []) or "일부"
                 out.append(
-                    f"  - 이 백엔드는 `{removed}` 를 거부해 **결정론 제어가 없다**. "
+                    f"  - 이 백엔드는 `{removed}` 를 거부해 **샘플링 제어 수단이 제거됐다**. "
                     "흔들림은 모델 결함이 아니라 구조적 성질이며, 이 모델의 "
                     "**단일 런 숫자는 측정이 아니다**."
                 )

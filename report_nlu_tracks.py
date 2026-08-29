@@ -128,10 +128,10 @@ def render_markdown(runs: list[dict[str, Any]], scorer) -> str:
                 else:
                     items = ", ".join(f"`{k}`({'/'.join(v)})" for k, v in info["unstable_items"].items())
                     out.append(f"- `{model}` — {info['runs']}런 **DIVERGED**: {items}")
-                if not info.get("decoding_controlled", True):
+                if info.get("sampling_controls_removed"):
                     removed = ", ".join(info.get("removed_sampling_params") or []) or "일부"
                     out.append(
-                        f"  - 이 백엔드는 `{removed}` 를 거부해 **결정론 제어가 없다**. "
+                        f"  - 이 백엔드는 `{removed}` 를 거부해 **샘플링 제어 수단이 제거됐다**. "
                         "흔들림은 모델 결함이 아니라 구조적 성질이며, "
                         "이 모델의 **단일 런 숫자는 측정이 아니다**."
                     )
@@ -161,6 +161,11 @@ def render_markdown(runs: list[dict[str, Any]], scorer) -> str:
     out.append("- 항목이 5개다. 한 항목이 뒤집히면 '통과 수'가 20% 움직인다.")
     out.append("- 변별 못 한 항목은 이 모델 집합에서 정보를 주지 않는다 — 통과 수를 부풀린다.")
     out.append("- `−` 는 형식을 못 지킨 것이지 틀린 것이 아니다. 둘을 합치면 다른 것을 재게 된다.")
+    out.append(
+        "- 샘플링 제어가 **제거되지 않았다고 결정론이 보장되는 것은 아니다**. "
+        "배치 구성·MoE 라우팅·부동소수점 비결합성으로도 결과는 달라진다. "
+        "이 도구는 재현을 부정하는 근거만 말한다."
+    )
     return "\n".join(out)
 
 

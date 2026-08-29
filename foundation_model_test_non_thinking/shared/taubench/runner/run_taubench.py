@@ -83,7 +83,7 @@ def _unsupported_sampling_params() -> list[str]:
         return []
 
 
-def apply_user_serving_constraints(user_llm_args: dict) -> list[str]:
+def apply_user_serving_constraints(user_llm_args: dict, *, inherited: bool = True) -> list[str]:
     """로컬 엔드포인트로 가는 사용자 시뮬레이터 인자에서 거부 파라미터를 뺀다.
 
     후보에는 temperature 를 보내지 않지만(`temperature_sent: False`) 사용자
@@ -93,11 +93,14 @@ def apply_user_serving_constraints(user_llm_args: dict) -> list[str]:
     이다 — 실측 응답: "The temperature, min_p, seed, ... are not yet supported
     with diffusion models."
 
-    외부 엔드포인트로 가는 경우(api_base 가 제거된 경우)에는 건드리지 않는다.
-    그쪽 제약은 이 프로파일이 말하는 대상이 아니다.
+    적용 대상은 **후보의 엔드포인트를 물려받은 경우뿐**이다. ``--user-base-url``
+    로 사용자 시뮬레이터를 다른 서버에 명시적으로 붙였다면 그쪽 백엔드의 제약은
+    이 프로파일이 말하는 대상이 아니다 — 그런데도 적용하면 그 서버가 요구하는
+    temperature 를 말없이 빼서 사용자 프로토콜을 바꿔버린다. 외부 엔드포인트로
+    가는 경우(api_base 가 제거된 경우)도 마찬가지로 건드리지 않는다.
     """
 
-    if not user_llm_args.get("api_base"):
+    if not inherited or not user_llm_args.get("api_base"):
         return []
     removed = [
         name for name in _unsupported_sampling_params() if name in user_llm_args
@@ -532,7 +535,9 @@ def main(argv: Optional[list[str]] = None) -> int:
         # 엔드포인트가 정해진 **뒤에** 적용한다 — 로컬로 가는지 외부로 가는지
         # 알아야 어느 제약을 걸지 정할 수 있다.
         user_removed_params = (
-            apply_user_serving_constraints(user_llm_args)
+            apply_user_serving_constraints(
+                user_llm_args, inherited=not args.user_base_url
+            )
             if args.mode == "standard"
             else []
         )
@@ -617,9 +622,10 @@ def main(argv: Optional[list[str]] = None) -> int:
                 "serving_profile_applied": False,
                 "serving_profile_observable": False,
                 "user_removed_sampling_params": user_removed_params,
-                "user_decoding_controlled": (
+                # **true 가 결정론을 뜻하지 않는다.** 재현을 부정하는 근거만 싣는다.
+                "user_sampling_controls_removed": (
                     None if args.mode == "solo"
-                    else "temperature" not in user_removed_params
+                    else "temperature" in user_removed_params
                 ),
                 "max_concurrency": args.max_concurrency,
                 "max_steps": args.max_steps,

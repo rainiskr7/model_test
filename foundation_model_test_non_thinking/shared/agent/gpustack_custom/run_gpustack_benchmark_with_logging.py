@@ -346,7 +346,10 @@ def _decoding_provenance(max_tokens, temperature=0.0):
         "requested": requested,
         "effective": effective,
         "constraints": constraints,
-        "deterministic_controls": "temperature" not in removed,
+        # **true 가 결정론을 뜻하지 않는다.** temperature=0 을 보냈어도 배치 구성,
+        # MoE 라우팅, 부동소수점 비결합성으로 결과는 달라질 수 있다. 재현을
+        # 부정하는 근거만 싣는다.
+        "sampling_controls_removed": "temperature" in removed,
     }
 
 

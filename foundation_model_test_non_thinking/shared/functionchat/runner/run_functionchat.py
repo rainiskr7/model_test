@@ -295,7 +295,7 @@ def _decoding_provenance(args: argparse.Namespace) -> Dict[str, Any]:
     요청값만 적으면 산출물이 거짓을 말한다 — 실제로 커밋된 diffusiongemma 런이
     `max_tokens: 16384` 이라고 적고 있는데 보낸 값은 4096 이다.
 
-    temperature 가 제거됐다는 것은 **결정론 제어가 없다**는 뜻이기도 하다. 그 런의
+    temperature 가 제거됐다는 것은 **샘플링 제어 수단이 없다**는 뜻이다. 그 런의
     단일 숫자는 재현되지 않으며, 그 사실은 산출물에서 읽을 수 있어야 한다.
     """
 
@@ -311,13 +311,16 @@ def _decoding_provenance(args: argparse.Namespace) -> Dict[str, Any]:
         "requested": requested,
         "effective": effective,
         "constraints": constraints,
-        # 이 한 줄이 결론이다. False 면 반복 실행이 달라지는 것이 정상이고,
-        # 단일 런 숫자를 인용하면 안 된다.
-        "deterministic_controls": "temperature" not in removed,
+        # **true 가 결정론을 뜻하지 않는다.** temperature=0 을 보냈어도 배치 구성,
+        # MoE 라우팅, 부동소수점 비결합성으로 결과는 달라질 수 있다. 재현을
+        # 부정하는 근거만 싣는다.
+        "sampling_controls_removed": "temperature" in removed,
     }
 
 
-def _metadata(args: argparse.Namespace, adapter: Any, dataset: str) -> Dict[str, Any]:
+def _metadata(
+    args: argparse.Namespace, adapter: Any, dataset: str, truncated: bool = True
+) -> Dict[str, Any]:
     return {
         "timestamp": datetime.now().isoformat(),
         "model": args.model,
@@ -331,7 +334,8 @@ def _metadata(args: argparse.Namespace, adapter: Any, dataset: str) -> Dict[str,
         "decoding": _decoding_provenance(args),
         # None 이면 전량이다. 값이 있으면 부분 실행이고, 채점기가 발행을 막는다.
         # 산출물이 스스로 말하지 않으면 나중에 구분할 방법이 없다.
-        "subset_limit": args.limit,
+        # 요청한 숫자가 아니라 **실제로 잘렸는지**로 정한다.
+        "subset_limit": args.limit if truncated else None,
         "native_tool_calling": args.native_tool_calling,
         "sdk_max_retries": adapter.sdk_max_retries,
         "openai_sdk_version": adapter.openai_sdk_version,
@@ -473,6 +477,12 @@ def main(argv: Optional[List[str]] = None) -> int:
                 data_dir / "FunctionChat-Dialog.jsonl", system_prompt
             ),
         }
+        # 실제로 잘렸을 때만 부분 실행이다. ``items[:1000]`` 은 500개짜리
+        # 데이터셋을 그대로 돌려주므로, 요청한 숫자만 보고 판단하면 전량 런이
+        # 발행 불가로 거부된다.
+        truncated = args.limit is not None and any(
+            len(items) > args.limit for items in datasets.values()
+        )
         if args.limit is not None:
             # 무작위 표본이 아니라 앞에서 N 개다. 두 런이 같은 항목을 덮어야
             # 항목 단위로 대조할 수 있다 — 표본이 다르면 재현성이 아니라 다른
@@ -480,11 +490,18 @@ def main(argv: Optional[List[str]] = None) -> int:
             datasets = {
                 name: items[: args.limit] for name, items in datasets.items()
             }
-            print(
-                f"[functionchat] --limit {args.limit}: 데이터셋마다 앞 {args.limit}항목만 "
-                "실행한다. 이 산출물은 발행 대상이 아니다.",
-                file=sys.stderr,
-            )
+            if truncated:
+                print(
+                    f"[functionchat] --limit {args.limit}: 데이터셋마다 앞 {args.limit}항목만 "
+                    "실행한다. 이 산출물은 발행 대상이 아니다.",
+                    file=sys.stderr,
+                )
+            else:
+                print(
+                    f"[functionchat] --limit {args.limit} 이 모든 데이터셋보다 크다 — "
+                    "실제로는 전량 실행이며 부분 실행으로 표시하지 않는다.",
+                    file=sys.stderr,
+                )
 
         timestamp = _timestamp(base_dir)
         results_dir = (
@@ -516,7 +533,7 @@ def main(argv: Optional[List[str]] = None) -> int:
                 if index % 25 == 0 or index == len(items):
                     print(f"[functionchat] {dataset}: {index}/{len(items)}")
 
-            metadata = _metadata(args, adapter, dataset)
+            metadata = _metadata(args, adapter, dataset, truncated)
             measured = sum(item["type_of_output"] == CALL for item in items)
             metadata.update(
                 {

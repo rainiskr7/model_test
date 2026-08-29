@@ -79,8 +79,9 @@ def load_run(run_dir: Path) -> dict[str, Any] | None:
             )
     # 디코딩 프로비넌스는 데이터셋 산출물의 metadata 에 있다. 없으면(계약 이전
     # 산출물) None — "제어됐다"고 단정하지 않는다.
-    controlled = None
-    removed: list[str] = []
+    # 첫 데이터셋에서 멈추지 않는다. 데이터셋마다 다른 제약으로 돌았다면 그
+    # 사실 자체가 중요한데, 하나만 보고 끝내면 나머지가 사라진다.
+    removed_sets: list[frozenset] = []
     for name in DATASET_FILES:
         path = run_dir / f"{name}.json"
         if not path.exists():
@@ -90,14 +91,17 @@ def load_run(run_dir: Path) -> dict[str, Any] | None:
         except Exception:
             continue
         if isinstance(decoding, dict) and decoding.get("available"):
-            controlled = bool(decoding.get("deterministic_controls"))
-            removed = list((decoding.get("constraints") or {}).get("removed_parameters") or [])
-            break
+            removed_sets.append(
+                frozenset((decoding.get("constraints") or {}).get("removed_parameters") or [])
+            )
+    removed = sorted(set().union(*removed_sets)) if removed_sets else []
+    # 기록이 없으면(계약 이전 산출물) None — "제거되지 않았다" 고 단정하지 않는다.
+    controls_removed = ("temperature" in removed) if removed_sets else None
 
     return {
         "session": run_dir.parents[1].name,
         "model": str(summary.get("model")),
-        "decoding_controlled": controlled,
+        "sampling_controls_removed": controls_removed,
         "removed_sampling_params": removed,
         "scoring_version": str(summary.get("scoring_version")),
         "publishable": bool((summary.get("publish_status") or {}).get("publishable")),
@@ -173,14 +177,14 @@ def reproducibility_report(runs: Iterable[Mapping[str, Any]]) -> list[dict[str, 
                 "건수가 같아도 다른 항목을 맞힌 것이면 같은 측정이 아니다"
             ),
             # 흔들림이 우연인지 구조적인지 구분한다. diffusion 백엔드는
-            # temperature 를 거부하므로 **결정론 제어 수단 자체가 없다** — 그때
+            # temperature 를 거부하므로 **샘플링 제어 수단 자체가 없다** — 그때
             # 반복 실행이 달라지는 것은 모델 결함이 아니라 정상이고, 그 모델의
             # 단일 런 숫자는 인용하면 안 된다. (nlu 실측: 요청 바이트가 동일한
             # 5런에서 한 항목이 세 갈래로 갈렸다.)
-            "decoding_controlled": (
+            "sampling_controls_removed": (
                 None
-                if any(run.get("decoding_controlled") is None for run in members)
-                else all(run.get("decoding_controlled") for run in members)
+                if any(run.get("sampling_controls_removed") is None for run in members)
+                else any(run.get("sampling_controls_removed") for run in members)
             ),
             "removed_sampling_params": sorted({
                 param for run in members for param in run.get("removed_sampling_params") or []

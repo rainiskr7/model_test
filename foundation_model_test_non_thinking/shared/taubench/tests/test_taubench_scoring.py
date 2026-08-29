@@ -947,6 +947,49 @@ class UserSimulatorServingConstraints(unittest.TestCase):
         self.assertNotIn("temperature", args)
         self.assertEqual(args["max_tokens"], 512, "관계없는 인자를 건드리면 안 된다")
 
+    def test_an_explicitly_pointed_user_endpoint_is_left_alone(self):
+        # --user-base-url 로 다른 서버에 붙였다면 그쪽 제약은 이 프로파일이 말하는
+        # 대상이 아니다. 그런데도 적용하면 그 서버가 요구하는 temperature 를 말없이
+        # 빼서 사용자 프로토콜을 바꿔버린다.
+        args = {"api_base": "http://other:9000/v1", "temperature": 0.0}
+        with mock.patch.dict(
+            os.environ, {"SERVING_UNSUPPORTED_SAMPLING_PARAMS": "temperature"}
+        ):
+            removed = runner.apply_user_serving_constraints(args, inherited=False)
+        self.assertEqual(removed, [])
+        self.assertEqual(args["temperature"], 0.0)
+
+    def test_a_removed_user_parameter_costs_comparison_eligibility(self):
+        # 선언한 temperature 가 제거됐다면 적어놓은 사용자 프로토콜은 실제로
+        # 실행된 것이 아니다. 지문을 갈라 반복 실행 코호트를 깨는 대신 비교
+        # 자격을 뺀다.
+        summary = {
+            "benchmark": "tau2", "scoring_version": "v1",
+            "split": {"domain": "airline", "name": "full"},
+            "harness_integrity": {
+                "mode": "standard", "user_model_sent_to_litellm": "m",
+                "user_request_timeout": 60, "user_max_tokens": 512,
+                "user_removed_sampling_params": ["temperature"],
+            },
+        }
+        got = cohort.comparison_fingerprint(summary)
+        self.assertFalse(got["comparable_across_candidates"])
+        self.assertIn("temperature", got["reason"])
+
+    def test_a_run_without_removed_user_parameters_keeps_its_eligibility(self):
+        summary = {
+            "benchmark": "tau2", "scoring_version": "v1",
+            "split": {"domain": "airline", "name": "full"},
+            "harness_integrity": {
+                "mode": "standard", "user_model_sent_to_litellm": "m",
+                "user_request_timeout": 60, "user_max_tokens": 512,
+                "user_removed_sampling_params": [],
+            },
+        }
+        self.assertTrue(
+            cohort.comparison_fingerprint(summary)["comparable_across_candidates"]
+        )
+
     def test_an_external_user_simulator_is_left_alone(self):
         # 외부 엔드포인트의 제약은 이 프로파일이 말하는 대상이 아니다.
         args = {"temperature": 0.0}

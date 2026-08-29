@@ -64,6 +64,11 @@ def parse_answers(response: str, contract: dict[str, Any]) -> dict[str, str]:
     if open_tag not in response:
         return {}
     body = response.rsplit(open_tag, 1)[1]
+    if close_tag not in body:
+        # 닫는 태그가 없으면 블록이 끝났다는 증거가 없다. 응답이 max_tokens 로
+        # 잘렸을 때 잘린 조각을 확정된 답으로 읽게 된다 — 그건 모델이 말한 것이
+        # 아니라 우리가 추측한 것이다. 계약 미준수로 둔다.
+        return {}
     body = body.split(close_tag, 1)[0]
 
     answers: dict[str, str] = {}

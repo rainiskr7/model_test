@@ -108,33 +108,40 @@ def score_run(run_dir: Path, contract=None, answer_key=None) -> dict[str, Any]:
         defined = items_for(contract, prompt_stem)
         record = records.get(prompt_stem)
         if record is None:
-            for item in defined:
-                items.append({
-                    "item_id": item["id"], "status": "invalid",
-                    "reason": f"{prompt_stem} 응답이 없다", "answer": None,
-                })
+            # 산출물이 없는 것은 **계약 미준수가 아니다.** invalid 로 집계하면
+            # 준수율이 모델의 형식 실패처럼 떨어지고, 없는 파일이 오답으로
+            # 둔갑한다. 채점 자체를 막는다.
+            blockers.append(f"{prompt_stem} 응답 산출물이 없다")
             continue
         answers = parse_answers(record["response"], contract)
         for item in defined:
             items.append(score_item(item, answers, answer_key["items"][item["id"]]["expected"]))
 
-    # 결정론 제어가 살아 있었는지. diffusion 백엔드는 temperature 를 거부하므로
+    # 샘플링 제어 수단이 제거됐는지. diffusion 백엔드는 temperature 를 거부하므로
     # 그 모델은 **구조적으로** 같은 요청에 다른 답을 낼 수 있다. 실측: 요청 바이트가
-    # 동일한 5런에서 한 항목이 walk/drive/depends 세 갈래로 나왔다. 이 사실을 옆에
-    # 두지 않으면 한 번 돌린 숫자가 측정으로 읽힌다.
-    sample = next(iter(records.values()), None) or {}
-    removed = set((sample.get("serving_constraints") or {}).get("unsupported_sampling_params") or [])
-    request = sample.get("request") or {}
-    decoding_controlled = "temperature" in request or (
-        bool(sample) and "temperature" not in removed
-    )
+    # 동일한 5런에서 한 항목이 walk/drive/depends 세 갈래로 나왔다.
+    #
+    # **이것이 참이라고 결정론이 보장되는 것은 아니다.** temperature=0 을 보냈어도
+    # 배치 구성, MoE 라우팅, 부동소수점 비결합성으로 결과는 달라질 수 있다. 그래서
+    # 이름을 제거 여부로 둔다 — 없음을 말할 수는 있어도 있음을 주장하지는 않는다.
+    #
+    # 레코드 하나만 보지 않는다. 프롬프트마다 다른 제약으로 돌았다면 그 자체가
+    # 한 런으로 묶을 수 없다는 뜻이다.
+    removed_sets = {
+        frozenset((record.get("serving_constraints") or {}).get("unsupported_sampling_params") or [])
+        for record in records.values()
+    }
+    if len(removed_sets) > 1:
+        blockers.append("프롬프트마다 서빙 제약이 다르다 — 한 런으로 묶을 수 없다")
+    removed = sorted(set().union(*removed_sets)) if removed_sets else []
+    sampling_controls_removed = "temperature" in removed
 
     return {
         "scoring_version": SCORING_VERSION,
         "contract_version": contract["version"],
-        # 이 런이 재현 가능한 조건에서 나왔는지.
-        "decoding_controlled": decoding_controlled,
-        "removed_sampling_params": sorted(removed),
+        # 재현 조건을 **부정하는** 사실만 싣는다. true 가 결정론을 뜻하지 않는다.
+        "sampling_controls_removed": sampling_controls_removed,
+        "removed_sampling_params": removed,
         "answer_key_version": answer_key["version"],
         "session": run_dir.parents[1].name if len(run_dir.parents) > 1 else None,
         "model": (manifest or {}).get("requested_model"),
@@ -221,9 +228,12 @@ def stability(scored_runs: Iterable[Mapping[str, Any]]) -> dict[str, Any]:
             "runs": len(runs),
             "status": "IDENTICAL" if not unstable else "DIVERGED",
             "unstable_items": unstable,
-            # 흔들림이 우연인지 구조적인지 구분한다. 결정론 제어가 없는 백엔드에서는
-            # 반복 실행이 다르게 나오는 것이 정상이며, 그때 단일 런은 측정이 아니다.
-            "decoding_controlled": all(run.get("decoding_controlled", True) for run in runs),
+            # 흔들림의 원인을 **배제할 수 있는 쪽만** 말한다. 제거됐으면 반복 실행이
+            # 다르게 나오는 것이 정상이다. 제거되지 않았다고 결정론이 보장되지는
+            # 않으므로(배치·MoE 라우팅·부동소수점) 그 방향의 주장은 하지 않는다.
+            "sampling_controls_removed": any(
+                run.get("sampling_controls_removed") for run in runs
+            ),
             "removed_sampling_params": sorted({
                 param for run in runs for param in run.get("removed_sampling_params") or []
             }),

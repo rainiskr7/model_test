@@ -3,6 +3,7 @@ import hashlib
 import json
 import os
 import sys
+import tempfile
 import argparse
 import importlib
 from datetime import datetime
@@ -185,10 +186,20 @@ def write_json_atomic(path: Path, payload) -> None:
     아니라 "산출물이 깨졌다" 로 보인다 — 나중에 읽는 쪽에서 구분할 수 없다.
     """
 
-    tmp = path.with_name(path.name + ".tmp")
-    with open(tmp, "w", encoding="utf-8") as handle:
-        json.dump(payload, handle, ensure_ascii=False, indent=2)
-    os.replace(tmp, path)
+    # 고정된 ``<name>.tmp`` 를 쓰면 두 프로세스가 서로의 임시 파일을 덮어써
+    # rename 전에 내용이 섞이거나 사라진다. 프로세스마다 고유한 이름을 쓴다.
+    # (락은 아니다 — 마지막 rename 이 이긴다. 다만 부분적으로 섞인 파일은 없다.)
+    fd, tmp_name = tempfile.mkstemp(prefix=f".{path.name}.", dir=str(path.parent))
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            json.dump(payload, handle, ensure_ascii=False, indent=2)
+        os.replace(tmp_name, path)
+    except BaseException:
+        try:
+            os.unlink(tmp_name)
+        except FileNotFoundError:
+            pass
+        raise
 
 
 def repo_relative(base_dir: Path, path: Path) -> str:
@@ -297,7 +308,20 @@ def main():
     check_no_clobber(manifest, model, endpoint)
 
     expected = [path.stem for path in prompt_paths]
-    done = [] if args.overwrite else list((manifest or {}).get("completed_prompts") or [])
+    # stem 만으로는 프롬프트가 식별되지 않는다. ``prompt/carwash.yaml`` 과
+    # ``/tmp/carwash.yaml`` 은 stem 이 같아 기대 집합 검사를 통과하고, 이어서
+    # 다른 본문의 응답을 같은 파일에 덮어쓴다. 본문 해시로 묶는다.
+    prompt_identity = {
+        path.stem: hashlib.sha256(path.read_bytes()).hexdigest()
+        for path in prompt_paths
+    }
+    # 매니페스트의 완료 표시를 그대로 믿지 않는다. 산출물이 지워졌거나 동기화가
+    # 깨졌으면 파일 없이 complete 로 표시되고, 채점기는 그것을 "모델이 형식을
+    # 지키지 않았다"로 집계한다 — 없는 파일이 모델의 오답으로 둔갑한다.
+    done = [] if args.overwrite else [
+        stem for stem in ((manifest or {}).get("completed_prompts") or [])
+        if (model_out_dir / f"{stem}.json").is_file()
+    ]
     if manifest is not None and sorted((manifest.get("expected_prompts") or [])) != sorted(expected):
         # 프롬프트 집합이 다르면 같은 시도가 아니다. 이어붙이면 한 디렉토리 안에서
         # 두 다른 측정이 섞여 완결된 한 런처럼 보인다.
@@ -306,6 +330,19 @@ def main():
             f"{manifest.get('expected_prompts')} vs {expected}. "
             "EVAL_TIMESTAMP 로 다른 세션을 지정하라."
         )
+    previous_identity = (manifest or {}).get("prompt_identity") or {}
+    changed = sorted(
+        stem for stem, digest in prompt_identity.items()
+        if previous_identity.get(stem) not in (None, digest)
+    )
+    if changed:
+        raise SystemExit(
+            f"[nlu] 같은 이름의 프롬프트인데 본문이 다르다: {changed}. "
+            "이어서 쓰면 두 다른 측정이 한 디렉토리에 섞인다 — "
+            "EVAL_TIMESTAMP 로 다른 세션을 지정하라."
+        )
+    # 본문이 바뀐 프롬프트는 완료로 물려받지 않는다.
+    done = [stem for stem in done if previous_identity.get(stem) in (None, prompt_identity[stem])]
 
     manifest = {
         "schema_version": MANIFEST_SCHEMA_VERSION,
@@ -323,6 +360,8 @@ def main():
             "sha256": {stem: _digest(render(contract, stem)) for stem in expected},
         },
         "expected_prompts": expected,
+        # 이름이 아니라 본문으로 식별한다.
+        "prompt_identity": prompt_identity,
         "completed_prompts": done,
         # 완결 여부를 파일 개수로 추정하지 않는다 — 한 개짜리 정상 런과
         # 두 개 중 하나만 성공한 런이 구분되지 않기 때문이다.

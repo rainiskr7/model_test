@@ -234,6 +234,24 @@ class ManifestLifecycle(unittest.TestCase):
                 "답1",
             )
 
+    def test_a_deleted_artifact_is_re_run_not_declared_complete(self):
+        # 매니페스트의 완료 표시를 그대로 믿으면, 산출물이 지워진 뒤에도 complete
+        # 로 남는다. 채점기는 그것을 "모델이 형식을 지키지 않았다"로 집계한다 —
+        # 없는 파일이 모델의 오답으로 둔갑한다.
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            with mock.patch.object(runner, "PROMPT_DIR", self._prompts(base)[0].parent):
+                self._main(base, ["답1", "답2"])
+                run_dir = base / "results" / "m_x" / "20260101_000000" / "language" / "nlu"
+                (run_dir / "carwash.json").unlink()
+                self._main(base, ["답1-재실행"])
+            self.assertTrue((run_dir / "carwash.json").exists(), "지워진 산출물을 다시 만들어야 한다")
+            self.assertEqual(
+                json.loads((run_dir / "carwash.json").read_text(encoding="utf-8"))["response"],
+                "답1-재실행",
+            )
+            self.assertEqual(self._manifest(base)["status"], "complete")
+
     def test_provenance_is_recorded_per_item(self):
         with tempfile.TemporaryDirectory() as tmp:
             base = Path(tmp)
