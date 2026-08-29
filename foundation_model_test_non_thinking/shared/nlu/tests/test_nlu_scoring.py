@@ -190,6 +190,37 @@ class RunGating(unittest.TestCase):
             self.assertEqual(result["counts"]["invalid"], 0, "미준수로 세면 안 된다")
 
 
+class TheReportDoesNotContradictItself(unittest.TestCase):
+    """통과 벡터는 오답끼리의 흔들림을 보지 못한다.
+
+    실측: diffusiongemma 3런이 carwash 에서 walk/depends/walk 로 갈렸는데 정답이
+    drive 라 세 번 다 오답이었다. 통과 벡터는 전부 False 로 같아 "뒤집힘 0" 이 되고,
+    같은 보고서 안에서 안정성 절은 DIVERGED, 클레임 절은 뒤집힘 0 이라 모순으로
+    읽혔다.
+    """
+
+    def _report(self):
+        import importlib.util as il
+
+        root = NLU_DIR.parents[2]
+        spec = il.spec_from_file_location("report_nlu_under_test", root / "report_nlu_tracks.py")
+        module = il.module_from_spec(spec)
+        sys.path.insert(0, str(root))
+        try:
+            spec.loader.exec_module(module)
+        finally:
+            sys.path.remove(str(root))
+        return module
+
+    def test_a_cohort_tuple_is_not_printed_where_a_model_name_belongs(self):
+        label = self._report()._cohort_label(("m/x", 1, ("temperature",)))
+        self.assertTrue(label.startswith("`m/x`"), label)
+        self.assertNotIn("('m/x'", label, "내부 자료구조가 그대로 노출됐다")
+
+    def test_a_plain_model_name_still_renders(self):
+        self.assertEqual(self._report()._cohort_label("m/x"), "`m/x`")
+
+
 class NoScoreIsManufactured(unittest.TestCase):
     def test_the_scorer_emits_no_average_or_rank(self):
         # 이 트랙의 유일한 결론이다. 항목 5개는 스칼라 점수를 지탱하지 못한다.

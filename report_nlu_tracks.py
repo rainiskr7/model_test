@@ -43,6 +43,17 @@ def collect(base: Path) -> tuple[list[dict[str, Any]], Any]:
     return runs, scorer
 
 
+def _cohort_label(key: Any) -> str:
+    """코호트 키를 사람이 읽을 라벨로. 모델명이 앞, 규약은 뒤에 붙인다."""
+
+    if not isinstance(key, tuple):
+        return f"`{key}`"
+    model = key[0]
+    rest = [str(part) for part in key[1:] if part not in (None, (), "")]
+    suffix = f" (규약 {', '.join(rest)})" if rest else ""
+    return f"`{model}`{suffix}"
+
+
 def _claims(base: Path):
     """shared/publish/claims 로드."""
 
@@ -146,12 +157,15 @@ def render_markdown(runs: list[dict[str, Any]], scorer, base: Path | None = None
                 "다른 트랙에서 통과 건수가 같은데 통과 항목이 뒤집힌 사례를 겪었다."
             )
             out.append("")
-            for model, info in sorted(repeated.items()):
+            for key, info in sorted(repeated.items(), key=repr):
+                # 코호트 키는 튜플이다(모델, 계약 버전, 제거된 파라미터). 그대로 찍으면
+                # 모델명 자리에 내부 자료구조가 나온다.
+                label = _cohort_label(key)
                 if info["status"] == "IDENTICAL":
-                    out.append(f"- `{model}` — {info['runs']}런 **IDENTICAL** (항목별 답이 전부 같다)")
+                    out.append(f"- {label} — {info['runs']}런 **IDENTICAL** (항목별 답이 전부 같다)")
                 else:
                     items = ", ".join(f"`{k}`({'/'.join(v)})" for k, v in info["unstable_items"].items())
-                    out.append(f"- `{model}` — {info['runs']}런 **DIVERGED**: {items}")
+                    out.append(f"- {label} — {info['runs']}런 **DIVERGED**: {items}")
                 if info.get("sampling_controls_removed"):
                     removed = ", ".join(info.get("removed_sampling_params") or []) or "일부"
                     out.append(
@@ -164,6 +178,17 @@ def render_markdown(runs: list[dict[str, Any]], scorer, base: Path | None = None
     if scorable and base is not None:
         creds = credentials(base, scorable)
         _, comparable = _claims(base)
+        # 통과 벡터는 **오답끼리의 흔들림을 보지 못한다.** 실측: 세 런이
+        # walk/depends/walk 로 갈렸는데 정답이 drive 라 세 번 다 오답 —
+        # 통과 벡터는 전부 False 로 같아 "뒤집힘 0" 이 된다. 그대로 두면 같은
+        # 보고서 안에서 안정성 절은 DIVERGED, 클레임 절은 뒤집힘 0 이라 모순으로
+        # 읽힌다. 답 단위 흔들림을 함께 실어 예산이 하한임을 밝힌다.
+        answer_unstable: dict[str, set[str]] = {}
+        for key, info in scorer.stability(scorable).items():
+            model = key[0] if isinstance(key, tuple) else key
+            answer_unstable.setdefault(str(model), set()).update(
+                (info.get("unstable_items") or {}).keys()
+            )
         out.append("## 클레임 등급")
         out.append("")
         out.append(
@@ -182,6 +207,13 @@ def render_markdown(runs: list[dict[str, Any]], scorer, base: Path | None = None
                 f"건수범위 {cred['count_range']} · 뒤집힘 {len(cred['unstable_items'])}건 · "
                 f"불안정 예산 {lo}–{hi}"
             )
+            hidden = sorted(answer_unstable.get(model, set()) - set(cred["unstable_items"]))
+            if hidden:
+                out.append(
+                    f"  - **이 예산은 하한이다.** 통과 여부는 그대로였지만 답이 런마다 "
+                    f"달라진 항목이 있다: {', '.join(f'`{i}`' for i in hidden)}. "
+                    "오답끼리 오가면 통과 벡터는 안정으로 보인다 — 실제 불안정은 이보다 크다."
+                )
         out.append("")
 
         verified = [(m, c) for m, c in creds.items()
