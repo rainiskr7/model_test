@@ -87,10 +87,22 @@ echo "[full_eval] config=$MODEL_CONFIG → MODEL=$MODEL CLASS=$MODEL_CLASS"
 
 # API key 외부화: .env 파일 또는 env 변수에서 로드 (하드코딩 금지)
 # .env 파일은 .gitignore 됨 — `OPENAI_API_KEY=gpustack_...` 형식
+# .env 는 **기본값**이지 덮어쓰기가 아니다. 호출자가 이미 export 한 값이 이긴다.
+# 트랙 러너들(run_functionchat.sh, run_taubench.sh)은 이미 이 규칙을 쓰는데 최상위
+# 드라이버만 무조건 source 하고 있었다. 그래서 다른 엔드포인트를 향해 export 한
+# 키가 조용히 덮어써진다 — 그 러너들의 주석이 기록한 사고와 같은 것이다
+# ("2026-08-19 에 7번 서버 런이 8번 키로 나가 401 로 죽었다").
+# 서버마다 키가 다르므로(실측: .7 의 키로 .8 을 부르면 401) 이 구분이 필요하다.
+_CALLER_OPENAI_API_KEY="${OPENAI_API_KEY:-}"
 if [ -f "$SCRIPT_DIR/.env" ]; then
   # shellcheck disable=SC1091
   source "$SCRIPT_DIR/.env"
 fi
+if [ -n "$_CALLER_OPENAI_API_KEY" ]; then
+  OPENAI_API_KEY="$_CALLER_OPENAI_API_KEY"
+  echo "[full_eval] OPENAI_API_KEY: 호출자가 넘긴 값을 쓴다 (.env 값은 무시)"
+fi
+unset _CALLER_OPENAI_API_KEY
 : "${OPENAI_API_KEY:?OPENAI_API_KEY 필요 (.env 파일 작성 또는 env 변수 export)}"
 export OPENAI_API_KEY
 
