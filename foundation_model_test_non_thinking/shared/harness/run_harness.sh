@@ -19,6 +19,17 @@
 # ./run_harness.sh qwen3-vl-8b-instruct Qwen/Qwen3-VL-8B-Instruct
 # ./run_harness.sh qwen3-vl-8b-instruct Qwen/Qwen3-VL-8B-Instruct http://172.16.1.81:18090/v1/chat/completions
 
+# **빈 문자열은 "미지정"이 아니라 "빈 값"이다.** 아래 `${2:-...}` 의 `:-` 는
+# 인자가 없을 때뿐 아니라 **비어 있을 때도** 기본값으로 바꾼다. 그래서 config 의
+# `tokenizer_path` 가 빈 문자열이면 조용히 Qwen 토크나이저로 대체되고,
+# **다른 모델의 토크나이저로 채점한 결과가 성공한 것처럼 나온다.**
+# 기본값이 적용되기 **전에** 판정해야 한다.
+if [ "$#" -ge 2 ] && [ -z "$2" ]; then
+  echo "run_harness.sh: TOKENIZER 가 빈 문자열이다 — 기본값으로 대체하지 않는다." >&2
+  echo "  모델 config 의 tokenizer_path 를 채우거나 두 번째 인자로 넘겨라." >&2
+  exit 2
+fi
+
 MODEL_NAME="${1:-qwen3-vl-8b-instruct}"
 TOKENIZER="${2:-Qwen/Qwen3-VL-8B-Instruct}"
 BASE_URL="${3:-http://172.16.1.81:18090/v1/chat/completions}"
