@@ -311,6 +311,74 @@ def test_vote_integrity_records_full_votes():
     _assert(integ["lost"] == 0 and not integ["single_vote"], f"정상인데 유실로 잡혔다: {integ}")
 
 
+def test_retry_selects_and_replaces_only_unresolved_records():
+    from copy import deepcopy
+
+    m = _load_judge_mod()
+    previous_records = [
+        {"dataset": "dialog", "serial_num": 7, "status": "judge_error",
+         "verdict": None, "verdicts": ["pass", "fail"]},
+        {"dataset": "call_decision", "serial_num": 7, "status": "judged",
+         "verdict": "pass", "verdicts": ["pass", "pass"]},
+        {"dataset": "dialog", "serial_num": 8, "status": "judged",
+         "verdict": "fail", "verdicts": ["fail", "fail"]},
+    ]
+    original = deepcopy(previous_records)
+    items = [
+        {"dataset": "dialog", "serial_num": 7},
+        {"dataset": "call_decision", "serial_num": 7},
+        {"dataset": "dialog", "serial_num": 8},
+    ]
+    selected = m.select_retry_items(items, previous_records)
+    _assert(selected == [items[0]], f"판정 불가 (dialog, 7)만 골라야 한다: {selected}")
+
+    redone = [
+        {"dataset": "dialog", "serial_num": 7, "status": "judged",
+         "verdict": "pass", "verdicts": ["pass"] * 3},
+    ]
+    merged = m.merge_retry_records(previous_records, redone)
+    by_key = {(r["dataset"], r["serial_num"]): r for r in merged}
+    expected_keys = {(r["dataset"], r["serial_num"]) for r in original}
+    _assert(len(merged) == 3, f"병합 후 레코드 수가 바뀌었다: {merged}")
+    _assert(set(by_key) == expected_keys, f"병합 후 키 구성이 바뀌었다: {by_key}")
+    for record in original[1:]:
+        key = (record["dataset"], record["serial_num"])
+        _assert(by_key[key] == record, f"확정 레코드가 바뀌었다: {by_key[key]}")
+        _assert(len(by_key[key]["verdicts"]) == 2, f"기존 2표가 바뀌었다: {by_key[key]}")
+    retried = by_key[("dialog", 7)]
+    _assert(retried == redone[0], f"재판정 레코드로 교체되지 않았다: {retried}")
+    _assert(retried["status"] == "judged", f"재판정 상태가 틀렸다: {retried}")
+    _assert(len(retried["verdicts"]) == 3, f"재판정 3표가 보존되지 않았다: {retried}")
+
+
+def test_retry_refuses_ambiguous_or_out_of_scope_records():
+    m = _load_judge_mod()
+    unresolved = {"dataset": "dialog", "serial_num": 7, "status": "judge_error"}
+    confirmed = {"dataset": "call_decision", "serial_num": 7, "status": "judged"}
+    previous_records = [unresolved, confirmed]
+    items = [
+        {"dataset": "dialog", "serial_num": 7},
+        {"dataset": "call_decision", "serial_num": 7},
+    ]
+    cases = [
+        ("기존 레코드 중복", lambda: m.select_retry_items(items, previous_records + [dict(unresolved)])),
+        ("수집 항목 중복", lambda: m.select_retry_items(items + [dict(items[0])], previous_records)),
+        ("판정 불가 원본 누락", lambda: m.select_retry_items(items[1:], previous_records)),
+        ("dataset 누락", lambda: m.record_key({"serial_num": 7})),
+        ("확정 레코드 교체", lambda: m.merge_retry_records(previous_records, [dict(confirmed)])),
+        ("새 키 병합", lambda: m.merge_retry_records(
+            previous_records, [{"dataset": "dialog", "serial_num": 9, "status": "judged"}]
+        )),
+    ]
+    for label, action in cases:
+        try:
+            action()
+        except SystemExit as exc:
+            _assert("[judge]" in str(exc), f"예상하지 않은 종료: {label}: {exc}")
+        else:
+            _assert(False, f"SystemExit 없이 허용됐다: {label}")
+
+
 def test_non_retryable_http_errors_are_not_retried():
     """400 을 3회 재시도해도 성공할 수 없다. 429/408 만 재시도한다."""
     import inspect
@@ -1049,6 +1117,8 @@ TESTS = [
     test_not_measured_items_still_carry_a_response,
     test_lost_vote_cannot_produce_a_single_vote_verdict,
     test_vote_integrity_records_full_votes,
+    test_retry_selects_and_replaces_only_unresolved_records,
+    test_retry_refuses_ambiguous_or_out_of_scope_records,
     test_non_retryable_http_errors_are_not_retried,
     test_api_failure_is_not_scored_as_a_model_failure,
     test_genuine_no_tool_call_is_still_a_model_failure,
