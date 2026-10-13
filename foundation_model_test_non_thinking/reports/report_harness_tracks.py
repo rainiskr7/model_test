@@ -119,19 +119,19 @@ def _claims(base: Path, published: list[dict[str, Any]], scorer):
     return credentials, verdicts
 
 
-def render_markdown(summaries: list[dict[str, Any]], folded: list[dict[str, Any]], scorer, base: Path | None = None) -> str:
-    """런 표 다음에 클레임·비교 거부·읽는 법을 같은 순서로 낸다."""
+def _chat_applied(summary: dict[str, Any]) -> bool:
+    """명시적으로 적용된 채팅 템플릿인지 판정한다."""
+    values = summary["protocol"].get("chat_template_applied") or []
+    return values == [True]
 
-    published = [summary for summary in summaries if summary["publish_status"]["publishable"]]
-    rejected = [summary for summary in summaries if not summary["publish_status"]["publishable"]]
+
+def _partition_protocols(published: list[dict[str, Any]]) -> tuple[list, list]:
+    """프롬프트 프로토콜별로 나누고 macro 순으로 정렬한다."""
     # **프롬프트 프로토콜이 다르면 같은 표에 정렬하지 않는다.** 러너 기본값은
     # `--apply_chat_template` 이고, 채팅 템플릿을 씌운 프롬프트와 raw 프롬프트는
     # 같은 문항이라도 다른 시험이다. 실측: 18런 중 4런이 미적용이며, 그중 2런이
     # 적용 런들과 한 표에 정렬돼 2위·4위를 차지하고 있었다. 커버리지 미달이나
     # n-shot 혼재와 같은 종류의 문제인데 정렬만으로는 드러나지 않는다.
-    def _chat_applied(summary):
-        values = summary["protocol"].get("chat_template_applied") or []
-        return values == [True]
 
     ordered = sorted(
         [s for s in published if _chat_applied(s)],
@@ -141,94 +141,116 @@ def render_markdown(summaries: list[dict[str, Any]], folded: list[dict[str, Any]
         [s for s in published if not _chat_applied(s)],
         key=lambda summary: -(summary["macro"]["accuracy"] or 0),
     )
-    out = ["# KMMLU (lm-eval-harness, 5-shot)", ""]
-    out.append("**공식 점수는 45과목 5-shot macro 하나다.** 문항가중은 보조 수치이며 KMMLU 점수의 헤드라인·정렬에 쓰지 않는다.")
-    out.append("")
-    if ordered:
+    return ordered, other_protocol
+
+
+def _append_main_table(ordered, out: list[str]) -> None:
+    """공식 macro와 보조 수치 표를 추가한다."""
+    out.extend([
+        "| 모델 | 세션 | KMMLU 5-shot macro (과목 간) | 보조: 문항가중 (문항 표집) | 과목 | 문항 | 재현성 |",
+        "|---|---|---|---|---|---|---|",
+    ])
+    for summary in ordered:
+        out.append(
+            f"| `{summary['model']}` | `{summary['session']}` | "
+            f"{_pm(summary['macro']['accuracy'], summary['macro']['stderr'])} | "
+            f"{_pm(summary['micro']['accuracy'], summary['micro']['stderr'])} | "
+            f"{summary['macro']['subjects']}/{summary['coverage']['expected_subjects']} | "
+            f"{summary['micro']['items']:,} | 미측정 (k=1) |"
+        )
+    out.extend(["", "macro의 ±는 **과목 간 표준오차**이고 문항가중의 ±는 **문항 표집 이항 표준오차**다. lm-eval `acc_stderr`를 평균한 값이 아니며, 어느 쪽도 재실행 재현성이 아니다.", ""])
+
+
+def _append_other_protocol(other_protocol, out: list[str]) -> None:
+    """다른 프롬프트 프로토콜의 표를 추가한다."""
+    if other_protocol:
+        out.append("### 다른 프롬프트 프로토콜로 돌린 런")
+        out.append("")
+        out.append(
+            "아래 런은 `--apply_chat_template` **없이** 돌았다(러너 기본값은 적용). "
+            "채팅 템플릿을 씌운 프롬프트와 raw 프롬프트는 같은 문항이라도 다른 "
+            "시험이므로 **위 표와 같은 축에 놓을 수 없다.** 무효라는 뜻은 아니다 — "
+            "다른 조건의 측정이다."
+        )
+        out.append("")
         out.extend([
-            "| 모델 | 세션 | KMMLU 5-shot macro (과목 간) | 보조: 문항가중 (문항 표집) | 과목 | 문항 | 재현성 |",
-            "|---|---|---|---|---|---|---|",
+            "| 모델 | 세션 | macro (과목 간) | 보조: 문항가중 | 과목 | 문항 |",
+            "|---|---|---|---|---|---|",
         ])
-        for summary in ordered:
+        for summary in other_protocol:
             out.append(
                 f"| `{summary['model']}` | `{summary['session']}` | "
                 f"{_pm(summary['macro']['accuracy'], summary['macro']['stderr'])} | "
                 f"{_pm(summary['micro']['accuracy'], summary['micro']['stderr'])} | "
                 f"{summary['macro']['subjects']}/{summary['coverage']['expected_subjects']} | "
-                f"{summary['micro']['items']:,} | 미측정 (k=1) |"
+                f"{summary['micro']['items']:,} |"
             )
-        out.extend(["", "macro의 ±는 **과목 간 표준오차**이고 문항가중의 ±는 **문항 표집 이항 표준오차**다. lm-eval `acc_stderr`를 평균한 값이 아니며, 어느 쪽도 재실행 재현성이 아니다.", ""])
-
-        if other_protocol:
-            out.append("### 다른 프롬프트 프로토콜로 돌린 런")
-            out.append("")
-            out.append(
-                "아래 런은 `--apply_chat_template` **없이** 돌았다(러너 기본값은 적용). "
-                "채팅 템플릿을 씌운 프롬프트와 raw 프롬프트는 같은 문항이라도 다른 "
-                "시험이므로 **위 표와 같은 축에 놓을 수 없다.** 무효라는 뜻은 아니다 — "
-                "다른 조건의 측정이다."
-            )
-            out.append("")
-            out.extend([
-                "| 모델 | 세션 | macro (과목 간) | 보조: 문항가중 | 과목 | 문항 |",
-                "|---|---|---|---|---|---|",
-            ])
-            for summary in other_protocol:
-                out.append(
-                    f"| `{summary['model']}` | `{summary['session']}` | "
-                    f"{_pm(summary['macro']['accuracy'], summary['macro']['stderr'])} | "
-                    f"{_pm(summary['micro']['accuracy'], summary['micro']['stderr'])} | "
-                    f"{summary['macro']['subjects']}/{summary['coverage']['expected_subjects']} | "
-                    f"{summary['micro']['items']:,} |"
-                )
-            out.append("")
-
-        # 채점기가 경고를 내도 보고가 렌더링하지 않으면 독자에게는 없는 것과 같다.
-        # 두 표 모두를 대상으로 한다. 주 표만 보면 다른 프로토콜 런의 경고가
-        # 조용히 사라진다.
-        warned = [s for s in ordered + other_protocol if s["publish_status"]["warnings"]]
-        if warned:
-            out.append("### 발행하되 감사할 수 없는 것")
-            out.append("")
-            out.append(
-                "아래 런은 게이트를 통과했지만 프로토콜 기록이 비어 있다. "
-                "**기록의 부재는 같음의 증거가 아니다** — 그 항목이 다른 런과 같았는지 "
-                "산출물만으로는 확인할 수 없다."
-            )
-            out.append("")
-            for summary in warned:
-                out.append(f"- `{summary['model']}` / `{summary['session']}`")
-                for warning in summary["publish_status"]["warnings"]:
-                    out.append(f"  - {warning}")
-            out.append("")
-        out.extend(["## 과목별 정확도", "", "45개 과목을 각각 보인다. 이 표에는 발행 게이트를 통과한 런만 있다.", ""])
-        out.append("| 과목 | " + " | ".join(f"`{summary['model']}`" for summary in ordered) + " |")
-        out.append("|---|" + "---|" * len(ordered))
-        for task in scorer.expected_tasks():
-            values = []
-            for summary in ordered:
-                entry = next((entry for entry in summary["by_subject"] if entry["task"] == task), None)
-                values.append("—" if entry is None or entry.get("accuracy") is None else f"{entry['accuracy'] * 100:.2f}")
-            out.append(f"| `{task}` | " + " | ".join(values) + " |")
         out.append("")
+
+
+def _append_warnings(ordered, other_protocol, out: list[str]) -> None:
+    """두 프로토콜의 감사 불가 경고를 추가한다."""
+    # 채점기가 경고를 내도 보고가 렌더링하지 않으면 독자에게는 없는 것과 같다.
+    # 두 표 모두를 대상으로 한다. 주 표만 보면 다른 프로토콜 런의 경고가
+    # 조용히 사라진다.
+    warned = [s for s in ordered + other_protocol if s["publish_status"]["warnings"]]
+    if warned:
+        out.append("### 발행하되 감사할 수 없는 것")
+        out.append("")
+        out.append(
+            "아래 런은 게이트를 통과했지만 프로토콜 기록이 비어 있다. "
+            "**기록의 부재는 같음의 증거가 아니다** — 그 항목이 다른 런과 같았는지 "
+            "산출물만으로는 확인할 수 없다."
+        )
+        out.append("")
+        for summary in warned:
+            out.append(f"- `{summary['model']}` / `{summary['session']}`")
+            for warning in summary["publish_status"]["warnings"]:
+                out.append(f"  - {warning}")
+        out.append("")
+
+
+def _append_subjects(ordered, scorer, out: list[str]) -> None:
+    """과목별 정확도 표를 추가한다."""
+    out.extend(["## 과목별 정확도", "", "45개 과목을 각각 보인다. 이 표에는 발행 게이트를 통과한 런만 있다.", ""])
+    out.append("| 과목 | " + " | ".join(f"`{summary['model']}`" for summary in ordered) + " |")
+    out.append("|---|" + "---|" * len(ordered))
+    for task in scorer.expected_tasks():
+        values = []
+        for summary in ordered:
+            entry = next((entry for entry in summary["by_subject"] if entry["task"] == task), None)
+            values.append("—" if entry is None or entry.get("accuracy") is None else f"{entry['accuracy'] * 100:.2f}")
+        out.append(f"| `{task}` | " + " | ".join(values) + " |")
+    out.append("")
+
+
+def _append_folded(folded, out: list[str]) -> None:
+    """동일 기록으로 접은 경로를 추가한다."""
     if folded:
         out.extend(["## 접은 동일 기록 집계 벡터", "", "과목별 정확도와 프로토콜이 같은 경로는 한 줄로 접었다. 이것은 반복 관측이나 분산 0의 증거가 아니다.", ""])
         for summary in folded:
             out.append(f"- `{summary['source_path']}`")
         out.append("")
-    if ordered and base is not None:
-        credentials, verdicts = _claims(base, ordered, scorer)
-        out.extend(["## 클레임 등급", "", "문항별 데이터가 없어 항목 벡터 재현성은 측정하지 않았다. 대표 런은 모델마다 하나여서 모두 `snapshot`이다.", ""])
-        for model, credential in credentials.items():
-            out.append(f"- `{model}` — `{credential['claim_class']}` (k={credential['k']}) · {credential['reason']}")
-        out.extend(["", "## 발행 가능한 우열 주장", ""])
-        for left, right, verdict in verdicts:
-            if verdict["comparable"]:
-                winner = left if verdict["winner"] == "left" else right
-                out.append(f"- `{winner}` 우세 — {verdict['reason']}")
-            else:
-                out.append(f"- `{left}` vs `{right}` — **발행 불가**: {verdict['reason']}")
-        out.extend(["", "> 가설검정·신뢰구간·p-value가 아니다. 거절은 두 모델이 같다는 뜻이 아니라, 이 기록으로 우열을 말할 근거가 없다는 뜻이다.", ""])
+
+
+def _append_claims(base, ordered, scorer, out: list[str]) -> None:
+    """클레임 등급과 비교 판정을 추가한다."""
+    credentials, verdicts = _claims(base, ordered, scorer)
+    out.extend(["## 클레임 등급", "", "문항별 데이터가 없어 항목 벡터 재현성은 측정하지 않았다. 대표 런은 모델마다 하나여서 모두 `snapshot`이다.", ""])
+    for model, credential in credentials.items():
+        out.append(f"- `{model}` — `{credential['claim_class']}` (k={credential['k']}) · {credential['reason']}")
+    out.extend(["", "## 발행 가능한 우열 주장", ""])
+    for left, right, verdict in verdicts:
+        if verdict["comparable"]:
+            winner = left if verdict["winner"] == "left" else right
+            out.append(f"- `{winner}` 우세 — {verdict['reason']}")
+        else:
+            out.append(f"- `{left}` vs `{right}` — **발행 불가**: {verdict['reason']}")
+    out.extend(["", "> 가설검정·신뢰구간·p-value가 아니다. 거절은 두 모델이 같다는 뜻이 아니라, 이 기록으로 우열을 말할 근거가 없다는 뜻이다.", ""])
+
+
+def _append_rejected(rejected, out: list[str]) -> None:
+    """거부된 런의 사유와 참고 수치를 추가한다."""
     if rejected:
         out.extend(["## 발행하지 않은 런", ""])
         for summary in rejected:
@@ -238,6 +260,28 @@ def render_markdown(summaries: list[dict[str, Any]], folded: list[dict[str, Any]
             if summary["macro"]["accuracy"] is not None:
                 out.append(f"  - 참고 macro {_pm(summary['macro']['accuracy'], summary['macro']['stderr'])} — **위 표와 같은 축에 놓을 수 없다**")
         out.append("")
+
+
+def render_markdown(summaries: list[dict[str, Any]], folded: list[dict[str, Any]], scorer, base: Path | None = None) -> str:
+    """런 표 다음에 클레임·비교 거부·읽는 법을 같은 순서로 낸다."""
+
+    published = [summary for summary in summaries if summary["publish_status"]["publishable"]]
+    rejected = [summary for summary in summaries if not summary["publish_status"]["publishable"]]
+    ordered, other_protocol = _partition_protocols(published)
+    out = ["# KMMLU (lm-eval-harness, 5-shot)", ""]
+    out.append("**공식 점수는 45과목 5-shot macro 하나다.** 문항가중은 보조 수치이며 KMMLU 점수의 헤드라인·정렬에 쓰지 않는다.")
+    out.append("")
+    if ordered:
+        _append_main_table(ordered, out)
+
+        _append_other_protocol(other_protocol, out)
+
+        _append_warnings(ordered, other_protocol, out)
+        _append_subjects(ordered, scorer, out)
+    _append_folded(folded, out)
+    if ordered and base is not None:
+        _append_claims(base, ordered, scorer, out)
+    _append_rejected(rejected, out)
     out.extend(["## 읽는 법", "", "- 공식 축은 45과목 5-shot macro다. 문항가중은 과목 크기 차이를 드러내는 보조 수치다.", "- 재현성은 미측정이다. 문항 표집 오차는 모델을 다시 실행했을 때의 흔들림이 아니다.", "- 발행 불가 런의 참고 수치는 역사 기록일 뿐, 위 표 수치와 비교하거나 순위를 만들 수 없다."])
     return "\n".join(out)
 

@@ -136,11 +136,8 @@ def build_summary(results_dir: Path) -> Dict[str, Any]:
     return build_summary_from_loaded(loaded, results_dir)
 
 
-def print_table(summary: Dict[str, Any], skipped_count: int) -> None:
-    print(f"{PREFIX} model={summary['model']} track={summary['track']}")
-    cache_by_level = (
-        (summary.get("cache_miss_diagnostics") or {}).get("by_level") or {}
-    )
+def _print_level_scores(summary: Dict[str, Any], cache_by_level: dict) -> None:
+    """v2 레벨별 점수와 캐시 진단을 출력한다."""
     for level in ALL_LEVELS:
         result = summary["by_level"].get(level)
         if not result:
@@ -167,6 +164,10 @@ def print_table(summary: Dict[str, Any], skipped_count: int) -> None:
                 else ""
             )
         )
+
+
+def _print_v2_headline(summary: Dict[str, Any]) -> None:
+    """v2 총점과 분모를 출력한다."""
     scored_levels = summary.get(
         "scored_levels",
         sum(
@@ -182,7 +183,10 @@ def print_table(summary: Dict[str, Any], skipped_count: int) -> None:
         f"status={summary.get('agent_score_status', 'unknown')} "
         f"scored_levels={scored_levels}/{required_levels}"
     )
-    v3 = summary.get("scoring_v3")
+
+
+def _print_v3_scores(v3: Any) -> None:
+    """v3 L6와 총점을 출력한다."""
     if isinstance(v3, dict):
         l6 = (v3.get("by_level") or {}).get("L6")
         if isinstance(l6, dict):
@@ -202,7 +206,10 @@ def print_table(summary: Dict[str, Any], skipped_count: int) -> None:
             f"status={v3.get('agent_score_status', 'unknown')} "
             f"scored_levels={v3.get('scored_levels')}/{v3.get('required_levels')}"
         )
-    v4 = summary.get("scoring_v4")
+
+
+def _print_v4_scores(summary: Dict[str, Any], v3: Any, v4: Any, cache_by_level: dict) -> None:
+    """v4 총점과 버전별 레벨 행렬을 출력한다."""
     if isinstance(v4, dict):
         print(
             f"{PREFIX} version={SCORING_VERSION_V4} "
@@ -234,6 +241,19 @@ def print_table(summary: Dict[str, Any], skipped_count: int) -> None:
                 f"{cache_token}"
             )
         print(f"{PREFIX} NOTE {L4_FIXTURE_COVERAGE_NOTICE}")
+
+
+def print_table(summary: Dict[str, Any], skipped_count: int) -> None:
+    print(f"{PREFIX} model={summary['model']} track={summary['track']}")
+    cache_by_level = (
+        (summary.get("cache_miss_diagnostics") or {}).get("by_level") or {}
+    )
+    _print_level_scores(summary, cache_by_level)
+    _print_v2_headline(summary)
+    v3 = summary.get("scoring_v3")
+    _print_v3_scores(v3)
+    v4 = summary.get("scoring_v4")
+    _print_v4_scores(summary, v3, v4, cache_by_level)
     cache_overall = (
         (summary.get("cache_miss_diagnostics") or {}).get("overall") or {}
     )

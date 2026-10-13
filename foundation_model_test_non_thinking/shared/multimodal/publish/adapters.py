@@ -11,6 +11,10 @@ from pathlib import Path
 from typing import Any, Callable, Iterable, Mapping
 
 from .classify import classify_record
+from .adapters_protocol import (
+    _add_decoding, _dataset_revision, _add_dataset_provenance,
+    _kreta_protocol, _judge_protocol,
+)
 from .schema import (
     COMPARISON_CRITICAL_UNKNOWN,
     KRETA_ANSWER_PARSER_HASH,
@@ -249,37 +253,6 @@ def _run_config(summary: Mapping[str, Any], source_dir: Path) -> dict[str, Any]:
     return {}
 
 
-def _add_decoding(config: Mapping[str, Any], recorded: dict[str, Any], unknown: list[str]) -> None:
-    decoding = config.get("decoding") or {}
-    serving = config.get("serving_constraints")
-    removed = set(serving.get("removed_parameters") or []) if isinstance(serving, Mapping) else set()
-    for key in ("temperature", "max_tokens", "seed"):
-        value = decoding.get(key)
-        if key in removed:
-            recorded[f"{key}_removed"] = True
-        elif value is None:
-            unknown.append(key)
-        else:
-            recorded[key] = value
-    if isinstance(serving, Mapping):
-        # Carry every key the run recorded, not a fixed projection: dropping a
-        # constraint this code does not know about would let a constrained run
-        # share a cohort with an unconstrained one.
-        snapshot = {
-            key: serving.get(key)
-            for key in (
-                "unsupported_sampling_params",
-                "max_output_tokens",
-                "force_skip_special_tokens",
-                "removed_parameters",
-                "skip_special_tokens",
-            )
-        }
-        snapshot.update({key: value for key, value in serving.items() if key not in snapshot})
-        recorded["serving_constraints"] = snapshot
-    unknown.extend(("prompt_template_hash", "answer_parser_hash", "image_preprocessing_version"))
-
-
 def _session_of(path: Path) -> str | None:
     """The results session a path belongs to: results/<model>/<session>/..."""
 
@@ -294,22 +267,6 @@ def _session_of(path: Path) -> str | None:
 def _prediction_session(summary: Mapping[str, Any], sibling: Path) -> str | None:
     predfile = summary.get("predfile")
     return _session_of(Path(predfile)) if predfile else _session_of(sibling)
-
-
-def _dataset_revision(config: Mapping[str, Any]) -> Any:
-    dataset = config.get("dataset") or {}
-    return dataset.get("revision") or dataset.get("git_commit")
-
-
-def _add_dataset_provenance(config: Mapping[str, Any], recorded: dict[str, Any]) -> None:
-    dataset = config.get("dataset")
-    if not isinstance(dataset, Mapping):
-        return
-    recorded["dataset_provenance"] = {
-        key: dataset.get(key)
-        for key in ("huggingface_id", "revision", "revision_source", "git_repo", "git_commit")
-        if key in dataset
-    }
 
 
 def _accuracy_item_keys(
@@ -516,10 +473,8 @@ def _kreta_axes(rows: list[Mapping[str, Any]], measured_only: bool = True) -> tu
     return correct, axes, {name: (values[0], values[1]) for name, values in groups.items()}
 
 
-def adapt_kreta(jsonl_path: Path) -> dict[str, Any]:
-    source_dir = jsonl_path.parent
-    failures: list[str] = []
-    warnings: list[str] = []
+def _read_kreta_rows(jsonl_path: Path, failures: list[str]) -> list[dict[str, Any]]:
+    """JSONL을 읽고 실패 전까지 읽은 행과 실패 사유를 남긴다."""
     rows: list[dict[str, Any]] = []
     try:
         with jsonl_path.open(encoding="utf-8") as fh:
@@ -531,6 +486,76 @@ def adapt_kreta(jsonl_path: Path) -> dict[str, Any]:
                     rows.append(value)
     except Exception as exc:
         failures.append(f"JSONL 읽기 실패: {type(exc).__name__}")
+    return rows
+
+
+def _kreta_upstream_accuracy(jsonl_path: Path, summary_path: Path, warnings: list[str]) -> Any:
+    """상류 비교값을 읽고 source 격리 경고를 추가한다."""
+    try:
+        all_summaries = load_json(summary_path)
+        stored = all_summaries.get(jsonl_path.stem) if isinstance(all_summaries, dict) else None
+    except Exception:
+        stored = None
+    upstream_accuracy = stored.get("overall_accuracy") if isinstance(stored, dict) else None
+    if not isinstance(stored, dict):
+        warnings.append("상류 results.json 비교값 없음 — raw 독립 재채점만 사용")
+    elif list(all_summaries) != [jsonl_path.stem]:
+        warnings.append("상류 results.json에 다른 source key가 함께 있음 — 채점에는 사용하지 않음")
+
+    return upstream_accuracy
+
+
+def _aggregate_judge_rows(rows: list, summary: Mapping[str, Any], failures: list[str]) -> tuple:
+    """Judge 유효 점수를 재집계하고 저장 요약과 대조한다."""
+    counts = {
+        "attempted": len(rows),
+        "measured": 0,
+        "errored": 0,
+        "unresolved": 0,
+    }
+    scores: list[int] = []
+    item_keys: list[str] = []
+    for row in rows:
+        item_key = row.get("dataset_item_id")
+        if item_key is None:
+            failures.append("judge row dataset_item_id가 누락됨")
+        else:
+            item_keys.append(str(item_key))
+        if row.get("error"):
+            counts["errored"] += 1
+            continue
+        score = row.get("score")
+        if isinstance(score, bool) or not isinstance(score, int) or not 0 <= score <= 10:
+            counts["unresolved"] += 1
+            continue
+        counts["measured"] += 1
+        scores.append(score)
+    # Non-accuracy benchmarks use correct_measured for records that produced
+    # a contract-valid primary measurement (a valid judge score here).
+    counts["correct_measured"] = counts["measured"]
+    if counts["attempted"] != EXPECTED_COUNTS["koffvqa_api_judge"]:
+        failures.append(f"기대 건수 {EXPECTED_COUNTS['koffvqa_api_judge']}와 다름")
+    if counts["errored"]:
+        failures.append("judge 오류가 포함됨")
+    if counts["unresolved"]:
+        failures.append("0~10 정수 아닌 judge 점수가 포함됨")
+    if len(item_keys) != len(rows) or len(set(item_keys)) != len(item_keys):
+        failures.append("judge dataset item key가 누락되었거나 중복됨")
+    item_digest = dataset_item_digest(item_keys) if len(item_keys) == len(rows) else None
+    if summary.get("scored") != len(scores):
+        failures.append("raw 재집계와 summary scored가 일치하지 않음")
+    average = sum(scores) / len(scores) if scores else None
+    stored_average = summary.get("avg_score")
+    if average is not None and (not isinstance(stored_average, (int, float)) or not math.isclose(average, stored_average, abs_tol=1e-12)):
+        failures.append("raw 재집계와 summary 평균이 일치하지 않음")
+    return counts, scores, item_digest, average
+
+
+def adapt_kreta(jsonl_path: Path) -> dict[str, Any]:
+    source_dir = jsonl_path.parent
+    failures: list[str] = []
+    warnings: list[str] = []
+    rows = _read_kreta_rows(jsonl_path, failures)
     aggregate = summarize_records(
         "kreta", rows, expected_count=EXPECTED_COUNTS["kreta"],
         verify_stored_prediction=True,
@@ -547,17 +572,7 @@ def adapt_kreta(jsonl_path: Path) -> dict[str, Any]:
     counts["correct_measured"] = correct
 
     summary_path = source_dir / "results.json"
-    try:
-        all_summaries = load_json(summary_path)
-        stored = all_summaries.get(jsonl_path.stem) if isinstance(all_summaries, dict) else None
-    except Exception:
-        stored = None
-    upstream_accuracy = stored.get("overall_accuracy") if isinstance(stored, dict) else None
-    if not isinstance(stored, dict):
-        warnings.append("상류 results.json 비교값 없음 — raw 독립 재채점만 사용")
-    elif list(all_summaries) != [jsonl_path.stem]:
-        warnings.append("상류 results.json에 다른 source key가 함께 있음 — 채점에는 사용하지 않음")
-
+    upstream_accuracy = _kreta_upstream_accuracy(jsonl_path, summary_path, warnings)
     model, mode = _kreta_mode(jsonl_path.stem)
 
     config_path = source_dir / "run_config.json"
@@ -565,38 +580,7 @@ def adapt_kreta(jsonl_path: Path) -> dict[str, Any]:
         config = load_json(config_path)
     except Exception:
         config = {}
-    recorded: dict[str, Any] = {"benchmark": "KRETA"}
-    inferred: dict[str, Any] = {}
-    unknown: list[str] = []
-    if mode == "unknown":
-        unknown.append("mode")
-    else:
-        recorded["mode"] = mode
-        _add_decoding(config, recorded, unknown)
-        # KRETA binds its own fixed response parser below; this is known even
-        # though the generic helper treats answer parser metadata as absent.
-        unknown = [item for item in unknown if item != "answer_parser_hash"]
-        if "max_tokens" in unknown:
-            unknown.remove("max_tokens")
-            inferred["max_tokens"] = {
-                "value": 32 if mode == "direct" else 4096,
-                "basis": f"legacy run_kreta.sh: {mode} mode default KRETA_MAX_TOKENS",
-            }
-    recorded["answer_parser_version"] = KRETA_ANSWER_PARSER_VERSION
-    recorded["answer_parser_hash"] = KRETA_ANSWER_PARSER_HASH
-    _add_dataset_provenance(config, recorded)
-    if item_digest:
-        recorded["dataset_item_digest"] = item_digest
-    else:
-        unknown.append("dataset_item_digest")
-    splits = {row.get("split") for row in rows if row.get("split") is not None}
-    if len(splits) == 1:
-        recorded["split"] = next(iter(splits))
-    else:
-        unknown.append("split")
-    if mode == "unknown":
-        unknown.extend(("temperature", "seed", "prompt_template_hash", "image_preprocessing_version"))
-    protocol = make_protocol(recorded, inferred, unknown)
+    protocol = _kreta_protocol(config, mode, item_digest, rows)
     metrics = {
         "strict": _fraction(correct, counts["attempted"]),
         "conditional": _fraction(correct, counts["measured"]),
@@ -685,47 +669,7 @@ def adapt_koffvqa_judge(source_dir: Path) -> dict[str, Any]:
     if not isinstance(rows, list) or not isinstance(summary, dict):
         rows, summary = [], {}
         failures.append("results.json/summary.json 형식이 올바르지 않음")
-    counts = {
-        "attempted": len(rows),
-        "measured": 0,
-        "errored": 0,
-        "unresolved": 0,
-    }
-    scores: list[int] = []
-    item_keys: list[str] = []
-    for row in rows:
-        item_key = row.get("dataset_item_id")
-        if item_key is None:
-            failures.append("judge row dataset_item_id가 누락됨")
-        else:
-            item_keys.append(str(item_key))
-        if row.get("error"):
-            counts["errored"] += 1
-            continue
-        score = row.get("score")
-        if isinstance(score, bool) or not isinstance(score, int) or not 0 <= score <= 10:
-            counts["unresolved"] += 1
-            continue
-        counts["measured"] += 1
-        scores.append(score)
-    # Non-accuracy benchmarks use correct_measured for records that produced
-    # a contract-valid primary measurement (a valid judge score here).
-    counts["correct_measured"] = counts["measured"]
-    if counts["attempted"] != EXPECTED_COUNTS["koffvqa_api_judge"]:
-        failures.append(f"기대 건수 {EXPECTED_COUNTS['koffvqa_api_judge']}와 다름")
-    if counts["errored"]:
-        failures.append("judge 오류가 포함됨")
-    if counts["unresolved"]:
-        failures.append("0~10 정수 아닌 judge 점수가 포함됨")
-    if len(item_keys) != len(rows) or len(set(item_keys)) != len(item_keys):
-        failures.append("judge dataset item key가 누락되었거나 중복됨")
-    item_digest = dataset_item_digest(item_keys) if len(item_keys) == len(rows) else None
-    if summary.get("scored") != len(scores):
-        failures.append("raw 재집계와 summary scored가 일치하지 않음")
-    average = sum(scores) / len(scores) if scores else None
-    stored_average = summary.get("avg_score")
-    if average is not None and (not isinstance(stored_average, (int, float)) or not math.isclose(average, stored_average, abs_tol=1e-12)):
-        failures.append("raw 재집계와 summary 평균이 일치하지 않음")
+    counts, scores, item_digest, average = _aggregate_judge_rows(rows, summary, failures)
 
     sibling = source_dir.parent / "koffvqa"
     candidates = sorted(sibling.glob("*_gen.xlsx"))
@@ -748,30 +692,7 @@ def adapt_koffvqa_judge(source_dir: Path) -> dict[str, Any]:
     prediction_session = _prediction_session(summary, sibling)
     judge_session = _session_of(source_dir)
     rejudge = bool(prediction_session and judge_session and prediction_session != judge_session)
-    recorded = {
-        "benchmark": "KOFFVQA-judge",
-        "judge_model": summary.get("judge_model"),
-        "judge_prompt_version": summary.get("judge_prompt_version"),
-        "prediction_sha256": recorded_sha,
-        "dataset_item_digest": item_digest,
-        "limit": (config.get("extra") or {}).get("limit"),
-    }
-    for key in ("judge_prompt_template_sha256", "judge_base_url", "judge_served_identity"):
-        if summary.get(key):
-            recorded[key] = summary[key]
-    if rejudge:
-        # Diagnostic variant: the predictions are held fixed, so they are part of
-        # this protocol's identity rather than informational provenance.
-        recorded["rejudged_prediction_sha256"] = recorded_sha
-    unknown = [key for key in ("judge_model", "judge_prompt_version") if not recorded.get(key)]
-    if not summary.get("judge_prompt_template_sha256"):
-        unknown.append("judge_prompt_template_hash")
-    _add_decoding(config, recorded, unknown)
-    if generation_revision:
-        recorded["dataset_provenance"] = {"revision": generation_revision}
-    if not item_digest:
-        unknown.append("dataset_item_digest")
-    protocol = make_protocol(recorded, {}, unknown)
+    protocol = _judge_protocol(summary, config, recorded_sha, item_digest, rejudge, generation_revision)
     metrics = {
         "axes": [{"name": "rubric", "value": average, "unit": "score/10", "numerator": sum(scores), "denominator": len(scores)}]
     }

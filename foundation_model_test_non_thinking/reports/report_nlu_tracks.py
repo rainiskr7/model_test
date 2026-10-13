@@ -78,6 +78,214 @@ def credentials(base: Path, scorable: list[dict[str, Any]]) -> dict[str, dict[st
     return {model: credential(runs) for model, runs in sorted(by_model.items())}
 
 
+def _append_item_table(scorable, out: list[str]) -> None:
+    """항목별 판정 표를 출력 목록에 추가한다."""
+    item_ids = [entry["item_id"] for entry in scorable[0]["items"]]
+    out.append("| 모델 | 세션 | " + " | ".join(item_ids) + " | 통과 |")
+    out.append("|---|---|" + "---|" * (len(item_ids) + 1))
+    for run in scorable:
+        marks = {e["item_id"]: STATUS_MARK.get(e["status"], "?") for e in run["items"]}
+        cells = " | ".join(marks.get(i, "?") for i in item_ids)
+        out.append(
+            f"| `{run['model']}` | `{run['session']}` | {cells} | "
+            f"{run['counts']['pass']}/{len(item_ids)} |"
+        )
+    out.append("")
+    out.append("O = 정답 라벨 · X = 다른 라벨 · − = 계약 미준수(오답이 아니다)")
+    out.append("")
+
+
+def _append_compliance(scorable, scorer, out: list[str]) -> None:
+    """계약 준수 현황을 출력 목록에 추가한다."""
+    comp = scorer.compliance(scorable)
+    out.append("## 계약 준수")
+    out.append("")
+    out.append(
+        f"채점된 {comp['scored_runs']}런 · 항목 {comp['items']}개 중 "
+        f"**{comp['honored']}개가 형식을 지켰다** (미준수 {comp['invalid']}개)."
+    )
+    out.append("")
+    for model, info in sorted(comp["per_model"].items()):
+        honored = info["items"] - info["invalid"]
+        out.append(
+            f"- `{model}` — {info['runs']}런, {honored}/{info['items']} 준수"
+        )
+    out.append("")
+    out.append(
+        "준수 실패는 **오답이 아니다**. 미준수가 많으면 모델이 틀린 것이 아니라 "
+        "계약 문구를 고쳐야 한다는 뜻이다."
+    )
+    out.append("")
+
+
+def _append_discrimination(scorable, scorer, out: list[str]) -> None:
+    """항목별 변별 판정을 출력 목록에 추가한다."""
+    out.append("## 이 항목들이 모델을 갈랐나")
+    out.append("")
+    disc = scorer.discrimination(scorable)
+    for item_id, info in disc.items():
+        if not info["assessable"]:
+            verdict = (
+                f"판단 불가 — 채점된 모델이 {info['models']}개뿐이다 "
+                "(변별은 모델 간 비교에서만 나온다)"
+            )
+            observed = ", ".join(info["distinct_answers"]) or "없음"
+        elif info["distinct_answers"]:
+            verdict = (
+                "**변별함**" if info["discriminating"]
+                else f"변별 못 함 — {info['models']}개 모델이 모두 같은 답"
+            )
+            observed = ", ".join(info["distinct_answers"])
+        else:
+            verdict = "판단 불가 — 유효한 답이 하나도 없다"
+            observed = "없음"
+        note = f", 계약 미준수 {info['invalid_runs']}런" if info["invalid_runs"] else ""
+        out.append(f"- `{item_id}` — {verdict} (관측된 답: {observed}{note})")
+    out.append("")
+
+
+def _append_stability(scorable, scorer, out: list[str]) -> None:
+    """반복 실행의 답 안정성을 출력 목록에 추가한다."""
+    stab = scorer.stability(scorable)
+    repeated = {m: i for m, i in stab.items() if i["runs"] >= 2}
+    if repeated:
+        out.append("## 반복 실행 안정성 (같은 모델)")
+        out.append("")
+        out.append(
+            "**통과 수가 같다고 같은 측정이 아니다.** 항목별 답을 대조한다 — "
+            "다른 트랙에서 통과 건수가 같은데 통과 항목이 뒤집힌 사례를 겪었다."
+        )
+        out.append("")
+        for key, info in sorted(repeated.items(), key=repr):
+            # 코호트 키는 튜플이다(모델, 계약 버전, 제거된 파라미터). 그대로 찍으면
+            # 모델명 자리에 내부 자료구조가 나온다.
+            label = _cohort_label(key)
+            if info["status"] == "IDENTICAL":
+                out.append(f"- {label} — {info['runs']}런 **IDENTICAL** (항목별 답이 전부 같다)")
+            else:
+                items = ", ".join(f"`{k}`({'/'.join(v)})" for k, v in info["unstable_items"].items())
+                out.append(f"- {label} — {info['runs']}런 **DIVERGED**: {items}")
+            if info.get("sampling_controls_removed"):
+                removed = ", ".join(info.get("removed_sampling_params") or []) or "일부"
+                out.append(
+                    f"  - 이 백엔드는 `{removed}` 를 거부해 **샘플링 제어 수단이 제거됐다**. "
+                    "흔들림은 모델 결함이 아니라 구조적 성질이며, "
+                    "이 모델의 **단일 런 숫자는 측정이 아니다**."
+                )
+        out.append("")
+
+
+def _append_credentials(scorable, scorer, base, out: list[str]) -> tuple[dict, Any]:
+    """클레임 등급과 답 단위 불안정을 추가한다."""
+    creds = credentials(base, scorable)
+    _, comparable = _claims(base)
+    # 통과 벡터는 **오답끼리의 흔들림을 보지 못한다.** 실측: 세 런이
+    # walk/depends/walk 로 갈렸는데 정답이 drive 라 세 번 다 오답 —
+    # 통과 벡터는 전부 False 로 같아 "뒤집힘 0" 이 된다. 그대로 두면 같은
+    # 보고서 안에서 안정성 절은 DIVERGED, 클레임 절은 뒤집힘 0 이라 모순으로
+    # 읽힌다. 답 단위 흔들림을 함께 실어 예산이 하한임을 밝힌다.
+    answer_unstable: dict[str, set[str]] = {}
+    for key, info in scorer.stability(scorable).items():
+        model = key[0] if isinstance(key, tuple) else key
+        answer_unstable.setdefault(str(model), set()).update(
+            (info.get("unstable_items") or {}).keys()
+        )
+    out.append("## 클레임 등급")
+    out.append("")
+    out.append(
+        "**1회 실행 숫자는 순위표에 올리지 않는다.** 저장·표시·역사 인용은 되지만 "
+        "우열 주장의 근거는 아니다. 반복 3회 이상이어야 반복성을 관측했다고 말한다."
+    )
+    out.append("")
+    for model, cred in creds.items():
+        if cred["claim_class"] != "repeatability_observed":
+            out.append(f"- `{model}` — `{cred['claim_class']}` (k={cred['k']}) · {cred['reason']}")
+            continue
+        lo, hi = cred["instability_envelope"]
+        out.append(
+            f"- `{model}` — `{cred['claim_class']}` (k={cred['k']}) · "
+            f"다수결 {cred['majority_passed']}/{cred['measured_items']} · "
+            f"건수범위 {cred['count_range']} · 뒤집힘 {len(cred['unstable_items'])}건 · "
+            f"불안정 예산 {lo}–{hi}"
+        )
+        hidden = sorted(answer_unstable.get(model, set()) - set(cred["unstable_items"]))
+        if hidden:
+            out.append(
+                f"  - **이 예산은 하한이다.** 통과 여부는 그대로였지만 답이 런마다 "
+                f"달라진 항목이 있다: {', '.join(f'`{i}`' for i in hidden)}. "
+                "오답끼리 오가면 통과 벡터는 안정으로 보인다 — 실제 불안정은 이보다 크다."
+            )
+    out.append("")
+    return creds, comparable
+
+
+def _append_comparisons(creds, comparable, out: list[str]) -> None:
+    """반복 관측된 모델의 비교 판정을 추가한다."""
+    verified = [(m, c) for m, c in creds.items()
+                if c["claim_class"] == "repeatability_observed"]
+    out.append("### 발행 가능한 우열 주장")
+    out.append("")
+    published = False
+    for i in range(len(verified)):
+        for j in range(i + 1, len(verified)):
+            (left, cl), (right, cr) = verified[i], verified[j]
+            verdict = comparable(cl, cr)
+            if not verdict["comparable"]:
+                out.append(f"- `{left}` vs `{right}` — **발행 불가**: {verdict['reason']}")
+                continue
+            published = True
+            winner = left if verdict["winner"] == "left" else right
+            out.append(f"- `{winner}` 우세 — {verdict['reason']}")
+    if not published and len(verified) < 2:
+        out.append("- 반복 관측된 모델이 2개 미만이라 비교할 대상이 없다.")
+    out.append("")
+    out.append(
+        "> 이것은 가설검정이 아니다. 신뢰구간도 p-value 도 아니다. "
+        "**관측된 불안정으로 설명이 끝나는 우열 주장을 거절하는 규칙**일 뿐이며, "
+        "거절되지 않았다고 '유의하다'는 뜻이 아니고 거절됐다고 '두 모델이 같다'는 뜻도 아니다."
+    )
+    out.append("")
+
+
+def _append_baseline(scorer, out: list[str]) -> None:
+    """상수 전략 기준선을 출력 목록에 추가한다."""
+    baseline = scorer.constant_baseline()
+    out.append("## 상수 전략 기준선")
+    out.append("")
+    out.append(
+        f"항상 한 라벨만 답하면 {baseline['total_items']}개 중 최대 "
+        f"**{baseline['best_constant_passes']}개**를 통과한다"
+        f" ({', '.join(baseline['best_constant_labels'])})."
+    )
+    out.append("이 수보다 조금 나은 결과는 실력의 증거가 아니다.")
+    out.append("")
+
+
+def _append_rejected(runs, out: list[str]) -> None:
+    """채점하지 않은 런과 사유를 추가한다."""
+    rejected = [r for r in runs if not r["scorable"]]
+    if rejected:
+        out.append("## 채점하지 않은 런")
+        out.append("")
+        for run in rejected:
+            out.append(f"- `{run['session']}` — {'; '.join(run['blockers'])}")
+        out.append("")
+
+
+def _append_reading_notes(out: list[str]) -> None:
+    """보고서 해석 지침을 추가한다."""
+    out.append("## 읽는 법")
+    out.append("")
+    out.append("- 항목이 5개다. 한 항목이 뒤집히면 '통과 수'가 20% 움직인다.")
+    out.append("- 변별 못 한 항목은 이 모델 집합에서 정보를 주지 않는다 — 통과 수를 부풀린다.")
+    out.append("- `−` 는 형식을 못 지킨 것이지 틀린 것이 아니다. 둘을 합치면 다른 것을 재게 된다.")
+    out.append(
+        "- 샘플링 제어가 **제거되지 않았다고 결정론이 보장되는 것은 아니다**. "
+        "배치 구성·MoE 라우팅·부동소수점 비결합성으로도 결과는 달라진다. "
+        "이 도구는 재현을 부정하는 근거만 말한다."
+    )
+
+
 def render_markdown(runs: list[dict[str, Any]], scorer, base: Path | None = None) -> str:
     scorable = [r for r in runs if r["scorable"]]
     out: list[str] = ["# NLU 항목별 판정", ""]
@@ -90,186 +298,24 @@ def render_markdown(runs: list[dict[str, Any]], scorer, base: Path | None = None
     if not scorable:
         out.append("채점 가능한 런이 없다.")
     else:
-        item_ids = [entry["item_id"] for entry in scorable[0]["items"]]
-        out.append("| 모델 | 세션 | " + " | ".join(item_ids) + " | 통과 |")
-        out.append("|---|---|" + "---|" * (len(item_ids) + 1))
-        for run in scorable:
-            marks = {e["item_id"]: STATUS_MARK.get(e["status"], "?") for e in run["items"]}
-            cells = " | ".join(marks.get(i, "?") for i in item_ids)
-            out.append(
-                f"| `{run['model']}` | `{run['session']}` | {cells} | "
-                f"{run['counts']['pass']}/{len(item_ids)} |"
-            )
-        out.append("")
-        out.append("O = 정답 라벨 · X = 다른 라벨 · − = 계약 미준수(오답이 아니다)")
-        out.append("")
+        _append_item_table(scorable, out)
 
-        comp = scorer.compliance(scorable)
-        out.append("## 계약 준수")
-        out.append("")
-        out.append(
-            f"채점된 {comp['scored_runs']}런 · 항목 {comp['items']}개 중 "
-            f"**{comp['honored']}개가 형식을 지켰다** (미준수 {comp['invalid']}개)."
-        )
-        out.append("")
-        for model, info in sorted(comp["per_model"].items()):
-            honored = info["items"] - info["invalid"]
-            out.append(
-                f"- `{model}` — {info['runs']}런, {honored}/{info['items']} 준수"
-            )
-        out.append("")
-        out.append(
-            "준수 실패는 **오답이 아니다**. 미준수가 많으면 모델이 틀린 것이 아니라 "
-            "계약 문구를 고쳐야 한다는 뜻이다."
-        )
-        out.append("")
+        _append_compliance(scorable, scorer, out)
 
-        out.append("## 이 항목들이 모델을 갈랐나")
-        out.append("")
-        disc = scorer.discrimination(scorable)
-        for item_id, info in disc.items():
-            if not info["assessable"]:
-                verdict = (
-                    f"판단 불가 — 채점된 모델이 {info['models']}개뿐이다 "
-                    "(변별은 모델 간 비교에서만 나온다)"
-                )
-                observed = ", ".join(info["distinct_answers"]) or "없음"
-            elif info["distinct_answers"]:
-                verdict = (
-                    "**변별함**" if info["discriminating"]
-                    else f"변별 못 함 — {info['models']}개 모델이 모두 같은 답"
-                )
-                observed = ", ".join(info["distinct_answers"])
-            else:
-                verdict = "판단 불가 — 유효한 답이 하나도 없다"
-                observed = "없음"
-            note = f", 계약 미준수 {info['invalid_runs']}런" if info["invalid_runs"] else ""
-            out.append(f"- `{item_id}` — {verdict} (관측된 답: {observed}{note})")
-        out.append("")
+        _append_discrimination(scorable, scorer, out)
 
-        stab = scorer.stability(scorable)
-        repeated = {m: i for m, i in stab.items() if i["runs"] >= 2}
-        if repeated:
-            out.append("## 반복 실행 안정성 (같은 모델)")
-            out.append("")
-            out.append(
-                "**통과 수가 같다고 같은 측정이 아니다.** 항목별 답을 대조한다 — "
-                "다른 트랙에서 통과 건수가 같은데 통과 항목이 뒤집힌 사례를 겪었다."
-            )
-            out.append("")
-            for key, info in sorted(repeated.items(), key=repr):
-                # 코호트 키는 튜플이다(모델, 계약 버전, 제거된 파라미터). 그대로 찍으면
-                # 모델명 자리에 내부 자료구조가 나온다.
-                label = _cohort_label(key)
-                if info["status"] == "IDENTICAL":
-                    out.append(f"- {label} — {info['runs']}런 **IDENTICAL** (항목별 답이 전부 같다)")
-                else:
-                    items = ", ".join(f"`{k}`({'/'.join(v)})" for k, v in info["unstable_items"].items())
-                    out.append(f"- {label} — {info['runs']}런 **DIVERGED**: {items}")
-                if info.get("sampling_controls_removed"):
-                    removed = ", ".join(info.get("removed_sampling_params") or []) or "일부"
-                    out.append(
-                        f"  - 이 백엔드는 `{removed}` 를 거부해 **샘플링 제어 수단이 제거됐다**. "
-                        "흔들림은 모델 결함이 아니라 구조적 성질이며, "
-                        "이 모델의 **단일 런 숫자는 측정이 아니다**."
-                    )
-            out.append("")
+        _append_stability(scorable, scorer, out)
 
     if scorable and base is not None:
-        creds = credentials(base, scorable)
-        _, comparable = _claims(base)
-        # 통과 벡터는 **오답끼리의 흔들림을 보지 못한다.** 실측: 세 런이
-        # walk/depends/walk 로 갈렸는데 정답이 drive 라 세 번 다 오답 —
-        # 통과 벡터는 전부 False 로 같아 "뒤집힘 0" 이 된다. 그대로 두면 같은
-        # 보고서 안에서 안정성 절은 DIVERGED, 클레임 절은 뒤집힘 0 이라 모순으로
-        # 읽힌다. 답 단위 흔들림을 함께 실어 예산이 하한임을 밝힌다.
-        answer_unstable: dict[str, set[str]] = {}
-        for key, info in scorer.stability(scorable).items():
-            model = key[0] if isinstance(key, tuple) else key
-            answer_unstable.setdefault(str(model), set()).update(
-                (info.get("unstable_items") or {}).keys()
-            )
-        out.append("## 클레임 등급")
-        out.append("")
-        out.append(
-            "**1회 실행 숫자는 순위표에 올리지 않는다.** 저장·표시·역사 인용은 되지만 "
-            "우열 주장의 근거는 아니다. 반복 3회 이상이어야 반복성을 관측했다고 말한다."
-        )
-        out.append("")
-        for model, cred in creds.items():
-            if cred["claim_class"] != "repeatability_observed":
-                out.append(f"- `{model}` — `{cred['claim_class']}` (k={cred['k']}) · {cred['reason']}")
-                continue
-            lo, hi = cred["instability_envelope"]
-            out.append(
-                f"- `{model}` — `{cred['claim_class']}` (k={cred['k']}) · "
-                f"다수결 {cred['majority_passed']}/{cred['measured_items']} · "
-                f"건수범위 {cred['count_range']} · 뒤집힘 {len(cred['unstable_items'])}건 · "
-                f"불안정 예산 {lo}–{hi}"
-            )
-            hidden = sorted(answer_unstable.get(model, set()) - set(cred["unstable_items"]))
-            if hidden:
-                out.append(
-                    f"  - **이 예산은 하한이다.** 통과 여부는 그대로였지만 답이 런마다 "
-                    f"달라진 항목이 있다: {', '.join(f'`{i}`' for i in hidden)}. "
-                    "오답끼리 오가면 통과 벡터는 안정으로 보인다 — 실제 불안정은 이보다 크다."
-                )
-        out.append("")
+        creds, comparable = _append_credentials(scorable, scorer, base, out)
 
-        verified = [(m, c) for m, c in creds.items()
-                    if c["claim_class"] == "repeatability_observed"]
-        out.append("### 발행 가능한 우열 주장")
-        out.append("")
-        published = False
-        for i in range(len(verified)):
-            for j in range(i + 1, len(verified)):
-                (left, cl), (right, cr) = verified[i], verified[j]
-                verdict = comparable(cl, cr)
-                if not verdict["comparable"]:
-                    out.append(f"- `{left}` vs `{right}` — **발행 불가**: {verdict['reason']}")
-                    continue
-                published = True
-                winner = left if verdict["winner"] == "left" else right
-                out.append(f"- `{winner}` 우세 — {verdict['reason']}")
-        if not published and len(verified) < 2:
-            out.append("- 반복 관측된 모델이 2개 미만이라 비교할 대상이 없다.")
-        out.append("")
-        out.append(
-            "> 이것은 가설검정이 아니다. 신뢰구간도 p-value 도 아니다. "
-            "**관측된 불안정으로 설명이 끝나는 우열 주장을 거절하는 규칙**일 뿐이며, "
-            "거절되지 않았다고 '유의하다'는 뜻이 아니고 거절됐다고 '두 모델이 같다'는 뜻도 아니다."
-        )
-        out.append("")
+        _append_comparisons(creds, comparable, out)
 
-    baseline = scorer.constant_baseline()
-    out.append("## 상수 전략 기준선")
-    out.append("")
-    out.append(
-        f"항상 한 라벨만 답하면 {baseline['total_items']}개 중 최대 "
-        f"**{baseline['best_constant_passes']}개**를 통과한다"
-        f" ({', '.join(baseline['best_constant_labels'])})."
-    )
-    out.append("이 수보다 조금 나은 결과는 실력의 증거가 아니다.")
-    out.append("")
+    _append_baseline(scorer, out)
 
-    rejected = [r for r in runs if not r["scorable"]]
-    if rejected:
-        out.append("## 채점하지 않은 런")
-        out.append("")
-        for run in rejected:
-            out.append(f"- `{run['session']}` — {'; '.join(run['blockers'])}")
-        out.append("")
+    _append_rejected(runs, out)
 
-    out.append("## 읽는 법")
-    out.append("")
-    out.append("- 항목이 5개다. 한 항목이 뒤집히면 '통과 수'가 20% 움직인다.")
-    out.append("- 변별 못 한 항목은 이 모델 집합에서 정보를 주지 않는다 — 통과 수를 부풀린다.")
-    out.append("- `−` 는 형식을 못 지킨 것이지 틀린 것이 아니다. 둘을 합치면 다른 것을 재게 된다.")
-    out.append(
-        "- 샘플링 제어가 **제거되지 않았다고 결정론이 보장되는 것은 아니다**. "
-        "배치 구성·MoE 라우팅·부동소수점 비결합성으로도 결과는 달라진다. "
-        "이 도구는 재현을 부정하는 근거만 말한다."
-    )
+    _append_reading_notes(out)
     return "\n".join(out)
 
 

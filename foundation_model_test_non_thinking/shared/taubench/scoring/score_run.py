@@ -17,7 +17,7 @@ except ImportError:  # 파일 하나만 단독 로드할 때 (테스트 로더)
     _sys.path.insert(0, str(_Path(__file__).resolve().parent))
     from passk import pass_hat_k_table
 from pathlib import Path
-from typing import Any, Iterable, Mapping, Optional
+from typing import Any, Iterable, Mapping, NamedTuple, Optional
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from jsonwrite.atomic_json import write_json_atomic
@@ -210,27 +210,20 @@ def _trials_per_task(task_results):
     return sorted(set(counts.values())) if counts else []
 
 
-def score_domain(
-    domain: str,
-    raw: Optional[Mapping[str, Any]],
-    runnable_tasks: int,
-    unavailable_reason: Optional[str] = None,
-) -> dict[str, Any]:
-    if runnable_tasks == 0:
-        return {
-            "status": "not_measured",
-            "reason": unavailable_reason or "zero runnable tasks",
-            "pass_rate": None,
-            "runnable_tasks": 0,
-            "result_records": 0,
-            "measured": 0,
-            "passed": 0,
-            "failed": 0,
-            "task_results": [],
-        }
-    if raw is None:
-        raise ValueError(f"missing upstream results for runnable domain {domain}")
+class _SimulationScores(NamedTuple):
+    """시뮬레이션 판정 벡터와 집계 수치를 함께 전달한다."""
 
+    task_results: list[dict[str, Any]]
+    passed: int
+    failed: int
+    measured: int
+    not_measured: Counter
+    protocol_failures: Counter
+    simulations: list[Mapping[str, Any]]
+
+
+def _score_simulations(raw: Mapping[str, Any]) -> _SimulationScores:
+    """시뮬레이션별 보상과 후보 프로토콜 실패를 집계한다."""
     tasks = {str(task["id"]): task for task in raw.get("tasks") or []}
     task_results: list[dict[str, Any]] = []
     passed = failed = measured = 0
@@ -276,13 +269,13 @@ def score_domain(
             else:
                 failed += 1
         task_results.append(record)
-
-    terminations = Counter(str(sim.get("termination_reason")) for sim in simulations)
-    # 프로토콜 실패로 이미 측정된 시뮬레이션은 미완주 귀책 분류에서 뺀다.
-    candidate_attr, env_attr, unclassified_attr = _classify_incompletions(
-        [sim for sim in simulations if _candidate_protocol_failure(sim) is None]
+    return _SimulationScores(
+        task_results, passed, failed, measured, not_measured, protocol_failures, simulations
     )
 
+
+def _strict_pass_rate(measured: int, passed: int, candidate_attr: Mapping, env_attr: Mapping, unclassified_attr: Mapping) -> tuple:
+    """미완주 귀책에 따른 strict 분모와 점수를 계산한다."""
     # pass_rate_strict: 모델 귀책 미완주를 실패로 세는 분모. 서빙 의사결정용이다
     # ("이 모델을 붙이면 몇 %가 실제로 끝나는가"). upstream 의 pass_rate 를 덮어쓰지
     # 않는다 — 두 숫자는 서로 다른 질문에 답한다.
@@ -303,57 +296,11 @@ def score_domain(
     else:
         pass_rate_strict = None
         strict_reason = "완주한 시뮬레이션이 없다"
-
-    return {
-        "status": "measured" if measured else "not_measured",
-        "reason": None if measured else "no upstream records had a runnable numeric reward",
-        "pass_rate": passed / measured if measured else None,
-        "pass_rate_source": "tau2 results.simulations[].reward_info.reward",
-        "pass_rate_note": "후보 프로토콜 실패(candidate_protocol_failures)는 보상 0 의 측정된 실패로 분모·실패에 포함",
-        "pass_rate_strict": pass_rate_strict,
-        "pass_rate_strict_denominator": strict_denominator,
-        "pass_rate_strict_reason": strict_reason,
-        "pass_rate_strict_definition": (
-            "passed / (measured + 모델 귀책 미완주). upstream pass_rate 와 달리 모델이 "
-            "스스로 망가져 못 끝낸 태스크를 실패로 센다. 환경 귀책 오류가 있으면 null."
-        ),
-        # 키는 "<error_type>@<actor>" 다. actor 는 traceback 에서 뽑는다.
-        "incompletion_attribution": {
-            "candidate": dict(sorted(candidate_attr.items())),
-            "environment": dict(sorted(env_attr.items())),
-            "unclassified": dict(sorted(unclassified_attr.items())),
-        },
-        "runnable_tasks": runnable_tasks,
-        "result_records": len(simulations),
-        # 반복 시행이면 시뮬레이션 수와 과제 수가 다르다. 커버리지는 **과제** 단위로
-        # 봐야 한다 — 20과제를 4회 돌린 것을 "80과제를 쟀다" 로 세면 게이트가
-        # 무의미해진다. Pass^k 도 과제별 성공 횟수에서 나온다.
-        "distinct_tasks": len({str(record["task_id"]) for record in task_results}),
-        "distinct_tasks_measured": len({
-            str(record["task_id"])
-            for record in task_results
-            if record.get("evaluation_status") == "measured"
-        }),
-        "trials": _trials_per_task(task_results),
-        "pass_hat_k": pass_hat_k_table(task_results),
-        "measured": measured,
-        "passed": passed,
-        "failed": failed,
-        "not_measured_result_records": dict(sorted(not_measured.items())),
-        # 측정된 실패로 센 후보 프로토콜 실패. termination_reasons 의 infrastructure_error
-        # 에는 그대로 포함돼 있다(상류 기록을 바꾸지 않는다) — 게이트가 이 수를 뺀다.
-        "candidate_protocol_failures": dict(sorted(protocol_failures.items())),
-        "termination_reasons": dict(sorted(terminations.items())),
-        "request_observability": _successful_call_observability(simulations),
-        "task_results": task_results,
-    }
+    return pass_rate_strict, strict_denominator, strict_reason
 
 
-def build_summary(
-    raw_by_domain: Mapping[str, Mapping[str, Any]],
-    manifest: Mapping[str, Any],
-    track: str,
-) -> dict[str, Any]:
+def _validated_split(raw_by_domain: Mapping, manifest: Mapping) -> tuple:
+    """완료 상태와 split 건수 및 상류 task ID를 검증한다."""
     if manifest.get("status") != "completed":
         raise ValueError("run manifest is not completed")
     split = dict(manifest.get("split") or {})
@@ -386,7 +333,11 @@ def build_summary(
             "manifest split ids disagree with tasks actually loaded by tau2: "
             f"manifest={len(task_ids)}, upstream={len(upstream_task_ids)}"
         )
+    return split, runnable_task_count, not_measured_tasks, not_measured_task_count, run_domain, domain_raw
 
+
+def _score_selected_domains(manifest: Mapping, run_domain: str, domain_raw: Any, runnable_task_count: int) -> dict:
+    """실행 도메인을 먼저 채점하고 미실행 도메인을 추가한다."""
     domain_scope = manifest.get("domain_scope") or {}
     # 실행 도메인을 먼저 넣고, **미실행 도메인만** 사유와 함께 채운다.
     # (예전에는 retail/airline 을 뒤에 무조건 넣어서, retail 을 실행하면 그 결과가
@@ -414,13 +365,16 @@ def build_summary(
     for name, reason in _fallback_reasons.items():
         if name != run_domain:
             domains[name] = score_domain(name, None, 0, reason)
+    return domains
 
+
+def _annotate_domain_coverage(split: Mapping, runnable_task_count: int, entry: dict) -> None:
+    """실행 도메인에 공식 split 대비 발행 자격을 추가한다."""
     # 완주와 "도메인을 다 쟀다"는 다르다. runnable 은 우리가 돌리기로 고른 판정
     # 불필요 부분집합이고, split.task_count 가 공식 크기다. 실측: retail test 는
     # 40 중 29 만 판정 없이 채점된다. 부분집합 점수를 도메인 이름으로 발행하면
     # 공식 split 성적으로 오독되므로, 자격을 산출물에 새긴다.
     official = split.get("task_count")
-    entry = domains[run_domain]
     if official and runnable_task_count:
         entry["benchmark_eligible"] = int(runnable_task_count) == int(official)
         entry["coverage"] = {
@@ -433,6 +387,9 @@ def build_summary(
                 "판정 불필요 부분집합만 측정했다 — 공식 도메인 점수가 아니다"
             )
 
+
+def _summary_payload(manifest: Mapping, track: str, split: dict, domains: dict, domain_raw: Any, not_measured_task_count: int, not_measured_tasks: list) -> dict:
+    """채점된 도메인과 상류 증거로 최종 요약을 구성한다."""
     measured = sum(entry["measured"] for entry in domains.values())
     passed = sum(entry["passed"] for entry in domains.values())
     failed = sum(entry["failed"] for entry in domains.values())
@@ -490,6 +447,106 @@ def build_summary(
         "source_inventory": DECLARED_INVENTORY,
         "source": dict(manifest.get("source") or {}),
     }
+
+
+def _domain_summary(runnable_tasks: int, scores: _SimulationScores) -> dict[str, Any]:
+    """시뮬레이션 집계에 미완주 귀책과 시행별 지표를 결합한다."""
+    task_results, passed, failed, measured, not_measured, protocol_failures, simulations = scores
+
+    terminations = Counter(str(sim.get("termination_reason")) for sim in simulations)
+    # 프로토콜 실패로 이미 측정된 시뮬레이션은 미완주 귀책 분류에서 뺀다.
+    candidate_attr, env_attr, unclassified_attr = _classify_incompletions(
+        [sim for sim in simulations if _candidate_protocol_failure(sim) is None]
+    )
+
+    pass_rate_strict, strict_denominator, strict_reason = _strict_pass_rate(
+        measured, passed, candidate_attr, env_attr, unclassified_attr
+    )
+
+    return {
+        "status": "measured" if measured else "not_measured",
+        "reason": None if measured else "no upstream records had a runnable numeric reward",
+        "pass_rate": passed / measured if measured else None,
+        "pass_rate_source": "tau2 results.simulations[].reward_info.reward",
+        "pass_rate_note": "후보 프로토콜 실패(candidate_protocol_failures)는 보상 0 의 측정된 실패로 분모·실패에 포함",
+        "pass_rate_strict": pass_rate_strict,
+        "pass_rate_strict_denominator": strict_denominator,
+        "pass_rate_strict_reason": strict_reason,
+        "pass_rate_strict_definition": (
+            "passed / (measured + 모델 귀책 미완주). upstream pass_rate 와 달리 모델이 "
+            "스스로 망가져 못 끝낸 태스크를 실패로 센다. 환경 귀책 오류가 있으면 null."
+        ),
+        # 키는 "<error_type>@<actor>" 다. actor 는 traceback 에서 뽑는다.
+        "incompletion_attribution": {
+            "candidate": dict(sorted(candidate_attr.items())),
+            "environment": dict(sorted(env_attr.items())),
+            "unclassified": dict(sorted(unclassified_attr.items())),
+        },
+        "runnable_tasks": runnable_tasks,
+        "result_records": len(simulations),
+        # 반복 시행이면 시뮬레이션 수와 과제 수가 다르다. 커버리지는 **과제** 단위로
+        # 봐야 한다 — 20과제를 4회 돌린 것을 "80과제를 쟀다" 로 세면 게이트가
+        # 무의미해진다. Pass^k 도 과제별 성공 횟수에서 나온다.
+        "distinct_tasks": len({str(record["task_id"]) for record in task_results}),
+        "distinct_tasks_measured": len({
+            str(record["task_id"])
+            for record in task_results
+            if record.get("evaluation_status") == "measured"
+        }),
+        "trials": _trials_per_task(task_results),
+        "pass_hat_k": pass_hat_k_table(task_results),
+        "measured": measured,
+        "passed": passed,
+        "failed": failed,
+        "not_measured_result_records": dict(sorted(not_measured.items())),
+        # 측정된 실패로 센 후보 프로토콜 실패. termination_reasons 의 infrastructure_error
+        # 에는 그대로 포함돼 있다(상류 기록을 바꾸지 않는다) — 게이트가 이 수를 뺀다.
+        "candidate_protocol_failures": dict(sorted(protocol_failures.items())),
+        "termination_reasons": dict(sorted(terminations.items())),
+        "request_observability": _successful_call_observability(simulations),
+        "task_results": task_results,
+    }
+
+
+def score_domain(
+    domain: str,
+    raw: Optional[Mapping[str, Any]],
+    runnable_tasks: int,
+    unavailable_reason: Optional[str] = None,
+) -> dict[str, Any]:
+    if runnable_tasks == 0:
+        return {
+            "status": "not_measured",
+            "reason": unavailable_reason or "zero runnable tasks",
+            "pass_rate": None,
+            "runnable_tasks": 0,
+            "result_records": 0,
+            "measured": 0,
+            "passed": 0,
+            "failed": 0,
+            "task_results": [],
+        }
+    if raw is None:
+        raise ValueError(f"missing upstream results for runnable domain {domain}")
+
+    return _domain_summary(runnable_tasks, _score_simulations(raw))
+
+
+def build_summary(
+    raw_by_domain: Mapping[str, Mapping[str, Any]],
+    manifest: Mapping[str, Any],
+    track: str,
+) -> dict[str, Any]:
+    split, runnable_task_count, not_measured_tasks, not_measured_task_count, run_domain, domain_raw = _validated_split(raw_by_domain, manifest)
+
+    domains = _score_selected_domains(manifest, run_domain, domain_raw, runnable_task_count)
+
+    _annotate_domain_coverage(split, runnable_task_count, domains[run_domain])
+
+    return _summary_payload(
+        manifest, track, split, domains, domain_raw,
+        not_measured_task_count, not_measured_tasks,
+    )
 
 
 def _load(path: Path) -> dict[str, Any]:

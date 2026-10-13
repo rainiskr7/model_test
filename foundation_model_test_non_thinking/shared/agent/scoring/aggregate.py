@@ -10,6 +10,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from resultspath.model_dir import results_model_dir_name
 
 if __package__:
+    from .aggregate_coverage import _format_l7_coverage
     from . import SCORING_VERSION, SCORING_VERSION_V3, SCORING_VERSION_V4
     from .cache_diagnostics import CACHE_MISS_RE, build_cache_diagnostics
     from .context import build_eval_context
@@ -30,6 +31,7 @@ if __package__:
     from .task_data import prepare_v3_loaded
 else:
     sys.path.insert(0, str(Path(__file__).resolve().parent))
+    from aggregate_coverage import _format_l7_coverage
     from __init__ import SCORING_VERSION, SCORING_VERSION_V3, SCORING_VERSION_V4
     from cache_diagnostics import CACHE_MISS_RE, build_cache_diagnostics
     from context import build_eval_context
@@ -496,7 +498,8 @@ def _build_possible_absorbed_request_timeouts(
     }
 
 
-def _build_l7_partial_coverage(level_data: Dict[str, Any]) -> Dict[str, Any]:
+def _collect_l7_coverage(level_data: Dict[str, Any]) -> tuple:
+    """L7 문맥 진단을 분포, 필드 집계, 커버리지로 모은다."""
     distribution: Dict[tuple, int] = {}
     per_field: Dict[str, Dict[str, int]] = {}
     tasks_total = 0
@@ -550,79 +553,28 @@ def _build_l7_partial_coverage(level_data: Dict[str, Any]) -> Dict[str, Any]:
                 )
                 field_entry["required"] += 1
                 field_entry["present"] += int(field["present"])
-
-    fields_required = sum(entry["required"] for entry in per_field.values())
-    fields_present = sum(entry["present"] for entry in per_field.values())
-    complete_entries = sum(
-        count
-        for (required, present), count in distribution.items()
-        if required == present
-    )
-    partial_entries = sum(
-        count
-        for (required, present), count in distribution.items()
-        if 0 < present < required
-    )
-    zero_entries = sum(
-        count
-        for (_required, present), count in distribution.items()
-        if present == 0
-    )
-    return {
-        "annotation_only": True,
-        "distribution": [
-            {
-                "fields_required": required,
-                "fields_present": present,
-                "entry_count": distribution[(required, present)],
-            }
-            for required, present in sorted(distribution)
-        ],
-        "per_field": {
-            name: {
-                **counts,
-                "hit_rate": counts["present"] / counts["required"],
-            }
-            for name, counts in sorted(per_field.items())
-        },
-        "totals": {
-            "entries": entries_classifiable,
-            "complete_entries": complete_entries,
-            "partial_entries": partial_entries,
-            "zero_entries": zero_entries,
-            "fields_required": fields_required,
-            "fields_present": fields_present,
-            "field_hit_rate": (
-                fields_present / fields_required if fields_required else None
-            ),
-        },
-        "coverage": {
-            "tasks_total": tasks_total,
-            "tasks_classifiable": tasks_classifiable,
-            "tasks_unclassifiable": tasks_total - tasks_classifiable,
-            "golden_entries_declared": entries_declared,
-            "golden_entries_classifiable": entries_classifiable,
-            "golden_entries_unclassifiable": (
-                entries_declared - entries_classifiable
-            ),
-            "fields_declared": fields_declared,
-            "fields_excluded_long_text": fields_excluded_long_text,
-            "fields_unresolved": fields_unresolved,
-            "context_construction_failures": _diagnostic_failures(
-                context_failures, first_context_error
-            ),
-        },
-        "eligibility_rule": (
-            "Uses the exact ResultFieldCoverage_det seeded-only resolver, field "
-            "normalization, and value matcher; normalized non-numeric values "
-            "longer than 80 characters are excluded, and entries with an "
-            "unresolved field are unclassifiable."
+    coverage = {
+        "tasks_total": tasks_total,
+        "tasks_classifiable": tasks_classifiable,
+        "tasks_unclassifiable": tasks_total - tasks_classifiable,
+        "golden_entries_declared": entries_declared,
+        "golden_entries_classifiable": entries_classifiable,
+        "golden_entries_unclassifiable": (
+            entries_declared - entries_classifiable
         ),
-        "statement": (
-            "ResultFieldCoverage_det is all-or-nothing per golden-fields entry; "
-            "partial field hits shown here are discarded by its score."
+        "fields_declared": fields_declared,
+        "fields_excluded_long_text": fields_excluded_long_text,
+        "fields_unresolved": fields_unresolved,
+        "context_construction_failures": _diagnostic_failures(
+            context_failures, first_context_error
         ),
     }
+    return distribution, per_field, entries_classifiable, coverage
+
+
+def _build_l7_partial_coverage(level_data: Dict[str, Any]) -> Dict[str, Any]:
+    distribution, per_field, entries, coverage = _collect_l7_coverage(level_data)
+    return _format_l7_coverage(distribution, per_field, entries, coverage)
 
 
 def _average_metric(tasks: List[Dict[str, Any]], spec: MetricSpec) -> Dict[str, Any]:
@@ -854,9 +806,8 @@ def _model_name(results_dir: Path, level_data: Iterable[Dict[str, Any]]) -> str:
         return ""
 
 
-def build_summary_from_loaded(
-    loaded: Dict[str, Dict[str, Any]], results_dir: Path
-) -> Dict[str, Any]:
+def _build_v2_summary(loaded: Dict[str, Dict[str, Any]], results_dir: Path) -> dict:
+    """고정된 v2 레벨 가중치와 최상위 요약 계약을 구성한다."""
     # The top-level contract is the published, frozen v2 summary. Keep this
     # construction and all existing field meanings intact.
     by_level = {level: score_level(level, data) for level, data in loaded.items()}
@@ -908,12 +859,11 @@ def build_summary_from_loaded(
         "levels_missing": levels_missing,
         "levels_unscorable": levels_unscorable,
     }
+    return summary
 
-    v3_loaded, task_data_provenance = prepare_v3_loaded(loaded)
-    v3_by_level = {
-        level: _score_level_with_specs(level, data, LEVEL_SPECS_V3)
-        for level, data in v3_loaded.items()
-    }
+
+def _add_v3_summary(v3_by_level: dict, required_levels: int, levels_missing: list, task_data_provenance: dict, summary: dict) -> None:
+    """v3 레벨 점수에서 요약 블록을 추가한다."""
     v3_levels_unscorable = [
         level for level, result in v3_by_level.items() if result.get("score") is None
     ]
@@ -939,14 +889,10 @@ def build_summary_from_loaded(
         "levels_unscorable": v3_levels_unscorable,
         "task_data": task_data_provenance,
     }
-    summary["scoring_v4"] = _build_v4_block(
-        v3_by_level, levels_missing, task_data_provenance
-    )
-    summary["headline_denominators"] = {
-        SCORING_VERSION: list(SCORABLE_LEVELS),
-        SCORING_VERSION_V3: list(SCORABLE_LEVELS),
-        SCORING_VERSION_V4: list(V4_HEADLINE_LEVELS),
-    }
+
+
+def _add_summary_diagnostics(loaded: dict, results_dir: Path, v3_loaded: dict, v3_by_level: dict, summary: dict) -> None:
+    """모든 채점 버전 계산 후 점수 중립 진단을 추가한다."""
     # Additive and score-neutral: diagnostics only observe saved tasks/calls and
     # fixed metric definitions after all scoring contracts have been computed.
     summary["cache_miss_diagnostics"] = build_cache_diagnostics(
@@ -979,4 +925,28 @@ def build_summary_from_loaded(
     summary["l7_partial_coverage_diagnostics"] = _build_l7_partial_coverage(
         loaded.get("L7", {})
     )
+
+
+def build_summary_from_loaded(
+    loaded: Dict[str, Dict[str, Any]], results_dir: Path
+) -> Dict[str, Any]:
+    summary = _build_v2_summary(loaded, results_dir)
+    levels_missing = summary["levels_missing"]
+    required_levels = summary["required_levels"]
+
+    v3_loaded, task_data_provenance = prepare_v3_loaded(loaded)
+    v3_by_level = {
+        level: _score_level_with_specs(level, data, LEVEL_SPECS_V3)
+        for level, data in v3_loaded.items()
+    }
+    _add_v3_summary(v3_by_level, required_levels, levels_missing, task_data_provenance, summary)
+    summary["scoring_v4"] = _build_v4_block(
+        v3_by_level, levels_missing, task_data_provenance
+    )
+    summary["headline_denominators"] = {
+        SCORING_VERSION: list(SCORABLE_LEVELS),
+        SCORING_VERSION_V3: list(SCORABLE_LEVELS),
+        SCORING_VERSION_V4: list(V4_HEADLINE_LEVELS),
+    }
+    _add_summary_diagnostics(loaded, results_dir, v3_loaded, v3_by_level, summary)
     return summary

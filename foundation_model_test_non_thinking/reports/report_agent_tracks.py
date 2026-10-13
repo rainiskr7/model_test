@@ -328,34 +328,8 @@ def collect_functionchat_reproducibility(base: Path) -> List[Dict[str, Any]]:
     return module.reproducibility_report(runs)
 
 
-def render_markdown(
-    rows: List[Dict[str, Any]],
-    repro_report: Optional[List[Dict[str, Any]]] = None,
-    claims: Optional[Dict[str, Any]] = None,
-) -> str:
-    """명령을 돌리지 않고도 읽을 수 있는 보고서를 만든다.
-
-    수치는 전부 산출물에서 읽는다. 이 함수에 숫자를 적어 넣지 않는다 — 그렇게 하면
-    산출물이 바뀌어도 보고서가 따라가지 않아 거짓이 된다.
-    """
-    published = [r for r in rows if r["publishable"]]
-    rejected = [r for r in rows if not r["publishable"]]
-
-    out: List[str] = []
-    out.append("# agent 트랙 결과")
-    out.append("")
-    out.append(
-        "이 파일은 `foundation_model_test_non_thinking/reports/report_agent_tracks.py` 가 산출물에서 생성한다. "
-        "손으로 고치지 말 것 — 다시 생성하면 덮어써진다."
-    )
-    out.append("")
-    out.append(
-        f"발행 가능한 **런** {len(published)}개 / 거부 {len(rejected)}개. "
-        "아래 표는 축별 대표 런만 보여주므로 행 수는 이보다 적다. "
-        "판단 기준은 [`AGENT_TRACK_CLOSEOUT.md`](AGENT_TRACK_CLOSEOUT.md)."
-    )
-    out.append("")
-
+def _select_axis_runs(published: List[Dict[str, Any]]) -> tuple[dict, dict]:
+    """축별 최대 분모 대표 후보와 동률 런을 고른다."""
     # 트랙/모델별 대표 런을 고른다. **런 이름 문자열 정렬을 쓰면 안 된다** —
     # fcrep_c 가 fcfull 보다 뒤로 잡혀 최신 670항목 결과가 밀려난다 (실제로 발생).
     # 축이 더 많고(=커버리지가 넓고), 그다음 항목 수가 많은 런을 대표로 삼는다.
@@ -382,7 +356,11 @@ def render_markdown(
                 ambiguous.pop(key, None)
             elif cand == current[0]:
                 ambiguous.setdefault(key, [current[1]["run"]]).append(r["run"])
+    return best, ambiguous
 
+
+def _append_axis_table(best: dict, ambiguous: dict, out: List[str]) -> None:
+    """축별 대표 수치 또는 동률 후보를 표에 추가한다."""
     out.append(
         "> taubench 는 이 보고서에 없다. 사용자 시뮬레이터 프로토콜 고정 여부와 공식 "
         "split 커버리지를 보는 전용 계층이 판정을 갖는다 — "
@@ -413,6 +391,9 @@ def render_markdown(
         )
     out.append("")
 
+
+def _append_rejected_runs(rejected: List[Dict[str, Any]], out: List[str]) -> None:
+    """발행 거부 사유를 출력 목록에 추가한다."""
     if rejected:
         out.append("## 발행 불가 — 점수를 인용하지 마십시오")
         out.append("")
@@ -425,6 +406,9 @@ def render_markdown(
                 out.append(f"  - {reason}")
         out.append("")
 
+
+def _append_reproducibility(repro_report, out: List[str]) -> None:
+    """반복 실행의 재현성 진단을 추가한다."""
     if repro_report:
         out.append("## 재현성 (반복 실행)")
         out.append("")
@@ -462,8 +446,9 @@ def render_markdown(
                 )
         out.append("")
 
-    out.extend(render_claims(claims or {}))
 
+def _append_reading_notes(out: List[str]) -> None:
+    """보고서 해석 지침을 추가한다."""
     out.append("## 읽는 법")
     out.append("")
     out.append("- 분자/분모를 함께 본다. 반올림된 점수만으로는 표본 크기가 사라진다.")
@@ -474,6 +459,47 @@ def render_markdown(
         "- 재현성은 **대표 런과 다른 코호트**일 수 있다. 대표가 `UNVERIFIED` 인데 "
         "다른 scoring_version 이 `DIVERGED` 라면, 발행 중인 수치에는 재현 근거가 없다는 뜻이다."
     )
+
+
+def render_markdown(
+    rows: List[Dict[str, Any]],
+    repro_report: Optional[List[Dict[str, Any]]] = None,
+    claims: Optional[Dict[str, Any]] = None,
+) -> str:
+    """명령을 돌리지 않고도 읽을 수 있는 보고서를 만든다.
+
+    수치는 전부 산출물에서 읽는다. 이 함수에 숫자를 적어 넣지 않는다 — 그렇게 하면
+    산출물이 바뀌어도 보고서가 따라가지 않아 거짓이 된다.
+    """
+    published = [r for r in rows if r["publishable"]]
+    rejected = [r for r in rows if not r["publishable"]]
+
+    out: List[str] = []
+    out.append("# agent 트랙 결과")
+    out.append("")
+    out.append(
+        "이 파일은 `foundation_model_test_non_thinking/reports/report_agent_tracks.py` 가 산출물에서 생성한다. "
+        "손으로 고치지 말 것 — 다시 생성하면 덮어써진다."
+    )
+    out.append("")
+    out.append(
+        f"발행 가능한 **런** {len(published)}개 / 거부 {len(rejected)}개. "
+        "아래 표는 축별 대표 런만 보여주므로 행 수는 이보다 적다. "
+        "판단 기준은 [`AGENT_TRACK_CLOSEOUT.md`](AGENT_TRACK_CLOSEOUT.md)."
+    )
+    out.append("")
+
+    best, ambiguous = _select_axis_runs(published)
+
+    _append_axis_table(best, ambiguous, out)
+
+    _append_rejected_runs(rejected, out)
+
+    _append_reproducibility(repro_report, out)
+
+    out.extend(render_claims(claims or {}))
+
+    _append_reading_notes(out)
     return "\n".join(out) + "\n"
 
 
