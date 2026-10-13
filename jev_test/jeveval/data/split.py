@@ -57,11 +57,10 @@ def _kote_demotions(rows, representatives, config, label_names):
     counts = Counter({name: 0 for name in config["emotions"]})
     by_id = {row.row_id: row for row in rows}
     for logical_id in representatives.values():
-        labels = by_id[logical_id.rsplit(":", 1)[1]].fields["labels"]
-        for label in set(labels):
-            if type(label) is not int or not 0 <= label < len(label_names):
-                raise ValueError("KOTE label index out of range")
-            name = label_names[label]
+        labels = by_id[logical_id.rsplit(":", 1)[1]].fields["labels_majority"]
+        for name in set(labels):
+            if name not in label_names:
+                raise ValueError("KOTE unknown majority emotion")
             if name in counts:
                 counts[name] += 1
     return _demotions(counts, config["min_positive"])

@@ -30,7 +30,7 @@ P1_CONTRACT.md 판 3 보정 6까지의 요청·응답·기초 채점과 원본 �
 - `io/sources/kosgd.py`: USER 턴의 전체 위치·frames 읽기와 감사 selected_turns 읽기.
 - `io/sources/functionchat.py`: serial_num·메시지·중첩 도구를 보존하는 JSONL 읽기.
 - `io/sources/kmhas.py`: 물리 행 ID와 Python label 목록을 갖는 parquet 읽기.
-- `io/sources/kote.py`: 물리 행 ID·labels와 info.features.labels.feature.names 읽기.
+- `io/sources/kote.py`: 보정 7의 raw 투표 검증·평가자별 중복 제거·votes/labels_majority 생성, 원본 labels 보존 및 메타데이터 이름 읽기.
 - `io/sources/korfin.py`: 원본 순서의 SID별 aspect 행 읽기.
 - `io/sources/klue_mrc.py`: is_impossible 양·음성 전체 행과 guid·source 읽기.
 - `data/grouping.py`: 정확 일치·union-find 묶음, ID·source 검사, 원본 행 연결과 항목 구성원.

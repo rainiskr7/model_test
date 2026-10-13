@@ -265,6 +265,7 @@ jev_test/results/_compare/<compare_id>/A/<set>/<variant>/compare.json   # 커밋
   - `groups` 는 **평가 풀 묶음만**, 키는 `sorted()`, 구성원도 `sorted()`. `dev`·`test` 는 분할 뒤 `sorted()` 로 적는다 (소속만 의미가 있다). `representative` 키도 `sorted()`.
   - 단순 무작위 cap 에서 cap ≥ 묶음 수면 전부. `allocation`: 비례 할당은 `{층: 묶음 수}`, 그 밖은 `{"all": 풀 묶음 수}`.
   - KOTE 강등은 **평가 풀 대표 항목**(dev+test) 의 라벨로 센다.
+  - **KOTE 라벨 (판 3 보정 7, 사용자 결정 10-13)**: 정답은 `raw.json` 의 평가자 5명 투표에서 **3명 이상이 고른 감정** (`rules.yaml` 의 `votes.min_raters`). `io/sources/kote.py` 는 parquet 행마다 `ID` 로 raw 를 찾아 `votes: {감정: 고른 평가자 수}`·`labels_majority: [감정 이름, sorted()]` 를 붙인다 (평가자 한 명 안에서 같은 감정이 겹치면 한 번). raw 에 ID 가 없거나 문장이 parquet 과 다르거나, 평가자 수가 `n_raters` 가 아니거나, 감정 이름이 44개 이름(parquet 메타데이터) 밖이면 멈춘다. 라벨 충돌·강등은 `labels_majority` 로 센다 (`dichotomized` 의 `labels` 는 쓰지 않는다).
   - `notes` = `{n_rows, n_groups_total, n_pool_groups, label_conflict_groups_total, label_conflict_groups_pool}` (충돌은 `label_field` 가 있는 셋만, 라벨 집합을 정렬해 비교).
   - 분할 파일 바이트 = `json.dumps(plan.to_dict(), ensure_ascii=False, indent=1, sort_keys=True) + "\n"` — 같은 입력이면 입력 순서와 무관하게 같은 바이트 (보정 6: `sort_keys`). 문항 원문·원문 묶음 키는 들어가면 안 된다 (§5-1) — 한글은 `diagnostic_demotions` 의 감정 이름(설정 값)에만 허용.
 - **판 3 보정 6 (③a 명세 반박 반영)**:
@@ -557,3 +558,4 @@ PoolResult(group_ids: list[str], allocation: dict[str, int])          # data/poo
 - 판 3 보정 4 (10-13, 작업 ② 명세에 대한 Codex 반박 10건 — 9 수용·1 해당 없음): 선택지 정렬은 B1 에서만(보정 3 의 §2-3 문장이 systemone 요청까지 정렬하는 것으로 읽혀 기존 render fixture 와 충돌 — Claude 실수) · snake_case 는 질문 ID 만 · usage 경고 이름 `usage_input_tokens_invalid` 와 경고 순서·보존 · 경계 입력 `ValueError` 규칙은 작업 ② 명세에.
 - 판 3 보정 5 (10-13, ③a 명세 전 Claude): 셋별 `item_id`·`group_id` 정의 · 정확 일치 묶음 키 · 분할 파일 정렬·바이트 규칙 · KOTE 강등은 풀 대표 기준 · `notes` 필드 · ③ 을 ③a(분할)·③b(항목·정답)로 나눔. 규칙 값은 `configs/splits/rules.yaml`.
 - 판 3 보정 6 (10-13, ③a 명세에 대한 Codex 반박 11건 — 실제 데이터 대조 포함, 전부 반영): KoSGD row_id·선정 검사 · FunctionChat 첫 user 는 role 로 찾기 · parquet 목록 열 변환 · KLUE 전체 행 · KorFin 행/항목 구별 · 비례 할당 경계 · `Groups`·`PoolResult` · 분할 파일 `sort_keys` · 한글은 강등 감정 이름만 · rules.yaml 의 KOTE 메타데이터 경로(`info` 누락 — Claude 실수). 기존 splits fixture 3개(정수 ID·정렬 전 순서·옛 notes 이름)는 계약에 맞게 고친다.
+- 판 3 보정 7 (10-13): KOTE 정답을 평가자 과반수(3/5, raw.json)로 — dichotomized 가 사실상 '1명 이상' 이라 (Claude 집계: 2명 이상은 전부 1, 1명만 고른 것도 81.5% 가 1). 사용자 결정.

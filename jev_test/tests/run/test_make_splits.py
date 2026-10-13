@@ -51,12 +51,7 @@ def _synthetic_rules(root):
     sets = _synthetic_json(root)
     sets["kmhas"] = _parquet(root, "kmhas", [{"text": f"문장{i}", "label": [i % 2]} for i in range(6)])
     sets["kmhas"]["label_field"] = "label"
-    metadata = {b"huggingface": json.dumps({"info": {"features": {
-        "labels": {"feature": {"names": ["화남/분노", "없음"]}}}}}).encode()}
-    sets["kote_escalation"] = _parquet(root, "kote", [
-        {"ID": f"id{i}", "text": f"문장{i}", "labels": [i % 2]} for i in range(6)], metadata)
-    sets["kote_escalation"].update(label_field="labels", demotion={
-        "emotions": ["화남/분노", "없음"], "min_positive": 6, "label_names": "parquet_metadata"})
+    sets["kote_escalation"] = _synthetic_kote(root)
     sets["korfin_asc"] = _parquet(root, "korfin", [
         {"SID": f"{i}_{j}", "SRC": f"문장{i}", "ASPECT": f"대상{j}", "SENTIMENT": "positive"}
         for i in range(6) for j in range(2)])
@@ -69,6 +64,25 @@ def _synthetic_rules(root):
     rules = {"seed": 20261012, "dev_fraction": 0.2, "sets": sets}
     (root / "rules.yaml").write_text(yaml.safe_dump(rules, allow_unicode=True))
     return rules
+
+
+def _synthetic_kote(root):
+    names = ["화남/분노", "없음"] + [f"합성감정{i}" for i in range(42)]
+    metadata = {b"huggingface": json.dumps({"info": {"features": {
+        "labels": {"feature": {"names": names}}}}}).encode()}
+    rows = [{"ID": 100 + i, "text": f"문장{i}", "labels": [0, 1]} for i in range(6)]
+    rows.append({"ID": 106, "text": "문장0", "labels": [0, 1]})
+    raw = {str(r["ID"]): {"text": r["text"], "labels": {
+        "rater1": ["화남/분노", "화남/분노", "없음"], "rater2": ["없음"],
+        "rater3": ["없음"], "rater4": [], "rater5": []}} for r in rows}
+    raw["106"]["labels"]["rater2"] = []
+    (root / "raw.json").write_text(json.dumps(raw), encoding="utf-8")
+    cfg = _parquet(root, "kote", rows, metadata)
+    cfg["source"]["votes"] = "raw.json"
+    cfg.update(label_field="labels_majority", votes={"n_raters": 5, "min_raters": 3},
+               demotion={"emotions": ["화남/분노", "없음"], "min_positive": 1,
+                         "label_names": "parquet_metadata"})
+    return cfg
 
 
 def _run(root, output, selection="all"):
@@ -98,7 +112,9 @@ def test_all_synthetic_sets_twice_identical_bytes(tmp_path):
     assert json.loads(before["klue_mrc_answerable.json"])["notes"]["n_rows"] == 6
     assert json.loads(before["korfin_asc.json"])["notes"]["n_rows"] == 12
     assert len(json.loads(before["fc_call_decision.json"])["extra"]) == 1
-    assert json.loads(before["kote_escalation.json"])["diagnostic_demotions"] == ["없음", "화남/분노"]
+    kote = json.loads(before["kote_escalation.json"])
+    assert kote["diagnostic_demotions"] == ["화남/분노"]
+    assert kote["notes"]["label_conflict_groups_total"] == 1
 
 
 def test_single_set_and_expect_groups_failure(tmp_path):
@@ -113,3 +129,22 @@ def test_single_set_and_expect_groups_failure(tmp_path):
     assert result.returncode != 0
     assert "expected 107 groups, got 6" in result.stderr
     assert not (output / "fc_call_decision.json").exists()
+
+
+def test_kote_votes_setting_and_invalid_raw_stop_cli(tmp_path):
+    rules = _synthetic_rules(tmp_path)
+    output = tmp_path / "out"
+    rules["sets"]["kote_escalation"]["votes"]["min_raters"] = 1
+    (tmp_path / "rules.yaml").write_text(yaml.safe_dump(rules))
+    result = _run(tmp_path, output, "kote_escalation")
+    assert result.returncode == 0, result.stderr
+    plan = json.loads((output / "kote_escalation.json").read_text())
+    assert plan["diagnostic_demotions"] == []
+    assert plan["notes"]["label_conflict_groups_total"] == 0
+    raw = json.loads((tmp_path / "raw.json").read_text())
+    del raw["106"]
+    (tmp_path / "raw.json").write_text(json.dumps(raw))
+    result = _run(tmp_path, tmp_path / "failed", "kote_escalation")
+    assert result.returncode != 0
+    assert "KOTE raw missing ID: 106" in result.stderr
+    assert not (tmp_path / "failed" / "kote_escalation.json").exists()

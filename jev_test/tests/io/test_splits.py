@@ -66,7 +66,8 @@ def test_input_rows_strata_and_rule_key_order_do_not_change_bytes(tmp_path):
 
 
 def test_actual_korean_demotion_roundtrip_and_other_hangul_rejected(tmp_path):
-    rows = [SourceRow("kote_escalation", "0", {"text": "원문 표식", "labels": [1]})]
+    rows = [SourceRow("kote_escalation", "0", {"text": "원문 표식", "labels": [1],
+                                             "labels_majority": ["없음"]})]
     groups = group_rows(rows, "text")
     cfg = {"pool": {"kind": "all"}, "demotion": {"emotions": ["화남/분노", "없음"], "min_positive": 1}}
     pool = select_pool(groups, cfg["pool"], 1, "kote_escalation")

@@ -22,12 +22,13 @@ sets:
     label_field: label                   # 묶음 안 라벨 충돌 세기용
     pool: {kind: simple_cap, cap: 2000}
   kote_escalation:
-    source: {file: dataset/kote_escalation/part1.parquet}
+    source: {file: dataset/kote_escalation/part1.parquet, votes: dataset/kote_escalation/raw.json}   # raw.json = 평가자 5명 각자의 선택 (HF searle-j/kote, MIT)
     unit: row
     group_key: text
-    label_field: labels
+    votes: {n_raters: 5, min_raters: 3}  # 라벨 = 5명 중 3명 이상이 고른 감정 (과반수, 사용자 결정 10-13). dichotomized 의 labels 는 쓰지 않는다
+    label_field: labels_majority
     pool: {kind: simple_cap, cap: 2000}
-    demotion:                            # 평가 풀(묶음 대표) 에서 양성 < min_positive 인 감정은 진단으로
+    demotion:                            # 평가 풀(묶음 대표) 의 과반수 라벨에서 양성 < min_positive 인 감정은 진단으로
       emotions: ["불평/불만", "화남/분노", "짜증", "안타까움/실망", "의심/불신", "불안/걱정", "고마움", "없음"]
       min_positive: 50
       label_names: parquet_metadata      # 라벨 번호 → 이름: json.loads(schema.metadata[b"huggingface"])["info"]["features"]["labels"]["feature"]["names"]

@@ -62,16 +62,33 @@ def test_demotion_fixture():
 def test_kote_counts_only_pool_representatives_with_korean_demotion():
     seed, name = 20261012, "kote_escalation"
     rep = random.Random(f"{seed}:{name}:rep:0").choice(["0", "1"])
-    rows = [SourceRow(name, str(i), {"text": "same", "labels": [1] if str(i) == rep else [0]})
+    rows = [SourceRow(name, str(i), {"text": "same", "labels": [0, 1],
+            "votes": {"화남/분노": 1, "없음": 3} if str(i) == rep else {"화남/분노": 3},
+            "labels_majority": ["없음"] if str(i) == rep else ["화남/분노"]})
             for i in range(2)]
-    rows.append(SourceRow(name, "2", {"text": "outside pool", "labels": [0]}))
+    rows.append(SourceRow(name, "2", {"text": "outside pool", "labels": [0],
+                                    "labels_majority": ["화남/분노"]}))
     groups = group_rows(rows, "text")
-    cfg = {"pool": {"kind": "simple_cap", "cap": 1}, "label_field": "labels",
+    cfg = {"pool": {"kind": "simple_cap", "cap": 1}, "label_field": "labels_majority",
            "demotion": {"emotions": ["화남/분노", "없음"], "min_positive": 1}}
     plan = build_split_plan(rows, groups, PoolResult(["0"], {"all": 1}), name, cfg, seed, 0.2,
                             label_names=["화남/분노", "없음"])
     assert plan.diagnostic_demotions == ["화남/분노"]
     assert plan.notes["label_conflict_groups_pool"] == 1
+
+
+def test_kote_conflicts_follow_label_field_only():
+    name = "kote_escalation"
+    rows = [SourceRow(name, str(i), {"text": "same", "labels": [i],
+                                    "labels_majority": ["없음"]}) for i in range(2)]
+    groups = group_rows(rows, "text")
+    cfg = {"pool": {"kind": "all"}, "label_field": "labels_majority"}
+    pool = select_pool(groups, cfg["pool"], 1, name)
+    plan = build_split_plan(rows, groups, pool, name, cfg, 1, 0.2)
+    assert plan.notes["label_conflict_groups_total"] == 0
+    cfg["label_field"] = "labels"
+    plan = build_split_plan(rows, groups, pool, name, cfg, 1, 0.2)
+    assert plan.notes["label_conflict_groups_total"] == 1
 
 
 def test_kosgd_fixed_representative_and_korfin_row_count():

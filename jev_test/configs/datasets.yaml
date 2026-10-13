@@ -77,16 +77,17 @@ korean_decisions:
 
   - id: kote_escalation
     hf: searle-j/kote
-    config: dichotomized
+    config: dichotomized     # 문장·ID·split 만 쓴다. 라벨은 raw.json 의 평가자 투표에서 과반수로 다시 만든다 (아래 label)
     split: test
     sha: 66f0eef
+    raw_votes: raw.json      # 같은 리포의 평가자 5명별 선택 (50,000 글, test 5,000 ID·문장 모두 일치 — 10-13 확인)
     rows: 5000
     cap: 2000
     license: MIT
     map:
       state: text
-      questions: "감정 8개 noul (동결): 불평/불만 · 화남/분노 · 짜증 · 안타까움/실망 · 의심/불신 · 불안/걱정 · 고마움 · 없음. 풀 양성 < 50 인 감정은 진단으로 내리고 대체하지 않는다. '없음' 은 원 라벨이지 '나머지 7개 거짓' 이 아니다"
-      label: "labels (사람 다중 라벨)"
+      questions: "감정 8개 noul (동결): 불평/불만 · 화남/분노 · 짜증 · 안타까움/실망 · 의심/불신 · 불안/걱정 · 고마움 · 없음. 풀 양성(과반수 라벨) < 50 인 감정은 진단으로 내리고 대체하지 않는다. '없음' 은 원 라벨(평가자의 NO EMOTION 선택)이지 '나머지 7개 거짓' 이 아니다"
+      label: "과반수 — raw.json 에서 평가자 5명 중 3명 이상이 고른 감정 (사용자 결정 10-13). dichotomized 의 labels 는 사실상 '1명 이상' (2명 이상은 전부 1, 1명만 고른 것도 81.5% 가 1 — 10-13 Claude 집계) 이라 글당 7.9개·'없음' 의 98% 가 다른 감정과 겹쳐 쓰지 않는다. 과반수면 글당 2.1개, '없음' 104 건 중 겹침 0"
     note: "'화난 고객이면 상담원 연결' 같은 판단. 44개 전부는 문항당 44 결정이라 비용이 커서 고정 부분집합만"
     tier: 1
     group: A
