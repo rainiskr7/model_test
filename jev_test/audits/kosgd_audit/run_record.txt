@@ -1,0 +1,57 @@
+KoSGD 재구성 감사
+kosgd: /private/tmp/claude-501/-Users-rainis-Desktop-workspace-source-model-test/aa7fe33a-3991-4573-b7d5-6bce4ff44cd9/scratchpad/data_kosgd — 대화 파일 34개, 대화 4201개
+sgd_en: /private/tmp/claude-501/-Users-rainis-Desktop-workspace-source-model-test/aa7fe33a-3991-4573-b7d5-6bce4ff44cd9/scratchpad/data_sgd_en — 대화 파일 34개, 대화 4201개
+KoSGD 스키마: extended_schema.json 1개, 21개 서비스
+토크나이저: /Users/rainis/Desktop/workplace/models/Qwen_Qwen3.8_27B/tokenizer.json (1개 파일)
+읽은 입력 파일 합계: 70
+표본: seed=20261012, 대화 3000, 고른 턴 3000, 건너뛴 대화 0
+건너뛴 dialogue_id: []
+
+지표 (분자/분모, 비율):
+  (a) 다중 frame: 256/3000 (8.5333%)
+  (b) 어떤 frame의 active_intent == "NONE": 229/3000 (7.6333%)
+  (b) 어떤 frame의 state 없음: 0/3000 (0.0000%)
+  (c) ALLOWED 밖 act가 있는 턴: 936/3000 (31.2000%)
+  (d) 7항목 매핑 집합이 빈 턴: 282/3000 (9.4000%)
+  (e) 입력 토큰 >8192: 2479/3000 (82.6333%)
+  (e) 입력 토큰 >16384: 1599/3000 (53.3000%)
+  (f) 영어 test dialogue_id 일치: 3000/3000 (100.0000%)
+  (f) ID 일치 대화 중 턴 수 일치: 3000/3000 (100.0000%)
+  R1: (a) ∪ (c) ∪ (d): 936/3000 (31.2000%)
+  (e) 토큰 p50=16988, p95=52687, max=61518 (최근접 순위법, 절단/패딩 없음)
+
+전체 act 빈도표 (모든 frame의 action 발생 횟수):
+  AFFIRM: 368
+  AFFIRM_INTENT: 68
+  GOODBYE: 223
+  INFORM: 1864
+  INFORM_INTENT: 812
+  NEGATE: 228
+  NEGATE_INTENT: 78
+  REQUEST: 519
+  REQUEST_ALTS: 130
+  SELECT: 564
+  THANK_YOU: 409
+
+ALLOWED 밖 act별 발생 횟수 및 해당 act를 가진 턴 비율:
+  AFFIRM_INTENT: 발생 68, 턴 68/3000 (2.2667%)
+  INFORM_INTENT: 발생 812, 턴 812/3000 (27.0667%)
+  NEGATE_INTENT: 발생 78, 턴 78/3000 (2.6000%)
+
+7항목 매핑: {"INFORM": "INFORM", "REQUEST": "REQUEST", "AFFIRM": "AFFIRM", "NEGATE": "NEGATE", "REQUEST_ALTS": "REQUEST_ALTS", "SELECT": "SELECT", "GOODBYE": "종료/감사", "THANK_YOU": "종료/감사"}
+
+사전 고정 판정 기준:
+R1 > 10% → "R1 FAIL: KoSGD 문항 재설계"
+(e) >8192 비율 > 5% → "R2 FAIL: 잘림/거부 비대칭 먼저 해소"
+(f) < 90% → "R3 FAIL: 영어 짝 비교 제외"
+각각 아니면 PASS
+
+판정:
+R1 FAIL: KoSGD 문항 재설계
+R2 FAIL: 잘림/거부 비대칭 먼저 해소
+R3 PASS
+exit=0
+script_sha256=4c9858ef96584405
+kosgd_rev=d7254612b6a9 sgd_en_rev=e852981ae349
+tokenizers=0.22.2
+2026년 10월 12일 월요일 16시 15분 58초 KST

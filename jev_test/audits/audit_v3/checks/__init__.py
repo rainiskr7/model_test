@@ -1,0 +1,1 @@
+"""Preregistered rule checks."""
