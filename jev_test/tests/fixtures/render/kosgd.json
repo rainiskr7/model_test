@@ -3,47 +3,29 @@
     "model": "synthetic-model",
     "state": {
       "catalog": [
-        {
-          "id": "lamp",
-          "description": "등 켜기"
-        }
+        {"id": "lamp", "description": "등 켜기"}
       ],
       "dialogue": [
-        {
-          "speaker": "USER",
-          "utterance": "작은 등을 켜 줘."
-        }
+        {"speaker": "USER", "utterance": "작은 등을 켜 줘."}
       ]
     },
     "state_spec": {
       "kind": "json_string",
-      "keys": [
-        "dialogue",
-        "catalog"
-      ]
+      "keys": ["dialogue", "catalog"],
+      "target_key": "dialogue"
     },
     "questions": {
       "act_inform": {
         "type": "noul",
         "instructions": "문장에 제안이 있나요?",
-        "criteria": {
-          "true": "제안이 있다.",
-          "false": "제안이 없다."
-        }
+        "criteria": {"true": "제안이 있다.", "false": "제안이 없다."}
       },
       "ongoing_1": {
         "type": "choice",
         "instructions": "진행할 일을 골라요.",
-        "criteria": {
-          "lamp": "등 켜기",
-          "NONE": "진행할 일이 없다."
-        }
+        "criteria": {"lamp": "등 켜기", "NONE": "진행할 일이 없다."}
       }
     }
   },
-  "expected": {
-    "state": "{\"dialogue\":[{\"speaker\":\"USER\",\"utterance\":\"작은 등을 켜 줘.\"}],\"catalog\":[{\"id\":\"lamp\",\"description\":\"등 켜기\"}]}",
-    "request_utf8": "{\"model\":\"synthetic-model\",\"state\":\"{\\\"dialogue\\\":[{\\\"speaker\\\":\\\"USER\\\",\\\"utterance\\\":\\\"작은 등을 켜 줘.\\\"}],\\\"catalog\\\":[{\\\"id\\\":\\\"lamp\\\",\\\"description\\\":\\\"등 켜기\\\"}]}\",\"questions\":{\"act_inform\":{\"type\":\"noul\",\"instructions\":\"문장에 제안이 있나요?\",\"criteria\":{\"true\":\"제안이 있다.\",\"false\":\"제안이 없다.\"}},\"ongoing_1\":{\"type\":\"choice\",\"instructions\":\"진행할 일을 골라요.\",\"criteria\":{\"lamp\":\"등 켜기\",\"NONE\":\"진행할 일이 없다.\"}}}}",
-    "request_sha256": "60b61c4ff2d6c5308daf6e283c106d74eeb8e14666465e59d0958b022ee40588"
-  }
+  "expected": {"state": "{\"dialogue\":[{\"speaker\":\"USER\",\"utterance\":\"작은 등을 켜 줘.\"}],\"catalog\":[{\"id\":\"lamp\",\"description\":\"등 켜기\"}]}", "target_end_char": 56, "request_utf8": "{\"model\":\"synthetic-model\",\"state\":\"{\\\"dialogue\\\":[{\\\"speaker\\\":\\\"USER\\\",\\\"utterance\\\":\\\"작은 등을 켜 줘.\\\"}],\\\"catalog\\\":[{\\\"id\\\":\\\"lamp\\\",\\\"description\\\":\\\"등 켜기\\\"}]}\",\"questions\":{\"act_inform\":{\"type\":\"noul\",\"instructions\":\"문장에 제안이 있나요?\",\"criteria\":{\"true\":\"제안이 있다.\",\"false\":\"제안이 없다.\"}},\"ongoing_1\":{\"type\":\"choice\",\"instructions\":\"진행할 일을 골라요.\",\"criteria\":{\"lamp\":\"등 켜기\",\"NONE\":\"진행할 일이 없다.\"}}}}", "request_sha256": "60b61c4ff2d6c5308daf6e283c106d74eeb8e14666465e59d0958b022ee40588"}
 }

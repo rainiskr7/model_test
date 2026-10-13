@@ -3,16 +3,37 @@
 from dataclasses import dataclass
 from typing import Any
 
-from . import JsonRecord
+from .base import JsonRecord
+
+
+@dataclass(frozen=True)
+class SourceRow(JsonRecord):
+    set: str
+    row_id: str
+    fields: dict
+
+
+@dataclass(frozen=True)
+class BoundQuestion(JsonRecord):
+    id: str
+    role: str
+    type: str
+    instructions: str
+    options: dict[str, str] | None
+    criteria: dict[str, str] | None
+    label: str
+    gold: str | None
 
 
 @dataclass(frozen=True)
 class Item(JsonRecord):
-    """§6에 명시된 식별 필드만. 항목 본문·정답 필드는 SPEC_AMBIGUOUS."""
-
     set: str
-    group_id: str | int
-    item_id: str | int
+    group_id: str
+    item_id: str
+    state_fields: dict | str
+    questions: list[BoundQuestion]
+    meta: dict
+    baseline: dict | None
 
 
 @dataclass(frozen=True)
@@ -47,3 +68,5 @@ class SplitPlan(JsonRecord):
     dev: list[str]
     test: list[str]
     diagnostic_demotions: list[str]
+    extra: list[str]
+    notes: dict

@@ -50,6 +50,35 @@ def _state_errors(state):
         keys = state.get("keys")
         if not isinstance(keys, list) or not keys or not all(map(_text, keys)):
             errors.append("task.state.keys: expected nonempty list of strings")
+        target = state.get("target_key")
+        if not _text(target) or not isinstance(keys, list) or target not in keys:
+            errors.append("task.state.target_key: required member of keys")
+    if state.get("kind") == "plain_text" and "target_key" in state:
+        errors.append("task.state.target_key: forbidden for plain_text")
+    return errors
+
+
+def _per_item_errors(per_item, static_ids):
+    path = "task.per_item_questions"
+    if per_item is None:
+        return []
+    if not isinstance(per_item, dict):
+        return [f"{path}: expected object or null"]
+    errors = _required(per_item, ("id_pattern", "role", "type",
+                                  "instructions_template", "label"), path)
+    pattern = per_item.get("id_pattern")
+    valid_pattern = isinstance(pattern, str) and pattern.count("{k}") == 1
+    if not valid_pattern:
+        errors.append(f"{path}.id_pattern: expected exactly one {{k}}")
+    question = dict(per_item, id=pattern.replace("{k}", "1") if valid_pattern else "",
+                    instructions=per_item.get("instructions_template"))
+    errors.extend(_question_errors(question, path))
+    if valid_pattern:
+        before, after = pattern.split("{k}")
+        matcher = re.compile(re.escape(before) + r"[1-9][0-9]*" + re.escape(after))
+        for qid in static_ids:
+            if matcher.fullmatch(qid):
+                errors.append(f"{path}.id_pattern: duplicate {qid}")
     return errors
 
 
@@ -64,8 +93,6 @@ def validate_taskspec(data: dict) -> TaskSpec | list[str]:
             errors.append(f"task.{name}: expected nonempty string")
     errors.extend(_state_errors(data.get("state")))
     per_item = data.get("per_item_questions")
-    if per_item is not None and not isinstance(per_item, dict):
-        errors.append("task.per_item_questions: expected object or null")
     questions = data.get("questions")
     if not isinstance(questions, list):
         errors.append("task.questions: expected list")
@@ -79,7 +106,10 @@ def validate_taskspec(data: dict) -> TaskSpec | list[str]:
             if qid in seen:
                 errors.append(f"{path}.id: duplicate {qid}")
             seen.add(qid)
-    if not any(isinstance(q, dict) and q.get("role") == "success" for q in questions):
+    errors.extend(_per_item_errors(per_item, seen))
+    success = any(isinstance(q, dict) and q.get("role") == "success" for q in questions)
+    success |= isinstance(per_item, dict) and per_item.get("role") == "success"
+    if not success:
         errors.append("task.questions: at least one success question required")
     if errors:
         return errors

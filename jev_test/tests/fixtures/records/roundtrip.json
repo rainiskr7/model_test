@@ -1,0 +1,173 @@
+{
+  "cases": [
+    {
+      "name": "ok",
+      "record": {
+        "logical_id": "synthetic:g:ok",
+        "status": "ok",
+        "reason": null,
+        "answered_over_limit": false,
+        "warnings": [],
+        "derived_from": null,
+        "calls": [
+          {
+            "call_id": "synthetic:g:ok",
+            "attempts": 1,
+            "status": "ok",
+            "reason": null,
+            "warnings": [],
+            "request_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "length": {"length_tokens": 12, "target_end": 7, "limit": 100, "fixed_tokens": 5},
+            "usage": {"input_tokens": 12},
+            "answers_parsed": {
+              "ready": {
+                "type": "noul",
+                "answer": "true",
+                "probs": {"true": 0.8, "false": 0.2},
+                "confidence": 0.8
+              }
+            },
+            "label_map": null,
+            "top_logprobs_raw": null
+          }
+        ]
+      },
+      "expected": {"scorable": true, "parsed_call_count": 1}
+    },
+    {
+      "name": "truncated",
+      "record": {
+        "logical_id": "synthetic:g:truncated",
+        "status": "truncated",
+        "reason": "tail_cut",
+        "answered_over_limit": true,
+        "warnings": [],
+        "derived_from": null,
+        "calls": [
+          {
+            "call_id": "synthetic:g:truncated",
+            "attempts": 1,
+            "status": "truncated",
+            "reason": "tail_cut",
+            "warnings": [],
+            "request_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "length": {"length_tokens": 101, "target_end": 7, "limit": 100, "fixed_tokens": 5},
+            "usage": {"input_tokens": 100},
+            "answers_parsed": {
+              "ready": {
+                "type": "noul",
+                "answer": "true",
+                "probs": {"true": 0.8, "false": 0.2},
+                "confidence": 0.8
+              }
+            },
+            "label_map": null,
+            "top_logprobs_raw": null
+          }
+        ]
+      },
+      "expected": {"scorable": false, "parsed_call_count": 1}
+    },
+    {
+      "name": "rejected",
+      "record": {
+        "logical_id": "synthetic:g:rejected",
+        "status": "rejected",
+        "reason": "input_limit",
+        "answered_over_limit": false,
+        "warnings": [],
+        "derived_from": null,
+        "calls": [
+          {
+            "call_id": "synthetic:g:rejected",
+            "attempts": 1,
+            "status": "rejected",
+            "reason": "input_limit",
+            "warnings": [],
+            "request_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "length": {"length_tokens": 12, "target_end": 7, "limit": 100, "fixed_tokens": 5},
+            "usage": null,
+            "answers_parsed": null,
+            "label_map": null,
+            "top_logprobs_raw": null
+          }
+        ]
+      },
+      "expected": {"scorable": false, "parsed_call_count": 0}
+    },
+    {
+      "name": "invalid",
+      "record": {
+        "logical_id": "synthetic:g:invalid",
+        "status": "error",
+        "reason": "noul_value",
+        "answered_over_limit": false,
+        "warnings": [],
+        "derived_from": null,
+        "calls": [
+          {
+            "call_id": "synthetic:g:invalid",
+            "attempts": 1,
+            "status": "error",
+            "reason": "noul_value",
+            "warnings": [],
+            "request_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "length": {"length_tokens": 12, "target_end": 7, "limit": 100, "fixed_tokens": 5},
+            "usage": null,
+            "answers_parsed": null,
+            "label_map": null,
+            "top_logprobs_raw": null
+          }
+        ]
+      },
+      "expected": {"scorable": false, "parsed_call_count": 0}
+    },
+    {
+      "name": "b1_partial",
+      "record": {
+        "logical_id": "synthetic:g:b1_partial",
+        "status": "error",
+        "reason": "b1_missing_label",
+        "answered_over_limit": false,
+        "warnings": [],
+        "derived_from": null,
+        "calls": [
+          {
+            "call_id": "synthetic:g:b1_partial/ready",
+            "attempts": 1,
+            "status": "ok",
+            "reason": null,
+            "warnings": [],
+            "request_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "length": {"length_tokens": 12, "target_end": 7, "limit": 100, "fixed_tokens": 5},
+            "usage": {"prompt_tokens": 12},
+            "answers_parsed": {
+              "ready": {
+                "type": "noul",
+                "answer": "true",
+                "probs": {"true": 0.8, "false": 0.2},
+                "confidence": 0.8
+              }
+            },
+            "label_map": null,
+            "top_logprobs_raw": null
+          },
+          {
+            "call_id": "synthetic:g:b1_partial/other",
+            "attempts": 1,
+            "status": "error",
+            "reason": "b1_missing_label",
+            "warnings": [],
+            "request_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "length": {"length_tokens": 12, "target_end": 7, "limit": 100, "fixed_tokens": 5},
+            "usage": null,
+            "answers_parsed": null,
+            "label_map": null,
+            "top_logprobs_raw": null
+          }
+        ]
+      },
+      "expected": {"scorable": false, "parsed_call_count": 1}
+    }
+  ]
+}

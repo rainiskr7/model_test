@@ -1,62 +1,70 @@
-# jeveval — P1 작업 1 기능 지도
+# jeveval — P1 작업 ②-0 기능 지도
 
-P1_CONTRACT.md 판 2의 §8-4 작업 1만 구현했다. fixture는 합성 데이터이며,
-아직 없는 실행·렌더·응답 검증·채점 모듈을 호출하지 않는다.
+P1_CONTRACT.md 판 3 보정의 자료형·task 검사·합성 fixture를 구현했다.
+실제 데이터 원문은 쓰지 않으며, render·response·score·data·run 실행 모듈은 아직 없다.
 
-## 현재 파일
+## 코드
 
 - `__init__.py`: 패키지 네임스페이스.
-- `types/__init__.py`: 공통 JSON 왕복과 dataclass 공개 이름.
-- `types/specs.py`: Item, QuestionSpec, TaskSpec, SplitPlan.
-- `types/records.py`: Request, AttemptRecord, CallRecord, FinalRecord.
-- `types/results.py`: ParsedAnswer, LengthInfo, Threshold, RiskCell, ScoreTable.
+- `types/__init__.py`: 기존 `from jeveval.types import X` 경로와 새 자료형 재수출.
+- `types/base.py`: JsonRecord, JSON 사본·중첩 dataclass 복원·타입 검사.
+- `types/specs.py`: SourceRow, BoundQuestion, Item, QuestionSpec, TaskSpec, SplitPlan.
+- `types/results.py`: Rendered, ParsedAnswer, 호출별 LengthInfo.
+- `types/scores.py`: Threshold, ThresholdFile, RiskCell, QStats, Population, Cost, ScoreTable.
+- `types/records.py`: Request, session_id를 포함한 AttemptRecord, CallRecord, FinalRecord.
+- `types/outcomes.py`: 메모리 전용 RequestOutcome, 테스트용 JSON 왕복 지원.
+- `contract/__init__.py`: 계약 검사 네임스페이스.
+- `contract/taskspec.py`: target_key·정적/동적 질문·성공 질문·ID 충돌 순수 검사.
 - `io/__init__.py`: 파일 입출력 네임스페이스.
-- `io/config.py`: 안전한 UTF-8 YAML 로더, 중첩 중복 키 거부, 순수 검사기 위임.
-- `contract/__init__.py`: 순수 검사 네임스페이스.
-- `contract/taskspec.py`: dict → TaskSpec 또는 전체 오류 문자열 목록.
-- `README.md`: 이 기능 지도와 미정 계약 범위.
+- `io/config.py`: UTF-8 안전 YAML 읽기, 중첩 중복 키 거부, task 검사 위임.
+- `README.md`: 기능 지도와 후속 작업 경계.
 
-현재 의존 방향: `io/config → contract/taskspec → types` 및 `io/config → types`.
-`types`는 io/contract에 의존하지 않는다. 전체 계약의 방향은
-`run → client/io → score/data/contract → types`이며, 앞 단계 모듈은 아직 없다.
-`types` 내부 공통 JSON 기능을 먼저 정의한 뒤 세 타입 파일을 공개한다.
+의존 방향은 `io → contract → types`이며 io는 반환 타입을 직접 참조한다.
+전체 예정 방향은 `run → client/io → score/data/contract → types`다.
+types는 jeveval의 다른 패키지를 import하지 않는다.
 
-## 사용과 검사
+모든 dataclass는 frozen이다. 내부 list/dict까지 불변인 것은 아니다.
+from_dict는 중첩 타입을 복원하고 별칭 없는 사본을 만든다.
+알 수 없는 필드·필수 필드 누락·비선택 필드의 null·잘못된 타입·NaN/Infinity를 거부한다.
+ThresholdFile은 by_tau 키와 값의 tau가 같은지도 검사한다.
+그 밖의 상태·확률 등 도메인 검사는 후속 contract/score/run 작업의 책임이다.
 
-`jeveval.io.config.load_taskspec(path)`는 TaskSpec을 반환한다.
-스키마 오류는 `TaskSpecError.errors`에 모이며, 중복 키는 위치를 포함하는
-`DuplicateKeyError`로 실패한다. 순수 함수 `validate_taskspec(dict)`는 입력을
-변경하지 않는다. 설정 예제 §1-1에 나열된 최상위 키를 필수로 검사한다.
-`criteria`의 `"true"`/`"false"` 키는 계약 예제처럼 인용한다(SafeLoader 규칙).
-YAML merge로 같은 키를 덮어쓰는 경우도 중복으로 거부한다.
+load_taskspec은 TaskSpec을 반환하며 오류 목록은 TaskSpecError.errors에 담는다.
+task yaml의 score 질문은 기존대로 오류 목록이며 NotImplementedError로 바꾸지 않는다.
+per_item_questions의 충돌 검사는 k 상한 없이 앞자리 0 없는 양의 정수를 대조한다.
+실제 질문 펼치기와 중복 재검사는 작업 ③의 data/expand에서 구현한다.
 
-모든 dataclass는 frozen이다(내부 list/dict까지 불변은 아니다).
-`to_dict()`/`from_dict()`는 독립된 JSON 사본과 중첩 dataclass를 왕복한다.
-알 수 없는 dataclass 필드와 NaN/Infinity는 거부한다. 도메인 검사는 별도다.
+## 테스트
 
-- `tests/types/test_specs.py`: 설정·분할·식별자 왕복과 사본 분리.
-- `tests/types/test_records.py`: 요청 봉투·기록·중첩 타입 왕복.
-- `tests/types/test_results.py`: 결과 왕복과 미정 점수 필드 거부.
-- `tests/io/test_config.py`: 중복·별칭·안전 로더·계약 검사 위임.
-- `tests/contract/test_taskspec.py`: §1-1 필수 필드·값·ID·질문 유형 검사.
-- `tests/fixtures/test_fixtures_wellformed.py`: JSON·README·CP·temperature·바이트 해시 검사.
-- `tests/conftest.py`: `python -I` 실행에 필요한 저장소 경로 추가.
-- `tests/fixtures/{render,responses,scoring,splits,resume,length,temperature,b1}/`:
-  §9 각 행의 입력과 기대값, 각 폴더 README.
+- `tests/conftest.py`: 격리 Python의 저장소 import 경로.
+- `tests/types/samples.py`: 자료형 테스트용 합성 표본.
+- `tests/types/test_base.py`: 전체 자료형 왕복·frozen·null·알 수 없는 필드.
+- `tests/types/test_specs.py`: 설정·항목·분할·중첩 질문·사본 분리.
+- `tests/types/test_results.py`: 응답·길이·렌더 자료형과 숫자 경계.
+- `tests/types/test_scores.py`: 임계값·모집단·질문 통계 중첩 복원.
+- `tests/types/test_records.py`: session_id·호출별 길이·ParsedAnswer 복원.
+- `tests/types/test_outcomes.py`: MISSING·실행 오류 요청 결과 왕복.
+- `tests/contract/test_taskspec.py`: 정적/동적 질문·target_key·ID 패턴 경계.
+- `tests/io/test_config.py`: 안전 YAML·중복 키·검사기 위임.
+- `tests/fixtures/test_fixtures_wellformed.py`: JSON·README·CP·temperature·바이트·정확한 대상 prefix·canary 입력.
+- `tests/fixtures/reference_scoring.py`: 테스트 전용 독립 F1·보정·임계값 참조 계산.
+- `tests/fixtures/test_scoring_fixtures.py`: 빈 bin·빈 채점·빈 마스크·21묶음 분모·코호트·pooled 검산.
+- `tests/fixtures/test_answer_fixtures.py`: API 확신·B1 교환 동률·누락 라벨·고정 칸 Brier.
+- `tests/fixtures/test_record_fixtures.py`: 다섯 기록 사례·길이 상태·KorFin 연결·terminal 복구 기대값.
+- `tests/fixtures/test_cost_fixtures.py`: 논리 완료 지연·백분위·세션 제외·토큰·파생 비용.
+- `tests/fixtures/test_seal_fixtures.py`: 바이트 해시·개발 임계값 재계산·mtime·resume 교체 거부.
+- `tests/fixtures/test_split_fixtures.py`: ID 묶음·라벨 충돌·연결요소·분할·비례 할당.
+- `tests/fixtures/test_resume_fixtures.py`: JSONL 손상·중복·완료 ID·누적 재시도 자료.
+
+fixture 폴더: render, responses, answers, scoring, splits, expand, records,
+resume, length, seal, temperature, b1, canary. 각 README는 한 줄이다.
+fixture 검산은 실제 실행 모듈 통합 테스트를 대신하지 않는다.
+canary는 표식 있는 입력만 만들며, 일곱 커밋 출력의 누출 검사는 작업 ⑥에서 한다.
 
 검사: `../foundation_model_test_non_thinking/.venv/bin/python -I -m pytest -q tests`
 
-## SPEC_AMBIGUOUS — 필드가 확정되지 않은 타입
+## SPEC_AMBIGUOUS
 
-§8-1은 타입 이름만 열거한다. 아래 미정 부분에는 새 필드를 발명하지 않았다.
-따라서 이 타입들이 전체 실행에 충분하다는 뜻은 아니다.
-
-- §1·§6·§8-1 Item: `set/group_id/item_id`만 구현. 본문과 정답 필드명·구조 미정.
-- §3·§5-3 ParsedAnswer: 명시된 응답 필드만 구현. 파싱 후 답·확신 스키마 미정.
-- §4-3·§5-3 LengthInfo: `length_tokens/target_end`만 구현. 상한·고정부 필드명 미정.
-- §7-4 Threshold: `t_star`만 구현. 목표 위험별 threshold.json 전체 구조 미정.
-- §7·§8-3 ScoreTable: 필드 자체가 없어 빈 dataclass만 정의. 실제 점수 필드는 거부.
-- §5-3: `answers_parsed` 내부 구조가 없다. 타입을 추측하지 않고 JSON 값 그대로 보존한다.
-
-`score` 질문은 이번 요청대로 스키마 오류 목록에 넣는다. 이후 응답 검증기·채점의
-NotImplementedError 규칙은 이번 작업 범위가 아니다.
+②-0 범위에 남은 항목 없음. 판 2의 자료형 미정 6건은 판 3으로 해결했다.
+§10의 서버 인코더·문자→토큰 변환·길이 거부 응답 확인은 P0 후속 작업이다.
+현재 길이 fixture는 이미 측정된 합성 LengthInfo를 입력으로 삼는다.

@@ -8,10 +8,13 @@ from pathlib import Path
 import pytest
 from scipy.stats import beta
 
+from jeveval.types import RiskCell
+
 
 ROOT = Path(__file__).parent
 JSON_FILES = sorted(ROOT.rglob("*.json"))
-FOLDERS = {"render", "responses", "scoring", "splits", "resume", "length", "temperature", "b1"}
+FOLDERS = {"render", "responses", "scoring", "splits", "resume", "length", "temperature", "b1",
+           "answers", "expand", "records", "seal", "canary"}
 
 
 def read(path):
@@ -97,28 +100,30 @@ def test_risk_cp_bounds_and_minimum_sample_sizes():
             assert row["U"] == pytest.approx(expected, abs=1e-9, rel=0)
     assert [row["n"] for row in fixture["n_min"]] == [299, 149, 59]
     for row in fixture["n_min"]:
-        assert cp_upper(0, row["n"]) <= row["tau"] < cp_upper(0, row["n"] - 1)
+        assert cp_upper(0, row["n"]) <= float(row["tau"]) < cp_upper(0, row["n"] - 1)
 
 
 def test_risk_statuses_flags_and_flip():
     cases = read(ROOT / "scoring/risk_cases.json")["cases"]
     assert {c["expected"]["status"] for c in cases} == {"MEETS", "FAILS", "UNDERPOWERED", "NO_THRESHOLD"}
     for case in cases:
-        result, tau = case["expected"], case["tau"]
+        result, tau = case["expected"], float(case["tau"])
+        assert RiskCell.from_dict(result).to_dict() == result
+        assert result["tau"] == case["tau"]
         test = result["test"]
-        n, k, groups = test["n"], test["k"], test["groups"]
+        n, k, groups = test["n_accepted"], test["k_errors"], test["n_groups"]
         minimum = math.ceil(math.log(.05) / math.log1p(-tau))
         assert result["insufficient_by_design"] == (groups < minimum)
         if result["t_star"] is None:
             assert result["status"] == "NO_THRESHOLD"
             assert n is k is test["U"] is test["b_flip"] is None
-            assert test["coverage"] == 0
+            assert test["coverage"] == {"num": 0, "den": test["n_denom"]}
             continue
         u = cp_upper(k, n)
         assert test["U"] is None if u is None else abs(test["U"] - u) < 1e-9
         status = "UNDERPOWERED" if n < minimum else "MEETS" if u <= tau else "FAILS"
         assert result["status"] == status
-        assert test["coverage"] == n / groups
+        assert test["coverage"] == {"num": n, "den": test["n_denom"]}
         if status == "MEETS":
             b = test["b_flip"]
             assert cp_upper(k + b - 1, n) <= tau < cp_upper(k + b, n)
@@ -141,3 +146,41 @@ def test_temperature_single_application_and_mutations():
                 distinguished[applications] |= any(abs(a-b) > fixture["comparison_atol"]
                                                    for a, b in zip(case[key], case["expected"]))
     assert all(distinguished.values())
+
+
+def test_render_target_exact_prefix():
+    for path in (ROOT / "render").glob("*.json"):
+        fixture = read(path)
+        source, expected = fixture["input"], fixture["expected"]
+        spec = source["state_spec"]
+        if spec["kind"] == "plain_text":
+            prefix = source["state"]
+        else:
+            parts = []
+            for key in spec["keys"]:
+                value = source["state"][key]
+                encoded = json.dumps(value, ensure_ascii=False, separators=(",", ":"))
+                if key == spec["target_key"] and isinstance(value, list):
+                    assert value
+                    encoded = encoded[:-1]
+                parts.append(json.dumps(key) + ":" + encoded)
+                if key == spec["target_key"]:
+                    break
+            prefix = "{" + ",".join(parts)
+        assert expected["target_end_char"] == len(prefix)
+        assert expected["state"][:len(prefix)] == prefix
+
+
+def test_functionchat_single_tool_source():
+    source = read(ROOT / "render/functionchat.json")["input"]
+    options = {t["function"]["name"]: t["function"]["description"]
+               for t in source["state"]["input_tools"]}
+    options["NONE"] = source["none_description"]
+    assert source["questions"]["tool_pick"]["criteria"] == options
+
+
+def test_canary_input_contains_each_marker():
+    fixture = read(ROOT / "canary/input.json")
+    text = json.dumps(fixture["input"], ensure_ascii=False)
+    assert len(set(fixture["markers"].values())) == len(fixture["markers"])
+    assert all(marker in text for marker in fixture["markers"].values())

@@ -1,10 +1,41 @@
 {
-  "attempts_jsonl": "{\"call_id\":\"synthetic:g1:i1\",\"logical_id\":\"synthetic:g1:i1\",\"attempt\":1,\"started_at\":\"2026-10-13T00:00:00Z\",\"ended_at\":\"2026-10-13T00:00:01Z\",\"latency_ms\":1000,\"http_status\":200,\"retry_after\":null,\"transport_error\":null,\"terminal\":true,\"request_sha256\":\"f07165b64216ae9a4988fc779b08f0dbe74750bd08a7504a6fb368cdc6c084d2\",\"response_raw\":\"{\\\"answers\\\":{\\\"is_ready\\\":{\\\"type\\\":\\\"noul\\\",\\\"noul\\\":0.8}}}\"}\n",
+  "attempts_jsonl": "{\"call_id\":\"synthetic:g1:i1\",\"logical_id\":\"synthetic:g1:i1\",\"attempt\":1,\"started_at\":\"2026-10-13T00:00:00.000Z\",\"ended_at\":\"2026-10-13T00:00:01.000Z\",\"latency_ms\":1000,\"http_status\":200,\"retry_after\":null,\"transport_error\":null,\"terminal\":true,\"request_sha256\":\"f07165b64216ae9a4988fc779b08f0dbe74750bd08a7504a6fb368cdc6c084d2\",\"response_raw\":\"{\\\"answers\\\":{\\\"is_ready\\\":{\\\"type\\\":\\\"noul\\\",\\\"noul\\\":0.8}}}\",\"session_id\":\"00000000-0000-4000-8000-000000000001\"}\n",
   "final_jsonl": "",
   "expected": {
     "recover_from_attempt": 1,
     "new_calls": 0,
     "logical_status": "ok",
-    "write_final": true
-  }
+    "write_final": true,
+    "final": {
+      "logical_id": "synthetic:g1:i1",
+      "status": "ok",
+      "reason": null,
+      "answered_over_limit": false,
+      "warnings": [],
+      "derived_from": null,
+      "calls": [
+        {
+          "call_id": "synthetic:g1:i1",
+          "attempts": 1,
+          "status": "ok",
+          "reason": null,
+          "warnings": [],
+          "request_sha256": "f07165b64216ae9a4988fc779b08f0dbe74750bd08a7504a6fb368cdc6c084d2",
+          "length": {"length_tokens": 12, "target_end": 7, "limit": 100, "fixed_tokens": 5},
+          "usage": null,
+          "answers_parsed": {
+            "is_ready": {
+              "type": "noul",
+              "answer": "true",
+              "probs": {"true": 0.8, "false": 0.19999999999999996},
+              "confidence": 0.8
+            }
+          },
+          "label_map": null,
+          "top_logprobs_raw": null
+        }
+      ]
+    }
+  },
+  "input_length": {"length_tokens": 12, "target_end": 7, "limit": 100, "fixed_tokens": 5}
 }

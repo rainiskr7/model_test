@@ -1,0 +1,111 @@
+{
+  "questions": {
+    "noul": {
+      "observations": [
+        {
+          "answer": "true",
+          "gold": "true",
+          "confidence": 0.5,
+          "probs": {"true": 0.5, "false": 0.5}
+        },
+        {
+          "answer": "false",
+          "gold": "true",
+          "confidence": 1,
+          "probs": {"true": 0, "false": 1}
+        }
+      ],
+      "expected": {
+        "ece": 0.75,
+        "bins": [
+          {"index": 0, "lo": 0.0, "hi": 0.06666666666666667, "n": 0, "acc": null, "conf": null},
+          {"index": 1, "lo": 0.06666666666666667, "hi": 0.13333333333333333, "n": 0, "acc": null, "conf": null},
+          {"index": 2, "lo": 0.13333333333333333, "hi": 0.2, "n": 0, "acc": null, "conf": null},
+          {"index": 3, "lo": 0.2, "hi": 0.26666666666666666, "n": 0, "acc": null, "conf": null},
+          {"index": 4, "lo": 0.26666666666666666, "hi": 0.3333333333333333, "n": 0, "acc": null, "conf": null},
+          {"index": 5, "lo": 0.3333333333333333, "hi": 0.4, "n": 0, "acc": null, "conf": null},
+          {"index": 6, "lo": 0.4, "hi": 0.4666666666666667, "n": 0, "acc": null, "conf": null},
+          {"index": 7, "lo": 0.4666666666666667, "hi": 0.5333333333333333, "n": 1, "acc": 1.0, "conf": 0.5},
+          {"index": 8, "lo": 0.5333333333333333, "hi": 0.6, "n": 0, "acc": null, "conf": null},
+          {"index": 9, "lo": 0.6, "hi": 0.6666666666666666, "n": 0, "acc": null, "conf": null},
+          {"index": 10, "lo": 0.6666666666666666, "hi": 0.7333333333333333, "n": 0, "acc": null, "conf": null},
+          {"index": 11, "lo": 0.7333333333333333, "hi": 0.8, "n": 0, "acc": null, "conf": null},
+          {"index": 12, "lo": 0.8, "hi": 0.8666666666666667, "n": 0, "acc": null, "conf": null},
+          {"index": 13, "lo": 0.8666666666666667, "hi": 0.9333333333333333, "n": 0, "acc": null, "conf": null},
+          {"index": 14, "lo": 0.9333333333333333, "hi": 1.0, "n": 1, "acc": 0.0, "conf": 1.0}
+        ],
+        "brier": 1.25,
+        "log_loss": 14.162084148244245
+      }
+    },
+    "choice": {
+      "observations": [
+        {
+          "answer": "B",
+          "gold": "A",
+          "confidence": 0.06666666666666667,
+          "probs": {"A": 0.9333333333333333, "B": 0.06666666666666667}
+        },
+        {
+          "answer": "A",
+          "gold": "A",
+          "confidence": 0.9333333333333333,
+          "probs": {"A": 0.9333333333333333, "B": 0.06666666666666667}
+        },
+        {
+          "answer": "B",
+          "gold": "B",
+          "confidence": 1,
+          "probs": {"A": 0, "B": 1}
+        }
+      ],
+      "expected": {
+        "ece": 0.04444444444444443,
+        "bins": [
+          {"index": 0, "lo": 0.0, "hi": 0.06666666666666667, "n": 0, "acc": null, "conf": null},
+          {"index": 1, "lo": 0.06666666666666667, "hi": 0.13333333333333333, "n": 1, "acc": 0.0, "conf": 0.06666666666666667},
+          {"index": 2, "lo": 0.13333333333333333, "hi": 0.2, "n": 0, "acc": null, "conf": null},
+          {"index": 3, "lo": 0.2, "hi": 0.26666666666666666, "n": 0, "acc": null, "conf": null},
+          {"index": 4, "lo": 0.26666666666666666, "hi": 0.3333333333333333, "n": 0, "acc": null, "conf": null},
+          {"index": 5, "lo": 0.3333333333333333, "hi": 0.4, "n": 0, "acc": null, "conf": null},
+          {"index": 6, "lo": 0.4, "hi": 0.4666666666666667, "n": 0, "acc": null, "conf": null},
+          {"index": 7, "lo": 0.4666666666666667, "hi": 0.5333333333333333, "n": 0, "acc": null, "conf": null},
+          {"index": 8, "lo": 0.5333333333333333, "hi": 0.6, "n": 0, "acc": null, "conf": null},
+          {"index": 9, "lo": 0.6, "hi": 0.6666666666666666, "n": 0, "acc": null, "conf": null},
+          {"index": 10, "lo": 0.6666666666666666, "hi": 0.7333333333333333, "n": 0, "acc": null, "conf": null},
+          {"index": 11, "lo": 0.7333333333333333, "hi": 0.8, "n": 0, "acc": null, "conf": null},
+          {"index": 12, "lo": 0.8, "hi": 0.8666666666666667, "n": 0, "acc": null, "conf": null},
+          {"index": 13, "lo": 0.8666666666666667, "hi": 0.9333333333333333, "n": 0, "acc": null, "conf": null},
+          {"index": 14, "lo": 0.9333333333333333, "hi": 1.0, "n": 2, "acc": 1.0, "conf": 0.9666666666666667}
+        ],
+        "brier": 0.005925925925925925,
+        "log_loss": 0.04599524765796762
+      }
+    },
+    "empty": {
+      "observations": [],
+      "expected": {
+        "ece": null,
+        "bins": [
+          {"index": 0, "lo": 0.0, "hi": 0.06666666666666667, "n": 0, "acc": null, "conf": null},
+          {"index": 1, "lo": 0.06666666666666667, "hi": 0.13333333333333333, "n": 0, "acc": null, "conf": null},
+          {"index": 2, "lo": 0.13333333333333333, "hi": 0.2, "n": 0, "acc": null, "conf": null},
+          {"index": 3, "lo": 0.2, "hi": 0.26666666666666666, "n": 0, "acc": null, "conf": null},
+          {"index": 4, "lo": 0.26666666666666666, "hi": 0.3333333333333333, "n": 0, "acc": null, "conf": null},
+          {"index": 5, "lo": 0.3333333333333333, "hi": 0.4, "n": 0, "acc": null, "conf": null},
+          {"index": 6, "lo": 0.4, "hi": 0.4666666666666667, "n": 0, "acc": null, "conf": null},
+          {"index": 7, "lo": 0.4666666666666667, "hi": 0.5333333333333333, "n": 0, "acc": null, "conf": null},
+          {"index": 8, "lo": 0.5333333333333333, "hi": 0.6, "n": 0, "acc": null, "conf": null},
+          {"index": 9, "lo": 0.6, "hi": 0.6666666666666666, "n": 0, "acc": null, "conf": null},
+          {"index": 10, "lo": 0.6666666666666666, "hi": 0.7333333333333333, "n": 0, "acc": null, "conf": null},
+          {"index": 11, "lo": 0.7333333333333333, "hi": 0.8, "n": 0, "acc": null, "conf": null},
+          {"index": 12, "lo": 0.8, "hi": 0.8666666666666667, "n": 0, "acc": null, "conf": null},
+          {"index": 13, "lo": 0.8666666666666667, "hi": 0.9333333333333333, "n": 0, "acc": null, "conf": null},
+          {"index": 14, "lo": 0.9333333333333333, "hi": 1.0, "n": 0, "acc": null, "conf": null}
+        ],
+        "brier": null,
+        "log_loss": null
+      }
+    }
+  }
+}

@@ -1,0 +1,86 @@
+{
+  "models": {
+    "clef": {"g1": "ok", "g2": "error", "g3": "ok", "g4": "ok"},
+    "pplx": {"g1": "ok", "g2": "ok", "g3": "rejected", "g4": "ok"},
+    "b1": {"g1": "ok", "g2": "ok", "g3": "ok", "g4": "truncated"}
+  },
+  "functionchat": {
+    "groups": {
+      "g1": ["i1", "i2", "i3"],
+      "g2": ["i4"]
+    },
+    "dev": ["i1"],
+    "test": ["i4"],
+    "extra": ["i2", "i3"],
+    "statuses": {"i1": "ok", "i2": "ok", "i3": "error", "i4": "ok"}
+  },
+  "korfin": {
+    "questions": {
+      "aspect_1": [
+        {
+          "answer": "pos",
+          "gold": "pos",
+          "confidence": 0.8,
+          "probs": {"pos": 0.8, "neg": 0.1, "neutral": 0.1}
+        },
+        {
+          "answer": "pos",
+          "gold": "pos",
+          "confidence": 0.8,
+          "probs": {"pos": 0.8, "neg": 0.1, "neutral": 0.1}
+        },
+        {
+          "answer": "pos",
+          "gold": "pos",
+          "confidence": 0.8,
+          "probs": {"pos": 0.8, "neg": 0.1, "neutral": 0.1}
+        }
+      ],
+      "aspect_2": [
+        {
+          "answer": "pos",
+          "gold": "neg",
+          "confidence": 0.8,
+          "probs": {"pos": 0.8, "neg": 0.1, "neutral": 0.1}
+        }
+      ]
+    }
+  },
+  "expected": {
+    "common_cohort": ["g1"],
+    "functionchat": {
+      "test": {"certified": true, "unit": "group_representative", "n_sampled": 1, "n_scored": 1},
+      "all_rows": {"certified": false, "unit": "row", "n_sampled": 4, "n_scored": 3}
+    },
+    "korfin": {
+      "pooled": {
+        "n_scored": 4,
+        "macro_f1": 0.42857142857142855,
+        "accuracy": {"num": 3, "den": 4},
+        "calibration": {
+          "ece": 0.050000000000000044,
+          "bins": [
+            {"index": 0, "lo": 0.0, "hi": 0.06666666666666667, "n": 0, "acc": null, "conf": null},
+            {"index": 1, "lo": 0.06666666666666667, "hi": 0.13333333333333333, "n": 0, "acc": null, "conf": null},
+            {"index": 2, "lo": 0.13333333333333333, "hi": 0.2, "n": 0, "acc": null, "conf": null},
+            {"index": 3, "lo": 0.2, "hi": 0.26666666666666666, "n": 0, "acc": null, "conf": null},
+            {"index": 4, "lo": 0.26666666666666666, "hi": 0.3333333333333333, "n": 0, "acc": null, "conf": null},
+            {"index": 5, "lo": 0.3333333333333333, "hi": 0.4, "n": 0, "acc": null, "conf": null},
+            {"index": 6, "lo": 0.4, "hi": 0.4666666666666667, "n": 0, "acc": null, "conf": null},
+            {"index": 7, "lo": 0.4666666666666667, "hi": 0.5333333333333333, "n": 0, "acc": null, "conf": null},
+            {"index": 8, "lo": 0.5333333333333333, "hi": 0.6, "n": 0, "acc": null, "conf": null},
+            {"index": 9, "lo": 0.6, "hi": 0.6666666666666666, "n": 0, "acc": null, "conf": null},
+            {"index": 10, "lo": 0.6666666666666666, "hi": 0.7333333333333333, "n": 0, "acc": null, "conf": null},
+            {"index": 11, "lo": 0.7333333333333333, "hi": 0.8, "n": 0, "acc": null, "conf": null},
+            {"index": 12, "lo": 0.8, "hi": 0.8666666666666667, "n": 4, "acc": 0.75, "conf": 0.8},
+            {"index": 13, "lo": 0.8666666666666667, "hi": 0.9333333333333333, "n": 0, "acc": null, "conf": null},
+            {"index": 14, "lo": 0.9333333333333333, "hi": 1.0, "n": 0, "acc": null, "conf": null}
+          ],
+          "brier": 0.41000000000000003,
+          "log_loss": 0.7430039367341686
+        }
+      },
+      "question_macro_f1_mean": 0.5
+    }
+  }
+}

@@ -3,7 +3,8 @@
 from dataclasses import dataclass
 from typing import Any
 
-from . import JsonRecord
+from .base import JsonRecord
+from .results import LengthInfo, ParsedAnswer
 
 
 @dataclass(frozen=True)
@@ -18,6 +19,7 @@ class AttemptRecord(JsonRecord):
     call_id: str
     logical_id: str
     attempt: int
+    session_id: str
     started_at: str
     ended_at: str
     latency_ms: float
@@ -35,11 +37,11 @@ class CallRecord(JsonRecord):
     attempts: int
     status: str
     reason: str | None
+    warnings: list[str]
     request_sha256: str
-    length_tokens: int
-    target_end: int
+    length: LengthInfo | None
     usage: dict[str, Any] | None
-    answers_parsed: Any  # §5-3은 내부 스키마를 명시하지 않아 JSON 그대로 보존.
+    answers_parsed: dict[str, ParsedAnswer] | None
     label_map: dict[str, str] | None = None
     top_logprobs_raw: Any = None
 

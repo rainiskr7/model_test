@@ -5,26 +5,26 @@ import json
 
 import pytest
 
-from jeveval.types import Item, QuestionSpec, SplitPlan, TaskSpec
+from jeveval.types import BoundQuestion, Item, QuestionSpec, SplitPlan, TaskSpec
+from samples import item
 
 
 @pytest.fixture
 def task():
     return TaskSpec(
         set="synthetic", variant="full", state={"kind": "plain_text"},
-        questions=[QuestionSpec("ready_1", "success", "noul", "준비됐나요?", "ready",
+        questions=[QuestionSpec(id="ready_1", role="success", type="noul", instructions="준비됐나요?", label="ready",
                                 criteria={"true": "준비됐다.", "false": "아직이다."})],
         per_item_questions=None, group_key="source",
     )
 
 
 @pytest.mark.parametrize("record", [
-    Item("synthetic", "g1", "i1"), Item("functionchat", 11, 12),
-    QuestionSpec("pick_one", "success", "choice", "하나를 골라요.", "pick", options="per_item"),
-    SplitPlan("synthetic", 20261012, "all", {}, {"g1": ["i1", "i2"]},
-              {"g1": "synthetic:g1:i1"}, [], ["g1"], []),
-    SplitPlan("functionchat", 20261012, "all", {}, {"11": [11, 12]},
-              {"11": "functionchat:11:12"}, [], ["11"], []),
+    item(),
+    QuestionSpec(id="pick_one", role="success", type="choice", instructions="골라요.", label="pick", options="per_item"),
+    SplitPlan(set="synthetic", seed=20261012, pool_rule="all", allocation={}, groups={"g1":["i1","i2"]},
+              representative={"g1":"synthetic:g1:i1"}, dev=[], test=["g1"], diagnostic_demotions=[],
+              extra=["synthetic:g1:i2"], notes={"label_conflict_groups":0}),
 ])
 def test_roundtrip(record):
     assert type(record).from_dict(json.loads(json.dumps(record.to_dict()))) == record
@@ -60,3 +60,21 @@ def test_unknown_or_missing_fields_fail():
 def test_wrong_types_fail(data):
     with pytest.raises(TypeError):
         Item.from_dict(data)
+
+
+def test_item_questions_restored_and_detached():
+    original = item()
+    source = original.to_dict()
+    restored = Item.from_dict(source)
+    assert isinstance(restored.questions[0], BoundQuestion)
+    source["questions"][0]["criteria"]["true"] = "변경"
+    source["meta"]["flags"].append("label_conflict_group")
+    assert restored == original
+
+
+def test_numeric_item_identifiers_rejected():
+    for key in ("group_id", "item_id"):
+        source = item().to_dict()
+        source[key] = 11
+        with pytest.raises(TypeError):
+            Item.from_dict(source)

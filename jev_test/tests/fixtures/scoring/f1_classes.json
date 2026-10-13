@@ -1,57 +1,66 @@
 {
   "cases": [
     {
-      "configured_classes": [
-        "a",
-        "b",
-        "c"
-      ],
-      "gold": [
-        "a",
-        "a"
-      ],
-      "predicted": [
-        "a",
-        "a"
-      ],
+      "configured_classes": ["a", "b", "c"],
+      "gold": ["a", "a"],
+      "predicted": ["a", "a"],
       "expected": {
-        "classes": [
-          "a"
-        ],
-        "per_class_f1": {
-          "a": 1.0
-        },
-        "macro_f1": 1.0
+        "classes": ["a"],
+        "per_class_f1": {"a": 1.0},
+        "macro_f1": 1.0,
+        "class_stats": {
+          "a": {
+            "support": 2,
+            "predicted": 2,
+            "tp": 2,
+            "recall": {"num": 2, "den": 2},
+            "precision": {"num": 2, "den": 2}
+          }
+        }
       }
     },
     {
-      "configured_classes": [
-        "a",
-        "b",
-        "c"
-      ],
-      "gold": [
-        "a",
-        "a",
-        "b"
-      ],
-      "predicted": [
-        "a",
-        "c",
-        "a"
-      ],
+      "configured_classes": ["a", "b", "c"],
+      "gold": ["a", "a", "b"],
+      "predicted": ["a", "c", "a"],
       "expected": {
-        "classes": [
-          "a",
-          "b",
-          "c"
-        ],
-        "per_class_f1": {
-          "a": 0.5,
-          "b": 0,
-          "c": 0
-        },
-        "macro_f1": 0.16666666666666666
+        "classes": ["a", "b", "c"],
+        "per_class_f1": {"a": 0.5, "b": 0, "c": 0},
+        "macro_f1": 0.16666666666666666,
+        "class_stats": {
+          "a": {
+            "support": 2,
+            "predicted": 2,
+            "tp": 1,
+            "recall": {"num": 1, "den": 2},
+            "precision": {"num": 1, "den": 2}
+          },
+          "b": {
+            "support": 1,
+            "predicted": 0,
+            "tp": 0,
+            "recall": {"num": 0, "den": 1},
+            "precision": {"num": 0, "den": 0}
+          },
+          "c": {
+            "support": 0,
+            "predicted": 1,
+            "tp": 0,
+            "recall": {"num": 0, "den": 0},
+            "precision": {"num": 0, "den": 1}
+          }
+        }
+      }
+    },
+    {
+      "configured_classes": ["true", "false"],
+      "gold": [],
+      "predicted": [],
+      "expected": {
+        "classes": [],
+        "per_class_f1": {},
+        "macro_f1": null,
+        "class_stats": {}
       }
     }
   ]

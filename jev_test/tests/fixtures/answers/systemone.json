@@ -1,0 +1,97 @@
+{
+  "cases": [
+    {
+      "name": "noul_0",
+      "raw": {"type": "noul", "noul": 0},
+      "expected": {
+        "parsed": {
+          "type": "noul",
+          "answer": "false",
+          "probs": {"true": 0, "false": 1},
+          "confidence": 1
+        },
+        "warnings": []
+      }
+    },
+    {
+      "name": "noul_0.5",
+      "raw": {"type": "noul", "noul": 0.5},
+      "expected": {
+        "parsed": {
+          "type": "noul",
+          "answer": "true",
+          "probs": {"true": 0.5, "false": 0.5},
+          "confidence": 0.5
+        },
+        "warnings": []
+      }
+    },
+    {
+      "name": "noul_1",
+      "raw": {"type": "noul", "noul": 1},
+      "expected": {
+        "parsed": {
+          "type": "noul",
+          "answer": "true",
+          "probs": {"true": 1, "false": 0},
+          "confidence": 1
+        },
+        "warnings": []
+      }
+    },
+    {
+      "name": "rounded",
+      "raw": {
+        "type": "choice",
+        "choice": "C",
+        "probabilities": {"A": 0.3333, "B": 0.3333, "C": 0.3333},
+        "confidence": 0.3333
+      },
+      "expected": {
+        "parsed": {
+          "type": "choice",
+          "answer": "C",
+          "probs": {"A": 0.3333, "B": 0.3333, "C": 0.3333},
+          "confidence": 0.3333
+        },
+        "warnings": []
+      }
+    },
+    {
+      "name": "not_argmax",
+      "raw": {
+        "type": "choice",
+        "choice": "B",
+        "probabilities": {"A": 0.8, "B": 0.2},
+        "confidence": 0.2
+      },
+      "expected": {
+        "parsed": {
+          "type": "choice",
+          "answer": "B",
+          "probs": {"A": 0.8, "B": 0.2},
+          "confidence": 0.2
+        },
+        "warnings": ["choice_not_argmax"]
+      }
+    },
+    {
+      "name": "clef_tie",
+      "raw": {
+        "type": "choice",
+        "choice": "B",
+        "probabilities": {"A": 0.5, "B": 0.5},
+        "confidence": 0.5
+      },
+      "expected": {
+        "parsed": {
+          "type": "choice",
+          "answer": "B",
+          "probs": {"A": 0.5, "B": 0.5},
+          "confidence": 0.5
+        },
+        "warnings": []
+      }
+    }
+  ]
+}

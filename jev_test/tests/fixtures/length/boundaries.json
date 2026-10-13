@@ -2,16 +2,7 @@
   "cases": [
     {
       "name": "exact_limit",
-      "input": {
-        "length_tokens": 100,
-        "limit": 100,
-        "fixed_tokens": 20,
-        "target_start": 70,
-        "target_end": 80,
-        "usage_input_tokens": 100,
-        "validated_response": true,
-        "matches_confirmed_input_limit_response": false
-      },
+      "input": {"length_tokens": 100, "limit": 100, "fixed_tokens": 20, "target_start": 70, "target_end": 80, "usage_input_tokens": 100, "validated_response": true, "matches_confirmed_input_limit_response": false},
       "expected": {
         "status": "ok",
         "reason": null,
@@ -22,16 +13,7 @@
     },
     {
       "name": "target_cut",
-      "input": {
-        "length_tokens": 101,
-        "limit": 100,
-        "fixed_tokens": 20,
-        "target_start": 70,
-        "target_end": 81,
-        "usage_input_tokens": 100,
-        "validated_response": true,
-        "matches_confirmed_input_limit_response": false
-      },
+      "input": {"length_tokens": 101, "limit": 100, "fixed_tokens": 20, "target_start": 70, "target_end": 81, "usage_input_tokens": 100, "validated_response": true, "matches_confirmed_input_limit_response": false},
       "expected": {
         "status": "truncated",
         "reason": "target_cut",
@@ -42,16 +24,7 @@
     },
     {
       "name": "tail_cut",
-      "input": {
-        "length_tokens": 101,
-        "limit": 100,
-        "fixed_tokens": 20,
-        "target_start": 70,
-        "target_end": 80,
-        "usage_input_tokens": 100,
-        "validated_response": true,
-        "matches_confirmed_input_limit_response": false
-      },
+      "input": {"length_tokens": 101, "limit": 100, "fixed_tokens": 20, "target_start": 70, "target_end": 80, "usage_input_tokens": 100, "validated_response": true, "matches_confirmed_input_limit_response": false},
       "expected": {
         "status": "truncated",
         "reason": "tail_cut",
@@ -62,16 +35,7 @@
     },
     {
       "name": "target_end_not_start",
-      "input": {
-        "length_tokens": 101,
-        "limit": 100,
-        "fixed_tokens": 20,
-        "target_start": 70,
-        "target_end": 85,
-        "usage_input_tokens": 100,
-        "validated_response": true,
-        "matches_confirmed_input_limit_response": false
-      },
+      "input": {"length_tokens": 101, "limit": 100, "fixed_tokens": 20, "target_start": 70, "target_end": 85, "usage_input_tokens": 100, "validated_response": true, "matches_confirmed_input_limit_response": false},
       "expected": {
         "status": "truncated",
         "reason": "target_cut",
@@ -82,16 +46,7 @@
     },
     {
       "name": "rejected_first",
-      "input": {
-        "length_tokens": 101,
-        "limit": 100,
-        "fixed_tokens": 20,
-        "target_start": 70,
-        "target_end": 85,
-        "usage_input_tokens": null,
-        "validated_response": false,
-        "matches_confirmed_input_limit_response": true
-      },
+      "input": {"length_tokens": 101, "limit": 100, "fixed_tokens": 20, "target_start": 70, "target_end": 85, "usage_input_tokens": null, "validated_response": false, "matches_confirmed_input_limit_response": true},
       "expected": {
         "status": "rejected",
         "reason": "input_limit",
@@ -102,25 +57,26 @@
     },
     {
       "name": "mismatch",
-      "input": {
-        "length_tokens": 99,
-        "limit": 100,
-        "fixed_tokens": 20,
-        "target_start": 70,
-        "target_end": 70,
-        "usage_input_tokens": 98,
-        "validated_response": true,
-        "matches_confirmed_input_limit_response": false
-      },
+      "input": {"length_tokens": 99, "limit": 100, "fixed_tokens": 20, "target_start": 70, "target_end": 70, "usage_input_tokens": 98, "validated_response": true, "matches_confirmed_input_limit_response": false},
       "expected": {
         "status": "ok",
         "reason": null,
         "remaining_state_tokens": 80,
         "answered_over_limit": false,
-        "warnings": [
-          "length_mismatch"
-        ]
+        "warnings": ["length_mismatch"]
       }
     }
-  ]
+  ],
+  "b1_logical": {
+    "logical_id": "kosgd:g:i",
+    "calls": [
+      {"length_tokens": 101, "target_end": 70, "limit": 100, "fixed_tokens": 20},
+      {"length_tokens": 111, "target_end": 70, "limit": 100, "fixed_tokens": 40}
+    ],
+    "expected": {
+      "classifications": ["tail_cut", "target_cut"],
+      "length_max": 111,
+      "bucket": "le_4096"
+    }
+  }
 }

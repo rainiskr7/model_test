@@ -1,31 +1,19 @@
 {
   "input": {
     "model": "synthetic-model",
-    "state": {
-      "question": "연필은 어디 있나요?",
-      "context": "푸른 상자에 연필을 두었다."
-    },
+    "state": {"question": "연필은 어디 있나요?", "context": "푸른 상자에 연필을 두었다."},
     "state_spec": {
       "kind": "json_string",
-      "keys": [
-        "context",
-        "question"
-      ]
+      "keys": ["context", "question"],
+      "target_key": "question"
     },
     "questions": {
       "answerable": {
         "type": "noul",
         "instructions": "문장에 제안이 있나요?",
-        "criteria": {
-          "true": "제안이 있다.",
-          "false": "제안이 없다."
-        }
+        "criteria": {"true": "제안이 있다.", "false": "제안이 없다."}
       }
     }
   },
-  "expected": {
-    "state": "{\"context\":\"푸른 상자에 연필을 두었다.\",\"question\":\"연필은 어디 있나요?\"}",
-    "request_utf8": "{\"model\":\"synthetic-model\",\"state\":\"{\\\"context\\\":\\\"푸른 상자에 연필을 두었다.\\\",\\\"question\\\":\\\"연필은 어디 있나요?\\\"}\",\"questions\":{\"answerable\":{\"type\":\"noul\",\"instructions\":\"문장에 제안이 있나요?\",\"criteria\":{\"true\":\"제안이 있다.\",\"false\":\"제안이 없다.\"}}}}",
-    "request_sha256": "2b6d648fd20edaee6e48a11c85e71c08e55b389e10acf3af126074453734f39e"
-  }
+  "expected": {"state": "{\"context\":\"푸른 상자에 연필을 두었다.\",\"question\":\"연필은 어디 있나요?\"}", "target_end_char": 53, "request_utf8": "{\"model\":\"synthetic-model\",\"state\":\"{\\\"context\\\":\\\"푸른 상자에 연필을 두었다.\\\",\\\"question\\\":\\\"연필은 어디 있나요?\\\"}\",\"questions\":{\"answerable\":{\"type\":\"noul\",\"instructions\":\"문장에 제안이 있나요?\",\"criteria\":{\"true\":\"제안이 있다.\",\"false\":\"제안이 없다.\"}}}}", "request_sha256": "2b6d648fd20edaee6e48a11c85e71c08e55b389e10acf3af126074453734f39e"}
 }

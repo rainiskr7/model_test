@@ -1,0 +1,37 @@
+{
+  "requests": [
+    {
+      "questions": [
+        {"id": "present", "role": "success", "gold": "false", "answer": "false", "confidence": 0.9},
+        {"id": "missing", "role": "success", "gold": null, "answer": "true", "confidence": 0.51},
+        {"id": "diag", "role": "diagnostic", "gold": "true", "answer": "false", "confidence": 0.1}
+      ],
+      "status": "ok",
+      "expected": {"valid": true, "s": 0.51, "mask_empty": false, "wrong": false, "n_missing": 1}
+    },
+    {
+      "questions": [
+        {"id": "missing", "role": "success", "gold": null, "answer": "true", "confidence": 0.51}
+      ],
+      "status": "ok",
+      "expected": {"valid": true, "s": 0.51, "mask_empty": true, "wrong": null, "n_missing": 1}
+    },
+    {
+      "questions": [
+        {"id": "present", "role": "success", "gold": "NONE", "answer": "NONE", "confidence": 0.9}
+      ],
+      "status": "ok",
+      "expected": {"valid": true, "s": 0.9, "mask_empty": false, "wrong": false, "n_missing": 0}
+    },
+    {
+      "questions": [
+        {"id": "present", "role": "success", "gold": "false", "answer": "false", "confidence": 0.9},
+        {"id": "missing", "role": "success", "gold": null, "answer": "true", "confidence": 0.51},
+        {"id": "diag", "role": "diagnostic", "gold": "true", "answer": "false", "confidence": 0.1}
+      ],
+      "status": "truncated",
+      "expected": {"valid": false, "s": null, "mask_empty": false, "wrong": null, "n_missing": 0}
+    }
+  ],
+  "expected": {"n_empty_mask": 1, "n_denom": 3}
+}

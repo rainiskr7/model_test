@@ -2,7 +2,7 @@
 
 작성 2026-10-13 · **판 3** (판 2 의 미정 필드 6곳을 채움 — Codex·grok 반박 반영) · 상태: 구현 중 (작업 ① 끝)
 상위 문서: [`JEV_TEST_PLAN.md`](JEV_TEST_PLAN.md) 개정 13. 이 문서와 계획이 다르면 계획이 기준이고, 이 문서를 고친다.
-범위: **첫 실행 = A 묶음 + B1** (계획 §7). B·C·T2·WorkflowEvals·B2 는 이 판에서 정하지 않는다. **score 질문은 이 판의 범위 밖**이다 (A 묶음에 없다) — 검증기·채점은 score 를 만나면 `NotImplementedError` 로 멈춘다.
+범위: **첫 실행 = A 묶음 + B1** (계획 §7). B·C·T2·WorkflowEvals·B2 는 이 판에서 정하지 않는다. **score 질문은 이 판의 범위 밖**이다 (A 묶음에 없다) — 응답 검증기(§3-1)·채점은 score 를 만나면 `NotImplementedError` 로 멈추고, task yaml 검사기(§1-1)는 오류 목록에 넣는다.
 
 이 문서는 코드를 쓰는 사람(Codex)이 **추측 없이** 구현할 수 있게 하는 것이 목적이다. 여기 없는 결정이 필요하면 구현하지 말고 `SPEC_AMBIGUOUS: <절> <내용>` 으로 보고한다.
 
@@ -53,7 +53,7 @@ questions:                     # 순서 = 요청에 넣는 순서. per_item_ques
 per_item_questions: null       # 항목마다 질문 수가 다른 셋 (KorFin) — 아래 형식
 group_key: dialogue_id         # §6 묶음 키 규칙 이름
 ```
-- **`per_item_questions`** (판 3): `{id_pattern: "aspect_{k}", role, type, instructions_template: "...{ASPECT}...", options | criteria, label}`. `k` 는 1부터, 원 데이터에 처음 나온 순서. `id_pattern` 은 `{k}` 를 정확히 한 번 담고, 펼친 ID 는 ASCII snake_case. 펼친 질문은 정적 `questions` 뒤에 붙는다. 정적 질문과 ID 가 겹치면 오류.
+- **`per_item_questions`** (판 3): `{id_pattern: "aspect_{k}", role, type, instructions_template: "...{ASPECT}...", options | criteria, label}`. `k` 는 1부터, 원 데이터에 처음 나온 순서. `id_pattern` 은 `{k}` 를 정확히 한 번 담고, 펼친 ID 는 ASCII snake_case. 펼친 질문은 정적 `questions` 뒤에 붙는다. 정적 질문과 ID 가 겹치면 오류 — 검사는 `id_pattern` 의 `{k}` 앞뒤 문자열 + 양의 정수(앞자리 0 없음) 정규식으로 정적 ID 를 대조한다 (k 상한 없음). 실제로 펼칠 때도 중복을 다시 검사한다.
 - 성공 질문 최소 1개 규칙은 **정적 `questions` 또는 `per_item_questions.role == success`** 로 만족한다 (판 2 검사기는 정적 질문만 봐서 KorFin 을 거부했다 — 작업 ②-0 에서 고친다).
 - 고정 목록(예: KoSGD 카탈로그·의도 선택지, KorFin 감성 3개)은 `configs/tasks/lists/<name>.json` 에 실제 값으로 둔다. 코드는 목록을 만들지 않고 읽기만 한다 (목록 생성 스크립트는 따로, 라벨만 읽음).
 - `options: per_item` 의 FunctionChat 도구 선택지는 **정규화한 `input_tools` 하나에서만** 만든다 (§6-2). `NONE` 설명은 `lists/functionchat_none.json`.
@@ -199,7 +199,7 @@ jev_test/results/_compare/<compare_id>/A/<set>/<variant>/compare.json   # 커밋
 - B1 의 논리 요청 해시 = `sha256("".join(sorted(call request_sha256)))`. 호출 하나가 `error` 여도 나머지 호출은 끝까지 돈다(진단용). 논리 상태는 호출 중 가장 나쁜 것 (`error` > `rejected` > `truncated` > `ok`).
 
 ### 5-3. 레코드
-- `attempts.jsonl`: `{call_id, logical_id, attempt, started_at, ended_at, latency_ms, http_status, retry_after, transport_error, terminal, request_sha256, response_raw}` — `terminal` = 이 시도로 그 호출이 끝났는가 (200·422·재시도 없는 오류·재시도 소진). `response_raw` 는 UTF-8 문자열, 못 읽으면 `{"b64": ...}`. 시각은 UTC ISO-8601 (밀리초).
+- `attempts.jsonl`: `{call_id, logical_id, attempt, session_id, started_at, ended_at, latency_ms, http_status, retry_after, transport_error, terminal, request_sha256, response_raw}` — `session_id` = 그 실행 프로세스의 ID (프로세스 시작 시 한 번 만든 UUID4, resume 하면 새 값. 판 3 보정: 비용의 '세션이 갈린 요청' 판정용) — `terminal` = 이 시도로 그 호출이 끝났는가 (200·422·재시도 없는 오류·재시도 소진). `response_raw` 는 UTF-8 문자열, 못 읽으면 `{"b64": ...}`. 시각은 UTC ISO-8601 (밀리초).
 - `final.jsonl`: `{logical_id, status, reason, answered_over_limit, warnings, derived_from, calls: [CallRecord]}`.
 - `CallRecord` (판 3): `{call_id, attempts, status, reason, warnings, request_sha256, length: LengthInfo | null, usage, answers_parsed, label_map?, top_logprobs_raw?}` — 판 2 의 최상위 `length_tokens`·`target_end` 는 `length` 안으로 옮긴다. `length` 가 null 인 것은 파생 레코드(§5-4)와 측정 전에 멈춘 `error/request_contract` 뿐.
 - **`answers_parsed`** (판 3) = `{question_id: ParsedAnswer} | null`:
@@ -291,6 +291,7 @@ jev_test/results/_compare/<compare_id>/A/<set>/<variant>/compare.json   # 커밋
 - ECE: 15 등폭 bin `[0,1/15), …, [14/15, 1]` (마지막 닫힘), top-label (`confidence` 대 `answer == gold`). bin 은 **빈 것도 포함해 15개 모두** `{index, lo, hi, n, acc, conf}` (빈 bin 의 acc·conf 는 null). bin 의 n 합 == 그 질문의 채점 수.
 - Brier: 확률표 전체에 대한 one-hot 제곱합의 평균 (noul 은 2클래스라 $2(p-y)^2$ 와 같다). log loss: $-\log \mathrm{clip}(p_{\rm gold}, 10^{-12}, 1)$.
 - 선택지 수가 다른 질문끼리 보정 지표를 평균하지 않는다.
+- 채점 수가 0 인 질문: `accuracy = {0, 0}`, `macro_f1`·`ece`·`brier`·`log_loss` null, bin 15개는 n 0·acc/conf null (판 3 보정).
 
 ### 7-2. KoSGD 칸
 - 정답 칸 고정: 정답 의도(`NONE` 아닌 것, 0–2개)를 **카탈로그 순서**로 정렬해 ①·② 에 넣고 모자라면 `NONE`. 질문 문구("서비스 목록에서 앞에 있는 서비스의 일 = ①")와 같은 규칙이다.
@@ -303,7 +304,7 @@ jev_test/results/_compare/<compare_id>/A/<set>/<variant>/compare.json   # 커밋
 - 모델별 채점 코호트 = 상태 `ok` 인 논리 요청 (질문 전부). `truncated`(③ 포함)·`rejected`·`error` 는 채점·보정에서 빠지고 처리율 분모에만 남는다.
 - 공통 코호트 = 비교하는 모든 모델(B1 포함)이 `ok` 인 `logical_id` — 모델 하나의 폴더로는 만들 수 없으므로 `compare.json` 에 둔다 (§7-6).
 - **정답 없음(MISSING)** 은 `BoundQuestion.gold = null` 이다 — `"false"`·`"NONE"`·빈 의도 집합(= `["NONE","NONE"]`) 과 다르다.
-  - 질문별 F1·보정: 정답 있는 것만, `n_missing` 을 옆에 적는다.
+  - 질문별 F1·보정: 정답 있는 것만, `n_missing` 을 옆에 적는다. `n_missing` 은 `n_scored` 와 같은 **채점 코호트(상태 `ok`) 안에서** 센다 (판 3 보정).
   - $s_i$: MISSING 질문도 **빼지 않는다** (빼면 정답 유무가 수락 판단에 들어간다 — 계획 §4-2).
   - $\ell_i$: $M_i$ (정답 있는 성공 질문) 로만.
   - $M_i = \varnothing$ 인 요청: 위험 표에 넣지 않는다 — **분모 $|S|$ 에서도 뺀다** (사용자 결정 10-13, 계획 개정 13). `n_empty_mask` 로 따로 센다. 첫 실행 6셋에서는 0 건이다 (§0).
@@ -337,9 +338,9 @@ jev_test/results/_compare/<compare_id>/A/<set>/<variant>/compare.json   # 커밋
  rule: "plan-4-2:dev_risk<=tau/2;max_coverage;tie_larger_t",
  unit: "group_representative",
  dev_input: {path: "dev/final.jsonl", sha256, nbytes, n_groups, n_denom, n_empty_mask},
- by_tau: {"0.01": {status: SELECTED|NO_THRESHOLD, t_star, n_accepted, k_errors, coverage: {num, den}}, "0.02": …, "0.05": …}}
+ by_tau: {"0.01": {tau: "0.01", status: SELECTED|NO_THRESHOLD, t_star, n_accepted, k_errors, coverage: {num, den}}, "0.02": …, "0.05": …}}
 ```
-- τ 키는 **문자열** `"0.01"`·`"0.02"`·`"0.05"` (부동소수 키 불일치 방지). dataclass 의 `tau` 도 문자열.
+- τ 키는 **문자열** `"0.01"`·`"0.02"`·`"0.05"` (부동소수 키 불일치 방지). 값에도 같은 `tau` 를 넣고 키와 같아야 한다 (dataclass 왕복 = 파일 형식).
 - 후보 t = 개발 표본에서 $v_i = 1$ 이고 $M_i \ne \varnothing$ 인 요청의 $s_i$ 의 서로 다른 값. 규칙: $k_D/n_D \le \tau/2$ 인 t 중 개발 처리율 $n_D / $`n_denom` 최대, 동률이면 큰 t. 후보가 없거나 만족하는 t 가 없으면 `NO_THRESHOLD` (`t_star`·`n_accepted`·`k_errors` null, `coverage = {0, n_denom}`). 같은 점수는 함께 수락하거나 함께 빠진다 (쪼개지 않는다).
 - KoSGD 의 $\ell_i$ 는 칸 묶음 비교(§7-2), 다른 셋은 기본 규칙 — 같은 함수를 `score/tasks` 가 셋별로 부른다.
 
@@ -372,10 +373,11 @@ QStats = {role, type, n_scored, n_missing, accuracy: {num, den}, macro_f1 | null
   - KorFin: `aspect_not_in_text: {n_scored, wrong}` (진단 열 — aspect 이름이 문장에 글자 그대로 없는 질문, §0 의 71 행).
   - 그 밖의 셋: `{}`.
 - 점수는 **임계값과 무관한 `ok` 코호트**의 값이다 (수락 집합의 점수는 `risk.json`). 이름으로 둘을 섞지 않는다.
-- `Cost` = `{n_logical, n_calls, n_attempts, n_retries, failure: {num: 상태 error 인 논리 요청, den: n_logical}, latency_ms: {population: "logical_ok", n, p50, p95, n_excluded_resumed}, input_tokens: {sum, n_calls_missing_usage}}`.
-  - 지연 = 논리 요청의 **완료 지연** = 마지막 terminal 시도 `ended_at` − 첫 시도 `started_at` (재시도·대기 포함, B1 은 호출 전부). resume 으로 세션이 갈린 요청은 지연에서 빼고 `n_excluded_resumed` 로 센다.
-  - 입력 토큰 = terminal 200 응답의 `usage.input_tokens` (B1 은 vLLM `usage.prompt_tokens`) 합, 없으면 `n_calls_missing_usage` 로 센다 (0 으로 넣지 않는다).
-  - 파생 판(§5-4) 은 전부 0 과 `derived_from`.
+- `Cost` = `{n_logical, n_calls, n_attempts, n_retries, failure: {num: 상태 error 인 논리 요청, den: n_logical}, latency_ms: {population: "logical_ok", n, p50, p95, n_excluded_resumed}, input_tokens: {sum, n_calls_missing_usage, n_missing_on_200}, derived_from: str | null}`.
+  - 백분위: 정렬한 값에서 위치 $(n-1)p$ 의 선형 보간 (numpy 기본과 같다). $n = 0$ 이면 p50·p95 null.
+  - 지연 = 논리 요청의 **완료 지연** = 마지막 terminal 시도 `ended_at` − 첫 시도 `started_at` (재시도·대기 포함, B1 은 호출 전부). 그 요청의 시도에 `session_id` 가 둘 이상이면(resume 으로 갈림) 지연에서 빼고 `n_excluded_resumed` 로 센다 — **`ok` 요청 중에서만** 센다 (모집단이 `logical_ok`; 작업 ⑥ 에서 `ok` 아닌 resume 요청 fixture 추가).
+  - 입력 토큰 (판 3 보정 2): 호출마다 **마지막 terminal 시도**의 `response_raw` 를 JSON 으로 읽어 `usage.input_tokens` (B1 은 vLLM `usage.prompt_tokens`) 가 **정수(bool 제외)** 이면 응답 코드와 무관하게 `sum` 에 더하고, 아니면(terminal 시도 없음 · 본문 못 읽음 · usage 없음 · 정수 아님) `n_calls_missing_usage` 로 센다. 모든 호출은 둘 중 정확히 하나에 든다 (`sum` 에 든 호출 수 + `n_calls_missing_usage` == `n_calls`). `sum` 은 **하한**이다. `n_missing_on_200` = 그중 terminal 이 200 인 호출 수 (서버가 usage 를 안 주는 경우를 실패와 따로 보이게).
+  - 파생 판(§5-4) 은 수치 전부 0 (p50·p95 null) 이고 `derived_from` 에 전체판 run 경로. 직접 돌린 판은 `derived_from: null`.
 - `compare.json` (모델 횡단) = `{schema: "compare/1", models: [...], set, variant, common_cohort: {n, logical_ids_sha256, per_model: {model: Population}}, bootstrap: {...}}`:
   - 공통 코호트는 비교 모델 전부(B1 포함)가 `ok` 인 시험 `logical_id` 의 정확한 교집합. ID 목록은 정렬해 해시만 적는다.
   - bootstrap (§7-7) 결과.
@@ -489,7 +491,7 @@ RequestOutcome(logical_id: str, group_id: str, stage: str,          # dev | test
 | `scoring/f1_classes.json` | 미출현 클래스 제외 규칙 · 클래스별 recall `{num, den}` · 분모 0 |
 | `scoring/calibration.json` (판 3) | ECE 15 bin 빈 것 포함 (n 합 == 채점 수) · noul Brier = 2(p−y)² · log loss clip |
 | `scoring/risk_cases.json` | U(6,600)=1.964% · U(0,150)=1.977% · U(1,150)=3.123% · U(0,252)=1.18% · U(0,86) · $n_{\min}$ · $b_{\rm flip}$ · 네 상태 + 플래그 |
-| `scoring/threshold_cases.json` (판 3) | 규칙 재계산 == `by_tau` · NO_THRESHOLD 는 `t_star`·`n_accepted`·`k_errors` null · 같은 점수 묶음째 · 시험 기록을 바꿔도 t\* 불변 · 묶음 단위 n_denom (FunctionChat 개발 21) |
+| `scoring/threshold_cases.json` (판 3) | 규칙 재계산 == `by_tau` · NO_THRESHOLD 는 `t_star`·`n_accepted`·`k_errors` null · 같은 점수 묶음째 · 시험 기록을 바꿔도 t\* 불변 · 묶음 단위 n_denom (FunctionChat 개발 21 묶음 대표 — 행 606 이 아님) |
 | `scoring/missing_mask.json` (판 3) | MISSING 인 저확신 성공 질문이 $s_i$ 의 min 에 남는다 · `"false"`·`"NONE"` 은 MISSING 이 아니다 · 빈 마스크 요청은 분모에서 빠지고 `n_empty_mask` 에 센다 |
 | `scoring/cohort_population.json` (판 3) | 모델별 실패 ID 가 다를 때 공통 코호트 == 정확한 교집합 · FunctionChat `test` 와 `all_rows` 가 구별된다 (크기가 다른 묶음) · KorFin `pooled.aspect` ≠ 질문별 평균 |
 | `scoring/cost.json` (판 3) | B1 재시도·대기·부분 실패를 포함한 논리 완료 지연 · KoSGD B1 `n_calls == 12 × n_logical` · 파생 판 0 · usage 없음은 0 이 아니라 `n_calls_missing_usage` |
@@ -498,10 +500,10 @@ RequestOutcome(logical_id: str, group_id: str, stage: str,          # dev | test
 | `records/roundtrip.json` (판 3) | ok · truncated(정상 응답, 맵 있음) · rejected · 검증 실패 · B1 일부 실패 를 직렬화 후 복원 → 같음 · `answers_parsed` 가 `ParsedAnswer` 로 복원 |
 | `resume/*` | 끝 줄 깨짐 · 중간 줄 깨짐 · fingerprint 불일치 · 중복 ID · terminal 응답 뒤 끊김(다시 호출하지 않음, 복구 결과 == 최초) · 재시도 예산 누적 · **판 3**: 시험 resume 중 threshold 교체 거부 |
 | `length/*.json` | $\ell = L_m$ (잘림 아님) · $\ell = L_m + 1$ · target_cut vs tail_cut (발화 **끝** 위치 기준) · **판 3**: 같은 논리 요청 안에서 `fixed_tokens` 가 다른 B1 호출 · 거부 우선 · mismatch 경고 |
-| `seal/*.json` (판 3) | threshold 없이 시험 시작 거부 · seal 해시 불일치 → certify 실패 · mtime 만 앞당긴 조작은 재계산(b) 에서 실패 |
+| `seal/*.json` (판 3) | threshold 없이 시험 시작 거부 · seal 해시 불일치 → certify 실패 · 내용은 그대로 두고 mtime 만 바꾼 것은 재계산(b) 통과(경고만) · 시험 점수로 t\* 를 바꿔 내용을 고친 뒤 mtime 을 위장한 것은 (b)·(c) 에서 실패 |
 | `temperature/pplx_path.json` | `reference/pplx_runner.py` 경로에 고정 logit($|z| ≈ 1.55$ 포함) → softmax(z/T) 한 번. 빼거나 두 번 적용하는 오류 주입 시 실패 |
 | `b1/*.json` | 라벨 대응·재정규화·−9999·라벨 누락 → `error` · 대응을 바꾼 noul 의 p · **판 3**: 대응 교환(A→false, B→true) × 0.5/0.5 → `"true"` |
-| `canary/*` (판 3) | 합성 state·정답에 고유 표식 문자열을 넣고 돌린 뒤, 커밋 대상 파일(`fingerprint`·`threshold`·`seal`·`scores`·`risk`·`summary`·`compare`) 어디에도 표식이 없다 |
+| `canary/*` (판 3) | 합성 state·정답에 고유 표식 문자열을 넣은 입력. 커밋 대상 파일(`fingerprint`·`threshold`·`seal`·`scores`·`risk`·`summary`·`compare`) 어디에도 표식이 없는지는 **출력이 생기는 작업 ⑥ 의 통합 검사**에서 본다 (②-0 은 입력만) |
 
 ---
 
@@ -517,3 +519,4 @@ RequestOutcome(logical_id: str, group_id: str, stage: str,          # dev | test
 - 판 1 (10-13): 초안.
 - 판 2 (10-13): Codex 반박 반영 — 잘림 판정 경계 오류(ℓ = L_m 오판, 발화 시작이 아니라 끝 위치) · state 키 이름을 datasets.yaml 로 · 감사 v4 필요 · noul criteria 명시 · 422 원인 분리 · 상태와 사유 분리 · 비공개 보존 · FunctionChat 도구 macro-F1 제외(정답 도구 25/100, 모든 행 6선택지) · KoSGD 칸 보정은 고정 칸 정답 · B1 선택지에 ID · 세 단계 식별자 · terminal 응답 복구 · 판 파생 · 설정 스키마 · 평가 풀 추출 · 코호트 · 검증기 문법 · score 범위 밖 · 원리적 부족은 플래그 · evalcommon 호환 · 상태기계 소유 · 작업 순서. yaml `label_source` 중복 키 수정.
 - 판 3 (10-13): 작업 ① 의 SPEC_AMBIGUOUS 6곳(Item·ParsedAnswer·LengthInfo·threshold.json·ScoreTable·answers_parsed)을 채움. Claude 안 → Codex 반박(6분 34초) · grok 반박(1–4 는 1차 13KB 가 8분에 끊겨 절반, 5–6 은 8.6KB 로 다시 3분 30초) → Claude 가 근거를 계획·코드에서 재확인. 받아들인 것 — 질문을 펼치고 정답을 붙인 Item(KorFin 정답 연결·KoSGD `서비스/의도`·직전 정답·FunctionChat 선택지 단일 출처·묶음 뒤 Item) · 클래스 ID 문자열 · one-hot Brier · 호출별 LengthInfo·대상 끝 문자 위치·길이만 보는 classify · 인코더 규칙은 fingerprint(grok) · `answers_parsed` 타입·null 규칙 · 개발/시험 기록 분리·봉인·certify 의 t\* 재계산(grok)·mtime 은 보조 · NO_THRESHOLD null · τ 문자열 키 · 묶음 단위 분모 · 모집단 분리(FunctionChat 606 기술 통계)·공통 코호트는 compare.json · 클래스별 재현율·빈 bin 포함 ECE 15·`{num,den}`(grok) · KorFin pooled · 수락 클래스별 위험·길이 구간·사람 이관률 · 논리 요청 단위 비용 · summary 는 RiskCell 에서 · bootstrap 의 FunctionChat 107 묶음(계획과 어긋났던 판 2 고침) · 작업 ① 검사기의 KorFin 거부 결함 · MISSING 구분. 사용자 결정(10-13, 네 가지 모두 권고대로): B1 noul 동률 p ≥ 0.5 → true(grok 안, Codex 는 라벨 순서) · choice 확신은 API `confidence` + `choice_not_argmax` 경고 · 빈 마스크는 분모에서도 뺌 · 잘린 정상 응답의 답은 남김(Codex 안, grok 은 null). 데이터 확인(10-13): 6셋 정답 빠짐 0 · 8,192 초과 0 · K-MHaS 라벨 충돌 묶음 1 · KorFin aspect 미포함 71. 빼고 넣지 않은 것: KorSTS 등급 필드(첫 실행 범위 밖).
+- 판 3 보정 (10-13, 작업 ②-0 명세에 대한 Codex 반박 10건 중 9 수용): 펼친 ID 충돌은 k 상한 없이 정규식 · `by_tau` 값에도 `tau` · 시도 기록 `session_id` · `Cost.derived_from`·백분위 보간·n=0 null · 채점 0 인 질문의 null 규칙 · seal fixture 문구 오류(mtime 만 바꾸면 재계산은 통과) 정정 · canary 누출 검사는 작업 ⑥ · score 질문은 task 검사기에서는 오류 목록(문구 분명히 — 반박 1건은 기각, 작업 ① 결정 유지). C3 재계산에서 나온 두 해석 차이 — `n_missing` 은 채점 코호트 안 · `n_calls_missing_usage` 는 응답 코드와 무관하게 usage 를 못 얻은 호출 전부. B(새 세션 중재) 지적으로 결정적 검사(합성 호출 3개: 422+usage · terminal 없음 · bool usage)에서 A 검사기 2 ≠ Codex 시험 1 → 판 3 보정 2: 마지막 terminal 응답의 정수 usage 는 코드와 무관하게 합에, 아니면 누락 (분할 불변식) + `n_missing_on_200`. 결정 기록 — 가정: 실패 응답이 usage 를 주면 그 토큰은 실제로 쓰였다 · 이유: 합이 하한임을 분명히 하고 모든 호출을 한쪽에 넣는다 · 다시 볼 조건: P0 에서 서버가 실패 응답에 usage 를 주지 않거나 오해를 주는 값을 준다고 확인되면.

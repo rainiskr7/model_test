@@ -2,100 +2,84 @@
   "cases": [
     {
       "name": "renormalize",
-      "label_order": [
-        "A",
-        "B"
-      ],
-      "label_map": {
-        "A": "true",
-        "B": "false"
-      },
+      "label_order": ["A", "B"],
+      "label_map": {"A": "true", "B": "false"},
       "top_logprobs": [
-        {
-          "token": "A",
-          "logprob": -1.6094379124341003
-        },
-        {
-          "token": "B",
-          "logprob": -1.2039728043259361
-        },
-        {
-          "token": "X",
-          "logprob": -0.6931471805599453
-        }
+        {"token": "A", "logprob": -1.6094379124341003},
+        {"token": "B", "logprob": -1.2039728043259361},
+        {"token": "X", "logprob": -0.6931471805599453}
       ],
       "expected": {
         "status": "ok",
-        "label_probabilities": {
-          "A": 0.4,
-          "B": 0.6
-        },
-        "choice": "false",
-        "confidence": 0.6,
-        "noul": 0.4
-      }
+        "label_probabilities": {"A": 0.4, "B": 0.6},
+        "parsed": {
+          "type": "noul",
+          "answer": "false",
+          "confidence": 0.6,
+          "probs": {"true": 0.4, "false": 0.6}
+        }
+      },
+      "type": "noul"
     },
     {
       "name": "swapped",
-      "label_order": [
-        "A",
-        "B"
-      ],
-      "label_map": {
-        "A": "false",
-        "B": "true"
-      },
+      "label_order": ["A", "B"],
+      "label_map": {"A": "false", "B": "true"},
       "top_logprobs": [
-        {
-          "token": "A",
-          "logprob": -1.6094379124341003
-        },
-        {
-          "token": "B",
-          "logprob": -1.2039728043259361
-        }
+        {"token": "A", "logprob": -1.6094379124341003},
+        {"token": "B", "logprob": -1.2039728043259361}
       ],
       "expected": {
         "status": "ok",
-        "label_probabilities": {
-          "A": 0.4,
-          "B": 0.6
-        },
-        "choice": "true",
-        "confidence": 0.6,
-        "noul": 0.6
-      }
+        "label_probabilities": {"A": 0.4, "B": 0.6},
+        "parsed": {
+          "type": "noul",
+          "answer": "true",
+          "confidence": 0.6,
+          "probs": {"true": 0.6, "false": 0.4}
+        }
+      },
+      "type": "noul"
     },
     {
       "name": "tie",
-      "label_order": [
-        "A",
-        "B"
-      ],
-      "label_map": {
-        "A": "true",
-        "B": "false"
-      },
+      "label_order": ["A", "B"],
+      "label_map": {"A": "true", "B": "false"},
       "top_logprobs": [
-        {
-          "token": "B",
-          "logprob": -1.0
-        },
-        {
-          "token": "A",
-          "logprob": -1.0
-        }
+        {"token": "B", "logprob": -1.0},
+        {"token": "A", "logprob": -1.0}
       ],
       "expected": {
         "status": "ok",
-        "label_probabilities": {
-          "A": 0.5,
-          "B": 0.5
-        },
-        "choice": "true",
-        "confidence": 0.5,
-        "noul": 0.5
-      }
+        "label_probabilities": {"A": 0.5, "B": 0.5},
+        "parsed": {
+          "type": "noul",
+          "answer": "true",
+          "confidence": 0.5,
+          "probs": {"true": 0.5, "false": 0.5}
+        }
+      },
+      "type": "noul"
+    },
+    {
+      "name": "swapped_tie",
+      "label_order": ["A", "B"],
+      "label_map": {"A": "false", "B": "true"},
+      "top_logprobs": [
+        {"token": "B", "logprob": -1.0},
+        {"token": "A", "logprob": -1.0}
+      ],
+      "expected": {
+        "status": "ok",
+        "label_probabilities": {"A": 0.5, "B": 0.5},
+        "parsed": {
+          "type": "noul",
+          "answer": "true",
+          "confidence": 0.5,
+          "probs": {"true": 0.5, "false": 0.5}
+        }
+      },
+      "type": "noul"
     }
   ]
 }

@@ -1,113 +1,172 @@
 {
   "confidence_level": 0.95,
   "upper_bounds": [
-    {
-      "k": 6,
-      "n": 600,
-      "U": 0.0196413302
-    },
-    {
-      "k": 0,
-      "n": 150,
-      "U": 0.0197734382
-    },
-    {
-      "k": 1,
-      "n": 150,
-      "U": 0.0312338169
-    },
-    {
-      "k": 0,
-      "n": 252,
-      "U": 0.0118174454
-    },
-    {
-      "k": 0,
-      "n": 86,
-      "U": 0.0342343728
-    },
-    {
-      "k": 0,
-      "n": 0,
-      "U": null
-    },
-    {
-      "k": 5,
-      "n": 5,
-      "U": 1.0
-    }
+    {"k": 6, "n": 600, "U": 0.0196413302},
+    {"k": 0, "n": 150, "U": 0.0197734382},
+    {"k": 1, "n": 150, "U": 0.0312338169},
+    {"k": 0, "n": 252, "U": 0.0118174454},
+    {"k": 0, "n": 86, "U": 0.0342343728},
+    {"k": 0, "n": 0, "U": null},
+    {"k": 5, "n": 5, "U": 1.0}
   ],
   "n_min": [
-    {
-      "tau": 0.01,
-      "n": 299
-    },
-    {
-      "tau": 0.02,
-      "n": 149
-    },
-    {
-      "tau": 0.05,
-      "n": 59
-    }
+    {"tau": "0.01", "n": 299},
+    {"tau": "0.02", "n": 149},
+    {"tau": "0.05", "n": 59}
   ],
   "cases": [
     {
       "name": "meets",
-      "tau": 0.02,
-      "expected": {"status": "MEETS", "insufficient_by_design": false, "t_star": 0.9, "dev": {"groups": 50, "n": 40, "k": 0}, "test": {"groups": 200, "n": 150, "k": 0, "U": 0.0197734382, "coverage": 0.75, "b_flip": 1}, "by_status": {"ok": 200, "rejected": 0, "truncated": 0, "error": 0}, "accepted_mix": {}, "diagnostic_error_in_accepted": {}}
+      "tau": "0.02",
+      "expected": {
+        "status": "MEETS",
+        "insufficient_by_design": false,
+        "t_star": 0.9,
+        "dev": {"n_groups": 50, "n_denom": 50, "n_empty_mask": 0, "n_accepted": 40, "k_errors": 0},
+        "test": {"U": 0.0197734382, "coverage": {"num": 150, "den": 200}, "b_flip": 1, "n_groups": 200, "n_denom": 200, "n_empty_mask": 0, "n_accepted": 150, "k_errors": 0},
+        "by_status": {"ok": 200, "rejected": 0, "truncated": 0, "error": 0},
+        "accepted_mix": {"by_class": {}, "by_service": null, "by_stratum": null, "by_n_questions": {}},
+        "diagnostic_error_in_accepted": {},
+        "tau": "0.02",
+        "unit": "group_representative",
+        "by_length_bucket": {}
+      }
     },
     {
       "name": "meets_six",
-      "tau": 0.02,
-      "expected": {"status": "MEETS", "insufficient_by_design": false, "t_star": 0.9, "dev": {"groups": 50, "n": 40, "k": 0}, "test": {"groups": 700, "n": 600, "k": 6, "U": 0.0196413302, "coverage": 0.8571428571428571, "b_flip": 1}, "by_status": {"ok": 700, "rejected": 0, "truncated": 0, "error": 0}, "accepted_mix": {}, "diagnostic_error_in_accepted": {}}
+      "tau": "0.02",
+      "expected": {
+        "status": "MEETS",
+        "insufficient_by_design": false,
+        "t_star": 0.9,
+        "dev": {"n_groups": 50, "n_denom": 50, "n_empty_mask": 0, "n_accepted": 40, "k_errors": 0},
+        "test": {"U": 0.0196413302, "coverage": {"num": 600, "den": 700}, "b_flip": 1, "n_groups": 700, "n_denom": 700, "n_empty_mask": 0, "n_accepted": 600, "k_errors": 6},
+        "by_status": {"ok": 700, "rejected": 0, "truncated": 0, "error": 0},
+        "accepted_mix": {"by_class": {}, "by_service": null, "by_stratum": null, "by_n_questions": {}},
+        "diagnostic_error_in_accepted": {},
+        "tau": "0.02",
+        "unit": "group_representative",
+        "by_length_bucket": {}
+      }
     },
     {
       "name": "fails",
-      "tau": 0.02,
-      "expected": {"status": "FAILS", "insufficient_by_design": false, "t_star": 0.9, "dev": {"groups": 50, "n": 40, "k": 0}, "test": {"groups": 200, "n": 150, "k": 1, "U": 0.0312338169, "coverage": 0.75, "b_flip": null}, "by_status": {"ok": 200, "rejected": 0, "truncated": 0, "error": 0}, "accepted_mix": {}, "diagnostic_error_in_accepted": {}}
+      "tau": "0.02",
+      "expected": {
+        "status": "FAILS",
+        "insufficient_by_design": false,
+        "t_star": 0.9,
+        "dev": {"n_groups": 50, "n_denom": 50, "n_empty_mask": 0, "n_accepted": 40, "k_errors": 0},
+        "test": {"U": 0.0312338169, "coverage": {"num": 150, "den": 200}, "b_flip": null, "n_groups": 200, "n_denom": 200, "n_empty_mask": 0, "n_accepted": 150, "k_errors": 1},
+        "by_status": {"ok": 200, "rejected": 0, "truncated": 0, "error": 0},
+        "accepted_mix": {"by_class": {}, "by_service": null, "by_stratum": null, "by_n_questions": {}},
+        "diagnostic_error_in_accepted": {},
+        "tau": "0.02",
+        "unit": "group_representative",
+        "by_length_bucket": {}
+      }
     },
     {
       "name": "underpowered",
-      "tau": 0.02,
-      "expected": {"status": "UNDERPOWERED", "insufficient_by_design": false, "t_star": 0.9, "dev": {"groups": 50, "n": 40, "k": 0}, "test": {"groups": 200, "n": 100, "k": 0, "U": 0.0295130496, "coverage": 0.5, "b_flip": null}, "by_status": {"ok": 200, "rejected": 0, "truncated": 0, "error": 0}, "accepted_mix": {}, "diagnostic_error_in_accepted": {}}
+      "tau": "0.02",
+      "expected": {
+        "status": "UNDERPOWERED",
+        "insufficient_by_design": false,
+        "t_star": 0.9,
+        "dev": {"n_groups": 50, "n_denom": 50, "n_empty_mask": 0, "n_accepted": 40, "k_errors": 0},
+        "test": {"U": 0.0295130496, "coverage": {"num": 100, "den": 200}, "b_flip": null, "n_groups": 200, "n_denom": 200, "n_empty_mask": 0, "n_accepted": 100, "k_errors": 0},
+        "by_status": {"ok": 200, "rejected": 0, "truncated": 0, "error": 0},
+        "accepted_mix": {"by_class": {}, "by_service": null, "by_stratum": null, "by_n_questions": {}},
+        "diagnostic_error_in_accepted": {},
+        "tau": "0.02",
+        "unit": "group_representative",
+        "by_length_bucket": {}
+      }
     },
     {
       "name": "by_design",
-      "tau": 0.02,
-      "expected": {"status": "UNDERPOWERED", "insufficient_by_design": true, "t_star": 0.9, "dev": {"groups": 50, "n": 40, "k": 0}, "test": {"groups": 86, "n": 86, "k": 0, "U": 0.0342343728, "coverage": 1.0, "b_flip": null}, "by_status": {"ok": 86, "rejected": 0, "truncated": 0, "error": 0}, "accepted_mix": {}, "diagnostic_error_in_accepted": {}}
+      "tau": "0.02",
+      "expected": {
+        "status": "UNDERPOWERED",
+        "insufficient_by_design": true,
+        "t_star": 0.9,
+        "dev": {"n_groups": 50, "n_denom": 50, "n_empty_mask": 0, "n_accepted": 40, "k_errors": 0},
+        "test": {"U": 0.0342343728, "coverage": {"num": 86, "den": 86}, "b_flip": null, "n_groups": 86, "n_denom": 86, "n_empty_mask": 0, "n_accepted": 86, "k_errors": 0},
+        "by_status": {"ok": 86, "rejected": 0, "truncated": 0, "error": 0},
+        "accepted_mix": {"by_class": {}, "by_service": null, "by_stratum": null, "by_n_questions": {}},
+        "diagnostic_error_in_accepted": {},
+        "tau": "0.02",
+        "unit": "group_representative",
+        "by_length_bucket": {}
+      }
     },
     {
       "name": "small_but_meets_5pct",
-      "tau": 0.05,
-      "expected": {"status": "MEETS", "insufficient_by_design": false, "t_star": 0.9, "dev": {"groups": 50, "n": 40, "k": 0}, "test": {"groups": 86, "n": 86, "k": 0, "U": 0.0342343728, "coverage": 1.0, "b_flip": 1}, "by_status": {"ok": 86, "rejected": 0, "truncated": 0, "error": 0}, "accepted_mix": {}, "diagnostic_error_in_accepted": {}}
+      "tau": "0.05",
+      "expected": {
+        "status": "MEETS",
+        "insufficient_by_design": false,
+        "t_star": 0.9,
+        "dev": {"n_groups": 50, "n_denom": 50, "n_empty_mask": 0, "n_accepted": 40, "k_errors": 0},
+        "test": {"U": 0.0342343728, "coverage": {"num": 86, "den": 86}, "b_flip": 1, "n_groups": 86, "n_denom": 86, "n_empty_mask": 0, "n_accepted": 86, "k_errors": 0},
+        "by_status": {"ok": 86, "rejected": 0, "truncated": 0, "error": 0},
+        "accepted_mix": {"by_class": {}, "by_service": null, "by_stratum": null, "by_n_questions": {}},
+        "diagnostic_error_in_accepted": {},
+        "tau": "0.05",
+        "unit": "group_representative",
+        "by_length_bucket": {}
+      }
     },
     {
       "name": "no_threshold",
-      "tau": 0.02,
-      "expected": {"status": "NO_THRESHOLD", "insufficient_by_design": false, "t_star": null, "dev": {"groups": 50, "n": null, "k": null}, "test": {"groups": 200, "n": null, "k": null, "U": null, "coverage": 0, "b_flip": null}, "by_status": {"ok": 200, "rejected": 0, "truncated": 0, "error": 0}, "accepted_mix": {}, "diagnostic_error_in_accepted": {}}
+      "tau": "0.02",
+      "expected": {
+        "status": "NO_THRESHOLD",
+        "insufficient_by_design": false,
+        "t_star": null,
+        "dev": {"n_groups": 50, "n_denom": 50, "n_empty_mask": 0, "n_accepted": null, "k_errors": null},
+        "test": {"U": null, "coverage": {"num": 0, "den": 200}, "b_flip": null, "n_groups": 200, "n_denom": 200, "n_empty_mask": 0, "n_accepted": null, "k_errors": null},
+        "by_status": {"ok": 200, "rejected": 0, "truncated": 0, "error": 0},
+        "accepted_mix": {"by_class": {}, "by_service": null, "by_stratum": null, "by_n_questions": {}},
+        "diagnostic_error_in_accepted": {},
+        "tau": "0.02",
+        "unit": "group_representative",
+        "by_length_bucket": {}
+      }
     },
     {
       "name": "no_threshold_by_design",
-      "tau": 0.01,
-      "expected": {"status": "NO_THRESHOLD", "insufficient_by_design": true, "t_star": null, "dev": {"groups": 50, "n": null, "k": null}, "test": {"groups": 86, "n": null, "k": null, "U": null, "coverage": 0, "b_flip": null}, "by_status": {"ok": 86, "rejected": 0, "truncated": 0, "error": 0}, "accepted_mix": {}, "diagnostic_error_in_accepted": {}}
+      "tau": "0.01",
+      "expected": {
+        "status": "NO_THRESHOLD",
+        "insufficient_by_design": true,
+        "t_star": null,
+        "dev": {"n_groups": 50, "n_denom": 50, "n_empty_mask": 0, "n_accepted": null, "k_errors": null},
+        "test": {"U": null, "coverage": {"num": 0, "den": 86}, "b_flip": null, "n_groups": 86, "n_denom": 86, "n_empty_mask": 0, "n_accepted": null, "k_errors": null},
+        "by_status": {"ok": 86, "rejected": 0, "truncated": 0, "error": 0},
+        "accepted_mix": {"by_class": {}, "by_service": null, "by_stratum": null, "by_n_questions": {}},
+        "diagnostic_error_in_accepted": {},
+        "tau": "0.01",
+        "unit": "group_representative",
+        "by_length_bucket": {}
+      }
     },
     {
       "name": "none_accepted",
-      "tau": 0.02,
-      "expected": {"status": "UNDERPOWERED", "insufficient_by_design": false, "t_star": 0.9, "dev": {"groups": 50, "n": 40, "k": 0}, "test": {"groups": 200, "n": 0, "k": 0, "U": null, "coverage": 0.0, "b_flip": null}, "by_status": {"ok": 200, "rejected": 0, "truncated": 0, "error": 0}, "accepted_mix": {}, "diagnostic_error_in_accepted": {}}
-    }
-  ],
-  "threshold_selection": [
-    {
-      "tau": 0.02,
-      "dev": [{"confidence": 0.9, "wrong": false}, {"confidence": 0.9, "wrong": true}],
-      "expected": {"status": "NO_THRESHOLD", "t_star": null}
-    },
-    {
-      "tau": 0.02,
-      "dev": [{"confidence": 0.9, "wrong": false}, {"confidence": 0.8, "wrong": true}],
-      "expected": {"t_star": 0.9, "n": 1, "k": 0}
+      "tau": "0.02",
+      "expected": {
+        "status": "UNDERPOWERED",
+        "insufficient_by_design": false,
+        "t_star": 0.9,
+        "dev": {"n_groups": 50, "n_denom": 50, "n_empty_mask": 0, "n_accepted": 40, "k_errors": 0},
+        "test": {"U": null, "coverage": {"num": 0, "den": 200}, "b_flip": null, "n_groups": 200, "n_denom": 200, "n_empty_mask": 0, "n_accepted": 0, "k_errors": 0},
+        "by_status": {"ok": 200, "rejected": 0, "truncated": 0, "error": 0},
+        "accepted_mix": {"by_class": {}, "by_service": null, "by_stratum": null, "by_n_questions": {}},
+        "diagnostic_error_in_accepted": {},
+        "tau": "0.02",
+        "unit": "group_representative",
+        "by_length_bucket": {}
+      }
     }
   ]
 }

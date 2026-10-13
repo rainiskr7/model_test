@@ -1,41 +1,33 @@
-"""무엇: 결과 타입 JSON 왕복 · 입력: 합성 결과 · 출력: 검증 · 계약 §3·§5-3·§7-4."""
-
-from dataclasses import FrozenInstanceError
-import json
+"""무엇: 응답·길이 자료형 경계 · 입력: 합성 JSON · 출력: 검증 · 계약 §3·§4·§8-5."""
 
 import pytest
 
-from jeveval.types import LengthInfo, ParsedAnswer, RiskCell, ScoreTable, Threshold
+from jeveval.types import LengthInfo, ParsedAnswer, Rendered
 
 
-@pytest.mark.parametrize("record", [
-    ParsedAnswer("noul", noul=.5),
-    ParsedAnswer("choice", choice="a", confidence=.7, probabilities={"a": .7, "b": .3}),
-    LengthInfo(100, 80), Threshold(.9), Threshold(None), ScoreTable(),
+@pytest.mark.parametrize('record', [
+    ParsedAnswer(type='noul',answer='true',probs={'true':.5,'false':.5},confidence=.5),
+    ParsedAnswer(type='choice',answer='B',probs={'A':.5,'B':.5},confidence=.5),
+    LengthInfo(length_tokens=100,target_end=80,limit=100,fixed_tokens=20),
+    Rendered(state='한글',target_end_char=2),
 ])
 def test_result_roundtrip(record):
-    assert type(record).from_dict(json.loads(json.dumps(record.to_dict()))) == record
-    with pytest.raises(FrozenInstanceError):
-        record.guessed_field = 1
+    assert type(record).from_dict(record.to_dict()) == record
 
 
-def test_risk_cells_roundtrip():
-    record = RiskCell("NO_THRESHOLD", True, None, {"groups": 1, "n": 0, "k": 0},
-                      {"groups": 4, "n": None, "k": None, "U": None,
-                       "coverage": 0, "b_flip": None},
-                      {"ok": 1, "rejected": 1, "truncated": 1, "error": 1}, {}, {})
-    data = json.loads(json.dumps(record.to_dict()))
-    assert RiskCell.from_dict(data) == record
-
-
-def test_unspecified_score_fields_are_not_silently_accepted():
-    with pytest.raises(ValueError, match="unknown fields"):
-        ScoreTable.from_dict({"accuracy": .5})
-
-
-@pytest.mark.parametrize("value", [float("nan"), float("inf"), -float("inf")])
+@pytest.mark.parametrize('value', [float('nan'),float('inf'),-float('inf')])
 def test_non_json_numbers_rejected(value):
     with pytest.raises(ValueError):
-        Threshold(value).to_dict()
+        ParsedAnswer(type='noul',answer='true',probs={'true':value},confidence=.5).to_dict()
     with pytest.raises(ValueError):
-        Threshold.from_dict({"t_star": value})
+        ParsedAnswer.from_dict(dict(type='noul',answer='true',probs={'true':value},confidence=.5))
+
+
+def test_parsed_answer_uses_strings_and_detaches_probabilities():
+    source = dict(type='noul',answer='true',probs={'true':.5,'false':.5},confidence=.5)
+    restored = ParsedAnswer.from_dict(source)
+    source['probs']['true'] = 0
+    assert restored.probs['true'] == .5
+    source['answer'] = True
+    with pytest.raises(TypeError):
+        ParsedAnswer.from_dict(source)

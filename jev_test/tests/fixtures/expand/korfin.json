@@ -1,0 +1,42 @@
+{
+  "task": {
+    "set": "korfin",
+    "variant": "full",
+    "state": {"kind": "plain_text"},
+    "questions": [],
+    "per_item_questions": {"id_pattern": "aspect_{k}", "role": "success", "type": "choice", "instructions_template": "{ASPECT}의 흐름을 골라요.", "options": "sentiment", "label": "aspect_sentiment"},
+    "group_key": "src"
+  },
+  "rows": [
+    {"SID": "20_0", "SRC": "수익은 늘고 비용도 올랐다.", "ASPECT": "수익", "gold": "pos"},
+    {"SID": "20_1", "SRC": "수익은 늘고 비용도 올랐다.", "ASPECT": "비용", "gold": "neg"}
+  ],
+  "options": {"pos": "긍정", "neg": "부정", "neutral": "중립"},
+  "expected": {
+    "questions": [
+      {
+        "id": "aspect_1",
+        "role": "success",
+        "type": "choice",
+        "instructions": "수익의 흐름을 골라요.",
+        "options": {"pos": "긍정", "neg": "부정", "neutral": "중립"},
+        "criteria": null,
+        "label": "aspect_sentiment",
+        "gold": "pos"
+      },
+      {
+        "id": "aspect_2",
+        "role": "success",
+        "type": "choice",
+        "instructions": "비용의 흐름을 골라요.",
+        "options": {"pos": "긍정", "neg": "부정", "neutral": "중립"},
+        "criteria": null,
+        "label": "aspect_sentiment",
+        "gold": "neg"
+      }
+    ],
+    "group_id": "20"
+  },
+  "collision_ids": ["aspect_1", "aspect_256", "aspect_999999999999999999999999"],
+  "noncollision_ids": ["aspect_0", "aspect_01", "aspect_1_more"]
+}

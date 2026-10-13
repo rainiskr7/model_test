@@ -1,0 +1,33 @@
+{
+  "input": {
+    "model": "synthetic-model",
+    "state": {
+      "catalog": [
+        {"id": "lamp", "description": "등 켜기"}
+      ],
+      "dialogue": [
+        {"speaker": "USER", "utterance": "\"등\"을 \\ 켜 줘.\n다시 부탁해."},
+        {"speaker": "SYSTEM", "utterance": "확인할게요."},
+        {"speaker": "USER", "utterance": "\"등\"을 \\ 켜 줘.\n다시 부탁해."}
+      ]
+    },
+    "state_spec": {
+      "kind": "json_string",
+      "keys": ["dialogue", "catalog"],
+      "target_key": "dialogue"
+    },
+    "questions": {
+      "act_inform": {
+        "type": "noul",
+        "instructions": "문장에 제안이 있나요?",
+        "criteria": {"true": "제안이 있다.", "false": "제안이 없다."}
+      },
+      "ongoing_1": {
+        "type": "choice",
+        "instructions": "진행할 일을 골라요.",
+        "criteria": {"lamp": "등 켜기", "NONE": "진행할 일이 없다."}
+      }
+    }
+  },
+  "expected": {"state": "{\"dialogue\":[{\"speaker\":\"USER\",\"utterance\":\"\\\"등\\\"을 \\\\ 켜 줘.\\n다시 부탁해.\"},{\"speaker\":\"SYSTEM\",\"utterance\":\"확인할게요.\"},{\"speaker\":\"USER\",\"utterance\":\"\\\"등\\\"을 \\\\ 켜 줘.\\n다시 부탁해.\"}],\"catalog\":[{\"id\":\"lamp\",\"description\":\"등 켜기\"}]}", "target_end_char": 168, "request_utf8": "{\"model\":\"synthetic-model\",\"state\":\"{\\\"dialogue\\\":[{\\\"speaker\\\":\\\"USER\\\",\\\"utterance\\\":\\\"\\\\\\\"등\\\\\\\"을 \\\\\\\\ 켜 줘.\\\\n다시 부탁해.\\\"},{\\\"speaker\\\":\\\"SYSTEM\\\",\\\"utterance\\\":\\\"확인할게요.\\\"},{\\\"speaker\\\":\\\"USER\\\",\\\"utterance\\\":\\\"\\\\\\\"등\\\\\\\"을 \\\\\\\\ 켜 줘.\\\\n다시 부탁해.\\\"}],\\\"catalog\\\":[{\\\"id\\\":\\\"lamp\\\",\\\"description\\\":\\\"등 켜기\\\"}]}\",\"questions\":{\"act_inform\":{\"type\":\"noul\",\"instructions\":\"문장에 제안이 있나요?\",\"criteria\":{\"true\":\"제안이 있다.\",\"false\":\"제안이 없다.\"}},\"ongoing_1\":{\"type\":\"choice\",\"instructions\":\"진행할 일을 골라요.\",\"criteria\":{\"lamp\":\"등 켜기\",\"NONE\":\"진행할 일이 없다.\"}}}}", "request_sha256": "079d07799bd8da903aa0333b32edff9f401c066eb7e0252e23174abc26071332"}
+}
