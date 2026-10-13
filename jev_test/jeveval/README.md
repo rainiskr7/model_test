@@ -1,7 +1,7 @@
-# jeveval — P1 작업 ⑤d·보정 12 기능 지도
+# jeveval — P1 작업 ⑥a-2a·보정 12 기능 지도
 
-P1_CONTRACT.md 판 3 보정 12 기준으로 단계 진입 검사 뒤 순차 실행·resume·KoSGD 파생 판을 구현했다.
-테스트는 합성 fixture·tmp_path와 동결 task 설정, 127.0.0.1 서버를 사용한다. CLI·certify·비용 집계는 후속 작업이다.
+P1_CONTRACT.md 판 3 보정 12와 ⑥a-2a R1 기준으로 위험 인증·세부 분포·논리 요청 비용 집계를 구현했다.
+테스트는 합성 fixture·tmp_path와 동결 task 설정, 127.0.0.1 서버를 사용한다. population·compare·bootstrap·CLI·certify·summary는 후속 작업이다.
 
 ## 코드
 
@@ -34,6 +34,9 @@ P1_CONTRACT.md 판 3 보정 12 기준으로 단계 진입 검사 뒤 순차 실�
 - `score/kosgd_slots.py`: 카탈로그 순서의 고정 정답 칸·중복·묶음 정답·순서 진단.
 - `score/tasks.py`: 호출별 답 병합·역할 보존, 성공 질문 전체 확신·정답 마스크·KoSGD 묶음 오류·최대 길이.
 - `score/threshold.py`: 정확한 위험 경계·동점 묶음 임계값, dev 대표 완료 대조·ThresholdFile 조립.
+- `score/risk.py`: 단측 CP 상한·정확한 n_min·b_flip·봉인 임계값 적용·RiskCell과 risk/1 JSON 조립.
+- `score/risk_mix.py`: 성공 질문 정답 클래스·서비스·층·질문 수 분포, 다섯 길이 칸과 수락 내 진단 오류.
+- `score/cost.py`: 단계별 논리 완료 지연·실패·호출·재시도·입력 토큰 하한·파생 비용 0.
 - `io/__init__.py`: 파일 입출력 네임스페이스.
 - `io/records.py`: JSONL 추가·flush/fsync·타입/호출 연속성 검사·끝 줄 복구·없는 기록 파일 생성.
 - `client/__init__.py`: 단일 시도 전송 네임스페이스.
@@ -100,16 +103,24 @@ call_record는 상한에 이른 non-terminal도 재전송 없이 복구하며, �
 plan_calls·length·policy·outcome·resume_check·derive는 순수 함수다. B1은 hf_chat_template_no_think로 로컬 측정하며 systemone 측정은 NotImplementedError다.
 score/tasks는 KoSGD 한 칸만 MISSING이면 상태와 무관하게 거부하고, 두 칸 모두 MISSING이면 묶음을 마스크에서 뺀다.
 score/threshold의 호출자는 dev_complete를 통과한 dev 결과와 원본 바이트 sha256·nbytes를 넘긴다. certify는 ⑥b다.
+score/risk도 완료된 dev/test 대표 집합을 받는다. stage·중복 대표·Item ID·threshold/dev 집계를 대조하고 시험으로 임계값을 다시 고르지 않는다.
+위험의 세부 분포도 빈 마스크를 제외한다. 길이 미측정 로컬 오류는 unmeasured에 세며 다섯 칸 sampled 합은 test.n_denom이다. valid 요청에는 측정 길이가 필요하다.
+n_min은 (1-tau)**n <= 0.05를 Fraction으로 비교한다. b_flip은 MEETS에서만 쓰며 바꿀 정답이 없는 k=n 입력은 ValueError다.
+risk_file은 세 tau의 RiskCell을 일반 JSON dict로 복사한다. cost_by_stage는 Cost 객체를 유지하며 ScoreTable.to_dict()/io.run_files.json_bytes가 중첩 값을 직렬화한다.
+cost 호출자는 완료 final과 연결된 시도, 명시적 kind(b1/systemone), 단계 derived.json의 출처를 전달한다. 토큰은 CallRecord.usage가 아닌 마지막 terminal의 원문에서 읽고 미측정 호출도 missing에 센다.
 
 `run_stage` 전에는 반드시 `gate.prepare_stage`를 호출한다. 실행기는 tail 복구·fingerprint·seal을 하지 않는다. 모든 항목(완료 항목 포함)의 계획과 기존 시도를 먼저 대조하고, 통과 후 빈 기록 파일 생성→측정→post→attempt fsync→대기/다음 호출→final fsync 순서다. 부모 폴더는 gate가 만든다.
 반환은 **RunSummary만**이다. records 읽기 경고는 재반환하지 않으며 gate의 경고를 호출자가 보존한다. `n_calls`는 이번에 처리한 호출 수(로컬 오류·복구 포함, 완료 final skip 제외), `by_status`는 이번에 쓴 final만 센다. `session_id`는 호출자가 프로세스별 UUID4를 한 번 만들어 전달하고 재개 프로세스에서는 새 값으로 바꾼다.
 non-terminal 재개는 잠 없이 다음 기록 번호로 전송한다. 기록 k 다음 전송(k+1)이 fsync 전에 중단되면 재개는 **같은 k+1**을 사용한다. 실제 전송 1회 추가가 가능한 기록 예산의 한계이며 cost는 미기록 전송을 관측할 수 없다. 5회째 non-terminal 복구는 과거 attempts를 고치지 않는다.
 `derive_stage(full_finals, items_full, action_qids, derived_from)`는 완료 ID 집합을 대조한다. 파생 호출의 attempts·usage·length는 원본 관측값을 유지하며, 논리 상태는 제거된 B1 호출의 오류도 보존한다. 호출자가 separate 모델·같은 단계의 전체판을 선택하고 파생 판 자체의 gate/threshold/seal을 적용한다(⑥b).
 `io.run_files.write_derived_stage`도 gate 통과 뒤 호출한다. 출처가 일치하는 final 접두 기록은 이어 쓰고, 변경/중복/실제 attempts는 쓰기 전에 거부한다. `derived.json`을 final append 전에 기록하므로 중단 후 재개가 가능하다. 빈 단계도 final·빈 attempts·출처 파일이 생긴다.
-⑥a-2 cost는 `<stage>/derived.json`의 `derived_from`으로 파생을 판별하고 **모든 수치 0·p50/p95 null**을 적용해야 한다. 남긴 CallRecord의 attempts/usage를 비용으로 합산하지 않는다. population/risk는 보존된 final 상태와 파생 Item을 사용한다.
+⑥a-2a cost는 `<stage>/derived.json`에서 전달받은 `derived_from`으로 파생을 판별하고 **모든 수치 0·p50/p95 null**을 적용한다. 남긴 CallRecord의 attempts/usage를 비용으로 합산하지 않는다. population/risk는 보존된 final 상태와 파생 Item을 사용한다.
 
 ## 테스트
 
+- `tests/score/test_risk.py`: 기존 CP·위험 상태·임계값 fixture를 실제 함수에 통과, risk/1 직렬화·입력 대조.
+- `tests/score/test_risk_mix.py`: missing_mask의 실제 채점→위험 경계, 고정 칸·서비스 중복·KLUE 층·KorFin 1–8 질문·진단·길이 경계·unmeasured 분모 불변식.
+- `tests/score/test_cost.py`: 기존 cost fixture의 JSONL 읽기→비용 경계, usage 타입·kind·terminal·로컬 오류·resume·파생·ScoreTable 직렬화.
 - `tests/run/conftest.py`, `executor_support.py`: 합성 설정·시도·실제 gate 연결·R3 메모리 계획 치환.
 - `tests/run/test_executor.py`: 순차 실행·Retry-After·바이트·fsync 순서·B1 오류 후 계속·빈 단계.
 - `tests/run/test_executor_fixtures.py`: 기존 완료/중복/terminal/retry_budget과 B1 부분 답 구조를 실제 실행기에 통과.
@@ -179,6 +190,8 @@ fixture 폴더: render, responses, answers, scoring, splits, expand, records, re
 CLI의 상대 `--rules`와 source/선정 경로는 `--root` 기준, 상대 `--out`은 실행 cwd 기준이다.
 
 ## SPEC_AMBIGUOUS
+
+⑥a-2a: R1 반영으로 미측정 길이의 모호성은 해소했다. risk_cases.json은 질문/길이 입력 없는 집계 예이므로 인증 필드(상태·dev/test·by_status·플래그)를 대조하고 빈 세부 분포 자리는 별도 합성 Item 시험으로 검증한다. fixture는 수정하지 않았다. 추가 SPEC_AMBIGUOUS / FIXTURE_CONFLICT 없음.
 
 ⑤c: 명세 B2의 `read_stage_finals -> list[FinalRecord]`와 경고 반환 요구는 함께 만족할 수 없어 기존 `io.records.read_finals`의 `(records, warnings)`를 따른다.
 `code_sha256` 경로는 root 기준 POSIX 상대 경로(`jeveval/...`)로 고정한다. 상대 tokenizer.path도 root 기준이다. path가 있는데 해시 목록이 null/빈 경우는 검증 불가로 거부한다.
