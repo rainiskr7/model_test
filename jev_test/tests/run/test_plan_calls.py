@@ -36,7 +36,15 @@ def test_b1_prompt_fixture(env, fixture_json):
     assert [p.call_id for p in plans] == ["synthetic:g1:i1/pick", "synthetic:g1:i1/ready"]
     for plan, case in zip(plans, source["cases"]):
         assert not plan.local_errors
-        for key, value in case["expected"].items():
+        # fixture는 이미 렌더된 입력용이다. 여기서는 plain_text 렌더를 한 번 더 거친다.
+        expected = deepcopy(case["expected"])
+        raw_state = source["rendered"]["state"]
+        user = expected["messages"][1]["content"]
+        assert user.startswith(raw_state)
+        expected["messages"][1]["content"] = raw_state.strip() + user[len(raw_state):]
+        assert plan.rendered == Rendered(raw_state.strip(), len(raw_state.strip()))
+        assert item.state_fields == raw_state
+        for key, value in expected.items():
             assert getattr(plan.b1_call, key) == value
         assert json.loads(plan.body)["allowed_token_ids"] == [5, 7, 9][:len(plan.b1_call.label_order)]
         assert plan.request_sha256 == hashlib.sha256(plan.body).hexdigest()

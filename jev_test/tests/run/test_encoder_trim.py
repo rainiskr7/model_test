@@ -9,6 +9,7 @@ from transformers import PreTrainedTokenizerFast
 from jeveval.io.hashes import sha256_file
 from jeveval.run.encoders import measurer_for
 from jeveval.run.encoders.hf_chat_template import _state_span
+from jeveval.run.plan_calls import plan_calls
 from jeveval.types import B1Call, LengthInfo, Rendered
 
 
@@ -81,3 +82,25 @@ def test_trimmed_user_must_occur_exactly_once(env, text):
     """trim 뒤 본문도 없거나 둘 이상이면 거부한다."""
     with pytest.raises(ValueError, match="exactly once"):
         _state_span(_plan(env, " 한글", 2), text)
+
+
+@pytest.mark.parametrize("raw", [" \t한글", "한글 \n", " \n한글\u3000", " \t한 글\n다음 \n"])
+def test_plain_text_render_leaves_no_encoder_prefix_to_remove(trimmed, env, raw):
+    """실제 호출 계획은 같은 정규화 state를 보내고 Item 원문과 내부 공백은 보존한다."""
+    item = replace(env.item, state_fields=raw)
+    before = item.to_dict()
+    systemone, = plan_calls(item, env.task, env.cfg, None)
+    b1, = plan_calls(item, env.task, env.bcfg, env.b1)
+    state = raw.strip()
+    assert not systemone.local_errors and not b1.local_errors
+    assert systemone.rendered == b1.rendered == Rendered(state, len(state))
+    assert systemone.request.state == state
+    user = b1.b1_call.messages[1]["content"]
+    assert user.startswith(state + "\n")
+    assert len(user) - len(user.lstrip()) == 0  # encoder의 removed 계산
+    text = trimmed.tokenizer.apply_chat_template(b1.b1_call.messages, tokenize=False,
+        add_generation_prompt=True, enable_thinking=False, return_dict=False)
+    start = len(env.b1.system.strip())
+    assert _state_span(b1, text) == (start, start + len(state), len(state))
+    assert trimmed.measure(b1).target_end == len(state.encode("utf-8"))
+    assert item.to_dict() == before and item.state_fields == raw

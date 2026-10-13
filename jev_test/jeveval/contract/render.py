@@ -10,11 +10,14 @@ def _encode(value):
 
 
 def render_state(state_fields: dict | str, state_spec: dict) -> Rendered:
-    """키 순서를 보존하며 직렬화한 prefix 길이로 대상 끝 위치를 구한다."""
+    """plain_text는 앞뒤 공백을 지우고, JSON은 키 순서·값을 보존해 대상 끝을 구한다."""
     if state_spec["kind"] == "plain_text":
         if not isinstance(state_fields, str):
             raise ValueError("plain_text requires a string")
-        return Rendered(state_fields, len(state_fields))
+        state = state_fields.strip()
+        if not state:
+            raise ValueError("plain_text requires non-whitespace content")
+        return Rendered(state, len(state))
     if state_spec["kind"] != "json_string" or not isinstance(state_fields, dict):
         raise ValueError("json_string requires an object")
     keys = state_spec["keys"]

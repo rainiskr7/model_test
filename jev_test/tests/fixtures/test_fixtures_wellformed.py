@@ -63,7 +63,7 @@ def test_render_bytes_and_hash(path):
         state = {key: source["state"][key] for key in source["state_spec"]["keys"]}
         assert expected["state"] == json.dumps(state, ensure_ascii=False, separators=(",", ":"))
     else:
-        assert expected["state"] == source["state"]
+        assert expected["state"] == source["state"].strip()
 
 
 def test_response_cases_cover_reason_codes_and_raw_duplicates():
@@ -154,7 +154,7 @@ def test_render_target_exact_prefix():
         source, expected = fixture["input"], fixture["expected"]
         spec = source["state_spec"]
         if spec["kind"] == "plain_text":
-            prefix = source["state"]
+            prefix = source["state"].strip()
         else:
             parts = []
             for key in spec["keys"]:

@@ -50,6 +50,32 @@ def test_unicode_key_and_escaped_target_before_repeated_tail():
     assert rendered.target_end_char == len(prefix)
 
 
-def test_plain_text_keeps_whitespace():
-    rendered = render_state(" \n가😀 ", {"kind": "plain_text"})
-    assert rendered.state == " \n가😀 " and rendered.target_end_char == 5
+@pytest.mark.parametrize("source,expected", [
+    (" \t가😀", "가😀"),
+    ("가😀 \r\n", "가😀"),
+    (" \n가😀 \t", "가😀"),
+    ("\u3000\u00a0가😀\u00a0\u3000", "가😀"),
+    (" \n가  나\n\t다 😀 \n", "가  나\n\t다 😀"),
+])
+def test_plain_text_strips_edges_and_preserves_internal_whitespace(source, expected):
+    rendered = render_state(source, {"kind": "plain_text"})
+    assert rendered.state == expected
+    assert rendered.target_end_char == len(expected)
+
+
+@pytest.mark.parametrize("source", ["", " ", "\t\n\r\v\f", "\u3000\u00a0"])
+def test_plain_text_empty_after_strip_rejected(source):
+    with pytest.raises(ValueError, match="non-whitespace"):
+        render_state(source, {"kind": "plain_text"})
+
+
+@pytest.mark.parametrize("source", [" \n가  나\n\t다 😀 \n", " \t\n"])
+def test_json_string_keeps_whitespace_in_values(source):
+    fields = {"target": source, "tail": " \n "}
+    before = deepcopy(fields)
+    rendered = render_state(fields, dict(kind="json_string", keys=["target", "tail"], target_key="target"))
+    expected = json.dumps(fields, ensure_ascii=False, separators=(",", ":"))
+    prefix = '{"target":' + json.dumps(source, ensure_ascii=False)
+    assert rendered.state == expected
+    assert rendered.target_end_char == len(prefix)
+    assert fields == before

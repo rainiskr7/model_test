@@ -72,7 +72,7 @@ fingerprint 에는 **파일별** sha256 을 넣는다: 쓰인 task yaml 들 · �
 
 ### 2-2. state 는 항상 문자열
 - 이유: 모델마다 객체 state 를 렌더링하는 방식이 다르거나(Clef 는 키 정렬) 알 수 없다(pplx). 문자열로 보내면 **모든 모델이 같은 글자를 같은 순서로** 받는다. 계획 §1 도 state 를 "문자열 또는 JSON" 으로 허용한다.
-- `json_string`: 내부 객체를 `keys` 순서로 `json.dumps(obj, ensure_ascii=False, separators=(",", ":"))`. `plain_text`: 원문 그대로.
+- `json_string`: 내부 객체를 `keys` 순서로 `json.dumps(obj, ensure_ascii=False, separators=(",", ":"))`. `plain_text`: 원문의 **앞뒤 공백을 지운 것** (`str.strip()` — 판 3 보정 12, 10-13). 문장 안쪽 공백·줄바꿈은 그대로. 이유: B1(Qwen) chat 템플릿이 메시지에 `|trim` 을 걸어 B1 만 공백 없는 문장을 받았다 — 모든 모델이 같은 글자를 받게 한다. 실측(10-13): 앞뒤 공백이 있는 원문은 KOTE 74 (평가 풀 30)·K-MHaS 0·KorFin 0, 지운 뒤 서로 다른 묶음의 원문이 같아지는 경우 0 (분할·누출 영향 없음, 분할 파일 그대로), 지우면 빈 문장 0 — 빈 문장이 되면 멈춘다. `target_end_char` = 지운 문자열의 길이. `Item.state_fields` 는 원문 그대로 두고 렌더에서 지운다.
 - **render 의 출력** (판 3) = `Rendered(state: str, target_end_char: int)`. `target_end_char` = state 문자열 안에서 대상 발화가 끝나는 **문자 위치(끝 다음 칸, 0부터)**:
   - `json_string`: `target_key` 값이 목록이면 그 **마지막 원소**의 직렬화가 끝나는 위치(`}` 다음), 문자열이면 그 문자열 직렬화의 닫는 `"` 다음.
   - `plain_text`: `len(state)`.
@@ -632,3 +632,4 @@ PoolResult(group_ids: list[str], allocation: dict[str, int])          # data/poo
 - 판 3 보정 9 (10-13, 작업 ④ 명세 전 Claude): client 는 한 번의 시도만 (재시도·terminal 은 ⑤) · AttemptResult · 전송 규칙(proxy 없음·리디렉트 안 따름·소켓 단위 600초) · B1 chat 본문·sha · B1 응답 읽기 · 기록 파일 줄·fsync·깨진 줄 규칙 (§5-5b).
 - 판 3 보정 10 (10-13, 남은 부분 설계 — Claude 초안 → Codex 아키텍처 검토 14건): 작업 순서 7단계(봉인 재계산을 위해 채점·임계값을 실행기 앞으로) · 진입 검사 순서 · resume 의 현재 요청 대조·예산 소진 · CallPlan 에 B1 대응표 · RequestOutcome.roles · Item 복원·dev 완료 검사 · fingerprint 와 archive 분리(archive.json) · 모델 yaml 재현 필드·t0 · 참조 구현 세 API·temperature 실경로 검사는 P0 · check-config · 파생 판 흐름 · compare 의 C4·두 bootstrap 모집단 · 입출력 소유 · 중단 위치별 검증.
 - 10-13 P0 B1 실측 (§10): vLLM 0.28.0·필수 옵션 2개·인코더 규칙·상한 65,536/400 거부 기록, 보정 11 예정(길이 거부 상태 코드 모델별·base_url 실행 인자).
+- 판 3 보정 12 (10-13, 사용자 결정): plain_text state 의 앞뒤 공백 제거 — B1 템플릿 trim 과 결정 모델 입력을 같은 글자로. fixture `render/plain_text.json` 기대값 갱신.
