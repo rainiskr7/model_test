@@ -378,7 +378,7 @@ jev_test/results/_compare/<compare_id>/A/<set>/<variant>/compare.json   # 커밋
    by_stratum:    {stratum: {sampled, n, k}} | null,          # KLUE-MRC source
    by_n_questions:{count: {sampled, n, k}}                    # 요청당 성공 질문 수 (KorFin 1–8)
  },
- by_length_bucket: {"le_4096"|"le_8192"|"le_16384"|"gt_16384": {sampled, n_valid, n, k}},
+ by_length_bucket: {"le_4096"|"le_8192"|"le_16384"|"gt_16384"|"unmeasured": {sampled, n_valid, n, k}},   # unmeasured = 길이 측정 전 로컬 오류 (⑥a-2a 반박, 10-13)
  diagnostic_error_in_accepted: {question_id: {n, wrong}}}
 ```
 - `sampled` = 그 칸에 든 시험 요청 수 (분모), `n` = 수락 수, `k` = 수락 중 요청 오류. 사람 이관률 = $1 - n/\text{sampled}$ (FunctionChat 유형별은 `by_class.<행동 질문>`).

@@ -6,6 +6,7 @@ from pathlib import Path
 import tempfile
 
 from jeveval.io.hashes import sha256_file as file_sha256
+from jeveval.io import records
 from jeveval.types import JsonRecord
 
 
@@ -68,3 +69,31 @@ def read_json(path, cls=None):
     data = json.loads(Path(path).read_text(encoding="utf-8"), object_pairs_hook=_unique,
                       parse_constant=_nonfinite, parse_float=_float)
     return cls.from_dict(data) if cls is not None else data
+
+
+def write_derived_stage(run_dir, stage, finals, derived_from):
+    """gate 통과 뒤 출처를 먼저 쓰고 final을 이어 쓴다. 동일 완료/접두 기록 재개는 멱등이다."""
+    if stage not in ("dev", "test", "extra"):
+        raise ValueError("invalid stage")
+    if not isinstance(derived_from, str) or not derived_from:
+        raise ValueError("derived_from is required")
+    root = Path(run_dir) / stage
+    final_path, attempt_path, marker = root / "final.jsonl", root / "attempts.jsonl", root / "derived.json"
+    provenance = {"derived_from": derived_from}
+    ids = [f.logical_id for f in finals]
+    if len(set(ids)) != len(ids) or any(f.derived_from != derived_from for f in finals):
+        raise ValueError("inconsistent derived finals")
+    for final in finals:
+        records.record_line(final)
+    existing, warnings = records.read_finals(final_path)
+    attempts, pending = records.read_attempts(attempt_path)
+    if warnings or pending or attempts or existing != finals[:len(existing)]:
+        raise ValueError("derived stage records mismatch or need repair")
+    if exists(marker) and read_json(marker) != provenance:
+        raise ValueError("derived source mismatch")
+    records.ensure_file(attempt_path)
+    records.ensure_file(final_path)
+    if not exists(marker):
+        write_json(marker, provenance)
+    for final in finals[len(existing):]:
+        records.append_record(final_path, final)

@@ -7,6 +7,16 @@ from pathlib import Path
 from jeveval.types import AttemptRecord, FinalRecord
 
 
+def ensure_file(path) -> None:
+    """없는 기록만 빈 파일로 만들고 fsync한다. 부모는 gate가 만들며 기존 파일은 보존한다."""
+    try:
+        with Path(path).open("xb") as stream:
+            stream.flush()
+            os.fsync(stream.fileno())
+    except FileExistsError:
+        pass
+
+
 def record_line(record) -> bytes:
     return (json.dumps(record.to_dict(), ensure_ascii=False, separators=(",", ":")) + "\n").encode("utf-8")
 

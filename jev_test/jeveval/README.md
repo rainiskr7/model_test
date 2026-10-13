@@ -1,7 +1,7 @@
-# jeveval — P1 작업 ⑤c·보정 11 기능 지도
+# jeveval — P1 작업 ⑤d·보정 12 기능 지도
 
-P1_CONTRACT.md 판 3 보정 10의 공유 실행 기반·채점·길이 측정에 단계 입력·fingerprint·진입 검사·봉인을 더했다. 보정 11의 모델별 HTTP 400/422 길이 거부를 반영했다.
-테스트는 합성 fixture·tmp_path와 동결 task 설정, 127.0.0.1 서버를 사용한다. 실행기는 후속 작업이다.
+P1_CONTRACT.md 판 3 보정 12 기준으로 단계 진입 검사 뒤 순차 실행·resume·KoSGD 파생 판을 구현했다.
+테스트는 합성 fixture·tmp_path와 동결 task 설정, 127.0.0.1 서버를 사용한다. CLI·certify·비용 집계는 후속 작업이다.
 
 ## 코드
 
@@ -17,7 +17,7 @@ P1_CONTRACT.md 판 3 보정 10의 공유 실행 기반·채점·길이 측정에
 - `contract/model_config.py`: 닫힌 모델 스키마·파일 해시·토큰 ID 검사, 실행 필수 값·B1 라벨 집합 대조.
 - `io/models.py`: 중복 키 거부 YAML 로더와 ModelConfigError.errors.
 - `io/hashes.py`: 스트리밍 SHA-256·SHA256SUMS 대조·정렬된 Python 소스 해시·토크나이저 재검증.
-- `io/run_files.py`: 정규 JSON 바이트·fsync/원자 교체·중복 키/비유한 수 거부·존재 조회/폴더 생성.
+- `io/run_files.py`: 정규 JSON·fsync/원자 교체·파생 단계 final/빈 attempts/derived.json 기록과 재개.
 - `types/contract.py`: Validated·B1Config·B1Call·B1Response의 frozen JsonRecord 자료형.
 - `types/scoring.py`: AnswerParse·F1Result·CalibResult·SlotJudgement 자료형.
 - `contract/__init__.py`: 계약 검사 네임스페이스.
@@ -35,7 +35,7 @@ P1_CONTRACT.md 판 3 보정 10의 공유 실행 기반·채점·길이 측정에
 - `score/tasks.py`: 호출별 답 병합·역할 보존, 성공 질문 전체 확신·정답 마스크·KoSGD 묶음 오류·최대 길이.
 - `score/threshold.py`: 정확한 위험 경계·동점 묶음 임계값, dev 대표 완료 대조·ThresholdFile 조립.
 - `io/__init__.py`: 파일 입출력 네임스페이스.
-- `io/records.py`: JSONL 추가·flush/fsync·타입/호출 연속성 검사·읽기와 분리된 끝 줄 복구.
+- `io/records.py`: JSONL 추가·flush/fsync·타입/호출 연속성 검사·끝 줄 복구·없는 기록 파일 생성.
 - `client/__init__.py`: 단일 시도 전송 네임스페이스.
 - `client/http.py`: proxy·리디렉트 없는 urllib POST, 소켓 timeout·부분 본문·HTTP 오류 응답 보존.
 - `client/systemone.py`: request_bytes 그대로 전송하고 SHA-256 반환.
@@ -70,6 +70,9 @@ P1_CONTRACT.md 판 3 보정 10의 공유 실행 기반·채점·길이 측정에
 - `run/encoders/hf_chat_template.py`: 파일 해시 대조·오프라인 no-think 템플릿·ID 재인코딩 일치·state offsets 기반 LengthInfo.
 - `run/policy.py`: MAX_ATTEMPTS=5·전송 오류 우선·정수 Retry-After·누적 번호에 따른 Decision.
 - `run/outcome.py`: 기록 연결·예산·길이 필수 검사, 독립 usage·답 변환·거부 우선·논리 상태 합성.
+- `run/resume_check.py`: 전체 계획·attempts·final ID·누적 예산을 첫 전송/쓰기 전에 대조하는 순수 검사.
+- `run/executor.py`: 주입 post/measurer/sleep으로 순차 실행·재시도·복구·attempts 뒤 final 기록·RunSummary.
+- `run/derive.py`: 전체판 Item의 질문 ID 대조·행동 질문/호출 거르기·오류 상태와 관측값을 보존하는 독립 사본.
 - `run/fingerprint.py`: 원본/토크나이저 검증·설정/규칙/코드 해시 수집·started_at 제외 비교.
 - `run/stage_inputs.py`: 동결 설정과 검증된 원본에서 단계별 Item 복원·해당 단계 final과 경고 읽기.
 - `run/gate.py`: 모든 검사 뒤 fingerprint 쓰기·현재 단계 tail 복구·첫 시험 봉인; 호출은 보내지 않는다.
@@ -83,7 +86,7 @@ run/encoders의 의존은 types·io.hashes·run.length·표준 라이브러리·
 
 모든 dataclass는 frozen이다. 내부 list/dict까지 불변인 것은 아니다. from_dict는 중첩 타입을 복원하고 별칭 없는 사본을 만들며 알 수 없는 필드·필수 필드 누락·비선택 필드의 null·잘못된 타입·NaN/Infinity를 거부한다.
 B1Response는 메모리 로그확률의 -inf를 JSON 왕복 때만 "-inf"로 인코딩하고 복원한다. CallRecord.top_logprobs_raw에는 storable_top_logprobs가 만든 사본을 넣는다.
-ThresholdFile은 by_tau 키와 값의 tau가 같은지도 검사한다. 요청·응답·채점 도메인 검사는 contract/score, 순수 상태 결합은 run/outcome, 전송·기록 순서 제어는 후속 executor의 책임이다.
+ThresholdFile은 by_tau 키와 값의 tau가 같은지도 검사한다. 요청·응답·채점 도메인 검사는 contract/score, 순수 상태 결합은 run/outcome, 전송·기록 순서 제어는 executor의 책임이다.
 
 load_taskspec은 TaskSpec을 반환하며 오류 목록은 TaskSpecError.errors에 담는다. task yaml의 score 질문은 기존대로 오류 목록이며 NotImplementedError로 바꾸지 않는다.
 per_item_questions의 충돌 검사는 k 상한 없이 앞자리 0 없는 양의 정수를 대조한다. 실제 질문 펼치기와 중복 재검사는 data/expand가 수행한다. 무상한 패턴 충돌은 taskspec이 검사한다.
@@ -94,59 +97,44 @@ missing_for_run의 B1 라벨 인자는 b1.yaml에서 읽어 전달한다. 생략
 timeout은 소켓 단위이며 총 소요 시간 상한이 아니다. clock.utc_now()는 aware datetime을 돌려준다.
 resume은 append 전에 repair_tail을 호출해야 한다. read_attempts/read_finals는 파일을 바꾸지 않는다. 재시도 5회는 기록된 시도 기준이다. 전송 뒤 fsync 전에 중단되면 실제 전송이 더 일어날 수 있다.
 call_record는 상한에 이른 non-terminal도 재전송 없이 복구하며, 상한 초과·기록 연결 불일치는 거부한다.
-plan_calls·length·policy·outcome은 파일·네트워크·시계·난수를 쓰지 않는다. B1은 hf_chat_template_no_think로 로컬 측정하며 systemone 측정은 NotImplementedError다. executor·gate는 후속 작업이다.
+plan_calls·length·policy·outcome·resume_check·derive는 순수 함수다. B1은 hf_chat_template_no_think로 로컬 측정하며 systemone 측정은 NotImplementedError다.
 score/tasks는 KoSGD 한 칸만 MISSING이면 상태와 무관하게 거부하고, 두 칸 모두 MISSING이면 묶음을 마스크에서 뺀다.
-score/threshold의 호출자는 dev_complete를 통과한 dev 결과와 원본 바이트 sha256·nbytes를 넘긴다. 단계 입력 복원·gate·seal은 후속 ⑤c, certify는 ⑥b다.
+score/threshold의 호출자는 dev_complete를 통과한 dev 결과와 원본 바이트 sha256·nbytes를 넘긴다. certify는 ⑥b다.
+
+`run_stage` 전에는 반드시 `gate.prepare_stage`를 호출한다. 실행기는 tail 복구·fingerprint·seal을 하지 않는다. 모든 항목(완료 항목 포함)의 계획과 기존 시도를 먼저 대조하고, 통과 후 빈 기록 파일 생성→측정→post→attempt fsync→대기/다음 호출→final fsync 순서다. 부모 폴더는 gate가 만든다.
+반환은 **RunSummary만**이다. records 읽기 경고는 재반환하지 않으며 gate의 경고를 호출자가 보존한다. `n_calls`는 이번에 처리한 호출 수(로컬 오류·복구 포함, 완료 final skip 제외), `by_status`는 이번에 쓴 final만 센다. `session_id`는 호출자가 프로세스별 UUID4를 한 번 만들어 전달하고 재개 프로세스에서는 새 값으로 바꾼다.
+non-terminal 재개는 잠 없이 다음 기록 번호로 전송한다. 기록 k 다음 전송(k+1)이 fsync 전에 중단되면 재개는 **같은 k+1**을 사용한다. 실제 전송 1회 추가가 가능한 기록 예산의 한계이며 cost는 미기록 전송을 관측할 수 없다. 5회째 non-terminal 복구는 과거 attempts를 고치지 않는다.
+`derive_stage(full_finals, items_full, action_qids, derived_from)`는 완료 ID 집합을 대조한다. 파생 호출의 attempts·usage·length는 원본 관측값을 유지하며, 논리 상태는 제거된 B1 호출의 오류도 보존한다. 호출자가 separate 모델·같은 단계의 전체판을 선택하고 파생 판 자체의 gate/threshold/seal을 적용한다(⑥b).
+`io.run_files.write_derived_stage`도 gate 통과 뒤 호출한다. 출처가 일치하는 final 접두 기록은 이어 쓰고, 변경/중복/실제 attempts는 쓰기 전에 거부한다. `derived.json`을 final append 전에 기록하므로 중단 후 재개가 가능하다. 빈 단계도 final·빈 attempts·출처 파일이 생긴다.
+⑥a-2 cost는 `<stage>/derived.json`의 `derived_from`으로 파생을 판별하고 **모든 수치 0·p50/p95 null**을 적용해야 한다. 남긴 CallRecord의 attempts/usage를 비용으로 합산하지 않는다. population/risk는 보존된 final 상태와 파생 Item을 사용한다.
 
 ## 테스트
 
-- `tests/run/conftest.py`: 합성 설정·항목·시도와 기존 fixture 읽기 도우미.
-- `tests/run/test_plan_calls.py`: 공통 검증·중복/렌더 실패·호출별 오류·B1 prompt/대응표 통합.
-- `tests/run/test_length.py`: 기존 boundaries의 거부·mismatch·호출별 고정부, offsets·구간 경계.
-- `tests/run/test_encoders.py`: tmp_path 합성 WordLevel/BPE·해시·오프라인 로드·수동 길이·B1 계획 통합·규칙/상한/ID/위치 오류. `tests/run/test_encoder_trim.py`: Jinja trim·앞 공백 보정·뒤쪽 trim 경계·전부 공백 거부.
-- `tests/run/test_policy.py`: 대기·소진·부분 응답, retry_budget fixture와 non-terminal 소진 복구.
-- `tests/run/test_outcome.py`: 전체 responses·B1 분포·terminal 복구·부분 실패 fixture, usage·경고·기록 거부.
-- `tests/types/test_run.py`: 실행 공유 타입 왕복·frozen·CallPlan 메모리 경계.
-- `tests/contract/test_model_config.py`: 모델 키·타입·enum·URL·해시·토큰·실행 누락 검사.
-- `tests/io/test_models.py`: 모델 YAML 6개·실제 B1 라벨 설정·중복 키·오류 목록.
-- `tests/io/test_hashes.py`: 합성 파일 해시·누락·변경·목록 밖 파일·중복 형식.
-- `tests/io/test_run_files.py`: 정규 바이트·교체 전 fsync·실패 복구·중복 키·비유한 수.
-- `tests/client/test_http.py`: 가짜 연결/opener의 감싸진·직접 예외, 부분 본문, HTTPError, 시계, 빈 proxy 표.
-- `tests/client/test_http_live.py`: loopback 바이트·상태·리디렉트·부분 본문·timeout·실제 가짜 proxy 무접촉.
-- `tests/client/test_systemone.py`: request_bytes·경로·해시·한 번 전송.
-- `tests/client/test_vllm_chat.py`: 기존 prompt fixture의 params·토큰 순서·해시·충돌 거부.
-- `tests/client/test_attempt.py`: 식별자·terminal 주입, 부분 응답과 독립 사본 보존.
-- `tests/contract/test_b1_response.py`: 로그확률·usage·중복 키·채점 연결·terminal 복구와 final 저장.
-- `tests/io/test_records.py`: 기존 resume/roundtrip fixture, 타입·연속성, repair→append→read, fsync.
-- `tests/conftest.py`: 격리 Python·공통 도우미 경로, 동명 시험의 importlib 수집.
-- `tests/types/samples.py`: 자료형 테스트용 합성 표본.
-- `tests/types/test_base.py`: 전체 자료형 왕복·frozen·null·알 수 없는 필드.
-- `tests/types/test_specs.py`: 설정·항목·분할·중첩 질문·사본 분리.
-- `tests/types/test_results.py`: 응답·길이·렌더 자료형과 숫자 경계.
-- `tests/types/test_scores.py`: 임계값·모집단·질문 통계 중첩 복원.
-- `tests/types/test_records.py`: session_id·호출별 길이·ParsedAnswer 복원.
-- `tests/types/test_outcomes.py`: MISSING·실행 오류 요청 결과 왕복.
-- `tests/contract/test_taskspec.py`: 정적/동적 질문·target_key·ID 패턴 경계.
-- `tests/contract/test_render.py`: 기존 render fixture의 state·위치·요청 바이트·해시 통합 검증.
-- `tests/contract/test_request.py`: ID·타입·선택지 개수·casefold·중복·순서·사본 분리.
-- `tests/contract/test_response.py`: 모든 기존 응답의 str/bytes 검증·사유 우선순위·usage 경고.
-- `tests/contract/test_b1_prompt.py`: 기존 라벨 대응·새 prompt fixture·설정 사본·라벨 수 제한.
-- `tests/score/test_answers.py`: 기존 답/B1 fixture·strip·중복·동률·프롬프트/검증기 연결.
-- `tests/score/test_f1.py`: 기존 F1 fixture·출현 클래스 순서·길이 불일치.
-- `tests/score/test_calibration.py`: 기존 보정 fixture·bin 경계·서로 다른 선택지·답 파서 연결.
-- `tests/score/test_kosgd_slots.py`: 기존 칸 fixture·copy_prev 별도 판정·칸별/평균 Brier 반례.
-- `tests/score/test_tasks.py`: MISSING·KoSGD fixture의 실제 요청 채점, 부분 결측 거부·B1 병합·상태·길이·독립 사본.
-- `tests/score/test_threshold.py`: 기존 임계값·seal fixture 재계산, 정확한 위험 경계·dev 대표 완료·단계 분리.
+- `tests/run/conftest.py`, `executor_support.py`: 합성 설정·시도·실제 gate 연결·R3 메모리 계획 치환.
+- `tests/run/test_executor.py`: 순차 실행·Retry-After·바이트·fsync 순서·B1 오류 후 계속·빈 단계.
+- `tests/run/test_executor_fixtures.py`: 기존 완료/중복/terminal/retry_budget과 B1 부분 답 구조를 실제 실행기에 통과.
+- `tests/run/test_executor_interrupt.py`: terminal fsync 뒤 복구·미기록 번호 재사용 한계·B1 호출 사이 재개.
+- `tests/run/test_resume_check.py`: 전체 기록 선검사·완료/뒤 항목 오류의 무변경 거부·non-terminal 소진.
+- `tests/run/test_derive.py`, `tests/io/test_derived_stage.py`: 파생 상태/사본·질문/완료 대조·출처·중단 재개·빈 dev 봉인.
+- `tests/run/test_executor_live.py`: 실제 client의 loopback 503→200; bind 권한 거부만 skip.
+- `tests/run/test_plan_calls.py`, `test_length.py`, `test_policy.py`, `test_outcome.py`: 계획·길이 경계·재시도·응답/B1/복구 fixture와 상태 결합.
+- `tests/run/test_encoders.py`, `test_encoder_trim.py`: 합성 WordLevel/BPE·해시·오프라인 로드·offsets·Jinja trim 경계.
+- `tests/types/`: 합성 표본과 전체 타입 왕복·frozen·null/비유한 수 거부·별칭 없는 사본·CallPlan 메모리 경계.
+- `tests/contract/test_model_config.py`, `test_b1_response.py`: 모델 설정·실행 누락·B1 로그확률/usage·기록 연결.
+- `tests/io/test_models.py`, `test_hashes.py`, `test_run_files.py`, `test_records.py`: 설정·해시·정규 JSON·원자 교체·JSONL 복구/연속성/fsync.
+- `tests/client/`: 가짜 전송/시계·loopback·proxy/리디렉트 금지·부분 응답·봉투/라벨 바이트·AttemptRecord.
+- `tests/conftest.py`: 격리 Python 경로·동명 시험의 importlib 수집.
+- `tests/contract/test_taskspec.py`, `test_render.py`, `test_request.py`: 질문/target 경계·렌더 바이트/해시·요청 ID/타입/선택지/중복/사본.
+- `tests/contract/test_response.py`, `test_b1_prompt.py`: 응답 fixture·사유/usage 경고·B1 라벨/문구/설정 사본.
+- `tests/score/test_answers.py`, `test_f1.py`, `test_calibration.py`: 답/B1·F1·보정 fixture·동률/중복·클래스/길이/bin 경계·파서 연결.
+- `tests/score/test_kosgd_slots.py`, `test_tasks.py`, `test_threshold.py`: 칸/Brier·MISSING·B1 병합·상태/길이/사본·임계값/seal 재계산·위험 경계·dev 완료/단계 분리.
 - `tests/io/test_tasks.py`: 목록 순서·중복 JSON·B1 필수 키·틀 오류.
 - `tests/score/test_labels.py`: 모든 규칙 양/음성·정답 누락·타입·도구 호출·카탈로그 순서.
 - `tests/data/test_expand.py`: 기존 KorFin fixture·무상한/실제 ID 충돌·중괄호·정답 클래스.
 - `tests/data/items/conftest.py`: 동결 task와 합성 SplitPlan 준비.
-- `tests/data/items/test_kosgd.py`: 두 판·직전 USER·state·카탈로그/묶음 오류.
-- `tests/data/items/test_functionchat.py`: 정규화·도구 선택지·extra·원본 불변.
-- `tests/data/items/test_kmhas.py`: 단계 순서·충돌·분할 오류·동결 설정/B1 통합.
-- `tests/data/items/test_kote.py`: 과반수·감정 강등·라벨 충돌.
-- `tests/data/items/test_korfin.py`: SID 순서·정답 연결·미포함 flag의 항목 단위 요약.
-- `tests/data/items/test_klue_mrc.py`: state·bool 정답·층·빈 단계 요약.
+- `tests/data/items/test_kosgd.py`, `test_functionchat.py`: 두 판·직전 USER·카탈로그/묶음·도구 선택지·extra·원본 불변.
+- `tests/data/items/test_kmhas.py`, `test_kote.py`: 단계/분할·동결 설정/B1·과반수·감정 강등·라벨 충돌.
+- `tests/data/items/test_korfin.py`, `test_klue_mrc.py`: SID/정답/flag 연결·state·bool·층·빈 단계 요약.
 - `tests/run/test_item_summary.py`: tmp_path CLI 전체 경로·extra·원문 누출 없음·오류 종료.
 - `tests/io/test_config.py`: 안전 YAML·중복 키·검사기 위임.
 - `tests/io/test_sources_kosgd.py`: USER 위치·dialogue·services·파일 순서·선정 읽기·중복 대화 거부.
@@ -198,14 +186,11 @@ extra는 명세 B4.3 그대로 test 대표 완료와 **존재하는** seal만 �
 FIXTURE_CONFLICT: `seal/cases.json`의 tampered/hash_mismatch/dev_changed는 start_allowed=true지만 기존 seal을 설치하면 명세 B4.2·계약 §8-6 A에 따라 거부해야 한다. start_allowed는 봉인 전 첫 진입으로 시험하고, 제공된 seal을 설치한 resume는 별도 거부 시험으로 고정했다. 기존 fixture는 수정하지 않았다. certify의 재계산·mtime 판정은 ⑥b 범위다.
 gate는 tail 복구의 중간 손상/잘못된 기록 거부도 쓰기 전에 발견한다. 검사 거부 메시지에 원문을 넣지 않는다. 이 순서는 단일 실행자 기준이며 외부 동시 변경의 트랜잭션 격리를 제공하지 않는다.
 
-작업 ② 범위의 SPEC_AMBIGUOUS / FIXTURE_CONFLICT 없음. 반박 10건은 계약 판 3 보정 4 와 Claude(조율자) 판정으로 해결했다 (사용자 결정 아님).
-작업 ③a의 반박 11건은 보정 6과 사용자 승인으로 해결했다. 남은 SPEC_AMBIGUOUS / FIXTURE_CONFLICT 없음.
-승인된 fixture 변경: union_find.expected.groups의 구성원 11–15를 문자열로 변경; label_conflicts.expected.notes의 옛 키를 label_conflict_groups_total/pool (각 1)로 대체.
-deterministic.json은 변경하지 않았으며 중간 순서와 최종 정렬을 따로 검증한다.
+⑤d SPEC_AMBIGUOUS / FIXTURE_CONFLICT 없음: R1–R5 반영. 기존 fixture는 수정하지 않는다. 시험에서만 R3대로 계획의 해시/바이트를 메모리 치환하며 B1 partial은 상태·사유·답 키 구조만 비교한다.
+②·③a 반박은 보정 4·6으로 해결했다. 당시 승인된 fixture 변경은 union_find 구성원 11–15 문자열화·label_conflicts notes 키 변경이며 deterministic.json은 불변이다.
 §10의 systemone 서버 인코더·길이 거부 응답 확인은 P0 후속 작업이다. B1 로컬 offsets 생성은 구현했다.
 ⑤a SPEC_AMBIGUOUS: threshold_cases의 232개 축약 outcome에는 질문 ID가 없어 roles={}로 추가했다.
-현재 길이 fixture는 이미 측정된 합성 LengthInfo를 입력으로 삼는다. ⑤b SPEC_AMBIGUOUS / FIXTURE_CONFLICT 없음.
-⑥a-1 반박 R1은 §7-2의 부분 결측 거부로 반영했다. 남은 SPEC_AMBIGUOUS / FIXTURE_CONFLICT 없음.
+길이 fixture는 합성 LengthInfo 입력이다. ⑤b·⑥a-1의 남은 SPEC_AMBIGUOUS / FIXTURE_CONFLICT는 없으며 부분 결측은 §7-2대로 거부한다.
 P0-B1: null/빈 해시 목록은 미확정으로 거부한다. user는 하나이며 state 접두사·trim 뒤 본문의 유일성을 검사하고 앞 공백만큼 state 범위·대상 끝을 보정한다. 전부 공백 state·state로 끝나는 user·state까지 침범하는 뒤쪽 trim은 거부한다. offsets는 start 비감소·0 ≤ start ≤ end를 요구하며 겹침·반복을 허용하고 대상 문자를 덮는 마지막 토큰 다음 번호를 반환한다. state 시작 경계를 가로지르는 음수 상대 offset은 ValueError이며 임의로 자르지 않는다.
 
 작업 ③b: 반박 반영 R1–R6 구현. extra 의미 검사는 구성원 소속을 검사한다. 라벨 변경 감지는 fingerprint 입력 해시 검사로 남긴다. 정답 규칙은 누락을 MISSING으로 대체하지 않는다. 요약은 dev/test/extra별이며 noul 선택지 수는 2, flag 접두별 항목 수를 센다.
