@@ -15,7 +15,6 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
-from typing import Any, Dict, List
 
 
 SCORING_DIR = Path(__file__).resolve().parents[1] / "scoring"
@@ -70,24 +69,13 @@ _result_spec.loader.exec_module(result_observability)
 
 
 def _load_runner_helpers():
-    """Load pure runner helpers without importing optional benchmark dependencies."""
-    parsed = ast.parse(RUNNER_PATH.read_text(encoding="utf-8"), filename=str(RUNNER_PATH))
-    wanted = {"convert_dataset_to_tasks", "simplify_result"}
-    functions = [
-        node
-        for node in parsed.body
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name in wanted
-    ]
-    namespace = {
-        "Any": Any,
-        "Dict": Dict,
-        "List": List,
-        "json": json,
-        "completion_latency_from_task": result_observability.completion_latency_from_task,
-        "finish_reason_fields": result_observability.finish_reason_fields,
-    }
-    exec(compile(ast.Module(body=functions, type_ignores=[]), str(RUNNER_PATH), "exec"), namespace)
-    return namespace
+    """Import the complete runner so extracted helpers remain covered."""
+    import pytest
+    from _agent_fakes import load_runner
+
+    with pytest.MonkeyPatch.context() as monkeypatch:
+        module = load_runner(monkeypatch, Path(tempfile.gettempdir()))
+    return vars(module)
 
 
 runner_helpers = _load_runner_helpers()

@@ -12,9 +12,8 @@ import os
 import signal
 import sys
 import tempfile
-from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict
 
 
 PARSER_PATH = (
@@ -70,42 +69,13 @@ def _load_adapter_parse_class():
 
 
 def _load_save_detailed_results():
-    """벤치 선택 의존성 없이 실제 artifact 저장 함수를 로드한다."""
-    parsed = ast.parse(RUNNER_PATH.read_text(encoding="utf-8"), filename=str(RUNNER_PATH))
-    # 디코딩 프로비넌스 헬퍼도 **실제 구현으로** 함께 로드한다. 스텁으로 때우면
-    # 산출물이 실제로 무엇을 기록하는지 이 테스트가 검증하지 못한다.
-    wanted = ("_decoding_provenance", "resolve_results_model_dir", "save_detailed_results")
-    functions = [
-        node
-        for node in parsed.body
-        if isinstance(node, ast.FunctionDef) and node.name in wanted
-    ]
-    missing = set(wanted) - {node.name for node in functions}
-    if missing:
-        raise AssertionError(f"러너에서 함수를 찾지 못했다: {sorted(missing)}")
-    namespace = {
-        "Any": Any,
-        "Dict": Dict,
-        "List": List,
-        "Optional": Optional,
-        "Path": Path,
-        "datetime": datetime,
-        "json": json,
-        "os": os,
-        "sys": sys,
-        # 실제 모듈과 같은 위치에서 실행되는 것처럼 만든다 — 헬퍼가 shared/ 를
-        # __file__ 기준으로 찾는다.
-        "__file__": str(RUNNER_PATH),
-        "simplify_result": lambda result: dict(result),
-        "build_observability_metadata": lambda _results: {
-            "tasks_with_length_finish_reason": 0
-        },
-    }
-    exec(
-        compile(ast.Module(body=functions, type_ignores=[]), str(RUNNER_PATH), "exec"),
-        namespace,
-    )
-    return namespace["save_detailed_results"]
+    """Import the complete runner, including its real persistence helpers."""
+    import pytest
+    from _agent_fakes import load_runner
+
+    with pytest.MonkeyPatch.context() as monkeypatch:
+        module = load_runner(monkeypatch, Path(tempfile.gettempdir()))
+    return module.save_detailed_results
 
 
 AdapterTextParser = _load_adapter_parse_class()
