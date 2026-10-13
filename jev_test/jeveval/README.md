@@ -1,6 +1,6 @@
-# jeveval — P1 작업 ⑤b 기능 지도
+# jeveval — P1 작업 ⑥a-1 기능 지도
 
-P1_CONTRACT.md 판 3 보정 10의 공유 실행 기반과 순수 호출 계획·길이·재시도 정책·결과 변환을 구현했다.
+P1_CONTRACT.md 판 3 보정 10의 공유 실행 기반과 순수 호출 계획·길이·재시도 정책·결과 변환, 요청 채점·개발 임계값을 구현했다.
 테스트는 합성 fixture·tmp_path와 동결 task 설정, 127.0.0.1 서버를 사용한다. 실행기는 후속 작업이다.
 
 ## 코드
@@ -32,6 +32,8 @@ P1_CONTRACT.md 판 3 보정 10의 공유 실행 기반과 순수 호출 계획·
 - `score/f1.py`: 출현 클래스 macro-F1과 support·예측 수·tp·재현율·정밀도.
 - `score/calibration.py`: 15 bin top-label ECE·one-hot Brier·clip log loss.
 - `score/kosgd_slots.py`: 카탈로그 순서의 고정 정답 칸·중복·묶음 정답·순서 진단.
+- `score/tasks.py`: 호출별 답 병합·역할 보존, 성공 질문 전체 확신·정답 마스크·KoSGD 묶음 오류·최대 길이.
+- `score/threshold.py`: 정확한 위험 경계·동점 묶음 임계값, dev 대표 완료 대조·ThresholdFile 조립.
 - `io/__init__.py`: 파일 입출력 네임스페이스.
 - `io/records.py`: JSONL 추가·flush/fsync·타입/호출 연속성 검사·읽기와 분리된 끝 줄 복구.
 - `client/__init__.py`: 단일 시도 전송 네임스페이스.
@@ -93,6 +95,8 @@ resume은 append 전에 repair_tail을 호출해야 한다. read_attempts/read_f
 재시도 5회는 기록된 시도 기준이다. 전송 뒤 fsync 전에 중단되면 실제 전송이 더 일어날 수 있다.
 call_record는 상한에 이른 non-terminal도 재전송 없이 복구하며, 상한 초과·기록 연결 불일치는 거부한다.
 plan_calls·length·policy·outcome은 파일·네트워크·시계·난수를 쓰지 않는다. 실제 길이 측정은 P0, executor·gate는 후속 작업이다.
+score/tasks는 KoSGD 한 칸만 MISSING이면 상태와 무관하게 거부하고, 두 칸 모두 MISSING이면 묶음을 마스크에서 뺀다.
+score/threshold의 호출자는 dev_complete를 통과한 dev 결과와 원본 바이트 sha256·nbytes를 넘긴다. 단계 입력 복원·gate·seal은 후속 ⑤c, certify는 ⑥b다.
 
 ## 테스트
 
@@ -130,6 +134,8 @@ plan_calls·length·policy·outcome은 파일·네트워크·시계·난수를 �
 - `tests/score/test_f1.py`: 기존 F1 fixture·출현 클래스 순서·길이 불일치.
 - `tests/score/test_calibration.py`: 기존 보정 fixture·bin 경계·서로 다른 선택지·답 파서 연결.
 - `tests/score/test_kosgd_slots.py`: 기존 칸 fixture·copy_prev 별도 판정·칸별/평균 Brier 반례.
+- `tests/score/test_tasks.py`: MISSING·KoSGD fixture의 실제 요청 채점, 부분 결측 거부·B1 병합·상태·길이·독립 사본.
+- `tests/score/test_threshold.py`: 기존 임계값·seal fixture 재계산, 정확한 위험 경계·dev 대표 완료·단계 분리.
 - `tests/io/test_tasks.py`: 목록 순서·중복 JSON·B1 필수 키·틀 오류.
 - `tests/score/test_labels.py`: 모든 규칙 양/음성·정답 누락·타입·도구 호출·카탈로그 순서.
 - `tests/data/test_expand.py`: 기존 KorFin fixture·무상한/실제 ID 충돌·중괄호·정답 클래스.
@@ -164,7 +170,7 @@ plan_calls·length·policy·outcome은 파일·네트워크·시계·난수를 �
 - `tests/fixtures/test_resume_fixtures.py`: JSONL 손상·중복·완료 ID·누적 재시도 자료.
 
 fixture 폴더: render, responses, answers, scoring, splits, expand, records, resume, length, seal, temperature, b1, canary. 각 README는 한 줄이다.
-fixture 검산은 실제 실행 모듈 통합 테스트를 대신하지 않는다. 작업 ②·⑤b 짝 테스트는 기존 fixture를 실제 함수에 통과시키며 기대값은 변경하지 않는다.
+fixture 검산은 실제 실행 모듈 통합 테스트를 대신하지 않는다. 작업 ②·⑤b·⑥a-1 짝 테스트는 기존 fixture를 실제 함수에 통과시키며 기대값은 변경하지 않는다.
 추가 fixture `tests/fixtures/b1/prompt.json`은 합성 설정으로 choice/noul 문구·매개변수를 고정한다.
 canary는 표식 있는 입력만 만들며, 일곱 커밋 출력의 누출 검사는 작업 ⑥에서 한다.
 
@@ -191,6 +197,7 @@ deterministic.json은 변경하지 않았으며 중간 순서와 최종 정렬�
 §10의 서버 인코더·토큰 offsets 생성·길이 거부 응답 확인은 P0 후속 작업이다.
 ⑤a SPEC_AMBIGUOUS: threshold_cases의 232개 축약 outcome에는 질문 ID가 없어 roles={}로 추가했다.
 현재 길이 fixture는 이미 측정된 합성 LengthInfo를 입력으로 삼는다. ⑤b SPEC_AMBIGUOUS / FIXTURE_CONFLICT 없음.
+⑥a-1 반박 R1은 §7-2의 부분 결측 거부로 반영했다. 남은 SPEC_AMBIGUOUS / FIXTURE_CONFLICT 없음.
 
 작업 ③b: 반박 반영 R1–R6 구현. extra 의미 검사는 구성원 소속을 검사한다. 라벨 변경 감지는 fingerprint 입력 해시 검사로 남긴다. 정답 규칙은 누락을 MISSING으로 대체하지 않는다.
 요약은 dev/test/extra별이며 noul 선택지 수는 2, flag 접두별 항목 수를 센다.
