@@ -54,5 +54,16 @@ grep -E "^[A-Za-z_][A-Za-z0-9_]*=" "$ENV_FILE" 2>/dev/null | while IFS='=' read 
   printf "  %-24s 길이 %s\n" "$name" "${#v}"
 done
 echo "--- 엔드포인트 ---"
-probe "192.168.0.7:18023" "OPENAI_API_KEY_7"
-probe "192.168.0.8:18023" "OPENAI_API_KEY"
+# 서버 IP 는 이 Mac 이 붙은 네트워크에 따라 바뀐다 (192.168.0.7/.8 ↔ 192.168.219.114/.115, 2026-09-26~27 실측).
+# 그래서 주소를 박지 않고 호스트 이름(mDNS .local)으로 찾는다. 못 찾으면 마지막으로 알려진 주소를 쓴다.
+resolve() {  # $1=hostname $2=fallback ip
+  local ip
+  ip="$(dscacheutil -q host -a name "$1.local" 2>/dev/null | awk '/ip_address/{print $2; exit}')"
+  [ -z "$ip" ] && ip="$(getent hosts "$1.local" 2>/dev/null | awk '{print $1; exit}')"
+  echo "${ip:-$2}"
+}
+H337F="$(resolve aitopatom-337f 192.168.0.7)"   # 키 OPENAI_API_KEY_7
+H22C3="$(resolve aitopatom-22c3 192.168.0.8)"   # 키 OPENAI_API_KEY
+echo "  aitopatom-337f → $H337F · aitopatom-22c3 → $H22C3"
+probe "$H337F:18023" "OPENAI_API_KEY_7"
+probe "$H22C3:18023" "OPENAI_API_KEY"
