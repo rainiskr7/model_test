@@ -45,6 +45,7 @@ from typing import Any, Iterable, Mapping
 __all__ = [
     "SNAPSHOT",
     "REPEATABILITY_OBSERVED",
+    "NOT_MEASURED",
     "MIN_REPEATS",
     "credential",
     "aggregate_credential",
@@ -53,6 +54,11 @@ __all__ = [
 
 SNAPSHOT = "snapshot"
 REPEATABILITY_OBSERVED = "repeatability_observed"
+# 항목이 하나도 남지 않은 코호트. **0점이 아니라 "재지 못했다"** 이다.
+# 이 구분이 없으면 전 항목이 인프라 오류로 죽은 런 3회가 서로 완전히 일치해
+# `repeatability_observed` 로 승격된다 (실측: diffusion telecom r1·r2·r3 이
+# 40/40 BadRequestError 였는데 pass_counts=[0,0,0] 의 "안정된 0점"이 됐다).
+NOT_MEASURED = "not_measured"
 
 # k=2 는 뒤집힘의 존재만 알려주고 다수결을 만들지 못한다(2런에서 1:1 은 다수가
 # 없다). 반복성 스크리닝의 최소치를 3 으로 둔다.
@@ -79,6 +85,23 @@ def credential(runs: Iterable[Mapping[str, Any]]) -> dict[str, Any]:
 
     shared_items = set.intersection(*item_sets) if item_sets else set()
     dropped = sorted(set().union(*item_sets) - shared_items) if item_sets else []
+
+    # 공통 항목이 없으면 반복해도 관측된 것이 없다. 여기서 끊지 않으면 아래
+    # 로직이 빈 집합끼리 완전히 일치한다고 보고 최고 등급을 준다 — 측정 실패가
+    # "완벽하게 재현되는 0점"으로 발행되는 경로다.
+    if not shared_items:
+        return {
+            "claim_class": NOT_MEASURED,
+            "k": len(runs),
+            "run_ids": run_ids,
+            "measured_items": 0,
+            "coverage_dropped": dropped,
+            "pass_counts": [0 for _ in runs],
+            "reason": (
+                "런들이 공통으로 채점한 항목이 없다 — 반복 횟수와 무관하게 "
+                "이 코호트는 측정된 것이 없다"
+            ),
+        }
 
     passed_sets = [
         {item for item in shared_items if (run.get("items") or {}).get(item)}

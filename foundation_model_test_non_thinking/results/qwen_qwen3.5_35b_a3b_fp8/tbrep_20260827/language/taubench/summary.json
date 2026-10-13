@@ -2,7 +2,7 @@
   "benchmark": "sierra-research/tau2-bench (state/action, agent-user-tools)",
   "model": "qwen_qwen3.5_35b_a3b_fp8",
   "track": "taubench",
-  "scoring_version": "taubench_state_v1",
+  "scoring_version": "taubench_state_v2",
   "score_provenance": "upstream tau2 reward_info.reward; no local reward recomputation",
   "harness_integrity": {
     "architecture": "upstream_tau2_framework",
@@ -46,6 +46,8 @@
         "user_model": "openrouter/openai/gpt-4.1-mini",
         "user_request_timeout": 120.0,
         "user_max_tokens": 16384,
+        "user_temperature": 0.0,
+        "user_api_base": null,
         "pinned": true
       },
       "source": "tau2 results.info.agent_info/user_info"
@@ -100,6 +102,7 @@
       "reason": null,
       "pass_rate": 0.7894736842105263,
       "pass_rate_source": "tau2 results.simulations[].reward_info.reward",
+      "pass_rate_note": "후보 프로토콜 실패(candidate_protocol_failures)는 보상 0 의 측정된 실패로 분모·실패에 포함",
       "pass_rate_strict": null,
       "pass_rate_strict_denominator": 19,
       "pass_rate_strict_reason": "후보 귀책으로 확정되지 않은 미완주가 있어 계산하지 않는다: {'Timeout@agent': 1}",
@@ -113,12 +116,28 @@
       },
       "runnable_tasks": 20,
       "result_records": 20,
+      "distinct_tasks": 20,
+      "distinct_tasks_measured": 19,
+      "trials": [
+        1
+      ],
+      "pass_hat_k": {
+        "tasks": 19,
+        "max_k": 1,
+        "trials_per_task": [
+          1
+        ],
+        "pass_hat_k": {
+          "pass^1": 0.7894736842105263
+        }
+      },
       "measured": 19,
       "passed": 15,
       "failed": 4,
       "not_measured_result_records": {
         "upstream_reward_missing": 1
       },
+      "candidate_protocol_failures": {},
       "termination_reasons": {
         "infrastructure_error": 1,
         "user_stop": 19
@@ -445,10 +464,10 @@
   "publish_status": {
     "publishable": false,
     "failures": [
-      "by_domain.airline: 20건 중 19건만 측정됐다 — 부분 실행이다",
+      "by_domain.airline: 20개 과제 중 19개만 측정됐다 — 부분 실행이다",
       "by_domain.airline: 완주 실패 1건 (environment=1) — 완전 측정이 아니다"
     ],
     "warnings": [],
-    "gate_scoring_version": "taubench_state_v1"
+    "gate_scoring_version": "taubench_state_v2"
   }
 }

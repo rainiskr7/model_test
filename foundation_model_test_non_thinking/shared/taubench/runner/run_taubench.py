@@ -83,6 +83,32 @@ def _unsupported_sampling_params() -> list[str]:
         return []
 
 
+def _read_shim_record(path: Path) -> dict[str, list[str]] | None:
+    """shim 이 남긴 "실제로 제거한 파라미터" 기록을 읽는다.
+
+    기록이 없거나 깨졌으면 **None** 을 돌려준다. 빈 목록과 구분해야 한다:
+    빈 목록은 "관측했고 뺀 것이 없다", None 은 "관측 자체를 못 했다"이다.
+    둘을 같은 값으로 접으면, 실제로 seed 를 빼고 돈 런이 기록만 유실됐을 때
+    제약 없이 돈 런과 같은 코호트로 묶인다.
+    """
+
+    try:
+        record = json.loads(path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return None
+    except Exception as exc:
+        print(f"[taubench] shim 기록을 읽지 못했다: {exc}", file=sys.stderr)
+        return None
+    removed = record.get("removed_params") or []
+    adjusted = record.get("adjusted_params") or []
+    return {
+        "removed": sorted(str(name) for name in removed),
+        "adjusted": sorted(str(name) for name in adjusted),
+        "user_removed": sorted(str(n) for n in record.get("user_removed_params") or []),
+        "request_counts": record.get("request_counts") or {},
+    }
+
+
 def apply_user_serving_constraints(user_llm_args: dict, *, inherited: bool = True) -> list[str]:
     """로컬 엔드포인트로 가는 사용자 시뮬레이터 인자에서 거부 파라미터를 뺀다.
 
@@ -232,10 +258,13 @@ def build_upstream_command(
 ) -> list[str]:
     """tau2 CLI에 공식 split과 실제 실행 id를 함께 전달한다."""
     selected_ids = list(task_ids)
+    # `-m tau2.cli` 가 아니라 shim 을 부른다. shim 은 tau2.cli 를 그대로 실행하되
+    # 서빙 백엔드가 거부하는 sampling 파라미터를 요청 직전에 뺀다 — tau2 가
+    # 시뮬레이션마다 llm_args["seed"] 를 런타임 주입하므로 --agent-llm-args 로는
+    # 막을 수 없다 (tau2_cli_shim.py 의 주석 참조).
     return [
         sys.executable,
-        "-m",
-        "tau2.cli",
+        str(Path(__file__).resolve().parent / "tau2_cli_shim.py"),
         "run",
         "--domain",
         args.domain,
@@ -548,6 +577,10 @@ def main(argv: Optional[list[str]] = None) -> int:
                 file=sys.stderr,
             )
 
+        # 후보 경로에서 뺄 수 있는 파라미터. 실제로 무엇이 빠졌는지는 shim 이
+        # 요청을 보며 판단하므로, 여기서는 "후보 목록"까지만 안다.
+        candidate_unsupported_params = _unsupported_sampling_params()
+
         manifest: dict[str, Any] = {
             "status": "running",
             "model": args.model,
@@ -614,13 +647,21 @@ def main(argv: Optional[list[str]] = None) -> int:
                 "litellm_num_retries": 0,
                 "max_tokens": args.max_tokens,
                 "temperature_sent": False,
-                # 후보 경로에는 여전히 프로파일을 적용하지 않는다(temperature 를
-                # 애초에 보내지 않으므로 diffusion 에서도 400 이 나지 않는다).
-                # 사용자 시뮬레이터 경로는 다르다 — 아래에 실제로 무엇을 뺐는지
-                # 남긴다. 비어 있으면 뺀 것이 없다는 뜻이고, 값이 있으면 그 런은
-                # **결정론 제어 없이** 돌았다는 뜻이다.
-                "serving_profile_applied": False,
+                # 후보 경로에도 프로파일을 적용한다. 예전 주석은 "temperature 를
+                # 안 보내니 후보는 안전하다" 였는데 **틀렸다**: tau2 가 시뮬레이션
+                # 마다 llm_args["seed"] 를 주입해 diffusion 백엔드가 40/40 을 400 으로
+                # 거부했다 (r1·r2·r3). 실제로 무엇이 빠졌는지는 런이 끝난 뒤
+                # shim 기록을 읽어 candidate_removed_sampling_params 에 채운다.
+                # 비어 있으면 뺀 것이 없다는 뜻이고, 값이 있으면 그 런은 그
+                # 파라미터의 **제어 없이** 돌았다는 뜻이다.
+                "serving_profile_applied": bool(candidate_unsupported_params),
+                # 런이 끝나고 shim 기록을 읽은 뒤에야 True 가 된다. 도중에 죽으면
+                # 이 값이 남아, 관측하지 못했다는 사실이 산출물에 남는다.
                 "serving_profile_observable": False,
+                "candidate_serving_profile_observation": "unobserved",
+                "candidate_unsupported_sampling_params": candidate_unsupported_params,
+                "candidate_removed_sampling_params": [],
+                "candidate_adjusted_serving_params": [],
                 "user_removed_sampling_params": user_removed_params,
                 # **true 가 결정론을 뜻하지 않는다.** 재현을 부정하는 근거만 싣는다.
                 "user_sampling_controls_removed": (
@@ -641,6 +682,14 @@ def main(argv: Optional[list[str]] = None) -> int:
 
         env = os.environ.copy()
         env["TAU2_DATA_DIR"] = str(bench_dir / "data")
+        # shim 계약: 이 주소로 가는 요청에서만 거부 파라미터를 뺀다. 사용자
+        # 시뮬레이터를 다른 서버에 붙였다면 그쪽은 건드리지 않는다.
+        env["TAUBENCH_CONSTRAINED_API_BASE"] = api_base
+        # 역할 구분용. 같은 주소로 가는 요청이라도 후보와 사용자 시뮬레이터의
+        # 제거를 한 칸에 적으면 사용자 쪽 게이트를 우회한다.
+        env["TAUBENCH_CANDIDATE_MODEL"] = litellm_model_name(args.model)
+        shim_record_path = results_dir / ".shim_removed_params.json"
+        env["TAUBENCH_REMOVED_PARAMS_OUT"] = str(shim_record_path)
         command = build_upstream_command(
             args, llm_args, user_llm_args, upstream_dir, selected_ids
         )
@@ -656,6 +705,59 @@ def main(argv: Optional[list[str]] = None) -> int:
             n_redacted = redact_secrets_in_upstream(upstream_dir)
             if n_redacted:
                 print(f"[taubench] api_key 를 {n_redacted}개 파일에서 제거했다")
+        # shim 이 실제로 무엇을 뺐는지 읽어 매니페스트에 남긴다. 기록이 없으면
+        # 뺐다고 말하지 않는다 — 증거 없는 필드를 채우면 게이트가 거짓을 읽는다.
+        shim_record = _read_shim_record(shim_record_path)
+        integrity = manifest["harness_integrity"]
+        if shim_record is None:
+            # 관측 실패. 프로파일이 걸려 있었다면 무엇이 빠졌는지 알 수 없으므로
+            # "뺀 것 없음"으로 적지 않는다 — 게이트가 이 런을 제약 없는 런과
+            # 같은 코호트로 묶으면 안 된다.
+            removed_by_shim, adjusted_by_shim = [], []
+            integrity["serving_profile_observable"] = False
+            integrity["candidate_serving_profile_observation"] = "unobserved"
+            if candidate_unsupported_params:
+                print(
+                    "[taubench] 경고: 서빙 프로파일이 걸린 런인데 shim 기록이 없다 "
+                    "— 무엇이 제거됐는지 확인할 수 없다",
+                    file=sys.stderr,
+                )
+        else:
+            removed_by_shim = shim_record["removed"]
+            adjusted_by_shim = shim_record["adjusted"]
+            integrity["serving_profile_observable"] = True
+            integrity["candidate_serving_profile_observation"] = "observed"
+            integrity["shim_request_counts"] = shim_record["request_counts"]
+            # shim 이 사용자 요청에서 뺀 것은 **사용자 칸**에 합친다. 이 경로는
+            # --user-base-url 을 후보와 같은 주소로 줬을 때만 생긴다.
+            if shim_record["user_removed"]:
+                integrity["user_removed_sampling_params"] = sorted(
+                    set(user_removed_params) | set(shim_record["user_removed"])
+                )
+                print(
+                    "[taubench] 사용자 요청에서도 서빙 제약으로 파라미터가 제거됐다: "
+                    f"{', '.join(shim_record['user_removed'])}"
+                )
+            if candidate_unsupported_params and not shim_record["request_counts"].get("matched"):
+                print(
+                    "[taubench] 경고: 서빙 프로파일이 걸렸는데 제약 주소로 간 요청이 "
+                    "한 건도 없다 — 주소 매칭을 확인하라",
+                    file=sys.stderr,
+                )
+        integrity["candidate_removed_sampling_params"] = removed_by_shim
+        # 값을 바꾼 것(max_tokens 상한, skip_special_tokens 강제)도 남긴다.
+        # 제거는 아니지만 후보의 실행 규약이 선언과 다르다는 사실은 같다.
+        integrity["candidate_adjusted_serving_params"] = adjusted_by_shim
+        if removed_by_shim:
+            print(
+                "[taubench] 후보 요청에서 서빙 백엔드가 거부하는 파라미터를 "
+                f"제거했다: {', '.join(removed_by_shim)} — 이 런은 그 제어 없이 돌았다"
+            )
+        if adjusted_by_shim:
+            print(
+                "[taubench] 후보 요청의 서빙 파라미터를 프로파일에 맞춰 조정했다: "
+                f"{', '.join(adjusted_by_shim)}"
+            )
         manifest["status"] = "completed"
         manifest["completed_at"] = datetime.now().isoformat()
         manifest["upstream_results"] = str(

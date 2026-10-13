@@ -2,7 +2,7 @@
   "benchmark": "sierra-research/tau2-bench (state/action, agent-user-tools)",
   "model": "qwen_qwen3.5_35b_a3b_fp8",
   "track": "taubench",
-  "scoring_version": "taubench_state_v1",
+  "scoring_version": "taubench_state_v2",
   "score_provenance": "upstream tau2 reward_info.reward; no local reward recomputation",
   "harness_integrity": {
     "architecture": "upstream_tau2_framework",
@@ -46,6 +46,8 @@
         "user_model": "openrouter/openai/gpt-4.1-mini",
         "user_request_timeout": 120.0,
         "user_max_tokens": 16384,
+        "user_temperature": 0.0,
+        "user_api_base": null,
         "pinned": true
       },
       "source": "tau2 results.info.agent_info/user_info"
@@ -120,6 +122,7 @@
       "reason": null,
       "pass_rate": 0.9696969696969697,
       "pass_rate_source": "tau2 results.simulations[].reward_info.reward",
+      "pass_rate_note": "후보 프로토콜 실패(candidate_protocol_failures)는 보상 0 의 측정된 실패로 분모·실패에 포함",
       "pass_rate_strict": null,
       "pass_rate_strict_denominator": 33,
       "pass_rate_strict_reason": "후보 귀책으로 확정되지 않은 미완주가 있어 계산하지 않는다: {'InternalServerError@agent': 2, 'ServiceUnavailableError@agent': 2, 'Timeout@agent': 3}",
@@ -157,6 +160,7 @@
       "not_measured_result_records": {
         "upstream_reward_missing": 7
       },
+      "candidate_protocol_failures": {},
       "termination_reasons": {
         "infrastructure_error": 7,
         "user_stop": 33
@@ -679,6 +683,6 @@
       "by_domain.telecom: 완주 실패 7건 (environment=5, unclassified=2) — 완전 측정이 아니다"
     ],
     "warnings": [],
-    "gate_scoring_version": "taubench_state_v1"
+    "gate_scoring_version": "taubench_state_v2"
   }
 }

@@ -11,6 +11,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from publish.claims import (  # noqa: E402
     MIN_REPEATS,
+    NOT_MEASURED,
     aggregate_credential,
     REPEATABILITY_OBSERVED,
     SNAPSHOT,
@@ -46,6 +47,44 @@ class ClaimClass(unittest.TestCase):
 
     def test_no_runs_is_a_snapshot_not_a_crash(self):
         self.assertEqual(credential([])["claim_class"], SNAPSHOT)
+
+
+class NoSharedItemsMeansNotMeasured(unittest.TestCase):
+    """공통 채점 항목이 없으면 0점이 아니라 "재지 못했다"이다.
+
+    실측: diffusion telecom r1·r2·r3 가 40/40 BadRequestError 라 채점된 항목이
+    없었는데, pass_counts=[0,0,0] 이 완전히 일치해 repeatability_observed 로
+    승격됐다. 측정 실패가 "완벽하게 재현되는 0점"으로 발행되는 경로를 막는다.
+    """
+
+    def test_three_empty_runs_are_not_measured(self):
+        cred = credential([run("r1"), run("r2"), run("r3")])
+        self.assertEqual(cred["claim_class"], NOT_MEASURED)
+        self.assertEqual(cred["k"], 3)
+        self.assertEqual(cred["measured_items"], 0)
+        self.assertEqual(cred["pass_counts"], [0, 0, 0])
+        self.assertEqual(cred["run_ids"], ["r1", "r2", "r3"])
+        self.assertIn("측정된 것이 없다", cred["reason"])
+
+    def test_disjoint_items_are_not_measured_despite_equal_pass_counts(self):
+        """통과 건수가 1·1·1 로 같아도 공통 항목이 없으면 측정이 아니다."""
+        cred = credential([
+            run("r1", a=True),
+            run("r2", b=True),
+            run("r3", c=True),
+        ])
+        self.assertEqual(cred["claim_class"], NOT_MEASURED)
+        self.assertEqual(cred["measured_items"], 0)
+        self.assertEqual(sorted(cred["coverage_dropped"]), ["a", "b", "c"])
+
+    def test_one_shared_item_is_measured(self):
+        cred = credential([
+            run("r1", a=True, b=True),
+            run("r2", a=True),
+            run("r3", a=True, c=True),
+        ])
+        self.assertNotEqual(cred["claim_class"], NOT_MEASURED)
+        self.assertEqual(cred["measured_items"], 1)
 
 
 class TheCounterexampleThatKillsScalarSpread(unittest.TestCase):

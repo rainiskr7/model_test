@@ -1041,3 +1041,164 @@ class UserSimulatorServingConstraints(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class CandidateProtocolFailureTest(unittest.TestCase):
+    """후보가 도구 호출 대신 텍스트로 답해 tau2 가 죽인 시뮬레이션은 측정된 실패(보상 0)다.
+
+    2026-09-26 결정. 그 전에는 unclassified 미완주로 남아 발행이 막혔다 (diffusion 3런 모두
+    16/40, gemma 2런 10/40). 서버 장애와 달리 모델의 행동이므로 점수에 반영한다.
+    """
+
+    AGENT_TB = "agent_msg, self.agent_state = self.agent.generate_next_message(\n"
+    USER_TB = "user_msg, self.user_state = self.user.generate_next_message(\n"
+
+    @staticmethod
+    def _dead(task_id, traceback, error="LLMSoloAgent only supports tool calls.", error_type="ValueError"):
+        return {
+            "task_id": task_id,
+            "termination_reason": "infrastructure_error",
+            "info": {"error": error, "error_type": error_type, "error_traceback": traceback},
+            "messages": [],
+        }
+
+    def _summary(self, sims, ids=("a", "b", "c", "d")):
+        raw = raw_results([task(v, ["ENV_ASSERTION"]) for v in ids], sims)
+        return scorer.build_summary({"telecom": raw}, manifest(list(ids)), "taubench")
+
+    def test_no_tool_call_by_agent_counts_as_measured_failure_and_publishes(self):
+        summary = self._summary([
+            simulation("a", 1.0), simulation("b", 0.0),
+            self._dead("c", self.AGENT_TB), self._dead("d", self.AGENT_TB),
+        ])
+        entry = summary["by_domain"]["telecom"]
+        self.assertEqual(4, entry["measured"])
+        self.assertEqual(1, entry["passed"])
+        self.assertEqual(3, entry["failed"])
+        self.assertEqual(0.25, entry["pass_rate"])
+        self.assertEqual({"no_tool_call@agent": 2}, entry["candidate_protocol_failures"])
+        self.assertEqual(4, entry["distinct_tasks_measured"])
+        self.assertEqual({}, entry["incompletion_attribution"]["unclassified"])
+        records = {r["task_id"]: r for r in entry["task_results"]}
+        self.assertIs(False, records["c"]["passed"])
+        self.assertEqual("no_tool_call", records["c"]["protocol_failure"])
+        self.assertEqual("measured", records["c"]["evaluation_status"])
+        failures, _ = scorer.validate_summary(summary)
+        self.assertEqual([], failures)
+
+    def test_same_error_without_agent_traceback_stays_blocking(self):
+        """actor 를 모르면 후보에게 씌우지 않는다 — 발행도 막힌다."""
+        summary = self._summary([
+            simulation("a", 1.0), simulation("b", 0.0),
+            self._dead("c", None), self._dead("d", self.AGENT_TB),
+        ])
+        entry = summary["by_domain"]["telecom"]
+        self.assertEqual(3, entry["measured"])
+        self.assertEqual({"no_tool_call@agent": 1}, entry["candidate_protocol_failures"])
+        self.assertEqual({"ValueError@unknown": 1}, entry["incompletion_attribution"]["unclassified"])
+        failures, _ = scorer.validate_summary(summary)
+        self.assertTrue(any("완주 실패 1건" in f for f in failures), failures)
+        self.assertTrue(any("3개만 측정" in f for f in failures), failures)
+
+    def test_same_error_in_user_simulator_is_not_candidate(self):
+        summary = self._summary([
+            simulation("a", 1.0), simulation("b", 0.0), simulation("c", 0.0),
+            self._dead("d", self.USER_TB),
+        ])
+        entry = summary["by_domain"]["telecom"]
+        self.assertEqual({}, entry["candidate_protocol_failures"])
+        self.assertEqual({"ValueError@user": 1}, entry["incompletion_attribution"]["unclassified"])
+
+    def test_other_value_errors_are_not_protocol_failures(self):
+        summary = self._summary([
+            simulation("a", 1.0), simulation("b", 0.0), simulation("c", 0.0),
+            self._dead("d", self.AGENT_TB, error="some other ValueError"),
+        ])
+        entry = summary["by_domain"]["telecom"]
+        self.assertEqual({}, entry["candidate_protocol_failures"])
+        self.assertEqual({"ValueError@agent": 1}, entry["incompletion_attribution"]["unclassified"])
+
+    def test_scoring_version_bumped_for_new_rule(self):
+        self.assertEqual("taubench_state_v2", scorer.SCORING_VERSION)
+
+    EMPTY_ERROR = (
+        "AssistantMessage must have either content or tool_calls. "
+        "Got AssistantMessage\nis_final_chunk: True"
+    )
+    VALIDATE_TB = (
+        'Traceback (most recent call last):\n'
+        '  File "/venv/site-packages/tau2/orchestrator/orchestrator.py", line 861, in step\n'
+        '    agent_msg.validate()\n'
+        '    ~~~~~~~~~~~~~~~~~~^^\n'
+        '  File "/venv/site-packages/tau2/data_model/message.py", line 287, in validate\n'
+        '    raise ValueError(\n'
+    )
+
+    def test_empty_agent_message_counts_as_measured_failure(self):
+        summary = self._summary([
+            simulation("a", 1.0), simulation("b", 0.0),
+            self._dead("c", self.VALIDATE_TB, self.EMPTY_ERROR),
+            self._dead("d", self.VALIDATE_TB, self.EMPTY_ERROR),
+        ])
+        entry = summary["by_domain"]["telecom"]
+        self.assertEqual({"empty_message@agent": 2}, entry["candidate_protocol_failures"])
+        self.assertEqual({"pass_rate": 0.25, "measured": 4, "passed": 1, "failed": 3},
+                         summary["overall"])
+        self.assertEqual(4, entry["distinct_tasks_measured"])
+        self.assertEqual(0.25, entry["pass_rate_strict"])
+        self.assertEqual(0.25, entry["pass_hat_k"]["pass_hat_k"]["pass^1"])
+        self.assertEqual({}, entry["incompletion_attribution"]["unclassified"])
+        for record in entry["task_results"][2:]:
+            self.assertEqual("measured", record["evaluation_status"])
+            self.assertEqual("empty_message", record["protocol_failure"])
+            self.assertIs(False, record["passed"])
+        self.assertEqual([], scorer.validate_summary(summary)[0])
+
+    def test_empty_message_suffix_and_source_line_can_change(self):
+        prefix = "AssistantMessage must have either content or tool_calls"
+        for suffix in ("", ". Got AssistantMessage\nis_final_chunk: False\nchunk_id: 7",
+                       ". Got AssistantMessage\ncontent:    \nsource: text"):
+            with self.subTest(suffix=suffix):
+                dead = self._dead("a", self.VALIDATE_TB.replace("line 861", "line 999"),
+                                  prefix + suffix)
+                self.assertEqual("empty_message", scorer._candidate_protocol_failure(dead))
+
+    def test_empty_user_message_is_not_candidate_failure(self):
+        user_error = self.EMPTY_ERROR.replace("AssistantMessage", "UserMessage")
+        for tb in (self.VALIDATE_TB.replace("agent_msg", "user_msg"), self.VALIDATE_TB):
+            with self.subTest(traceback=tb):
+                summary = self._summary([
+                    simulation("a", 1.0), simulation("b", 0.0), simulation("c", 0.0),
+                    self._dead("d", tb, user_error),
+                ])
+                entry = summary["by_domain"]["telecom"]
+                self.assertEqual(3, entry["measured"])
+                self.assertEqual({}, entry["candidate_protocol_failures"])
+                self.assertEqual({"ValueError@unknown": 1},
+                                 entry["incompletion_attribution"]["unclassified"])
+                self.assertTrue(scorer.validate_summary(summary)[0])
+
+    def test_empty_assistant_message_requires_exact_agent_validation_frame(self):
+        for tb in (
+            None, self.AGENT_TB, self.USER_TB, "agent_msg.validate()",
+            self.VALIDATE_TB.replace("agent_msg", "user_msg"),
+            self.VALIDATE_TB.replace("in step", "in validate_message_history"),
+            self.VALIDATE_TB.replace("tau2/orchestrator/orchestrator.py", "other/orchestrator.py"),
+            self.VALIDATE_TB.replace("    agent_msg.validate()\n", "") +
+                '\n  File "/other.py", line 1, in step\n    agent_msg.validate()\n',
+        ):
+            with self.subTest(traceback=tb):
+                dead = self._dead("a", tb, self.EMPTY_ERROR)
+                self.assertIsNone(scorer._candidate_protocol_failure(dead))
+
+    def test_empty_message_keeps_other_error_types_and_terminations_unchanged(self):
+        for error_type in ("TypeError", "Timeout", "ContextWindowExceededError", ""):
+            with self.subTest(error_type=error_type):
+                dead = self._dead("a", self.VALIDATE_TB, self.EMPTY_ERROR, error_type)
+                self.assertIsNone(scorer._candidate_protocol_failure(dead))
+                candidate, environment, unclassified = scorer._classify_incompletions([dead])
+                self.assertEqual({}, candidate)
+                self.assertEqual(1, sum(environment.values()) + sum(unclassified.values()))
+        dead = self._dead("a", self.VALIDATE_TB, self.EMPTY_ERROR)
+        dead["termination_reason"] = "agent_stop"
+        self.assertIsNone(scorer._candidate_protocol_failure(dead))

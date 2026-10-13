@@ -133,13 +133,30 @@ def _blockers(summary: Mapping[str, Any]) -> list[str]:
 
 
 def _task_vector(summary: Mapping[str, Any]) -> dict[str, bool]:
-    """도메인 산출물이 실제로 기록한 전체 과제 벡터를 읽는다."""
+    """**채점된** 과제만 벡터에 넣는다.
+
+    예전에는 전체 task_results 를 넣고 `passed is True` 로 접었다. 그러면
+    채점되지 못한 과제(`evaluation_status == "not_measured"`, 예: 후보가
+    BadRequestError 로 한 턴도 못 돌린 경우)가 조용히 **실패 1건**으로
+    집계된다. 두 가지가 동시에 망가진다.
+
+    1. 전 항목이 인프라 오류로 죽은 런은 "모두 실패"가 되어, 세 번 반복하면
+       완전히 일치하는 벡터로 `repeatability_observed` 를 받는다. 측정 실패가
+       "안정된 0점"으로 발행된다 (실측: diffusion telecom r1·r2·r3).
+    2. 부분적으로만 채점된 런은 분모가 부풀려진다 (실측: gemma telecom 은
+       measured=30 인데 벡터는 40 항목이었고, 못 잰 10건이 실패로 깔렸다).
+
+    `evaluation_status` 를 기록하지 않는 옛 산출물은 판단 근거가 없으므로
+    종전대로 포함한다 — 없는 필드를 "측정 실패"로 단정하지 않는다.
+    """
 
     domain, entry = _domain_entry(summary)
     return {
         str(result["task_id"]): result.get("passed") is True
         for result in entry.get("task_results") or []
-        if isinstance(result, Mapping) and "task_id" in result
+        if isinstance(result, Mapping)
+        and "task_id" in result
+        and result.get("evaluation_status") != "not_measured"
     }
 
 
@@ -159,11 +176,14 @@ def _claims(summaries: Iterable[Mapping[str, Any]]) -> dict[str, Any]:
         grouped[replicate_key(summary)].append(summary)
 
     credentials: list[dict[str, Any]] = []
-    for (fingerprint, model), members in sorted(grouped.items()):
+    for (fingerprint, model, removed_controls), members in sorted(grouped.items()):
         protocol = comparison_fingerprint(members[0])
         credentials.append({
             "fingerprint": fingerprint,
             "model": model,
+            # 서빙 제약으로 후보 쪽에서 뺀 샘플링 제어. 비어 있지 않으면 그
+            # 코호트는 그 제어 없이 돌았다 (예: diffusion 은 seed 를 못 받는다).
+            "removed_sampling_controls": removed_controls,
             "protocol": protocol,
             "credential": credential([
                 {
@@ -181,6 +201,27 @@ def _claims(summaries: Iterable[Mapping[str, Any]]) -> dict[str, Any]:
     for entries in by_protocol.values():
         for index, left in enumerate(entries):
             for right in entries[index + 1:]:
+                # 같은 모델의 두 코호트는 **모델 간 우열의 대상이 아니다.**
+                # replicate_key 가 후보의 제거된 샘플링 제어까지 포함하면서
+                # 한 모델이 두 코호트로 갈릴 수 있게 됐고(seed 있는 런 / 없는 런),
+                # 그대로 두면 자기 자신을 상대로 "winner" 가 나온다.
+                # 서빙 조건 차이의 영향은 별도 질문이지 모델 비교가 아니다.
+                if left["model"] == right["model"]:
+                    verdicts.append({
+                        "left": left["model"],
+                        "right": right["model"],
+                        "left_removed_sampling_controls": left["removed_sampling_controls"],
+                        "right_removed_sampling_controls": right["removed_sampling_controls"],
+                        "verdict": {
+                            "comparable": False,
+                            "reason": (
+                                "같은 모델의 두 서빙 조건이다 — 모델 간 우열이 아니다 "
+                                f"(제거된 제어: '{left['removed_sampling_controls']}' vs "
+                                f"'{right['removed_sampling_controls']}')"
+                            ),
+                        },
+                    })
+                    continue
                 left_protocol, right_protocol = left["protocol"], right["protocol"]
                 if not (
                     left_protocol["comparable_across_candidates"]
@@ -194,7 +235,15 @@ def _claims(summaries: Iterable[Mapping[str, Any]]) -> dict[str, Any]:
                     verdict = {"comparable": False, "reason": "; ".join(dict.fromkeys(reasons))}
                 else:
                     verdict = comparable(left["credential"], right["credential"])
-                verdicts.append({"left": left["model"], "right": right["model"], "verdict": verdict})
+                verdicts.append({
+                    "left": left["model"],
+                    "right": right["model"],
+                    # 어느 서빙 조건의 코호트끼리 비교한 것인지 남긴다. 없으면
+                    # 독자가 seed 있는 런과 없는 런을 구별할 수 없다.
+                    "left_removed_sampling_controls": left["removed_sampling_controls"],
+                    "right_removed_sampling_controls": right["removed_sampling_controls"],
+                    "verdict": verdict,
+                })
     return {"credentials": credentials, "excluded": excluded, "verdicts": verdicts}
 
 

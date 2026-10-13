@@ -4,6 +4,7 @@
 import argparse
 import json
 import os
+import re
 import sys
 import tempfile
 from collections import Counter
@@ -20,7 +21,7 @@ from pathlib import Path
 from typing import Any, Iterable, Mapping, Optional
 
 
-SCORING_VERSION = "taubench_state_v1"
+SCORING_VERSION = "taubench_state_v2"  # v2: 후보 프로토콜 실패(도구 미호출)를 측정된 실패로 센다
 JUDGE_BASES = frozenset({"NL_ASSERTION", "COMMUNICATE"})
 PROGRAMMATIC_BASES = frozenset({"DB", "ENV_ASSERTION", "ACTION"})
 DECLARED_INVENTORY = {
@@ -230,6 +231,7 @@ def score_domain(
     task_results: list[dict[str, Any]] = []
     passed = failed = measured = 0
     not_measured = Counter()
+    protocol_failures = Counter()
     simulations = list(raw.get("simulations") or [])
     for simulation in simulations:
         task_id = str(simulation.get("task_id"))
@@ -245,9 +247,17 @@ def score_domain(
             "upstream_reward": reward,
             "termination_reason": simulation.get("termination_reason"),
         }
+        protocol_failure = _candidate_protocol_failure(simulation)
         if status != "measured":
             record["not_measured_reason"] = reason
             not_measured[str(reason)] += 1
+        elif protocol_failure is not None:
+            # 후보가 규약을 어겨 시뮬레이션이 죽었다 — 보상은 없지만 측정된 실패다.
+            record["passed"] = False
+            record["protocol_failure"] = protocol_failure
+            protocol_failures[f"{protocol_failure}@agent"] += 1
+            measured += 1
+            failed += 1
         elif not isinstance(reward, (int, float)):
             record["evaluation_status"] = "not_measured"
             record["not_measured_reason"] = "upstream_reward_missing"
@@ -264,7 +274,10 @@ def score_domain(
         task_results.append(record)
 
     terminations = Counter(str(sim.get("termination_reason")) for sim in simulations)
-    candidate_attr, env_attr, unclassified_attr = _classify_incompletions(simulations)
+    # 프로토콜 실패로 이미 측정된 시뮬레이션은 미완주 귀책 분류에서 뺀다.
+    candidate_attr, env_attr, unclassified_attr = _classify_incompletions(
+        [sim for sim in simulations if _candidate_protocol_failure(sim) is None]
+    )
 
     # pass_rate_strict: 모델 귀책 미완주를 실패로 세는 분모. 서빙 의사결정용이다
     # ("이 모델을 붙이면 몇 %가 실제로 끝나는가"). upstream 의 pass_rate 를 덮어쓰지
@@ -292,6 +305,7 @@ def score_domain(
         "reason": None if measured else "no upstream records had a runnable numeric reward",
         "pass_rate": passed / measured if measured else None,
         "pass_rate_source": "tau2 results.simulations[].reward_info.reward",
+        "pass_rate_note": "후보 프로토콜 실패(candidate_protocol_failures)는 보상 0 의 측정된 실패로 분모·실패에 포함",
         "pass_rate_strict": pass_rate_strict,
         "pass_rate_strict_denominator": strict_denominator,
         "pass_rate_strict_reason": strict_reason,
@@ -322,6 +336,9 @@ def score_domain(
         "passed": passed,
         "failed": failed,
         "not_measured_result_records": dict(sorted(not_measured.items())),
+        # 측정된 실패로 센 후보 프로토콜 실패. termination_reasons 의 infrastructure_error
+        # 에는 그대로 포함돼 있다(상류 기록을 바꾸지 않는다) — 게이트가 이 수를 뺀다.
+        "candidate_protocol_failures": dict(sorted(protocol_failures.items())),
         "termination_reasons": dict(sorted(terminations.items())),
         "request_observability": _successful_call_observability(simulations),
         "task_results": task_results,
@@ -539,6 +556,48 @@ EXIT_CODE_HELP = """exit codes:
 # 평가 대상(후보 모델)에게 귀책시킬 수 있는 error_type. 화이트리스트다.
 CANDIDATE_ATTRIBUTABLE_ERROR_TYPES = frozenset({"ContextWindowExceededError"})
 
+# 후보의 **프로토콜 실패** — 후보 모델의 응답 자체가 실행 규약을 어겨 tau2 가 시뮬레이션을
+# 죽인 경우. solo 모드는 도구 호출만 받는데(tau2 llm_agent.py LLMSoloAgent, tool_choice=
+# "required" 로 요청해도) 모델이 텍스트로 답하면 ValueError 로 끝난다. 서버 장애가 아니라
+# 모델의 행동이므로 "측정된 실패(보상 0)" 로 센다 — 2026-09-26 결정 (diffusion 3런 16/40,
+# gemma 2런 10/40 이 이 유형이었다). error_type 과 메시지가 **둘 다** 맞고, traceback 이
+# 후보 에이전트 호출을 가리킬 때만 인정한다. 사용자 시뮬레이터 쪽이면 후보 탓이 아니다.
+CANDIDATE_PROTOCOL_FAILURES = {
+    ("ValueError", "LLMSoloAgent only supports tool calls."): "no_tool_call",
+}
+
+# 설치된 tau2/orchestrator/orchestrator.py:858-861: 후보 생성이 반환된 뒤
+# step()에서 agent_msg.validate()를 호출하므로 생성 호출은 traceback에 없다.
+# 사용자 반환값은 user/user_simulator.py:246의 UserMessage이고 검증은
+# orchestrator/orchestrator.py:837-840의 user_msg.validate()다. 다만 사용자도
+# 내부적으로 AssistantMessage를 만들므로(user/user_simulator_base.py:71),
+# 타입명만으로 귀책시키지 않고 파일·함수·검증 호출이 같은 프레임인지 확인한다.
+# data_model/message.py:284-288은 오류 뒤에 가변적인 str(self)를 붙인다.
+EMPTY_ASSISTANT_MESSAGE_PREFIX = "AssistantMessage must have either content or tool_calls"
+AGENT_MESSAGE_VALIDATION_FRAME = re.compile(
+    r'^\s*File "[^"\n]*/tau2/orchestrator/orchestrator\.py", line \d+, in step\n'
+    r'[ \t]+agent_msg\.validate\(\)[ \t]*(?:\n|$)',
+    re.MULTILINE,
+)
+
+
+def _candidate_protocol_failure(sim: Mapping[str, Any]) -> Optional[str]:
+    """후보 프로토콜 실패면 그 라벨을, 아니면 None 을 돌려준다."""
+    if str(sim.get("termination_reason")) != "infrastructure_error":
+        return None
+    info = sim.get("info") or {}
+    if (
+        info.get("error_type") == "ValueError"
+        and str(info.get("error") or "").startswith(EMPTY_ASSISTANT_MESSAGE_PREFIX)
+        and AGENT_MESSAGE_VALIDATION_FRAME.search(str(info.get("error_traceback") or ""))
+    ):
+        return "empty_message"
+    key = (str(info.get("error_type") or ""), str(info.get("error") or "").strip())
+    label = CANDIDATE_PROTOCOL_FAILURES.get(key)
+    if label is None or _failure_actor(sim) != "agent":
+        return None
+    return label
+
 # 원인이 확정된 환경 귀책 유형. 여기에도 없으면 unclassified 로 남긴다 —
 # "환경 탓" 이라고 단정하는 것도 근거 없는 주장이기 때문이다.
 KNOWN_ENVIRONMENT_ERROR_TYPES = frozenset(
@@ -677,8 +736,10 @@ def validate_summary(summary: dict) -> tuple:
                 f"{runnable}건만 대상이다 — 도메인 점수가 아니라 부분집합 점수로만 인용할 것"
             )
 
-        infra = (entry.get("termination_reasons") or {}).get("infrastructure_error")
-        if infra:
+        infra = (entry.get("termination_reasons") or {}).get("infrastructure_error") or 0
+        # 후보 프로토콜 실패는 측정된 실패로 이미 셌다 — 미완주로 다시 세지 않는다.
+        infra -= sum((entry.get("candidate_protocol_failures") or {}).values())
+        if infra > 0:
             # 귀책은 incompletion_attribution 이 말해준다. "전부 하네스 탓" 이라고
             # 단정하지 않는다 — 후보 모델이 스스로 컨텍스트를 넘긴 경우도 여기 섞인다.
             attr = entry.get("incompletion_attribution") or {}

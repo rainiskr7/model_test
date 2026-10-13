@@ -2,7 +2,7 @@
   "benchmark": "sierra-research/tau2-bench (state/action, agent-user-tools)",
   "model": "qwen_qwen3.5_35b_a3b_fp8",
   "track": "taubench",
-  "scoring_version": "taubench_state_v1",
+  "scoring_version": "taubench_state_v2",
   "score_provenance": "upstream tau2 reward_info.reward; no local reward recomputation",
   "harness_integrity": {
     "architecture": "upstream_tau2_framework",
@@ -39,6 +39,15 @@
       "litellm_num_retries": 0,
       "max_tokens": 16384,
       "temperature_sent": false,
+      "user_protocol": {
+        "user_model": "openrouter/openai/gpt-4.1-mini",
+        "user_request_timeout": 120.0,
+        "user_max_tokens": 16384,
+        "user_temperature": 0.0,
+        "user_api_base": null,
+        "pinned": false,
+        "reason": "사용자 인자를 기록하지 않는 구버전 러너가 만든 산출물이다. 다른 런과 같은 사용자 프로토콜이었다는 증거가 없다."
+      },
       "source": "tau2 results.info.agent_info/user_info"
     },
     "manifest_only_not_in_upstream_info": [
@@ -91,6 +100,7 @@
       "reason": null,
       "pass_rate": 0.85,
       "pass_rate_source": "tau2 results.simulations[].reward_info.reward",
+      "pass_rate_note": "후보 프로토콜 실패(candidate_protocol_failures)는 보상 0 의 측정된 실패로 분모·실패에 포함",
       "pass_rate_strict": 0.85,
       "pass_rate_strict_denominator": 20,
       "pass_rate_strict_reason": null,
@@ -102,10 +112,26 @@
       },
       "runnable_tasks": 20,
       "result_records": 20,
+      "distinct_tasks": 20,
+      "distinct_tasks_measured": 20,
+      "trials": [
+        1
+      ],
+      "pass_hat_k": {
+        "tasks": 20,
+        "max_k": 1,
+        "trials_per_task": [
+          1
+        ],
+        "pass_hat_k": {
+          "pass^1": 0.85
+        }
+      },
       "measured": 20,
       "passed": 17,
       "failed": 3,
       "not_measured_result_records": {},
+      "candidate_protocol_failures": {},
       "termination_reasons": {
         "user_stop": 20
       },
@@ -340,7 +366,13 @@
           "termination_reason": "user_stop",
           "passed": true
         }
-      ]
+      ],
+      "benchmark_eligible": true,
+      "coverage": {
+        "measured": 20,
+        "runnable_task_count": 20,
+        "official_task_count": 20
+      }
     },
     "banking_knowledge": {
       "status": "not_measured",
@@ -383,7 +415,7 @@
       "tasks": []
     },
     "banking_knowledge": {
-      "count": 98,
+      "count": 97,
       "reason": "judge-free rewards exist, but the domain rejects no-user solo mode"
     },
     "retail": {
@@ -404,7 +436,7 @@
       }
     },
     "banking_knowledge": {
-      "total_records": 98,
+      "total_records": 97,
       "reward_component_counts": {
         "DB": 88,
         "ACTION": 9
@@ -425,7 +457,9 @@
   "publish_status": {
     "publishable": true,
     "failures": [],
-    "warnings": [],
-    "gate_scoring_version": "taubench_state_v1"
+    "warnings": [
+      "사용자 시뮬레이터 인자가 기록돼 있지 않다 — 이 런은 모델 간 비교에 쓸 수 없다"
+    ],
+    "gate_scoring_version": "taubench_state_v2"
   }
 }

@@ -9,7 +9,7 @@
     따라 timeout 600s/8192 tokens 와 120s/16384 tokens 로 갈렸다. 후보만 다른 것이
     아니면 그 비교는 모델 비교가 아니다.
 
-``replicate_key`` — comparison_fingerprint + 후보 정체성.
+``replicate_key`` — comparison_fingerprint + 후보 정체성 + 후보에서 제거된 샘플링 제어.
     같은 모델을 같은 규약으로 다시 돌린 것들이다. 재현성은 이 안에서만 논한다.
     후보를 빼먹으면 서로 다른 모델을 서로의 반복 실행으로 오인한다.
 
@@ -143,14 +143,35 @@ def comparison_fingerprint(summary: Mapping[str, Any]) -> dict[str, Any]:
     return result
 
 
-def replicate_key(summary: Mapping[str, Any]) -> tuple[str, str]:
-    """같은 모델을 같은 규약으로 다시 돌린 것을 묶는 키."""
+def replicate_key(summary: Mapping[str, Any]) -> tuple[str, str, str]:
+    """같은 모델을 같은 규약으로 다시 돌린 것을 묶는 키.
+
+    후보 쪽에서 제거된 샘플링 파라미터도 키에 넣는다. seed 를 서버가 거부해
+    빼고 돈 런과, seed 를 받은 런은 **같은 모델이라도 재현성 조건이 다르다**
+    (전자는 서버측 결정론 제어가 없다). 한 코호트로 묶으면 "흔들렸다"와
+    "다르게 쟀다"가 구분되지 않는다. 지문(fingerprint)에는 넣지 않는다 —
+    지문은 후보와 무관한 공유 규약의 정체성이고, 후보의 서빙 제약은
+    후보의 성질이기 때문이다.
+    """
 
     integrity = summary.get("harness_integrity") or {}
     candidate = str(
         integrity.get("model_sent_to_litellm") or summary.get("model") or "unknown"
     )
-    return comparison_fingerprint(summary)["fingerprint"], candidate
+    # 세 상태를 구분한다.
+    #   ""         제약이 선언되지 않았다 → 뺄 것이 없었다 (옛 산출물 포함)
+    #   "seed,..." 관측했고 이만큼 뺐다
+    #   "unknown"  제약이 걸린 런인데 관측 기록이 없다 → 뺀 것이 없다고 말할 수 없다
+    # 옛 산출물은 제약 선언 필드 자체가 없으므로 첫 번째로 떨어진다. 그래야
+    # 수정 전후의 같은 모델 런이 한 반복 코호트에 남는다.
+    declared = integrity.get("candidate_unsupported_sampling_params") or []
+    observation = integrity.get("candidate_serving_profile_observation")
+    if declared and observation == "unobserved":
+        controls = "unknown"
+    else:
+        removed = integrity.get("candidate_removed_sampling_params") or []
+        controls = ",".join(sorted(str(name) for name in removed))
+    return comparison_fingerprint(summary)["fingerprint"], candidate, controls
 
 
 def passed_task_ids(summary: Mapping[str, Any], domain: str | None = None) -> set[str]:
@@ -184,18 +205,19 @@ def is_multi_trial(summary: Mapping[str, Any], domain: str | None = None) -> boo
 def reproducibility_report(summaries: Iterable[Mapping[str, Any]]) -> list[dict[str, Any]]:
     """복제 키별로 통과 과제 집합을 대조한다."""
 
-    grouped: dict[tuple[str, str], list[Mapping[str, Any]]] = defaultdict(list)
+    grouped: dict[tuple[str, str, str], list[Mapping[str, Any]]] = defaultdict(list)
     for summary in summaries:
         grouped[replicate_key(summary)].append(summary)
 
     report: list[dict[str, Any]] = []
-    for (fingerprint, candidate), runs in sorted(grouped.items()):
+    for (fingerprint, candidate, removed_controls), runs in sorted(grouped.items()):
         sets = [passed_task_ids(run) for run in runs]
         sessions = [str(run.get("session") or run.get("_session") or "?") for run in runs]
         if any(is_multi_trial(run) for run in runs):
             report.append({
                 "fingerprint": fingerprint,
                 "candidate": candidate,
+                "removed_sampling_controls": removed_controls,
                 "runs": sessions,
                 "status": "UNSUPPORTED",
                 "reason": "다중 시행 산출물이다 — 통과 집합 비교는 Pass^k 를 대신할 수 없다",
