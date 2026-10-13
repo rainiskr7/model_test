@@ -6,7 +6,6 @@ import json
 import os
 import re
 import sys
-import tempfile
 from collections import Counter
 
 try:  # 패키지로 임포트될 때
@@ -19,6 +18,9 @@ except ImportError:  # 파일 하나만 단독 로드할 때 (테스트 로더)
     from passk import pass_hat_k_table
 from pathlib import Path
 from typing import Any, Iterable, Mapping, Optional
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+from jsonwrite.atomic_json import write_json_atomic
 
 
 SCORING_VERSION = "taubench_state_v2"  # v2: 후보 프로토콜 실패(도구 미호출)를 측정된 실패로 센다
@@ -507,22 +509,6 @@ def _load(path: Path) -> dict[str, Any]:
     return data
 
 
-def _write_atomic(path: Path, data: Mapping[str, Any]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    fd, temp_name = tempfile.mkstemp(prefix=f".{path.name}.", dir=str(path.parent))
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as handle:
-            json.dump(data, handle, ensure_ascii=False, indent=2)
-            handle.write("\n")
-        os.replace(temp_name, path)
-    except Exception:
-        try:
-            os.unlink(temp_name)
-        except FileNotFoundError:
-            pass
-        raise
-
-
 def _results_dir(args: argparse.Namespace) -> Path:
     if args.results_dir:
         return args.results_dir.resolve()
@@ -801,7 +787,7 @@ def main(argv: Optional[list[str]] = None) -> int:
             print(json.dumps(summary, ensure_ascii=False, indent=2))
         else:
             # 발행 불가여도 산출물은 남긴다 — 진단에 필요하다.
-            _write_atomic(results_dir / "summary.json", summary)
+            write_json_atomic(results_dir / "summary.json", summary)
             print(f"[taubench/score] wrote {results_dir / 'summary.json'}")
 
         if failures:

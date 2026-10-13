@@ -7,10 +7,12 @@ import json
 import os
 import subprocess
 import sys
-import tempfile
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Iterable, Mapping, Optional
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+from jsonwrite.atomic_json import write_json_atomic
 
 
 SOURCE_COMMIT = "c3398666e6559e3a063da3fc04b5acf7f941464e"
@@ -336,7 +338,7 @@ def redact_secrets_in_upstream(upstream_dir: Path) -> int:
         except json.JSONDecodeError:
             continue
         if _scrub_api_key(data):
-            _write_atomic(path, data)
+            write_json_atomic(path, data)
             redacted += 1
     return redacted
 
@@ -356,22 +358,6 @@ def _scrub_api_key(node: Any) -> bool:
             if _scrub_api_key(item):
                 changed = True
     return changed
-
-
-def _write_atomic(path: Path, data: Mapping[str, Any]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    fd, temp_name = tempfile.mkstemp(prefix=f".{path.name}.", dir=str(path.parent))
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as handle:
-            json.dump(data, handle, ensure_ascii=False, indent=2)
-            handle.write("\n")
-        os.replace(temp_name, path)
-    except Exception:
-        try:
-            os.unlink(temp_name)
-        except FileNotFoundError:
-            pass
-        raise
 
 
 def _package_version(name: str) -> Optional[str]:
@@ -678,7 +664,7 @@ def main(argv: Optional[list[str]] = None) -> int:
                 "absorbed_timeout_counter_observable": False,
             },
         }
-        _write_atomic(results_dir / "run_manifest.json", manifest)
+        write_json_atomic(results_dir / "run_manifest.json", manifest)
 
         env = os.environ.copy()
         env["TAU2_DATA_DIR"] = str(bench_dir / "data")
@@ -763,7 +749,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         manifest["upstream_results"] = str(
             (upstream_dir / "results.json").relative_to(results_dir)
         )
-        _write_atomic(results_dir / "run_manifest.json", manifest)
+        write_json_atomic(results_dir / "run_manifest.json", manifest)
         print(f"[taubench] upstream artifacts written to {upstream_dir}")
         return 0
     except Exception as exc:

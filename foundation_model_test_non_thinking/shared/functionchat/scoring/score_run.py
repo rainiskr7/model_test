@@ -5,9 +5,11 @@ import argparse
 import json
 import os
 import sys
-import tempfile
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Mapping, Tuple
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+from jsonwrite.atomic_json import write_json_atomic
 
 if __package__:
     from .exact_match import CALL, exact_match
@@ -241,22 +243,6 @@ def _load(path: Path) -> Dict[str, Any]:
     return data
 
 
-def _write_atomic(path: Path, data: Mapping[str, Any]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    fd, temp_name = tempfile.mkstemp(prefix=f".{path.name}.", dir=str(path.parent))
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as handle:
-            json.dump(data, handle, ensure_ascii=False, indent=2)
-            handle.write("\n")
-        os.replace(temp_name, path)
-    except Exception:
-        try:
-            os.unlink(temp_name)
-        except FileNotFoundError:
-            pass
-        raise
-
-
 def _results_dir(args: argparse.Namespace) -> Path:
     if args.results_dir:
         return args.results_dir.resolve()
@@ -366,14 +352,22 @@ def main(argv: List[str] = None) -> int:
         coverage = _load(results_dir / "coverage.json")
         summary = build_summary(raw, coverage, args.track)
         for name, entry in summary["by_dataset"].items():
+            accuracy = (
+                "n/a (measured=0)" if entry["accuracy"] is None
+                else f"{entry['accuracy']:.6f}"
+            )
             print(
                 f"[functionchat-scoring] {name}: {entry['passed']}/{entry['measured']} "
-                f"accuracy={entry['accuracy']:.6f}"
+                f"accuracy={accuracy}"
             )
         overall = summary["overall"]
+        accuracy = (
+            "n/a (measured=0)" if overall["accuracy"] is None
+            else f"{overall['accuracy']:.6f}"
+        )
         print(
             f"[functionchat-scoring] overall: {overall['passed']}/{overall['measured']} "
-            f"accuracy={overall['accuracy']:.6f}; "
+            f"accuracy={accuracy}; "
             f"not_measured={summary['not_measured']['total_items']}"
         )
         failures, warnings = validate_summary(summary)
@@ -390,7 +384,7 @@ def main(argv: List[str] = None) -> int:
         }
         if not args.dry_run:
             # 발행 불가여도 산출물은 남긴다 — 진단에 필요하다.
-            _write_atomic(results_dir / "summary.json", summary)
+            write_json_atomic(results_dir / "summary.json", summary)
             print(f"[functionchat-scoring] wrote {results_dir / 'summary.json'}")
 
         if failures:

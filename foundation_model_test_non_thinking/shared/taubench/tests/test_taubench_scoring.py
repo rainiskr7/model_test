@@ -89,6 +89,26 @@ def raw_results(tasks, simulations):
 
 
 class TauBenchScoringTests(unittest.TestCase):
+    def test_main_smoke_writes_summary(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            directory = Path(temp_dir)
+            (directory / "run_manifest.json").write_text(
+                json.dumps(manifest(["one"])), encoding="utf-8"
+            )
+            raw_path = directory / "upstream" / "telecom" / "results.json"
+            raw_path.parent.mkdir(parents=True)
+            raw_path.write_text(
+                json.dumps(raw_results(
+                    [task("one", ["ENV_ASSERTION"])], [simulation("one", 1.0)]
+                )),
+                encoding="utf-8",
+            )
+            self.assertEqual(0, scorer.main(["--results-dir", str(directory)]))
+            summary_path = directory / "summary.json"
+            self.assertTrue(summary_path.is_file())
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            self.assertEqual(1, summary["overall"]["measured"])
+
     def test_task_with_real_nl_assertions_is_never_scored(self):
         """nl_assertions 에 **내용이 있으면** 판정이 필요하므로 채점하지 않는다."""
         for basis in (["DB", "NL_ASSERTION"], ["ENV_ASSERTION", "ACTION", "NL_ASSERTION"]):

@@ -70,6 +70,58 @@ def _output(name="informWeather", arguments=None):
     }
 
 
+def _write_main_inputs(directory, output_type="call"):
+    metadata = {
+        "model": "test/model",
+        "request_timeout": 60.0,
+        "task_timeout": 120.0,
+        "max_retries": 0,
+        "max_tokens": 1024,
+        "native_tool_calling": True,
+        "sdk_max_retries": 0,
+        "openai_sdk_version": "test",
+    }
+    item = {**_input(output_type=output_type), "model_output": _output()}
+    for name in ("singlecall", "call_decision", "dialog"):
+        (directory / f"{name}.json").write_text(
+            json.dumps({"metadata": metadata, "results": [item]}, ensure_ascii=False),
+            encoding="utf-8",
+        )
+    counts = {} if output_type == "call" else {output_type: 1}
+    (directory / "coverage.json").write_text(
+        json.dumps({"not_measured": {"call_decision": counts, "dialog": counts}}),
+        encoding="utf-8",
+    )
+
+
+def test_main_all_not_measured_writes_rejected_summary(tmp_path, capsys):
+    _write_main_inputs(tmp_path, output_type="slot")
+    assert len(list(tmp_path.glob("*.json"))) == 4
+    rc = score.main(["--results-dir", str(tmp_path)])
+    assert rc != 2
+    assert rc == 1
+    summary_path = tmp_path / "summary.json"
+    assert summary_path.is_file()
+    summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    assert summary["overall"]["measured"] == 0
+    assert summary["overall"]["accuracy"] is None
+    assert summary["publish_status"]["publishable"] is False
+    assert "overall.measured 가 0 이다 — 측정된 항목이 없다" in summary["publish_status"]["failures"]
+    assert "accuracy=n/a (measured=0)" in capsys.readouterr().out
+
+
+def test_main_measured_smoke_writes_summary(tmp_path):
+    _write_main_inputs(tmp_path)
+    rc = score.main(["--results-dir", str(tmp_path)])
+    assert rc == 1  # A small fixture is incomplete under the unchanged publish gate.
+    summary_path = tmp_path / "summary.json"
+    assert summary_path.is_file()
+    summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    assert set(summary["by_dataset"]) == {"singlecall", "call_decision", "dialog"}
+    assert summary["overall"]["measured"] == 3
+    assert summary["overall"]["accuracy"] == 1.0
+
+
 def test_three_acceptable_argument_sentinels_are_empty():
     sentinels = (
         "Only ground truth is allowed.",

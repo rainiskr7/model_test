@@ -243,6 +243,7 @@ def print_table(summary: Dict[str, Any], skipped_count: int) -> None:
 
 
 def _write_json_atomic(path: Path, payload: Dict[str, Any]) -> None:
+    # jsonwrite.atomic_json과 달리 끝 LF 없이 기록하고 fsync로 동기화한다.
     fd, temp_name = tempfile.mkstemp(
         dir=path.parent, prefix=f".{path.name}.", suffix=".tmp"
     )

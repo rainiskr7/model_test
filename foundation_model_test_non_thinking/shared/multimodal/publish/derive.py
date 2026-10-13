@@ -261,6 +261,7 @@ def _sidecar_lock(path: Path):
 
 
 def _write_sidecar_unlocked(path: Path, sidecar: dict[str, Any]) -> None:
+    # jsonwrite.atomic_json과 달리 sidecar_json의 sort_keys=True 규약을 유지한다.
     payload = sidecar_json(sidecar)
     tmp = path.with_name(f".{path.name}.{os.getpid()}.tmp")
     tmp.write_text(payload, encoding="utf-8")

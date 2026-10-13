@@ -7,7 +7,6 @@ import json
 import os
 import queue
 import sys
-import tempfile
 import threading
 import time
 import types
@@ -15,6 +14,9 @@ from collections import Counter
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Tuple
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+from jsonwrite.atomic_json import write_json_atomic
 
 
 SOURCE_COMMIT = "5ddb0b5bb37d6423e1f3381ef693cda811a7847e"
@@ -342,22 +344,6 @@ def _metadata(
     }
 
 
-def _write_atomic(path: Path, data: Mapping[str, Any]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    fd, temp_name = tempfile.mkstemp(prefix=f".{path.name}.", dir=str(path.parent))
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as handle:
-            json.dump(data, handle, ensure_ascii=False, indent=2)
-            handle.write("\n")
-        os.replace(temp_name, path)
-    except Exception:
-        try:
-            os.unlink(temp_name)
-        except FileNotFoundError:
-            pass
-        raise
-
-
 def _safe_model_name(model: str) -> str:
     return model.replace("/", "_").replace("-", "_").replace(":", "_")
 
@@ -549,7 +535,7 @@ def main(argv: Optional[List[str]] = None) -> int:
 
         # 모든 dataset이 끝난 뒤 기록해 interrupt 시 partial run을 완전 run처럼 보이지 않게 한다.
         for dataset, raw in raw_outputs.items():
-            _write_atomic(results_dir / f"{dataset}.json", raw)
+            write_json_atomic(results_dir / f"{dataset}.json", raw)
 
         decision_types = Counter(
             item["type_of_output"] for item in datasets["call_decision"]
@@ -594,7 +580,7 @@ def main(argv: Optional[List[str]] = None) -> int:
                 },
             },
         }
-        _write_atomic(results_dir / "coverage.json", coverage)
+        write_json_atomic(results_dir / "coverage.json", coverage)
         print(f"[functionchat] raw artifacts written to {results_dir}")
         return 0
     except Exception as exc:
