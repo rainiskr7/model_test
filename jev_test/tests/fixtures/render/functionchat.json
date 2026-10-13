@@ -1,0 +1,61 @@
+{
+  "input": {
+    "model": "synthetic-model",
+    "state": {
+      "input_tools": [
+        {
+          "name": "tool_z",
+          "description": "쪽지 접기"
+        },
+        {
+          "name": "tool_a",
+          "description": "등 켜기"
+        },
+        {
+          "name": "tool_c",
+          "description": "책을 편다."
+        },
+        {
+          "name": "tool_d",
+          "description": "끈을 묶는다."
+        },
+        {
+          "name": "tool_e",
+          "description": "컵을 놓는다."
+        }
+      ],
+      "input_messages": [
+        {
+          "role": "user",
+          "content": "쪽지를 접어 줘."
+        }
+      ]
+    },
+    "state_spec": {
+      "kind": "json_string",
+      "keys": [
+        "input_messages",
+        "input_tools"
+      ]
+    },
+    "questions": {
+      "tool_pick": {
+        "type": "choice",
+        "instructions": "맞는 도구를 고르세요.",
+        "criteria": {
+          "tool_z": "쪽지를 접는다.",
+          "NONE": "도구가 필요 없다.",
+          "tool_a": "등을 켠다.",
+          "tool_c": "책을 편다.",
+          "tool_d": "끈을 묶는다.",
+          "tool_e": "컵을 놓는다."
+        }
+      }
+    }
+  },
+  "expected": {
+    "state": "{\"input_messages\":[{\"role\":\"user\",\"content\":\"쪽지를 접어 줘.\"}],\"input_tools\":[{\"name\":\"tool_z\",\"description\":\"쪽지 접기\"},{\"name\":\"tool_a\",\"description\":\"등 켜기\"},{\"name\":\"tool_c\",\"description\":\"책을 편다.\"},{\"name\":\"tool_d\",\"description\":\"끈을 묶는다.\"},{\"name\":\"tool_e\",\"description\":\"컵을 놓는다.\"}]}",
+    "request_utf8": "{\"model\":\"synthetic-model\",\"state\":\"{\\\"input_messages\\\":[{\\\"role\\\":\\\"user\\\",\\\"content\\\":\\\"쪽지를 접어 줘.\\\"}],\\\"input_tools\\\":[{\\\"name\\\":\\\"tool_z\\\",\\\"description\\\":\\\"쪽지 접기\\\"},{\\\"name\\\":\\\"tool_a\\\",\\\"description\\\":\\\"등 켜기\\\"},{\\\"name\\\":\\\"tool_c\\\",\\\"description\\\":\\\"책을 편다.\\\"},{\\\"name\\\":\\\"tool_d\\\",\\\"description\\\":\\\"끈을 묶는다.\\\"},{\\\"name\\\":\\\"tool_e\\\",\\\"description\\\":\\\"컵을 놓는다.\\\"}]}\",\"questions\":{\"tool_pick\":{\"type\":\"choice\",\"instructions\":\"맞는 도구를 고르세요.\",\"criteria\":{\"tool_z\":\"쪽지를 접는다.\",\"NONE\":\"도구가 필요 없다.\",\"tool_a\":\"등을 켠다.\",\"tool_c\":\"책을 편다.\",\"tool_d\":\"끈을 묶는다.\",\"tool_e\":\"컵을 놓는다.\"}}}}",
+    "request_sha256": "90224c681523e566b2773f9cd2d3b4cfc7fed94d7aacc2f134598578b549e3f2"
+  }
+}

@@ -1,0 +1,134 @@
+{
+  "catalog_order": [
+    "b",
+    "a"
+  ],
+  "cases": [
+    {
+      "name": "zero",
+      "gold_intents": [],
+      "predicted": [
+        "NONE",
+        "NONE"
+      ],
+      "expected": {
+        "fixed_gold": [
+          "NONE",
+          "NONE"
+        ],
+        "group_correct": true,
+        "duplicate_non_none": false,
+        "order_only": false
+      }
+    },
+    {
+      "name": "one",
+      "gold_intents": [
+        "b"
+      ],
+      "predicted": [
+        "b",
+        "NONE"
+      ],
+      "expected": {
+        "fixed_gold": [
+          "b",
+          "NONE"
+        ],
+        "group_correct": true,
+        "duplicate_non_none": false,
+        "order_only": false
+      }
+    },
+    {
+      "name": "two",
+      "gold_intents": [
+        "b",
+        "a"
+      ],
+      "predicted": [
+        "b",
+        "a"
+      ],
+      "expected": {
+        "fixed_gold": [
+          "b",
+          "a"
+        ],
+        "group_correct": true,
+        "duplicate_non_none": false,
+        "order_only": false
+      }
+    },
+    {
+      "name": "duplicate",
+      "gold_intents": [
+        "a",
+        "b"
+      ],
+      "predicted": [
+        "a",
+        "a"
+      ],
+      "expected": {
+        "fixed_gold": [
+          "b",
+          "a"
+        ],
+        "group_correct": false,
+        "duplicate_non_none": true,
+        "order_only": false
+      }
+    },
+    {
+      "name": "order_only",
+      "gold_intents": [
+        "b",
+        "a"
+      ],
+      "predicted": [
+        "a",
+        "b"
+      ],
+      "expected": {
+        "fixed_gold": [
+          "b",
+          "a"
+        ],
+        "group_correct": true,
+        "duplicate_non_none": false,
+        "order_only": true
+      }
+    }
+  ],
+  "counterexample": {
+    "fixed_gold": [
+      "b",
+      "a"
+    ],
+    "predicted": [
+      "a",
+      "b"
+    ],
+    "probabilities": [
+      {
+        "a": 0.99,
+        "b": 0.01
+      },
+      {
+        "a": 0.01,
+        "b": 0.99
+      }
+    ],
+    "expected": {
+      "group_correct": true,
+      "order_only": true,
+      "fixed_slot_brier": [
+        1.9602,
+        1.9602
+      ],
+      "fixed_mean_brier": 1.9602,
+      "reassigned_mean_brier_forbidden": 0.0002
+    }
+  }
+}

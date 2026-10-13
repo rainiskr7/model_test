@@ -1,0 +1,51 @@
+{
+  "label_map": {
+    "A": "true",
+    "B": "false"
+  },
+  "cases": [
+    {
+      "name": "missing",
+      "top_logprobs": [
+        {
+          "token": "A",
+          "logprob": -0.2
+        }
+      ]
+    },
+    {
+      "name": "sentinel",
+      "top_logprobs": [
+        {
+          "token": "A",
+          "logprob": -0.2
+        },
+        {
+          "token": "B",
+          "logprob": -9999
+        }
+      ]
+    },
+    {
+      "name": "below_sentinel",
+      "top_logprobs": [
+        {
+          "token": "A",
+          "logprob": -0.2
+        },
+        {
+          "token": "B",
+          "logprob": -10000
+        }
+      ]
+    },
+    {
+      "name": "nonfinite",
+      "top_logprobs_raw": "[{\"token\":\"A\",\"logprob\":-0.2},{\"token\":\"B\",\"logprob\":-Infinity}]"
+    }
+  ],
+  "expected": {
+    "status": "error",
+    "reason": "b1_missing_label"
+  }
+}
