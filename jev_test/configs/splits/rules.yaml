@@ -1,0 +1,43 @@
+# 분할 규칙 (P1 계약 §6) — 라벨만 읽는 jeveval/run/make_splits.py 가 읽는다. 모델 호출 없음. 동결 대상.
+# 경로는 jev_test/ 기준. dataset/ 은 git 제외 (공개 데이터 사본 + SHA256SUMS).
+seed: 20261012          # datasets.yaml 과 같다
+dev_fraction: 0.2       # 앞 floor(0.2·묶음 수) 가 개발 (계획 §4-3)
+sets:
+  kosgd:
+    source: {dir: dataset/kosgd, dialogues_glob: "dialogues_*.json", schema: extended_schema.json}
+    unit: user_turn                      # item_id = 대화 안 turn_index (SYSTEM 턴 포함 전체 목록의 위치)
+    group_key: dialogue_id
+    pool: {kind: fixed_selection, path: audits/kosgd_audit/audit_result.json, field: selected_turns}   # 10-12 선정, 대화당 1턴 3,000
+  fc_call_decision:
+    source: {file: dataset/fc_call_decision/FunctionChat-CallDecision.jsonl}
+    unit: row                            # item_id = serial_num
+    group_key: fc_components             # 첫 user content 일치 OR input_tools(sort_keys) 일치 union-find
+    expect_groups: 107                   # 다르면 멈춘다
+    pool: {kind: all}
+    extra: true                          # 대표가 아닌 행을 extra 로 (606행 기술 통계)
+  kmhas:
+    source: {file: dataset/kmhas/part1.parquet}
+    unit: row                            # item_id = parquet 행 번호 (0부터)
+    group_key: text
+    label_field: label                   # 묶음 안 라벨 충돌 세기용
+    pool: {kind: simple_cap, cap: 2000}
+  kote_escalation:
+    source: {file: dataset/kote_escalation/part1.parquet}
+    unit: row
+    group_key: text
+    label_field: labels
+    pool: {kind: simple_cap, cap: 2000}
+    demotion:                            # 평가 풀(묶음 대표) 에서 양성 < min_positive 인 감정은 진단으로
+      emotions: ["불평/불만", "화남/분노", "짜증", "안타까움/실망", "의심/불신", "불안/걱정", "고마움", "없음"]
+      min_positive: 50
+      label_names: parquet_metadata      # 라벨 번호 → 이름: json.loads(schema.metadata[b"huggingface"])["info"]["features"]["labels"]["feature"]["names"]
+  korfin_asc:
+    source: {file: dataset/korfin_asc/part1.parquet}
+    unit: src                            # SRC 하나 = 항목 하나 (aspect 행 여러 개), item_id = group_id
+    group_key: SRC
+    pool: {kind: simple_cap, cap: 1000}
+  klue_mrc_answerable:
+    source: {file: dataset/klue_mrc_answerable/part1.parquet}
+    unit: row                            # item_id = guid
+    group_key: context
+    pool: {kind: proportional, cap: 2000, stratum_field: source}

@@ -2,7 +2,7 @@
 
 from jeveval.types import (
     AttemptRecord, BoundQuestion, CallRecord, Cost, FinalRecord, Item, LengthInfo,
-    ParsedAnswer, Population, QStats, QuestionSpec, Rendered, Request, RequestOutcome, RiskCell,
+    Groups, PoolResult, ParsedAnswer, Population, QStats, QuestionSpec, Rendered, Request, RequestOutcome, RiskCell,
     ScoreTable, SourceRow, SplitPlan, TaskSpec, Threshold, ThresholdFile,
     AnswerParse, B1Call, B1Config, CalibResult, F1Result, SlotJudgement, Validated,
 )
@@ -70,7 +70,8 @@ def records():
                             label='ready',criteria={'true':'예','false':'아니오'})
     task = TaskSpec(set='s',variant='full',state={'kind':'plain_text'},questions=[question],
                     per_item_questions=None,group_key='source')
-    return [*function_results(),task,question,item(),bound(),SourceRow(set='s',row_id='i',fields={'text':'등을 켰다.'}),
+    return [*function_results(), Groups({'i':'g'}, {'g':['i']}), PoolResult(['g'], {'all':1}),
+        task,question,item(),bound(),SourceRow(set='s',row_id='i',fields={'text':'등을 켰다.'}),
         SplitPlan(set='s',seed=20261012,pool_rule='all',allocation={},groups={'g':['i']},
                   representative={'g':'s:g:i'},dev=[],test=['g'],diagnostic_demotions=[],extra=[],notes={}),
         Rendered(state='등',target_end_char=1),c.length,*c.answers_parsed.values(),c,attempt(),

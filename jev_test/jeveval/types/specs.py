@@ -63,10 +63,26 @@ class SplitPlan(JsonRecord):
     seed: int
     pool_rule: Any
     allocation: dict[str, int]
-    groups: dict[str, list[str | int]]
+    groups: dict[str, list[str]]
     representative: dict[str, str]
     dev: list[str]
     test: list[str]
     diagnostic_demotions: list[str]
     extra: list[str]
     notes: dict
+
+
+@dataclass(frozen=True)
+class Groups(JsonRecord):
+    """전체 원본 행의 묶음 연결과 항목 구성원 (§6 보정 6)."""
+
+    row_to_group: dict[str, str]
+    members: dict[str, list[str]]
+
+
+@dataclass(frozen=True)
+class PoolResult(JsonRecord):
+    """선정된 평가 풀 묶음과 층별 할당 (§6 보정 6)."""
+
+    group_ids: list[str]
+    allocation: dict[str, int]

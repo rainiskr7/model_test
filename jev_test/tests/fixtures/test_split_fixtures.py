@@ -15,7 +15,8 @@ def test_label_conflict_groups_use_ids():
     groups = {min(rows,key=lambda r:int(r['row_id']))['row_id']:[r['row_id'] for r in rows]
               for rows in grouped.values()}
     conflicts = sum(len({r['gold'] for r in rows}) > 1 for rows in grouped.values())
-    assert f['expected'] == {'groups':groups,'notes':{'label_conflict_groups':conflicts}}
+    assert f['expected'] == {'groups':groups,'notes':{
+        'label_conflict_groups_total':conflicts, 'label_conflict_groups_pool':conflicts}}
     assert not set(groups).intersection(grouped)
 
 
@@ -31,7 +32,7 @@ def test_union_find_components():
                 merged = component[a['serial_num']] | component[b['serial_num']]
                 for member in merged:
                     component[member] = merged
-    groups = {str(min(v)):sorted(v) for v in component.values()}
+    groups = {str(min(v)):sorted(map(str, v)) for v in component.values()}
     assert groups == f['expected']['groups']
     assert len(groups) == f['expected']['group_count']
 

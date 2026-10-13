@@ -259,6 +259,22 @@ jev_test/results/_compare/<compare_id>/A/<set>/<variant>/compare.json   # 커밋
 - 분할: `ids = sorted(풀의 group_id)`; `random.Random(f"{seed}:{set}:split").shuffle(ids)`; 앞 `floor(0.2·len)` 개발.
 - KOTE 진단 강등: 평가 풀 전체 라벨에서 양성 < 50 인 감정을 `diagnostic_demotions` 에 적는다 (모델 점수를 보지 않는다 — 다시 고르지 않는다).
 - `notes.label_conflict_groups`: 같은 묶음 안에 정답이 다른 행이 있는 묶음 수 (K-MHaS 1 — 대표에 따라 정답이 정해진다. 빼지 않고 건수만).
+- **판 3 보정 5 (③a 세부)** — 규칙 값은 `configs/splits/rules.yaml`:
+  - `item_id`·`group_id` 는 문자열이고 `:` 를 담지 않는다 (logical_id 구분자). KoSGD `group_id` = `dialogue_id`, `item_id` = 대화 안 `turn_index` (SYSTEM 포함 전체 턴 목록의 위치, `audit_result.json` 의 `selected_turns` 와 같은 뜻). FunctionChat `item_id` = `serial_num`, `group_id` = 요소 안 **정수로** 최소인 serial. K-MHaS·KOTE `item_id` = parquet 행 번호, `group_id` = 묶음 안 정수로 최소인 행 번호. KorFin `item_id` = `group_id` (SRC 하나가 항목 하나 — 그 SRC 의 aspect 행 `SID` 들이 항목을 이룬다). KLUE-MRC `item_id` = `guid`, `group_id` = 묶음 안 문자열로 최소인 `guid`.
+  - 묶음 키는 문자열 **정확 일치** (정규화하지 않는다). KLUE-MRC 한 묶음의 행들이 `source` 가 다르면 멈춘다.
+  - `groups` 는 **평가 풀 묶음만**, 키는 `sorted()`, 구성원도 `sorted()`. `dev`·`test` 는 분할 뒤 `sorted()` 로 적는다 (소속만 의미가 있다). `representative` 키도 `sorted()`.
+  - 단순 무작위 cap 에서 cap ≥ 묶음 수면 전부. `allocation`: 비례 할당은 `{층: 묶음 수}`, 그 밖은 `{"all": 풀 묶음 수}`.
+  - KOTE 강등은 **평가 풀 대표 항목**(dev+test) 의 라벨로 센다.
+  - `notes` = `{n_rows, n_groups_total, n_pool_groups, label_conflict_groups_total, label_conflict_groups_pool}` (충돌은 `label_field` 가 있는 셋만, 라벨 집합을 정렬해 비교).
+  - 분할 파일 바이트 = `json.dumps(plan.to_dict(), ensure_ascii=False, indent=1, sort_keys=True) + "\n"` — 같은 입력이면 입력 순서와 무관하게 같은 바이트 (보정 6: `sort_keys`). 문항 원문·원문 묶음 키는 들어가면 안 된다 (§5-1) — 한글은 `diagnostic_demotions` 의 감정 이름(설정 값)에만 허용.
+- **판 3 보정 6 (③a 명세 반박 반영)**:
+  - KoSGD `SourceRow.row_id` = `f"{dialogue_id}#{turn_index}"` (`turn_index` 는 원본에 필드가 없다 — `turns` 를 enumerate 한 위치). `item_id` = `str(turn_index)`. `frames` 는 목록, 의도는 `frame["state"]["active_intent"]`. 고정 선정이 없는 대화·중복 대화·SYSTEM 턴·범위 밖 위치를 가리키면 멈춘다.
+  - FunctionChat 묶음 키의 '첫 user 메시지' = `input_messages` 에서 **처음 `role == "user"` 인 원소**의 `content` (실제 606행 모두 첫 원소는 `system`). 도구 키 = `input_tools` 전체의 `json.dumps(sort_keys=True, ensure_ascii=False)`.
+  - parquet 의 목록 열은 Arrow `to_pylist()` (또는 명시적 `list`/`int` 변환) 로 파이썬 값으로 바꾼다 (pandas `ndarray` 는 JSON 이 안 된다).
+  - KLUE-MRC 는 **모든 행**을 둔다 (`is_impossible` 은 정답 필드 — 행을 거르지 않는다).
+  - KorFin `SourceRow` 는 `SID` 마다 하나, `n_rows` = SID 수 (8,818). 분할 파일의 구성원은 `[group_id]` 하나.
+  - 비례 할당에서 cap ≥ 전체 묶음 수면 전부(할당 = 층별 묶음 수). 모집단이 비거나 cap 이 양의 정수가 아니면 멈춘다. `pool_rule` = `rules.yaml` 의 그 셋 `pool` 객체 그대로.
+  - 모듈 사이 결과: `Groups(row_to_group: dict[str, str], members: dict[str, list[str]])` (data/grouping), `PoolResult(group_ids: list[str], allocation: dict[str, int])` (data/pool) — §8-5 에 추가.
 
 ### 6-1. `extra` (묶음 대표가 아닌 행)
 - FunctionChat 만 (`datasets.yaml` 의 "606행 F1·처리율은 기술 통계"). 다른 셋은 대표만 돌린다.
@@ -428,7 +444,7 @@ jev_test/jeveval/
 1. ~~`types/` + `io/config.py` + task yaml 스키마 검사 + §9 fixture~~ — **끝** (10-13, 커밋 `dafe4b2`)
 2. **②-0** (작업 ① 고침): `types/` 를 §8-5 로 갱신 (`SourceRow`·`BoundQuestion`·`Item`·`Rendered`·`ParsedAnswer`·`LengthInfo`·`CallRecord.length`·`answers_parsed` 타입·`Threshold`·`ThresholdFile`·`RiskCell`·`ScoreTable` 계열·`RequestOutcome`) · `contract/taskspec.py` 의 `per_item_questions` 검사·성공 질문 규칙 (§1-1) · §9 의 판 3 fixture.
    **②**: `contract/` (render·request·response·b1_prompt) + `score/answers·f1·calibration·kosgd_slots` (판 3 보정 3: `labels` 는 ③ 으로 — 정답 규칙은 `io/sources` 가 정하는 원본 필드 구조를 알아야 한다)
-3. `data/` (펼치기·묶음·풀·분할·items) + `io/sources` + `io/splits` + `score/labels` → 분할 파일 생성
+3. **③a** `io/sources` + `data/grouping·pool·split` + `io/splits` + `run/make_splits.py` → 분할 파일 생성 (라벨만 — 질문 문구 불필요). **③b** `data/expand·items` + `score/labels` (task yaml 이 필요 — 합성 TaskSpec 으로 먼저 구현 가능)
 4. `client/` (한 번의 시도) + `io/records`
 5. `run/executor` (상태기계·resume) + `run/length` + `run/seal`
 6. `score/tasks·threshold·risk·population·cost·bootstrap` + `run/cli` + `io/archive` + `reference/`
@@ -489,6 +505,10 @@ F1Result(classes: list[str], per_class_f1: dict[str, float], macro_f1: float | N
          class_stats: dict)                                                             # score/f1 — class_stats 는 QStats.classes 모양 그대로
 CalibResult(ece: float | None, bins: list[dict], brier: float | None, log_loss: float | None)   # score/calibration — §7-1
 SlotJudgement(fixed_gold: list[str], group_correct: bool, duplicate_non_none: bool, order_only: bool)  # score/kosgd_slots — §7-2
+
+# 작업 ③a (판 3 보정 6, 메모리 전용)
+Groups(row_to_group: dict[str, str], members: dict[str, list[str]])   # data/grouping — members 의 구성원은 item_id (KorFin 은 [group_id])
+PoolResult(group_ids: list[str], allocation: dict[str, int])          # data/pool
 ```
 
 ---
@@ -535,3 +555,5 @@ SlotJudgement(fixed_gold: list[str], group_correct: bool, duplicate_non_none: bo
 - 판 3 보정 (10-13, 작업 ②-0 명세에 대한 Codex 반박 10건 중 9 수용): 펼친 ID 충돌은 k 상한 없이 정규식 · `by_tau` 값에도 `tau` · 시도 기록 `session_id` · `Cost.derived_from`·백분위 보간·n=0 null · 채점 0 인 질문의 null 규칙 · seal fixture 문구 오류(mtime 만 바꾸면 재계산은 통과) 정정 · canary 누출 검사는 작업 ⑥ · score 질문은 task 검사기에서는 오류 목록(문구 분명히 — 반박 1건은 기각, 작업 ① 결정 유지). C3 재계산에서 나온 두 해석 차이 — `n_missing` 은 채점 코호트 안 · `n_calls_missing_usage` 는 응답 코드와 무관하게 usage 를 못 얻은 호출 전부. B(새 세션 중재) 지적으로 결정적 검사(합성 호출 3개: 422+usage · terminal 없음 · bool usage)에서 A 검사기 2 ≠ Codex 시험 1 → 판 3 보정 2: 마지막 terminal 응답의 정수 usage 는 코드와 무관하게 합에, 아니면 누락 (분할 불변식) + `n_missing_on_200`. 결정 기록 — 가정: 실패 응답이 usage 를 주면 그 토큰은 실제로 쓰였다 · 이유: 합이 하한임을 분명히 하고 모든 호출을 한쪽에 넣는다 · 다시 볼 조건: P0 에서 서버가 실패 응답에 usage 를 주지 않거나 오해를 주는 값을 준다고 확인되면.
 - 판 3 보정 3 (10-13, 작업 ② 명세 전 Claude): 작업 ② 함수 결과 자료형 7개(§8-5 끝) · `labels` 를 ③ 으로 · B1 토큰 대조 규칙(strip 정확 일치, 중복은 큰 값+경고) · 선택지 ID casefold 충돌 금지·정렬은 코드포인트.
 - 판 3 보정 4 (10-13, 작업 ② 명세에 대한 Codex 반박 10건 — 9 수용·1 해당 없음): 선택지 정렬은 B1 에서만(보정 3 의 §2-3 문장이 systemone 요청까지 정렬하는 것으로 읽혀 기존 render fixture 와 충돌 — Claude 실수) · snake_case 는 질문 ID 만 · usage 경고 이름 `usage_input_tokens_invalid` 와 경고 순서·보존 · 경계 입력 `ValueError` 규칙은 작업 ② 명세에.
+- 판 3 보정 5 (10-13, ③a 명세 전 Claude): 셋별 `item_id`·`group_id` 정의 · 정확 일치 묶음 키 · 분할 파일 정렬·바이트 규칙 · KOTE 강등은 풀 대표 기준 · `notes` 필드 · ③ 을 ③a(분할)·③b(항목·정답)로 나눔. 규칙 값은 `configs/splits/rules.yaml`.
+- 판 3 보정 6 (10-13, ③a 명세에 대한 Codex 반박 11건 — 실제 데이터 대조 포함, 전부 반영): KoSGD row_id·선정 검사 · FunctionChat 첫 user 는 role 로 찾기 · parquet 목록 열 변환 · KLUE 전체 행 · KorFin 행/항목 구별 · 비례 할당 경계 · `Groups`·`PoolResult` · 분할 파일 `sort_keys` · 한글은 강등 감정 이름만 · rules.yaml 의 KOTE 메타데이터 경로(`info` 누락 — Claude 실수). 기존 splits fixture 3개(정수 ID·정렬 전 순서·옛 notes 이름)는 계약에 맞게 고친다.

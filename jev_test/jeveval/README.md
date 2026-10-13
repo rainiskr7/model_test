@@ -1,14 +1,14 @@
-# jeveval — P1 작업 ② 기능 지도
+# jeveval — P1 작업 ③a 기능 지도
 
-P1_CONTRACT.md 판 3 보정 4의 요청·응답·B1 프롬프트·답 파싱·기초 채점을 구현했다.
-합성 fixture로 검증하며 data·io/sources·labels·client·run은 후속 작업이다.
+P1_CONTRACT.md 판 3 보정 6까지의 요청·응답·기초 채점과 원본 읽기·묶음·평가 풀·분할을 구현했다.
+테스트는 합성 fixture와 tmp_path만 사용한다. 항목·질문 펼치기·정답·client·실행기는 후속 작업이다.
 
 ## 코드
 
 - `__init__.py`: 패키지 네임스페이스.
 - `types/__init__.py`: 기존 `from jeveval.types import X` 경로와 새 자료형 재수출.
 - `types/base.py`: JsonRecord, JSON 사본·중첩 dataclass 복원·타입 검사.
-- `types/specs.py`: SourceRow, BoundQuestion, Item, QuestionSpec, TaskSpec, SplitPlan.
+- `types/specs.py`: SourceRow, BoundQuestion, Item, QuestionSpec, TaskSpec, SplitPlan, Groups, PoolResult.
 - `types/results.py`: Rendered, ParsedAnswer, 호출별 LengthInfo.
 - `types/scores.py`: Threshold, ThresholdFile, RiskCell, QStats, Population, Cost, ScoreTable.
 - `types/records.py`: Request, session_id를 포함한 AttemptRecord, CallRecord, FinalRecord.
@@ -27,12 +27,24 @@ P1_CONTRACT.md 판 3 보정 4의 요청·응답·B1 프롬프트·답 파싱·�
 - `score/kosgd_slots.py`: 카탈로그 순서의 고정 정답 칸·중복·묶음 정답·순서 진단.
 - `io/__init__.py`: 파일 입출력 네임스페이스.
 - `io/config.py`: UTF-8 안전 YAML 읽기, 중첩 중복 키 거부, task 검사 위임.
+- `io/sources/kosgd.py`: USER 턴의 전체 위치·frames 읽기와 감사 selected_turns 읽기.
+- `io/sources/functionchat.py`: serial_num·메시지·중첩 도구를 보존하는 JSONL 읽기.
+- `io/sources/kmhas.py`: 물리 행 ID와 Python label 목록을 갖는 parquet 읽기.
+- `io/sources/kote.py`: 물리 행 ID·labels와 info.features.labels.feature.names 읽기.
+- `io/sources/korfin.py`: 원본 순서의 SID별 aspect 행 읽기.
+- `io/sources/klue_mrc.py`: is_impossible 양·음성 전체 행과 guid·source 읽기.
+- `data/grouping.py`: 정확 일치·union-find 묶음, ID·source 검사, 원본 행 연결과 항목 구성원.
+- `data/pool.py`: 고정 선정 검증, 전체·단순 cap·최대 나머지 비례 할당과 층별 추출.
+- `data/split.py`: 대표·dev/test·extra, 풀 대표 기준 KOTE 강등, 전체/풀 라벨 충돌·행 통계.
+- `io/splits.py`: 보정 6의 정렬된 UTF-8 JSON 바이트와 SplitPlan 왕복, 감정 이름 외 한글 거부.
+- `run/make_splits.py`: 원본·순수 계산·쓰기 조립과 셋별 한 줄 요약, expect_groups 불일치 종료.
 - `README.md`: 기능 지도와 후속 작업 경계.
 
-의존 방향은 `io → contract → types`, `score → types`이며 io는 반환 타입을 직접 참조한다.
+의존 방향은 `run → io/data → types`, `io → contract → types`, `score → types`다.
 전체 예정 방향은 `run → client/io → score/data/contract → types`다.
 types는 jeveval의 다른 패키지를 import하지 않는다.
 contract·score는 서로 import하지 않으며 파일·네트워크·시계·난수 접근이 없는 순수 함수다.
+data도 파일·네트워크·시계에 접근하지 않고, 난수는 계약의 문자열 seed로 만든 random.Random만 쓴다.
 
 모든 dataclass는 frozen이다. 내부 list/dict까지 불변인 것은 아니다.
 from_dict는 중첩 타입을 복원하고 별칭 없는 사본을 만든다.
@@ -70,6 +82,17 @@ B1 allowed_token_ids는 후속 client가 채운다. calibrate의 모집단 구�
 - `tests/score/test_calibration.py`: 기존 보정 fixture·bin 경계·서로 다른 선택지·답 파서 연결.
 - `tests/score/test_kosgd_slots.py`: 기존 칸 fixture·copy_prev 별도 판정·칸별/평균 Brier 반례.
 - `tests/io/test_config.py`: 안전 YAML·중복 키·검사기 위임.
+- `tests/io/test_sources_kosgd.py`: USER 위치·원문 제외·파일 순서·선정 읽기·중복 대화 거부.
+- `tests/io/test_sources_functionchat.py`: system 선행·중첩 도구·첫 USER 기준의 전이 연결.
+- `tests/io/test_sources_kmhas.py`: 물리 행 번호와 Python 라벨 목록.
+- `tests/io/test_sources_kote.py`: info 메타데이터 경로와 메타데이터 누락 거부.
+- `tests/io/test_sources_korfin.py`: SID 행 순서 보존과 SRC별 단일 항목.
+- `tests/io/test_sources_klue_mrc.py`: 답변 불가능 행을 포함한 guid·중첩 answers 보존.
+- `tests/data/test_grouping.py`: 기존 union-find·충돌 fixture, 숫자 최소·문자열 정렬·ID/source 거부.
+- `tests/data/test_pool.py`: 기존 추출·비례 fixture, 동률·cap·빈 모집단·잘못된 고정 선정.
+- `tests/data/test_split.py`: 기존 중간 shuffle·최종 정렬, 풀 대표 강등·충돌·extra·KorFin 행 수.
+- `tests/io/test_splits.py`: 고정 바이트·왕복·입력 순서 불변·한글 감정 강등과 원문 제외.
+- `tests/run/test_make_splits.py`: 여섯 합성 셋 CLI 두 번의 바이트 일치·단일 셋·expect_groups 실패.
 - `tests/fixtures/test_fixtures_wellformed.py`: JSON·README·CP·temperature·바이트·정확한 대상 prefix·canary 입력.
 - `tests/fixtures/reference_scoring.py`: 테스트 전용 독립 F1·보정·임계값 참조 계산.
 - `tests/fixtures/test_scoring_fixtures.py`: 빈 bin·빈 채점·빈 마스크·21묶음 분모·코호트·pooled 검산.
@@ -89,8 +112,24 @@ canary는 표식 있는 입력만 만들며, 일곱 커밋 출력의 누출 검�
 
 검사: `../foundation_model_test_non_thinking/.venv/bin/python -I -m pytest -q -p no:cacheprovider tests`
 
+실제 데이터 미리보기 (저장소 루트에서, `-I` 경로 처리는 실행 명령에만 둔다):
+
+```sh
+../foundation_model_test_non_thinking/.venv/bin/python -I -c 'import runpy, sys; from pathlib import Path; sys.path.insert(0, str(Path.cwd())); runpy.run_module("jeveval.run.make_splits", run_name="__main__")' --rules configs/splits/rules.yaml --root . --set all --out .work/splits_preview
+```
+
+분할 파일에는 평가 풀 묶음만 담는다. KOTE 강등 이름만 한글을 허용하며 원문 묶음 키는 저장하지 않는다.
+`pool_rule`은 YAML pool 객체 그대로, 바이트는 `ensure_ascii=False, indent=1, sort_keys=True`와 끝 LF다.
+`Groups`·`PoolResult`는 frozen JsonRecord이며, strata 입력은 group_id→층 이름이다.
+KoSGD 고정 선정은 원본 USER 구성원 존재 여부로 검증한다 (없는 대화·중복·SYSTEM·범위 밖 거부).
+CLI의 상대 `--rules`와 source/선정 경로는 `--root` 기준, 상대 `--out`은 실행 cwd 기준이다.
+
 ## SPEC_AMBIGUOUS
 
 작업 ② 범위의 SPEC_AMBIGUOUS / FIXTURE_CONFLICT 없음. 반박 10건은 계약 판 3 보정 4 와 Claude(조율자) 판정으로 해결했다 (사용자 결정 아님).
+작업 ③a의 반박 11건은 보정 6과 사용자 승인으로 해결했다. 남은 SPEC_AMBIGUOUS / FIXTURE_CONFLICT 없음.
+승인된 fixture 변경: union_find.expected.groups의 구성원 11–15를 문자열로 변경;
+label_conflicts.expected.notes의 옛 키를 label_conflict_groups_total/pool (각 1)로 대체.
+deterministic.json은 변경하지 않았으며 중간 순서와 최종 정렬을 따로 검증한다.
 §10의 서버 인코더·문자→토큰 변환·길이 거부 응답 확인은 P0 후속 작업이다.
 현재 길이 fixture는 이미 측정된 합성 LengthInfo를 입력으로 삼는다.
