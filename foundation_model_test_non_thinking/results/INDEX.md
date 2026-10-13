@@ -15,7 +15,7 @@
 | fc1/fcrep_a/fcrep_b_20260819, fcfull_20260823 | 실험 | functionchat 재현·전량 시험 |
 | v2b_20260824, 20260621_221741, v4run_20260818 | 실험 | multimodal·agent 시험 |
 | 20260505_124246, 20260505_124246.bad | 구판 | 5월 라운드 |
-※ 소문자 `google_gemma_4_26b_a4b_it/20260621_221741`(git 추적 3파일, KRETA)이 macOS 에서는 대소문자 무시로 위 폴더와 겹쳐 보인다. 리눅스에서는 두 폴더로 갈린다 — 정리 보류.
+※ 10-13 정리: 소문자 `google_gemma_4_26b_a4b_it/20260621_221741`(KRETA 원본 3파일)이 git 에 따로 추적돼 리눅스 체크아웃에서 두 폴더로 갈리고 `results_model_dir_name` 이 "case-fold ambiguous" 로 거부하던 것을, 원본 3파일을 위 폴더(`google_gemma_4_26B_A4B_it`)로 옮기고 publish sidecar 의 경로 4곳을 맞춰 해소했다. 이제 결과 폴더 철자는 한 가지뿐이다(`configs/model_identity.json` 의 소문자 키는 과거 산출물용으로 남김).
 
 ### google_diffusiongemma_26B_A4B_it — 정리: [SUMMARY.md](google_diffusiongemma_26B_A4B_it/SUMMARY.md)
 | 세션 | 분류 | 내용 |
