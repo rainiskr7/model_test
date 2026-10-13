@@ -1,6 +1,6 @@
-# jeveval — P1 작업 ⑥a-1·P0-B1 길이 측정 기능 지도
+# jeveval — P1 작업 ⑤c·보정 11 기능 지도
 
-P1_CONTRACT.md 판 3 보정 10의 공유 실행 기반과 순수 호출 계획·길이·재시도 정책·결과 변환, 요청 채점·개발 임계값과 로컬 B1 길이 측정기를 구현했다.
+P1_CONTRACT.md 판 3 보정 10의 공유 실행 기반·채점·길이 측정에 단계 입력·fingerprint·진입 검사·봉인을 더했다. 보정 11의 모델별 HTTP 400/422 길이 거부를 반영했다.
 테스트는 합성 fixture·tmp_path와 동결 task 설정, 127.0.0.1 서버를 사용한다. 실행기는 후속 작업이다.
 
 ## 코드
@@ -16,8 +16,8 @@ P1_CONTRACT.md 판 3 보정 10의 공유 실행 기반과 순수 호출 계획·
 - `types/run.py`: ModelConfig·Decision·RunSummary JSON 왕복, bytes를 담는 메모리 전용 CallPlan.
 - `contract/model_config.py`: 닫힌 모델 스키마·파일 해시·토큰 ID 검사, 실행 필수 값·B1 라벨 집합 대조.
 - `io/models.py`: 중복 키 거부 YAML 로더와 ModelConfigError.errors.
-- `io/hashes.py`: 스트리밍 SHA-256·SHA256SUMS 파싱·목록 파일 대조.
-- `io/run_files.py`: 정규 JSON 바이트·fsync/원자 교체·중복 키/비유한 수 거부·파일 해시 재수출.
+- `io/hashes.py`: 스트리밍 SHA-256·SHA256SUMS 대조·정렬된 Python 소스 해시·토크나이저 재검증.
+- `io/run_files.py`: 정규 JSON 바이트·fsync/원자 교체·중복 키/비유한 수 거부·존재 조회/폴더 생성.
 - `types/contract.py`: Validated·B1Config·B1Call·B1Response의 frozen JsonRecord 자료형.
 - `types/scoring.py`: AnswerParse·F1Result·CalibResult·SlotJudgement 자료형.
 - `contract/__init__.py`: 계약 검사 네임스페이스.
@@ -70,6 +70,10 @@ P1_CONTRACT.md 판 3 보정 10의 공유 실행 기반과 순수 호출 계획·
 - `run/encoders/hf_chat_template.py`: 파일 해시 대조·오프라인 no-think 템플릿·ID 재인코딩 일치·state offsets 기반 LengthInfo.
 - `run/policy.py`: MAX_ATTEMPTS=5·전송 오류 우선·정수 Retry-After·누적 번호에 따른 Decision.
 - `run/outcome.py`: 기록 연결·예산·길이 필수 검사, 독립 usage·답 변환·거부 우선·논리 상태 합성.
+- `run/fingerprint.py`: 원본/토크나이저 검증·설정/규칙/코드 해시 수집·started_at 제외 비교.
+- `run/stage_inputs.py`: 동결 설정과 검증된 원본에서 단계별 Item 복원·해당 단계 final과 경고 읽기.
+- `run/gate.py`: 모든 검사 뒤 fingerprint 쓰기·현재 단계 tail 복구·첫 시험 봉인; 호출은 보내지 않는다.
+- `run/seal.py`: threshold/dev final 바이트 해시 봉인·덮어쓰기 거부·resume 해시 대조 (certify는 ⑥b).
 - `README.md`: 기능 지도와 후속 작업 경계.
 
 의존 방향은 `run → io/data → score/types`, `io → contract → types`, `score → types`다. 전체 예정 방향은 `run → client/io → score/data/contract → types`다.
@@ -167,6 +171,11 @@ score/threshold의 호출자는 dev_complete를 통과한 dev 결과와 원본 �
 - `tests/fixtures/test_resume_fixtures.py`: JSONL 손상·중복·완료 ID·누적 재시도 자료.
 
 fixture 폴더: render, responses, answers, scoring, splits, expand, records, resume, length, seal, temperature, b1, canary. 각 README는 한 줄이다. fixture 검산은 실제 실행 모듈 통합 테스트를 대신하지 않는다. 작업 ②·⑤b·⑥a-1 짝 테스트는 기존 fixture를 실제 함수에 통과시키며 기대값은 변경하지 않는다.
+- `tests/run/test_fingerprint.py`: 기존 비교 fixture·실제 파일 해시·원본/토크나이저 변조·null/등록 규칙.
+- `tests/run/test_stage_inputs.py`: 합성 FunctionChat의 세 단계·읽기 불가 test/extra와 dev 경로 격리.
+- `tests/run/test_gate.py`: resume fixture·검사 전후 전체 디렉터리 불변·완료 검사·현재 단계 tail 복구.
+- `tests/run/test_seal.py`: 기존 seal fixture의 첫 진입/재진입 분리·바이트 해시·mtime·덮어쓰기 거부.
+- `tests/run/stage_support.py`: 위 짝 테스트의 합성 실행 폴더·분할·전체 바이트 스냅샷 도우미.
 추가 fixture `tests/fixtures/b1/prompt.json`은 합성 설정으로 choice/noul 문구·매개변수를 고정한다. canary는 표식 있는 입력만 만들며, 일곱 커밋 출력의 누출 검사는 작업 ⑥에서 한다.
 
 검사: `../foundation_model_test_non_thinking/.venv/bin/python -I -m pytest -q -p no:cacheprovider -rs tests`
@@ -182,6 +191,12 @@ fixture 폴더: render, responses, answers, scoring, splits, expand, records, re
 CLI의 상대 `--rules`와 source/선정 경로는 `--root` 기준, 상대 `--out`은 실행 cwd 기준이다.
 
 ## SPEC_AMBIGUOUS
+
+⑤c: 명세 B2의 `read_stage_finals -> list[FinalRecord]`와 경고 반환 요구는 함께 만족할 수 없어 기존 `io.records.read_finals`의 `(records, warnings)`를 따른다.
+`code_sha256` 경로는 root 기준 POSIX 상대 경로(`jeveval/...`)로 고정한다. 상대 tokenizer.path도 root 기준이다. path가 있는데 해시 목록이 null/빈 경우는 검증 불가로 거부한다.
+extra는 명세 B4.3 그대로 test 대표 완료와 **존재하는** seal만 검사한다. seal 누락 자체를 거부하는 규칙은 아직 없다.
+FIXTURE_CONFLICT: `seal/cases.json`의 tampered/hash_mismatch/dev_changed는 start_allowed=true지만 기존 seal을 설치하면 명세 B4.2·계약 §8-6 A에 따라 거부해야 한다. start_allowed는 봉인 전 첫 진입으로 시험하고, 제공된 seal을 설치한 resume는 별도 거부 시험으로 고정했다. 기존 fixture는 수정하지 않았다. certify의 재계산·mtime 판정은 ⑥b 범위다.
+gate는 tail 복구의 중간 손상/잘못된 기록 거부도 쓰기 전에 발견한다. 검사 거부 메시지에 원문을 넣지 않는다. 이 순서는 단일 실행자 기준이며 외부 동시 변경의 트랜잭션 격리를 제공하지 않는다.
 
 작업 ② 범위의 SPEC_AMBIGUOUS / FIXTURE_CONFLICT 없음. 반박 10건은 계약 판 3 보정 4 와 Claude(조율자) 판정으로 해결했다 (사용자 결정 아님).
 작업 ③a의 반박 11건은 보정 6과 사용자 승인으로 해결했다. 남은 SPEC_AMBIGUOUS / FIXTURE_CONFLICT 없음.

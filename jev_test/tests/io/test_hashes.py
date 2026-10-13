@@ -4,7 +4,7 @@ import hashlib
 
 import pytest
 
-from jeveval.io.hashes import read_sha256sums, sha256_file, verify_dir
+from jeveval.io.hashes import code_sha256, read_sha256sums, sha256_file, tokenizer_sha256, verify_dir
 
 
 def test_streaming_hash_and_verification(tmp_path):
@@ -43,3 +43,23 @@ def test_duplicate_nested_and_space_names(tmp_path):
 def test_missing_manifest_raises(tmp_path):
     with pytest.raises(FileNotFoundError):
         verify_dir(tmp_path)
+
+
+def test_code_hash_relative_paths_sorted_and_cache_excluded(tmp_path):
+    code = tmp_path / "jeveval"
+    (code / "__pycache__").mkdir(parents=True)
+    (code / "z.py").write_bytes(b"z")
+    (code / "a.py").write_bytes(b"a")
+    (code / "__pycache__/ignored.py").write_bytes(b"ignored")
+    (code / "not_python.json").write_bytes(b"ignored")
+    assert code_sha256(tmp_path) == hashlib.sha256(b"jeveval/a.py\0ajeveval/z.py\0z").hexdigest()
+
+
+def test_tokenizer_symlink_escape_is_rejected(tmp_path):
+    root = tmp_path / "tok"
+    root.mkdir()
+    target = tmp_path / "outside"
+    target.write_text("same hash but outside")
+    (root / "tokenizer.json").symlink_to(target)
+    with pytest.raises(ValueError, match="outside"):
+        tokenizer_sha256(root, {"tokenizer.json": sha256_file(target)})

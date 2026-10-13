@@ -70,12 +70,13 @@ def _response_record(plan, attempt, length, cfg):
             if (cut == "not_truncated" and usage is not None
                     and usage["input_tokens"] != length.length_tokens):
                 warnings.append("length_mismatch")
+    elif (cfg.input_limit_response
+          and attempt.http_status == cfg.input_limit_response["status"]
+          and isinstance(raw, str)
+          and re.search(cfg.input_limit_response["body_regex"], raw)):
+        status, reason = "rejected", "input_limit"
     elif attempt.http_status == 422:
-        match = cfg.input_limit_response
-        if match and isinstance(raw, str) and re.search(match["body_regex"], raw):
-            status, reason = "rejected", "input_limit"
-        else:
-            reason = "http_422_other"
+        reason = "http_422_other"
     else:
         reason = f"http_{attempt.http_status}"
     return status, reason, list(dict.fromkeys(warnings + usage_warnings)), usage, answers, top

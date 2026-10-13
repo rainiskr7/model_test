@@ -87,6 +87,12 @@ def test_conditional_objects_and_regex(config):
     assert isinstance(validate_model_config(config, "m"), list)
 
 
+@pytest.mark.parametrize("status", [400, 422])
+def test_model_specific_input_limit_status(config, status):
+    config["input_limit_response"] = {"status": status, "body_regex": "maximum context length is"}
+    assert validate_model_config(config, "m").input_limit_response == config["input_limit_response"]
+
+
 def test_missing_systemone_and_detached_config(config):
     cfg = validate_model_config(config, "m")
     assert missing_for_run(cfg) == []

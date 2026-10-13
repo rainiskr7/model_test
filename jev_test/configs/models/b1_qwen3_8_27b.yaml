@@ -12,7 +12,7 @@ base_url: null
 auth_env: OPENAI_API_KEY
 question_scoring: separate
 limit: {tokens: 65535, overflow: reject}
-input_limit_response: null   # 길이 거부는 HTTP 400 — 검사기가 422 만 받으므로 보정 11 뒤에 {status: 400, body_regex: "maximum context length is"}
+input_limit_response: {status: 400, body_regex: "maximum context length is"}   # 길이 거부는 HTTP 400
 encoder: {rule: hf_chat_template_no_think}
 tokenizer:
   path: /Users/rainis/Desktop/workplace/models/Qwen_Qwen3.8_27B

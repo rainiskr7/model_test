@@ -9,6 +9,16 @@ from jeveval.io.hashes import sha256_file as file_sha256
 from jeveval.types import JsonRecord
 
 
+def exists(path) -> bool:
+    """실행 입력/산출물의 존재 여부를 io에서 조회한다."""
+    return Path(path).exists()
+
+
+def make_directory(path) -> None:
+    """검사가 끝난 실행기의 출력 폴더를 만든다."""
+    Path(path).mkdir(parents=True, exist_ok=True)
+
+
 def json_bytes(obj) -> bytes:
     """실행 산출물의 UTF-8·정렬 키·한 칸 들여쓰기·끝 LF를 고정한다."""
     data = obj.to_dict() if isinstance(obj, JsonRecord) else obj

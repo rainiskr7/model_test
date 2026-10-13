@@ -32,7 +32,10 @@ def test_six_registered_models_and_pending_run_fields():
         assert cfg.id == path.stem
         assert (cfg.kind, cfg.question_scoring, cfg.repo["id"], cfg.repo["sha"]) == EXPECTED[cfg.id]
         assert cfg.concurrency == 1 and cfg.t0 == {"status": "not_run", "record": None}
-        assert cfg.notes and cfg.input_limit_response is None
+        assert cfg.notes
+        assert cfg.input_limit_response == (
+            {"status": 400, "body_regex": "maximum context length is"}
+            if cfg.id == "b1_qwen3_8_27b" else None)
         assert ModelConfig.from_dict(cfg.to_dict()) == cfg
         expected = ["served_name", "base_url", "limit.tokens", "limit.overflow", "encoder.rule",
                     "tokenizer.path", "tokenizer.files_sha256"]

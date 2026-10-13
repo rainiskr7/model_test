@@ -11,6 +11,22 @@ from jeveval.run.plan_calls import plan_calls
 from jeveval.types import AttemptRecord, CallRecord, Request
 
 
+@pytest.mark.parametrize("configured,code,raw,reason", [
+    (400, 400, "This model's maximum context length is 65536 tokens. ...", "input_limit"),
+    (400, 400, "max allowed: 20", "http_400"),
+    (422, 400, "maximum context length is 65536", "http_400"),
+    (400, 422, "maximum context length is 65536", "http_422_other"),
+    (422, 422, "maximum context length is 65536", "input_limit"),
+])
+def test_b1_model_specific_length_rejection(env, make_attempt, configured, code, raw, reason):
+    cfg = replace(env.bcfg, input_limit_response={
+        "status": configured, "body_regex": "maximum context length is"})
+    plan, = plan_calls(env.item, env.task, cfg, env.b1)
+    call = call_record(plan, [make_attempt(plan, http_status=code, response_raw=raw)], env.length, cfg)
+    assert call.reason == reason
+    assert call.status == ("rejected" if reason == "input_limit" else "error")
+
+
 @pytest.mark.parametrize("path", sorted((Path(__file__).parents[1] / "fixtures/responses").glob("*.json")),
                          ids=lambda p: p.stem)
 def test_response_fixtures(env, make_attempt, path):

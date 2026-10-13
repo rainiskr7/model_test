@@ -97,7 +97,7 @@ def validate_model_config(data: dict, file_stem: str) -> ModelConfig | list[str]
     _object(data, schema, "", errors)
     if isinstance(data, dict):
         if isinstance(data.get("input_limit_response"), dict):
-            _object(data["input_limit_response"], {"status": lambda v: type(v) is int and v == 422,
+            _object(data["input_limit_response"], {"status": lambda v: type(v) is int and v in (400, 422),
                     "body_regex": _regex}, "input_limit_response.", errors)
         if data.get("kind") == "b1":
             _object(data.get("b1"), {"label_token_ids": _nullable(_token_ids)}, "b1.", errors)
