@@ -1,5 +1,5 @@
 diff --git aa/eval/infer/infer_gpt.py bb/eval/infer/infer_gpt.py
-index 5119c2c..e1adf83 100644
+index 5119c2c..3947bb7 100644
 --- aa/eval/infer/infer_gpt.py
 +++ bb/eval/infer/infer_gpt.py
 @@ -12,7 +12,68 @@ from tqdm import tqdm
@@ -210,7 +210,7 @@ index 5119c2c..e1adf83 100644
      dataset = load_dataset("tabtoyou/KoTextVQA", split="test")
      model_components = load_model(
          model_name=MODEL_NAME,
-@@ -168,32 +238,116 @@ def run_and_save():
+@@ -168,32 +238,120 @@ def run_and_save():
      )
  
      def process_and_save_part(part_data, part_name, model_components):
@@ -221,7 +221,12 @@ index 5119c2c..e1adf83 100644
 +        from concurrent.futures import as_completed
          print(f"Begin processing {part_name}")
 -        results = []
-         output_path = f"./output/{MODEL}_{part_name}.jsonl"
+-        output_path = f"./output/{MODEL}_{part_name}.jsonl"
++        # KRETA_OUTPUT_DIR: 러너(run_kreta.sh)가 실행마다 다른 답안 폴더를 지정한다.
++        # 미설정이면 upstream 과 같은 ./output — 두 실행이 한 폴더를 쓰면 서로의
++        # checkpoint 를 지우므로(2026-08-30) 러너는 항상 설정한다.
++        output_dir = os.environ.get("KRETA_OUTPUT_DIR") or "./output"
++        output_path = os.path.join(output_dir, f"{MODEL}_{part_name}.jsonl")
 +        os.makedirs(os.path.dirname(output_path), exist_ok=True)
  
 +        # checkpoint: keep only valid completed rows, dropping corrupt/error rows.

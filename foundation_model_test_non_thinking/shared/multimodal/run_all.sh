@@ -66,23 +66,57 @@ fi
 #   이유 = 직전 런에서 KMMLU 가 chat-template 오염으로 폐기됐고, 같이 재실행하는
 #   KRETA(direct) 결과를 조기에 확인하기 위함. 원복하려면 이 블록을 아래
 #   K-MMBench 다음 자리로 되돌리면 된다.
+# SKIP_BENCHES 에 벤치 이름(kreta k_dtcbench koffvqa mtvqa_kr k_mmbench b4_latency_profile)을 주면 그 벤치를 건너뛴다.
+#   끝난 벤치를 덮어쓰지 않고 중단된 세션을 이어갈 때 쓴다. 마지막 sanity check 는 건너뛴 벤치의 기존 결과도 검사한다.
+if skip_bench kreta; then
+  echo "=== KRETA — SKIP (SKIP_BENCHES) ==="
+else
 echo "=== KRETA (mode=${KRETA_SETTING:-default}) ==="
 # KRETA 프롬프트 모드: KRETA_SETTING env 로 override (기본 default).
 #   direct → 글자만 답(빠름, Spark/느린 HW 권장) / default → 추론 후 답.
-run_checked "KRETA" bash "$SCRIPT_DIR/run_kreta.sh" "$MODEL" "${KRETA_SETTING:-default}" "$BASE_URL"
+#   KRETA_RESUME=1 → 같은 세션의 checkpoint 를 이어 쓴다(run_kreta_resume.sh: 오류 행만 재요청).
+#   run_kreta.sh 는 시작 시 checkpoint 를 지우므로 중단된 세션을 이어갈 때 반드시 1 을 준다.
+#   resume 이 실패하면 1회 더 시도하고, 그래도 실패하면 다른 벤치처럼 실패로 세고 계속한다.
+case "${KRETA_RESUME:-0}" in
+  0) run_checked "KRETA" bash "$SCRIPT_DIR/run_kreta.sh" "$MODEL" "${KRETA_SETTING:-default}" "$BASE_URL" ;;
+  1)
+    if ! bash "$SCRIPT_DIR/run_kreta_resume.sh" "$MODEL" "${KRETA_SETTING:-default}" "$BASE_URL"; then
+      echo "[run_all] KRETA resume 실패 — 1회 재시도"
+      run_checked "KRETA(resume)" bash "$SCRIPT_DIR/run_kreta_resume.sh" "$MODEL" "${KRETA_SETTING:-default}" "$BASE_URL"
+    fi
+    ;;
+  *) echo "[run_all] KRETA_RESUME 은 0 또는 1 이어야 한다: '${KRETA_RESUME}'" >&2; exit 2 ;;
+esac
+fi
 
 # 이하 가장 가벼운 것부터
-echo "=== K-DTCBench (240) ==="
-run_checked "K-DTCBench" bash "$SCRIPT_DIR/run_k_dtcbench.sh" "$MODEL" "$BASE_URL"
+if skip_bench k_dtcbench; then
+  echo "=== K-DTCBench — SKIP (SKIP_BENCHES) ==="
+else
+  echo "=== K-DTCBench (240) ==="
+  run_checked "K-DTCBench" bash "$SCRIPT_DIR/run_k_dtcbench.sh" "$MODEL" "$BASE_URL"
+fi
 
-echo "=== KOFFVQA (275, Rubric judge) ==="
-run_checked "KOFFVQA" bash "$SCRIPT_DIR/run_koffvqa.sh" "$MODEL" "$BASE_URL"
+if skip_bench koffvqa; then
+  echo "=== KOFFVQA — SKIP (SKIP_BENCHES) ==="
+else
+  echo "=== KOFFVQA (275, Rubric judge) ==="
+  run_checked "KOFFVQA" bash "$SCRIPT_DIR/run_koffvqa.sh" "$MODEL" "$BASE_URL"
+fi
 
-echo "=== MTVQA-KR (한국어 서브셋) ==="
-run_checked "MTVQA-KR" bash "$SCRIPT_DIR/run_mtvqa_kr.sh" "$MODEL" "$BASE_URL"
+if skip_bench mtvqa_kr; then
+  echo "=== MTVQA-KR — SKIP (SKIP_BENCHES) ==="
+else
+  echo "=== MTVQA-KR (한국어 서브셋) ==="
+  run_checked "MTVQA-KR" bash "$SCRIPT_DIR/run_mtvqa_kr.sh" "$MODEL" "$BASE_URL"
+fi
 
-echo "=== K-MMBench (4,329) ==="
-run_checked "K-MMBench" bash "$SCRIPT_DIR/run_k_mmbench.sh" "$MODEL" "$BASE_URL"
+if skip_bench k_mmbench; then
+  echo "=== K-MMBench — SKIP (SKIP_BENCHES) ==="
+else
+  echo "=== K-MMBench (4,329) ==="
+  run_checked "K-MMBench" bash "$SCRIPT_DIR/run_k_mmbench.sh" "$MODEL" "$BASE_URL"
+fi
 
 # KO-VLM-Benchmark — stub (외부 코드 OpenAI-compat 미지원, 별도 작업 필요)
 echo "=== KO-VLM-Benchmark (stub — skip) ==="
@@ -187,7 +221,9 @@ if not session.exists():
     print(f"[sanity] WARN: session dir 없음 {session}")
     sys.exit(0)
 
-for jf in session.rglob('*.json'):
+# 이 스크립트가 만든 이미지 결과(vision/)만 검사한다. 세션 전체를 훑으면 같은 세션의 언어 트랙
+# (예: Qwen 의 solo taubench 는 템플릿 거부로 늘 발행 불가)을 잡아 이미지 시험을 매번 실패로 끝낸다.
+for jf in (session / 'vision').rglob('*.json'):
     if '_derived' in jf.parts:
         continue
     if jf.name in ('run_config.json', 'runs.json'):

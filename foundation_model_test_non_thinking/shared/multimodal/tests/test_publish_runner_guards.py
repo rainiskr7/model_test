@@ -75,7 +75,9 @@ def test_kreta_patch_remains_well_formed():
 
 
 def test_kreta_resume_rejects_stale_session_before_inference(tmp_path):
-    output = tmp_path / "data/KRETA/eval/output"
+    """옛 세션의 checkpoint 가 지금 세션 폴더에 놓여 있어도 거부한다.
+    (session 필드만 다른 정밀 테스트는 test_kreta_output_isolation.py 에 있다.)"""
+    output = tmp_path / "data/KRETA/eval/output/model/new-session/direct"
     output.mkdir(parents=True)
     (output / "model_direct.jsonl").write_text("{}\n", encoding="utf-8")
     (output / ".resume_context.json").write_text(json.dumps({
@@ -100,7 +102,7 @@ def test_kreta_resume_rejects_stale_session_before_inference(tmp_path):
 
 
 def test_kreta_resume_rejects_changed_serving_constraints(tmp_path):
-    output = tmp_path / "data/KRETA/eval/output"
+    output = tmp_path / "data/KRETA/eval/output/model/same-session/direct"
     output.mkdir(parents=True)
     (output / "model_direct.jsonl").write_text("{}\n", encoding="utf-8")
     monkey_env = {
