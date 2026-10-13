@@ -11,15 +11,18 @@ from jeveval.run.encoders import ENCODERS
 def build_fingerprint(*, root, run_id, model_cfg_path, task_path, set_name,
                       variant, started_at) -> dict:
     """원본·토크나이저를 검증한 뒤 설정과 규칙 소스의 실제 바이트를 식별한다."""
-    root = Path(root)
-    model_path, task_path = root / model_cfg_path, root / task_path
+    root = Path(root).resolve()
+    model_path, task_path = (root / model_cfg_path).resolve(), (root / task_path).resolve()
+    inputs = dict(model_cfg_path=model_path.relative_to(root).as_posix(),
+                  task_path=task_path.relative_to(root).as_posix(), set=set_name,
+                  variant=variant, run_id=run_id)
     cfg, task = load_model_config(model_path), load_taskspec(task_path)
     if task.set != set_name or task.variant != variant:
         raise ValueError("fingerprint task identity mismatch")
     dataset = root / "dataset" / set_name
     if hashes.verify_dir(dataset):
         raise ValueError("dataset hash mismatch")
-    paths = [task_path, root / "configs/tasks/b1.yaml",
+    paths = [task_path, root / "configs/tasks/b1.yaml", root / "configs/datasets.yaml",
              root / "configs/splits" / f"{set_name}.json", model_path,
              dataset / "SHA256SUMS", *hashes.glob_files(root / "configs/tasks/lists", "*.json")]
     files = {p.relative_to(root).as_posix(): hashes.sha256_file(p) for p in sorted(set(paths))}
@@ -34,7 +37,7 @@ def build_fingerprint(*, root, run_id, model_cfg_path, task_path, set_name,
     tokenizer = None if path is None else hashes.tokenizer_sha256(
         root / path, cfg.tokenizer["files_sha256"])
     return dict(schema="fingerprint/1", run_id=run_id, model=cfg.id, set=set_name,
-                variant=variant, files=files, dataset_verified=True, encoder=encoder,
+                variant=variant, inputs=inputs, files=files, dataset_verified=True, encoder=encoder,
                 tokenizer=tokenizer, code_sha256=hashes.code_sha256(root), started_at=started_at)
 
 

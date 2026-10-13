@@ -17,7 +17,7 @@ REPO = Path(__file__).resolve().parents[2]
 
 @pytest.fixture
 def inputs(tmp_path):
-    paths = ["configs/tasks/kmhas.yaml", "configs/tasks/b1.yaml",
+    paths = ["configs/tasks/kmhas.yaml", "configs/tasks/b1.yaml", "configs/datasets.yaml",
              "configs/models/b1_qwen3_8_27b.yaml", "jeveval/run/encoders/hf_chat_template.py"]
     paths += [str(p.relative_to(REPO)) for p in (REPO / "configs/tasks/lists").glob("*.json")]
     for name in paths:
@@ -51,10 +51,12 @@ def test_exact_hashes_and_only_started_at_ignored(inputs, fixture_json):
     assert result["schema"] == "fingerprint/1" and result["dataset_verified"] is True
     assert (result["model"], result["set"], result["variant"], result["run_id"]) == (
         "b1_qwen3_8_27b", "kmhas", "default", "r1")
-    expected = ["configs/tasks/kmhas.yaml", "configs/tasks/b1.yaml", "configs/splits/kmhas.json",
+    expected = ["configs/tasks/kmhas.yaml", "configs/tasks/b1.yaml", "configs/datasets.yaml", "configs/splits/kmhas.json",
                 "configs/models/b1_qwen3_8_27b.yaml", "dataset/kmhas/SHA256SUMS"]
     expected += [p.relative_to(root).as_posix() for p in (root / "configs/tasks/lists").glob("*.json")]
     assert result["files"] == {p: sha256_file(root / p) for p in expected}
+    assert result["inputs"] == dict(model_cfg_path="configs/models/b1_qwen3_8_27b.yaml",
+        task_path="configs/tasks/kmhas.yaml", set="kmhas", variant="default", run_id="r1")
     assert result["encoder"] == dict(rule="hf_chat_template_no_think",
         sha256=sha256_file(root / "jeveval/run/encoders/hf_chat_template.py"))
     assert result["tokenizer"] == {"tokenizer.json": sha256_file(root / "tokenizer/tokenizer.json")}

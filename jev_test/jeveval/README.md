@@ -206,6 +206,8 @@ CLI의 상대 `--rules`와 source/선정 경로는 `--root` 기준, 상대 `--ou
 
 ## SPEC_AMBIGUOUS
 
+⑥b-1: 실행 명령·summary·canary와 반박 R1–R7을 구현했다. 아래 실행 순서와 후속 인수조건을 따른다.
+
 ⑥a-2b: R1–R3 반영. 추가 SPEC_AMBIGUOUS / FIXTURE_CONFLICT 없음. missing_mask fixture의 present는 사례마다 noul과 NONE choice를 나타내므로 통합 시험에서는 NONE 사례만 별도 질문 ID로 연결한다. fixture 파일과 각 사례의 정답·예측·상태는 변경하지 않는다.
 
 ⑥a-2a: R1 반영으로 미측정 길이의 모호성은 해소했다. risk_cases.json은 질문/길이 입력 없는 집계 예이므로 인증 필드(상태·dev/test·by_status·플래그)를 대조하고 빈 세부 분포 자리는 별도 합성 Item 시험으로 검증한다. fixture는 수정하지 않았다. 추가 SPEC_AMBIGUOUS / FIXTURE_CONFLICT 없음.
@@ -228,3 +230,54 @@ P0-B1: null/빈 해시 목록은 미확정으로 거부한다. user는 하나이
 ```sh
 ../foundation_model_test_non_thinking/.venv/bin/python -I -c 'import runpy, sys; from pathlib import Path; sys.path.insert(0, str(Path.cwd())); runpy.run_module("jeveval.run.item_summary", run_name="__main__")' --rules configs/splits/rules.yaml --root . --tasks configs/tasks --splits configs/splits --task all
 ```
+
+## 실행 명령 (⑥b-1)
+
+저장소 루트 `jev_test/`에서 동결한 task·분할·입력·모델 설정을 사용한다. 다음은
+설정과 서버 준비가 끝난 뒤의 순서다. `--base-url`은 메모리에서만 덮어쓰며 YAML을 바꾸지 않는다.
+직접 실행은 모델 설정의 `auth_env`가 지정한 환경 변수에 인증 토큰이 있어야 한다.
+토큰은 `Authorization: Bearer` 헤더에만 사용하고 출력·fingerprint에 기록하지 않는다.
+
+```sh
+python -m jeveval.run.cli run --model configs/models/b1_qwen3_8_27b.yaml --task configs/tasks/kmhas.yaml --stage dev --run-id r1 --base-url http://127.0.0.1:8000 --check-config
+python -m jeveval.run.cli run --model configs/models/b1_qwen3_8_27b.yaml --task configs/tasks/kmhas.yaml --stage dev --run-id r1 --base-url http://127.0.0.1:8000
+python -m jeveval.run.cli threshold --run-dir results/b1_qwen3_8_27b/r1/A/kmhas/default
+python -m jeveval.run.cli run --model configs/models/b1_qwen3_8_27b.yaml --task configs/tasks/kmhas.yaml --stage test --run-id r1 --base-url http://127.0.0.1:8000
+python -m jeveval.run.cli score --run-dir results/b1_qwen3_8_27b/r1/A/kmhas/default
+python -m jeveval.run.cli certify --run-dir results/b1_qwen3_8_27b/r1/A/kmhas/default
+```
+
+FunctionChat은 test 뒤 `run --stage extra`까지 완료한 뒤 score한다. test는 인증 모집단,
+dev+test+extra는 `all_rows` 기술 통계다. score는 봉인 존재·해시 및 각 단계의 정확한 완료
+ID 집합을 먼저 검사한다. threshold는 dev 기록만 열고, 시험 봉인 후에는 재작성하지 않는다.
+
+`--check-config`는 설정·task·분할 구조와 실행 누락 목록만 검사한다. 원본 데이터 로드,
+길이 측정, 인증 확인, 전송, 결과 쓰기는 하지 않는다. 일반 명령은 JSON 한 줄과 종료값
+0(성공)/1(실패)을 반환하며 예외 원문을 출력하지 않는다.
+
+fingerprint는 명시적 `inputs` 경로와 `configs/datasets.yaml` 해시를 포함한다.
+threshold·score·certify는 저장된 입력으로 fingerprint를 다시 만들고, `started_at`을
+제외한 값이 모두 같아야 진행한다. 이전 형식의 inputs 없는 fingerprint는 거부한다.
+인증은 dev 완료 확인·Item 복원 후 기존 threshold 함수로 세 tau를 재계산한다.
+dev 바이트/threshold 재계산/threshold–seal–risk 해시를 각각 a/b/c로 출력하며,
+threshold mtime이 봉인 시각보다 늦은 것은 경고다. 개발 실행을 반복해 고르는 일은
+이 검사로 막지 못한다. attempts와 fingerprint 보존은 후속 archive 명령의 책임이다.
+
+KoSGD separate 모델은 `kosgd_full.yaml`의 같은 단계 완료 후
+`kosgd_actions_only.yaml`로 run한다. 두 판의 공통 fingerprint 입력을 비교하고,
+파생 판도 dev → 자기 threshold → test 봉인 → score → certify 순서를 거친다.
+파생에는 인증·측정·전송이 없으며 출처는 저장소 상대 full 경로로 단계별 derived.json에
+남긴다. 파생 재개는 동일 final 접두부만 허용하고, 비용은 전부 0(p50/p95 null)이다.
+
+summary는 동결 datasets 설정의 주 지표 판, risk.cells["0.02"]에서만 만든다.
+NO_THRESHOLD/UNDERPOWERED 또는 분모 0의 score는 0이고, t0_status도 함께 기록한다.
+비주 지표 판에 기존 summary가 있으면 자동 삭제하지 않고 거부한다.
+score는 risk·scores·summary를 모두 계산·직렬화한 뒤 파일별로 원자 교체한다.
+같은 입력의 재실행은 같은 바이트다. 여러 파일 전체의 트랜잭션이나 디스크 장애 시
+롤백은 제공하지 않으므로 저장 도중 장애가 나면 같은 명령을 다시 실행한다.
+
+canary는 합성 원본·가짜 Measurer·주입 post로 실제 CLI 전체 순서를 실행한다.
+systemone의 실제 인코더는 P0 후속이며 시험용 주입은 CLI 옵션으로 노출하지 않는다.
+seal fixture 여섯 경우는 실제 certify 경로를 통과하고, fixture의 synthetic 셋은
+시험에서 Item 로더만 주입한다. **⑥b-2 인수조건: compare.json에도 같은 세 canary
+표식이 없어야 한다.** compare·archive·reference 명령은 ⑥b-2에서 추가한다.
