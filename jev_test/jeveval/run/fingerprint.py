@@ -23,7 +23,7 @@ def build_fingerprint(*, root, run_id, model_cfg_path, task_path, set_name,
     if hashes.verify_dir(dataset):
         raise ValueError("dataset hash mismatch")
     paths = [task_path, root / "configs/tasks/b1.yaml", root / "configs/datasets.yaml",
-             root / "configs/splits" / f"{set_name}.json", model_path,
+             root / "configs/splits" / f"{set_name}.json", root / "configs/splits/rules.yaml", model_path,
              dataset / "SHA256SUMS", *hashes.glob_files(root / "configs/tasks/lists", "*.json")]
     files = {p.relative_to(root).as_posix(): hashes.sha256_file(p) for p in sorted(set(paths))}
     rule, encoder = cfg.encoder["rule"], None

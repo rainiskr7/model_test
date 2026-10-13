@@ -18,13 +18,14 @@ REPO = Path(__file__).resolve().parents[2]
 @pytest.fixture
 def inputs(tmp_path):
     paths = ["configs/tasks/kmhas.yaml", "configs/tasks/b1.yaml", "configs/datasets.yaml",
-             "configs/models/b1_qwen3_8_27b.yaml", "jeveval/run/encoders/hf_chat_template.py"]
+             "configs/models/b1_qwen3_8_27b.yaml", "configs/splits/rules.yaml",
+             "jeveval/run/encoders/hf_chat_template.py"]
     paths += [str(p.relative_to(REPO)) for p in (REPO / "configs/tasks/lists").glob("*.json")]
     for name in paths:
         path = tmp_path / name
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes((REPO / name).read_bytes())
-    (tmp_path / "configs/splits").mkdir()
+    (tmp_path / "configs/splits").mkdir(exist_ok=True)
     (tmp_path / "configs/splits/kmhas.json").write_text("{}\n")
     data = tmp_path / "dataset/kmhas"
     data.mkdir(parents=True)
@@ -52,7 +53,7 @@ def test_exact_hashes_and_only_started_at_ignored(inputs, fixture_json):
     assert (result["model"], result["set"], result["variant"], result["run_id"]) == (
         "b1_qwen3_8_27b", "kmhas", "default", "r1")
     expected = ["configs/tasks/kmhas.yaml", "configs/tasks/b1.yaml", "configs/datasets.yaml", "configs/splits/kmhas.json",
-                "configs/models/b1_qwen3_8_27b.yaml", "dataset/kmhas/SHA256SUMS"]
+                "configs/models/b1_qwen3_8_27b.yaml", "configs/splits/rules.yaml", "dataset/kmhas/SHA256SUMS"]
     expected += [p.relative_to(root).as_posix() for p in (root / "configs/tasks/lists").glob("*.json")]
     assert result["files"] == {p: sha256_file(root / p) for p in expected}
     assert result["inputs"] == dict(model_cfg_path="configs/models/b1_qwen3_8_27b.yaml",
@@ -112,4 +113,8 @@ def test_task_identity_and_code_or_list_changes(inputs):
     assert not same_fingerprint(before, build_fingerprint(**inputs))
     before = build_fingerprint(**inputs)
     (inputs["root"] / "configs/tasks/lists/added.json").write_text("{}")
+    assert not same_fingerprint(before, build_fingerprint(**inputs))
+    before = build_fingerprint(**inputs)
+    rules = inputs["root"] / "configs/splits/rules.yaml"
+    rules.write_text(rules.read_text() + "\n# changed\n")
     assert not same_fingerprint(before, build_fingerprint(**inputs))

@@ -12,9 +12,11 @@ from jeveval.io.splits import read_split_plan
 from jeveval.io.tasks import read_b1_config
 from jeveval.run.fingerprint import build_fingerprint, same_fingerprint
 from jeveval.run.layout import identifier
+from jeveval.run.seal import check_seal
 from jeveval.run.stage_inputs import load_items, read_stage_finals
 from jeveval.score.tasks import outcome
 from jeveval.score.threshold import dev_complete
+from jeveval.types import ThresholdFile
 
 
 def inside(root, path):
@@ -113,3 +115,15 @@ def primary_variant(ctx):
 def file_info(path):
     stat = Path(path).stat()
     return stat.st_size, stat.st_mtime
+
+
+def completed(root, run_dir):
+    """compare/archive 공통 선행: 불변 입력·단계 완료·threshold identity·봉인."""
+    ctx = restore(root, run_dir)
+    names = ("dev", "test", "extra") if ctx.task.set == "fc_call_decision" else ("dev", "test")
+    stages = {name: stage(ctx, name) for name in names}
+    threshold = run_files.read_json(ctx.directory / "threshold.json", ThresholdFile)
+    check_identity(ctx, threshold.to_dict())
+    if not run_files.exists(ctx.directory / "test/seal.json") or check_seal(ctx.directory):
+        raise ValueError("valid seal required")
+    return ctx, stages, threshold

@@ -45,8 +45,11 @@ def test_c4_order_duplicates_missing_and_compare_serialization():
     pop = population(**population_args(records))
     ids = [r[1].logical_id for r in records]
     output = compare_file(models=["z", "a"], set="s", variant="v", cohort_ids=ids,
-                          per_model_population=dict(z=pop, a=pop), bootstrap={"x": []})
+                          per_model_population=dict(z=pop, a=pop), bootstrap={"x": []},
+                          t0_status=dict(z="partial", a="passed"))
     assert output["models"] == ["a", "z"] and output["schema"] == "compare/1"
+    assert output["t0_status"] == dict(a="passed", z="partial")
+    assert output["t0_not_passed"] == ["z"]
     assert output["common_cohort"]["logical_ids_sha256"] == sha256("\n".join(sorted(ids)).encode()).hexdigest()
     assert output["common_cohort"]["per_model"]["a"] == pop.to_dict()
     output["common_cohort"]["per_model"]["a"]["counts"]["n_sampled"] = 100

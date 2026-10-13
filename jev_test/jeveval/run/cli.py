@@ -4,7 +4,7 @@ import argparse
 import json
 from pathlib import Path
 
-from jeveval.run import cmd_certify, cmd_run, cmd_score, cmd_threshold
+from jeveval.run import cmd_archive, cmd_certify, cmd_compare, cmd_run, cmd_score, cmd_threshold
 
 
 def main(argv=None):
@@ -20,10 +20,18 @@ def main(argv=None):
     run.add_argument("--check-config", action="store_true")
     for name in ("threshold", "score", "certify"):
         commands.add_parser(name).add_argument("--run-dir", required=True)
+    compare = commands.add_parser("compare")
+    compare.add_argument("--run-dirs", nargs="+", required=True)
+    compare.add_argument("--compare-id", required=True)
+    compare.add_argument("--results", default="results")
+    archive = commands.add_parser("archive")
+    archive.add_argument("--run-id", required=True)
+    archive.add_argument("--results", default="results")
+    archive.add_argument("--archive-root", default="archive")
     args = vars(parser.parse_args(argv))
     command = args.pop("command")
     handler = {"run": cmd_run, "threshold": cmd_threshold, "score": cmd_score,
-               "certify": cmd_certify}[command]
+               "certify": cmd_certify, "compare": cmd_compare, "archive": cmd_archive}[command]
     try:
         result = handler.run(root=Path.cwd(), **args)
     except Exception:

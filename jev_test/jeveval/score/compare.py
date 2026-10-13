@@ -43,17 +43,22 @@ def common_cohort(per_model_outcomes: dict[str, list[RequestOutcome]], stage_fil
     return sorted(set.intersection(*cohorts)) if cohorts else []
 
 
-def compare_file(*, models, set, variant, cohort_ids, per_model_population, bootstrap) -> dict:
+def compare_file(*, models, set, variant, cohort_ids, per_model_population, bootstrap,
+                 t0_status) -> dict:
     """호출자는 C4 검사 뒤 정확한 공통 코호트의 Population을 전달한다."""
     names, ids = sorted(models), sorted(cohort_ids)
     if len(names) != len(builtins_set(names)) or builtins_set(names) != per_model_population.keys():
         raise ValueError("comparison model keys differ or duplicate")
     if len(ids) != len(builtins_set(ids)):
         raise ValueError("duplicate cohort logical_id")
+    if t0_status.keys() != builtins_set(names) or any(
+            s not in ("not_run", "partial", "passed") for s in t0_status.values()):
+        raise ValueError("invalid model T0 status")
     for pop in per_model_population.values():
         if pop.counts["n_sampled"] != len(ids) or pop.counts["by_status"]["ok"] != len(ids):
             raise ValueError("population differs from common ok cohort")
     return dict(schema="compare/1", models=names, set=set, variant=variant,
                 common_cohort=dict(n=len(ids), logical_ids_sha256=sha256("\n".join(ids).encode()).hexdigest(),
                                    per_model={m: per_model_population[m].to_dict() for m in names}),
-                bootstrap=deepcopy(bootstrap))
+                bootstrap=deepcopy(bootstrap), t0_status={m: t0_status[m] for m in names},
+                t0_not_passed=[m for m in names if t0_status[m] != "passed"])
