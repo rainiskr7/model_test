@@ -417,25 +417,27 @@ def full_suite(target):
 
 def guard_fixture(target):
     base=ROOT/'guard_fixture';orch=base/'logs/resume_orch';orch.mkdir(parents=True)
-    shutil.copy2(target,orch/'lane_guard.sh')
+    odir=base/'orchestration';(odir/'lanes').mkdir(parents=True)
+    shutil.copy2(target,odir/'lane_guard.sh')
+    shutil.copy2(target.parent/'lanes.conf',odir/'lanes.conf')
     (base/'shared/harness').mkdir(parents=True)
-    shutil.copy2(target.parents[2]/'shared/harness/harness_lib.sh',base/'shared/harness/harness_lib.sh')
+    shutil.copy2(target.parents[1]/'shared/harness/harness_lib.sh',base/'shared/harness/harness_lib.sh')
     write(base/'health','#!/bin/bash\n[ "$(cat "$CASE/health_value")" = up ]\n',True)
     write(base/'temp','#!/bin/bash\ncat "$CASE/temp_value"\n',True)
     write(base/'health_value','up');write(base/'temp_value','60 70')
     # A shell waits on an owned sleeper; fake root basename cannot match old guards.
-    lane=write(orch/'zz_fake_lane_primary.sh','#!/bin/bash\nsleep 300 &\necho "$!" > "$CASE/lane_child"\necho ready > "$CASE/lane_ready"\nwait\n',True)
+    lane=write(odir/'lanes'/'zz_fake_lane_primary.sh','#!/bin/bash\nsleep 300 &\necho "$!" > "$CASE/lane_child"\necho ready > "$CASE/lane_ready"\nwait\n',True)
     env=envbase();env.update(CASE=str(base),LANEGUARD_STATE_DIR=str(base/'state'),LANEGUARD_LOG=str(base/'guard.log'),LANEGUARD_ONCE='1',
         LANEGUARD_LANES='fake|zz_fake_lane_primary|fixture|FIXTURE_KEY|fixture-model',
         LANEGUARD_HEALTH_CMD=str(base/'health'),LANEGUARD_TEMP_CMD=str(base/'temp'))
-    return base,orch,lane,env
+    return base,orch,odir,lane,env
 
 def guard_suite(target):
     if not proc_available():
         inconclusive('C6 all real guard process assertions','ps denied: real guard and fake lanes not launched')
         guard_model(target)
         return
-    base,orch,lane,env=guard_fixture(target);guard=[BASH,str(orch/'lane_guard.sh')];p=None;known=[]
+    base,orch,odir,lane,env=guard_fixture(target);guard=[BASH,str(odir/'lane_guard.sh')];p=None;known=[]
     def cycle(n=1):
         for _ in range(n):
             r=run(guard,env,timeout=15)
@@ -497,6 +499,24 @@ def guard_suite(target):
         try:
             qkids=descendants(q.pid)[1:];cycle();check('보존','C6 sh -c decoy excluded','T' not in stat(q.pid) and stopped())
         finally:cleanup_process(q,qkids)
+        # C7: each unsupported command is observed beside the valid root.
+        elsewhere=write(base/'elsewhere/lanes'/lane.name,lane.read_text(),True)
+        for label,args in [('outside orchestration',[BASH,str(elsewhere)]),
+                           ('extra argument',[BASH,str(lane),'extra']),
+                           ('bash -c',[BASH,'-c','sleep 300',lane.stem])]:
+            q=launch(args,env,base/('c7_'+str(len(OWNED))+'.log'));qkids=[]
+            try:
+                ready=waitfor(lambda:bool(stat(q.pid)) if label=='bash -c' else len(descendants(q.pid))>1)
+                qkids=descendants(q.pid)[1:]
+                before=(base/'guard.log').read_text()
+                heat('90 99');cycle()
+                added=(base/'guard.log').read_text()[len(before):]
+                pids=[q.pid,*qkids]
+                check('신규','C7 '+label+' excluded / zero signals',ready and
+                      all(stat(pid) and 'T' not in stat(pid) for pid in pids) and
+                      not any(re.search(r'(?:STOP|CONT) pid='+str(pid)+r' ',added) for pid in pids) and
+                      '레인 2개 이상' not in added and stopped())
+            finally:cleanup_process(q,qkids)
         # Replace root while old ownership exists: counts restart, new running
         # process must not receive a CONT intended for the old PID.
         cleanup_process(p,known);heat('');health('up');newlane();cycle()
@@ -524,6 +544,18 @@ def guard_suite(target):
         finally:cleanup_process(holder,holderkids)
     finally:
         if p:cleanup_process(p,known)
+
+    guard_default_lanes(base,odir,env)
+
+def guard_default_lanes(base,odir,env):
+    default_env=dict(env)
+    default_env.pop('LANEGUARD_LANES',None)
+    default_env['LANEGUARD_ONCE']='1'
+    before=(base/'guard.log').read_text() if (base/'guard.log').exists() else ''
+    r=run([BASH,str(odir/'lane_guard.sh')],default_env)
+    added=(base/'guard.log').read_text()[len(before):]
+    check('신규','C8 default lanes.conf without LANEGUARD_LANES',r.returncode==0 and
+          all(name+': 레인 식별 root=없음' in added for name in ('qwen38','qwenfp8')),f'rc={r.returncode}')
 
 def real_cancel(target,python):
     if not proc_available():
@@ -588,7 +620,7 @@ if tool=='kill':
 '''
 
 def guard_model(target):
-    base,orch,lane,env=guard_fixture(target)
+    base,orch,odir,lane,env=guard_fixture(target)
     model=write(base/'process_model.py',MODEL_PROCESS)
     bindir=base/'model_bin'
     for tool in ('ps','pgrep'):
@@ -608,7 +640,7 @@ def guard_model(target):
     def stopped():return load()['processes'][root]['stat']=='T'
     def cycle(n=1):
         for _ in range(n):
-            r=run([BASH,str(orch/'lane_guard.sh')],env)
+            r=run([BASH,str(odir/'lane_guard.sh')],env)
             if r.returncode:raise RuntimeError('guard model cycle: '+r.stdout)
     def pending(t):
         d=load();d['processes'][root]['stat']='T' if t else 'S';store(d)
@@ -632,6 +664,14 @@ def guard_model(target):
     check('신규','C6 MODEL duplicate roots no signal / warning once',not load()['signals'] and (base/'guard.log').read_text().count('레인 2개 이상')==1)
     fresh();d=load();d['processes']['800003']={'ppid':0,'stamp':'decoy','stat':'S','cmd':'sh -c bash '+str(lane)};store(d);temp('90 99');cycle()
     check('보존','C6 MODEL sh decoy excluded',stopped() and load()['processes']['800003']['stat']=='S')
+    saved=load();saved_state=file.read_text()
+    for label,cmd in [('outside orchestration','/bin/bash '+str(base/'elsewhere/lanes'/lane.name)),
+                      ('extra argument','/bin/bash '+str(lane)+' extra'),
+                      ('bash -c',"/bin/bash -c sleep 300 "+lane.stem)]:
+        fresh();d=load();d['processes']={root:dict(d['processes'][root],cmd=cmd)};store(d)
+        temp('90 99');cycle()
+        check('신규','C7 MODEL '+label+' excluded / zero signals',not load()['signals'] and not stopped())
+    store(saved);write(file,saved_state)
     d=load();d['processes']['800004']={'ppid':int(child),'stamp':'new child','stat':'S','cmd':'sleep 300'};store(d);cycle()
     check('신규','C6 MODEL new descendant reconciled',load()['processes']['800004']['stat']=='T')
     d=load();d['processes'][root]['stamp']='new incarnation';d['processes'][root]['stat']='S';store(d);temp('');cycle()
@@ -639,6 +679,9 @@ def guard_model(target):
     # Root absence must still reconcile stored orphan ownership when reasons clear.
     d=load();del d['processes'][root];d['processes'][child]['ppid']=1;store(d);temp('60 70');cycle(3)
     check('신규','C6 MODEL orphan held descendant resumes without root',load()['processes'][child]['stat']=='S')
+
+    store({"processes":{},"signals":[]})
+    guard_default_lanes(base,odir,env)
 
 def main():
     global ROOT
