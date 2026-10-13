@@ -77,7 +77,8 @@ def valid_score(score) -> bool:
 
 
 def judge_one(client, judge_model: str, question: str, response: str, criteria,
-              seed: Optional[int] = None, max_tokens: int = 1024) -> tuple:
+              seed: Optional[int] = None, max_tokens: int = 1024,
+              identity: Optional["ServedIdentity"] = None) -> tuple:
     crit_str = criteria if isinstance(criteria, str) else json.dumps(criteria, ensure_ascii=False, indent=2)
     prompt = JUDGE_PROMPT.format(question=question, criteria=crit_str, response=response)
     kwargs = {
@@ -90,7 +91,8 @@ def judge_one(client, judge_model: str, question: str, response: str, criteria,
         kwargs["seed"] = seed
     try:
         resp = client.chat.completions.create(**kwargs)
-        _record_served_identity(resp)
+        if identity is not None:
+            _record_served_identity(identity, resp)
         text = resp.choices[0].message.content or ""
         m = re.search(r'\{[^{}]*"score"[^{}]*\}', text, re.DOTALL)
         if m:
@@ -109,18 +111,20 @@ def judge_one(client, judge_model: str, question: str, response: str, criteria,
 
 # What the endpoint reported serving, collected across the run.  A judged score
 # is only interpretable against the model that actually produced it.
-SERVED_IDENTITY = {"model": set(), "system_fingerprint": set(), "provider": set()}
+class ServedIdentity:
+    def __init__(self):
+        self.values = {"model": set(), "system_fingerprint": set(), "provider": set()}
 
 
-def _record_served_identity(resp):
+def _record_served_identity(identity: ServedIdentity, resp):
     for field in ("model", "system_fingerprint", "provider"):
         value = getattr(resp, field, None)
         if value:
-            SERVED_IDENTITY[field].add(str(value))
+            identity.values[field].add(str(value))
 
 
-def served_identity_snapshot():
-    return {field: sorted(values) for field, values in SERVED_IDENTITY.items() if values}
+def served_identity_snapshot(identity: ServedIdentity):
+    return {field: sorted(values) for field, values in identity.values.items() if values}
 
 
 def _detect_column(cols, name):
@@ -210,6 +214,7 @@ def main():
     print(f"[koffvqa_judge] target={args.target_model}")
     print(f"[koffvqa_judge] out={out_dir}")
 
+    identity = ServedIdentity()
     results = []
     scores = []
     for i, row in df.iterrows():
@@ -219,7 +224,7 @@ def main():
 
         score, reason, err, raw_judge = judge_one(
             client, args.judge_model, q, resp, crit,
-            seed=args.seed, max_tokens=args.judge_max_tokens,
+            seed=args.seed, max_tokens=args.judge_max_tokens, identity=identity,
         )
         if score is not None:
             scores.append(score)
@@ -246,7 +251,7 @@ def main():
         "judge_prompt_version": JUDGE_PROMPT_VERSION,
         "judge_prompt_template_sha256": _prompt_template_hash(),
         "judge_base_url": args.judge_base_url,
-        "judge_served_identity": served_identity_snapshot(),
+        "judge_served_identity": served_identity_snapshot(identity),
         "target_model": args.target_model,
         "predfile": args.predfile,
         "prediction_sha256": file_sha256(args.predfile),

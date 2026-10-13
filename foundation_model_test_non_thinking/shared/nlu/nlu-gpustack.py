@@ -8,29 +8,37 @@ import argparse
 import importlib
 from datetime import datetime
 from pathlib import Path
-try:
-    _dotenv = importlib.import_module("dotenv")
-    _dotenv.load_dotenv()
-except Exception:
-    # python-dotenv 는 선택 의존이고 실제로 없는 환경이 있다. 그때 조용히 넘어가면
-    # 자격증명 없이 `Bearer None` 을 보내고 엔드포인트는 401 만 돌려준다 —
-    # 인증 설정 문제가 서버 문제처럼 보인다. 최소 파서로 직접 읽는다.
-    for _candidate in (Path.cwd(), *Path.cwd().parents, Path(__file__).resolve().parent.parent.parent):
-        _env_file = _candidate / ".env"
-        if not _env_file.is_file():
-            continue
-        try:
-            for _line in _env_file.read_text(encoding="utf-8").splitlines():
-                _line = _line.strip()
-                if not _line or _line.startswith("#") or "=" not in _line:
-                    continue
-                _name, _, _value = _line.partition("=")
-                os.environ.setdefault(_name.strip(), _value.strip().strip("\"'"))
-        except Exception:
-            pass
-        break
 
-api_key = os.getenv("OPENAI_API_KEY")
+# Compatibility for callers that replace get_response with the legacy signature.
+# Credentials are resolved only when main() starts, never during import.
+api_key = None
+
+
+def load_api_key() -> str | None:
+    """Load CLI credentials with the existing dotenv/fallback precedence."""
+    try:
+        _dotenv = importlib.import_module("dotenv")
+        _dotenv.load_dotenv()
+    except Exception:
+        # python-dotenv 는 선택 의존이고 실제로 없는 환경이 있다. 그때 조용히 넘어가면
+        # 자격증명 없이 `Bearer None` 을 보내고 엔드포인트는 401 만 돌려준다 —
+        # 인증 설정 문제가 서버 문제처럼 보인다. 최소 파서로 직접 읽는다.
+        for _candidate in (Path.cwd(), *Path.cwd().parents, Path(__file__).resolve().parent.parent.parent):
+            _env_file = _candidate / ".env"
+            if not _env_file.is_file():
+                continue
+            try:
+                for _line in _env_file.read_text(encoding="utf-8").splitlines():
+                    _line = _line.strip()
+                    if not _line or _line.startswith("#") or "=" not in _line:
+                        continue
+                    _name, _, _value = _line.partition("=")
+                    os.environ.setdefault(_name.strip(), _value.strip().strip("\"'"))
+            except Exception:
+                pass
+            break
+    return os.getenv("OPENAI_API_KEY")
+
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 PROMPT_DIR = SCRIPT_DIR / "prompt"
@@ -248,6 +256,9 @@ def check_no_clobber(manifest, model: str, endpoint: str) -> None:
 
 
 def main():
+    global api_key
+    api_key = load_api_key()
+
     parser = argparse.ArgumentParser(description="NLU evaluation client (gpustack endpoint).")
     parser.add_argument("--model", default="qwen/qwen3-32b", help="Model name (default: qwen/qwen3-32b)")
     parser.add_argument(
