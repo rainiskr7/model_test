@@ -34,6 +34,30 @@ def test_serialization_failure_leaves_no_target_or_temporary_file(tmp_path):
     assert list(tmp_path.iterdir()) == []
 
 
+def test_replace_failure_preserves_existing_bytes_and_removes_temporary_file(monkeypatch, tmp_path):
+    from jsonwrite import atomic_json
+
+    path = tmp_path / "summary.json"
+    original = b'{"existing": "bytes stay unchanged"}\n'
+    path.write_bytes(original)
+    failure = OSError("synthetic replace failure")
+    replacements = []
+
+    def fail_replace(source, destination):
+        replacements.append((source, destination))
+        assert Path(source).is_file()
+        assert destination == path
+        raise failure
+
+    monkeypatch.setattr(atomic_json.os, "replace", fail_replace)
+    with pytest.raises(OSError) as caught:
+        write_json_atomic(path, {"새 값": "서울"})
+    assert caught.value is failure
+    assert len(replacements) == 1
+    assert path.read_bytes() == original
+    assert list(tmp_path.iterdir()) == [path]
+
+
 def test_all_four_consumers_import_the_same_writer():
     paths = (
         "functionchat/runner/run_functionchat.py",

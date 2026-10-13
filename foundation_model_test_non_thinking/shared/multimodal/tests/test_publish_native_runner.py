@@ -53,10 +53,7 @@ def test_summarize_records_errors_reduce_only_conditional_denominator():
     assert summary["accuracy_conditional"]["denominator"] == 2
 
 
-def test_clean_completed_source_is_promoted_to_native(monkeypatch, tmp_path):
-    from shared.multimodal.publish import adapters
-
-    monkeypatch.setitem(adapters.EXPECTED_COUNTS, "k_dtcbench", 2)
+def write_tiny_accuracy_source(tmp_path):
     source_dir = tmp_path / "results/model/session/vision/multimodal/k_dtcbench"
     source_dir.mkdir(parents=True)
     rows = [
@@ -80,6 +77,14 @@ def test_clean_completed_source_is_promoted_to_native(monkeypatch, tmp_path):
     }
     (source_dir / "results.json").write_text(json.dumps(rows), encoding="utf-8")
     (source_dir / "summary.json").write_text(json.dumps(summary), encoding="utf-8")
+    return source_dir, rows
+
+
+def test_clean_completed_source_is_promoted_to_native(monkeypatch, tmp_path):
+    from shared.multimodal.publish import adapters
+
+    monkeypatch.setitem(adapters.EXPECTED_COUNTS, "k_dtcbench", 2)
+    source_dir, rows = write_tiny_accuracy_source(tmp_path)
     _, sidecar = native_sidecar_from_records(
         source_dir,
         tmp_path,

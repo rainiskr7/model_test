@@ -41,6 +41,9 @@ def test_run_all_accumulates_runner_failure_and_exits_nonzero(tmp_path):
     script_dir = tmp_path / "shared/multimodal"
     script_dir.mkdir(parents=True)
     shutil.copy2(REPO / "shared/multimodal/run_all.sh", script_dir / "run_all.sh")
+    (script_dir / "benches").mkdir()
+    for name in ("paths.py", "_schema.py", "b3_preflight.py", "session_sanity.py"):
+        shutil.copy2(REPO / "shared/multimodal/benches" / name, script_dir / "benches" / name)
     wrappers = [
         "run_k_dtcbench.sh", "run_koffvqa.sh", "run_mtvqa_kr.sh",
         "run_k_mmbench.sh", "run_kreta.sh", "run_b4_latency_profile.sh",
@@ -58,12 +61,15 @@ def test_run_all_accumulates_runner_failure_and_exits_nonzero(tmp_path):
         path.chmod(0o755)
     result = subprocess.run(
         ["bash", str(script_dir / "run_all.sh"), "model", "http://unused"],
-        env={**os.environ, "EVAL_TIMESTAMP": "synthetic-session"},
+        env={**os.environ, "MODEL_TEST_BASE": str(tmp_path), "EVAL_TIMESTAMP": "synthetic-session"},
         text=True, capture_output=True, check=False,
     )
     assert result.returncode == 1
     assert "K-DTCBench 실패 — 계속" in result.stdout
     assert "run_b4_latency_profile.sh" in marker.read_text(encoding="utf-8")
+    assert "[sanity] WARN: session dir 없음" in result.stdout
+    assert "all benchmarks done (failures=1)" in result.stdout
+    assert result.stderr == ""
 
 
 def test_kreta_patch_remains_well_formed():

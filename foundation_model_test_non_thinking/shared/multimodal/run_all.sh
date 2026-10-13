@@ -136,31 +136,7 @@ B3_MANIFEST="$SCRIPT_DIR/data/structured_output/manifest.json"
 if [ ! -f "$B3_MANIFEST" ]; then
   echo "[run_all] B-3 manifest 없음 — 스킵 (data/structured_output/ 채우면 활성화)"
 else
-  # manifest 가 있어도 image 가 모두 존재해야 의미 있는 평가 가능.
-  # 누락 시 total=0 인 "성공 exit + 0건 결과" 함정에 빠지므로 preflight 에서 fail-fast.
-  B3_PREFLIGHT_OK=$(python - "$B3_MANIFEST" "$SCRIPT_DIR/data/structured_output" <<'PY'
-import json, sys
-from pathlib import Path
-manifest_path = Path(sys.argv[1])
-base_dir = Path(sys.argv[2])
-items = json.loads(manifest_path.read_text())
-missing = []
-for it in items:
-    img = it.get('image')
-    if not img:
-        continue
-    full = base_dir / img
-    if not full.exists():
-        missing.append(str(full))
-if missing:
-    sys.stderr.write("[run_all] B-3 preflight 실패: 이미지 누락\n")
-    for m in missing:
-        sys.stderr.write(f"  - {m}\n")
-    print("NO")
-else:
-    print("OK")
-PY
-)
+  B3_PREFLIGHT_OK=$(python "$SCRIPT_DIR/benches/b3_preflight.py" "$B3_MANIFEST" "$SCRIPT_DIR/data/structured_output")
   if [ "$B3_PREFLIGHT_OK" = "OK" ]; then
     run_checked "B-3" bash "$SCRIPT_DIR/run_b3_structured_output.sh" "$MODEL" "$BASE_URL"
   else
@@ -190,93 +166,9 @@ fi
 # Linux에서도 기존 git 경로의 실제 casing을 재사용한다. 문자열 치환으로 따로
 # 계산하면 macOS(대소문자 무시)에서는 같은 디렉토리를 가리키지만 리눅스에서는
 # Python 러너가 쓰는 경로와 갈라져 산출물이 두 디렉토리로 흩어진다.
-SAFE_MODEL="$("$PY" - "$SCRIPT_DIR/benches" "$BASE_DIR" "$MODEL" <<'PYEOF'
-import sys
-sys.path.insert(0, sys.argv[1])
-from paths import results_model_dir_name
-print(results_model_dir_name(sys.argv[2], sys.argv[3]))
-PYEOF
-)" || { echo "[run_all] results 모델 경로 해석 실패 — 중단"; exit 1; }
+SAFE_MODEL="$("$PY" -c 'import sys; sys.path.insert(0, sys.argv[1]); from paths import results_model_dir_name; print(results_model_dir_name(sys.argv[2], sys.argv[3]))' "$SCRIPT_DIR/benches" "$BASE_DIR" "$MODEL")" || { echo "[run_all] results 모델 경로 해석 실패 — 중단"; exit 1; }
 SESSION_DIR="$RESULTS_ROOT/$SAFE_MODEL/$EVAL_TIMESTAMP"
-if ! "$PY" - "$SESSION_DIR" "$MODEL" "$SCRIPT_DIR/benches" <<'PY'
-import json, sys
-from pathlib import Path
-
-session = Path(sys.argv[1])
-model_name = sys.argv[2]
-benches_dir = Path(sys.argv[3])
-
-# schema-aware validation (Pydantic 기반 — _schema.py 가 있으면 활용)
-sys.path.insert(0, str(benches_dir))
-try:
-    from _schema import detect_and_validate, diagnostic_warnings, publish_status_error
-    HAS_SCHEMA = True
-except Exception as e:
-    print(f"[sanity] schema module 로드 실패 ({e}) — legacy 키 검사만")
-    HAS_SCHEMA = False
-
-failures = []
-warnings = []
-if not session.exists():
-    print(f"[sanity] WARN: session dir 없음 {session}")
-    sys.exit(0)
-
-# 이 스크립트가 만든 이미지 결과(vision/)만 검사한다. 세션 전체를 훑으면 같은 세션의 언어 트랙
-# (예: Qwen 의 solo taubench 는 템플릿 거부로 늘 발행 불가)을 잡아 이미지 시험을 매번 실패로 끝낸다.
-for jf in (session / 'vision').rglob('*.json'):
-    if '_derived' in jf.parts:
-        continue
-    if jf.name in ('run_config.json', 'runs.json'):
-        continue
-    try:
-        d = json.loads(jf.read_text())
-    except Exception:
-        continue
-    rel = jf.relative_to(session)
-
-    if HAS_SCHEMA and isinstance(d, dict):
-        warnings.extend(f"  [warning] {msg}" for msg in diagnostic_warnings(d, str(rel)))
-        gate_error = publish_status_error(
-            d, str(rel), allow_clean_unscored=(jf.parent.name == "koffvqa"),
-        )
-        if gate_error:
-            failures.append(f"  [publish] {gate_error}")
-            continue
-
-    # 1차: schema 검증 (새 bench 표준)
-    if HAS_SCHEMA and isinstance(d, dict):
-        kind, msg = detect_and_validate(d, str(rel))
-        if msg:
-            failures.append(f"  [{kind}] {msg}")
-            continue
-        if kind != "unknown":
-            continue  # schema 통과 → legacy 검사 skip
-
-    # 2차: legacy fallback (키 기반 — KRETA 같은 비표준 구조 등)
-    if isinstance(d, dict):
-        for k in ("total", "count", "n_samples", "num_samples"):
-            v = d.get(k)
-            if isinstance(v, (int, float)) and v == 0:
-                failures.append(f"  {rel}: {k}=0")
-                break
-        # KRETA results.json 의 모델별 키 구조에서 stale key 탐지
-        if jf.parent.name == "kreta" and jf.name == "results.json":
-            stale = [k for k in d.keys() if not k.startswith(model_name)]
-            if stale:
-                failures.append(f"  {rel}: stale model key {stale}")
-
-if warnings:
-    print(f"[sanity] {len(warnings)} 건의 비치명 경고:")
-    for w in warnings:
-        print(w)
-if failures:
-    print(f"[sanity] {len(failures)} 건의 실패 결과:")
-    for failure in failures:
-        print(failure)
-    sys.exit(1)
-else:
-    print("[sanity] OK — 치명적 결과 없음")
-PY
+if ! "$PY" "$SCRIPT_DIR/benches/session_sanity.py" "$SESSION_DIR" "$MODEL" "$SCRIPT_DIR/benches"
 then
   echo "[run_all] sanity check 실패 감지됨"
   FAILURES=$((FAILURES + 1))
