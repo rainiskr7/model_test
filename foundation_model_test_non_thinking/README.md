@@ -309,33 +309,33 @@ GB10은 통합 메모리(LPDDR5X, 대역폭 ~273 GB/s)라 dense 대형 모델의
 ## 4. 디렉토리 구조
 
 ```
-model_test/
-├── llm/  slm/  vlm/  vsm/        # 4 클래스 (자급자족)
-│   └── <class>/
-│       ├── harness/              # lm-evaluation-harness 래퍼
-│       ├── nlu/                  # NLU smoke test
-│       ├── agent/                # Ko-AgentBench 래퍼 + GPUStack 어댑터
-│       ├── multimodal/           # vlm/vsm 에만 존재
-│       │   ├── benches/          # 개별 벤치마크 runner
-│       │   ├── patches/          # 외부 repo 로컬 패치 (kreta_infer_gpt.patch)
-│       │   ├── run_<bench>.sh
-│       │   ├── run_kreta_resume.sh  # KRETA 중단-재개 (jsonl 보존)
-│       │   ├── run_all.sh
-│       │   └── install.sh
-│       ├── recommended_models.md
-│       └── (평가계획.md)
+foundation_model_test_non_thinking/
+├── shared/                        # 트랙 구현의 단일 소스 — 각 트랙은 run_*.sh(진입) · runner/ · scoring/ · tests/
+│   ├── harness/                   # KMMLU (lm-evaluation-harness 래퍼, harness_lib.sh 가 정지·검증·잠금)
+│   ├── nlu/                       # NLU (nlu-gpustack.py + scoring/)
+│   ├── functionchat/              # FunctionChat (runner/ · scoring/ · judge/)
+│   ├── taubench/                  # tau2-bench (runner/ · scoring/)
+│   ├── agent/                     # Ko-AgentBench (gpustack_custom/ · scoring/; run_full_eval 에서는 비활성)
+│   ├── multimodal/                # 이미지 벤치 (benches/ · publish/ · run_<bench>.sh · run_all.sh)
+│   ├── publish/                   # 발행 등급 (claims.py)
+│   ├── serving/                   # 서빙 제약 (constraints.py)
+│   ├── jsonwrite/                 # 공용: 원자적 JSON 쓰기 (write_json_atomic)
+│   ├── resultspath/               # 공용: results/ 모델 폴더 철자 재사용·채점 경로·실행 시각
+│   └── results_dir.sh             # 위 철자 재사용의 bash 판 (run_harness.sh 가 source)
+├── llm/  slm/  vlm/  vsm/         # 클래스별 진입점 = shared/ 로의 symlink + recommended_models.md + 평가계획
+├── orchestration/                 # 레인 실행·감시: run_lane.sh + lanes/<이름>.conf · lane_guard.sh · tests/ · README
+├── reports/                       # 트랙별 보고 스크립트 report_<track>_tracks.py (--base 기본 = 이 저장소)
+├── configs/                       # 모델별 YAML (models/), 로더, model_identity.json, serving_profiles/
 ├── data/                          # 외부 repo 중앙 clone (.gitignore)
-│   ├── KRETA/  KOFFVQA/  KO-VLM-Benchmark/
-│   ├── Ko-AgentBench/
-│   └── lm-evaluation-harness/
-├── results/                       # 평가 결과 (git 추적 — 모델별 결과 누적)
-├── logs/                          # 트랙별 실행 로그 (.gitignore)
+├── results/                       # 평가 결과 (git 추적 — results/INDEX.md 가 본·보조·실험·구판 분류)
+├── logs/                          # 실행 로그 (.gitignore; resume_orch/ 에 레인 상태·orchestrator.log)
 ├── run_full_eval.sh               # 한 모델 전 트랙 일괄 (config 의 tracks 순서)
-├── start_eval_session.sh / end_eval_session.sh
-├── sync.sh                        # 머신 간 rsync
-├── REFACTORING_PLAN.md            # 향후 정비 계획
+├── start_eval_session.sh / end_eval_session.sh / check_servers.sh / sync.sh
+├── CONVENTIONS.md                 # 코드 작성 규칙 (크기·분해·공용 모듈·시험·검증 방식)
 └── README.md
 ```
+
+KMMLU·taubench std4 같은 단일 트랙 재측정은 `orchestration/lanes/<이름>.sh` 로, 절차는 `orchestration/README.md`.
 
 ---
 
