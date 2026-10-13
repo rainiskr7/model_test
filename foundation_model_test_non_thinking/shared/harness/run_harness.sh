@@ -150,57 +150,73 @@ else
 fi
 echo "[harness] mode=$LM_EVAL_MODE model_type=$LM_MODEL fewshot=$NUM_FEWSHOT num_concurrent=$NUM_CONCURRENT"
 
+# Cancellation/validation helpers are local to this repository.
+source "$SCRIPT_DIR/harness_lib.sh" || exit 4
 FAILED_TASKS=()
-HARNESS_TMP_DIR=""
+LM_PID="" TASK="" HARNESS_TMP_DIR="" CANCELLING=0 PRESERVE_TMP=0
+harness_lock "$RESULTS_DIR/.harness.lock" || exit $?
+trap 'harness_on_signal 143' TERM
+trap 'harness_on_signal 130' INT
+trap 'harness_cleanup_tmp' EXIT
 
-# lm_eval semantics:
-#   --output_path X.json  →  실제 파일은 X_<isotime>.json (loggers/evaluation_tracker.py:269-275)
-# 따라서 task 단위 임시 dir 안에 lm_eval 실행시키고, 성공 시 생성된 ${TASK}_*.json 을
-# RESULTS_DIR 로 이동. idempotency 도 같은 패턴 매칭으로 체크.
-#
-# SIGINT/SIGTERM/EXIT 시 진행 중이던 tmp dir 정리.
-trap '[[ -n "$HARNESS_TMP_DIR" && -d "$HARNESS_TMP_DIR" ]] && rm -rf "$HARNESS_TMP_DIR"' INT TERM EXIT
-
-for TASK in "${TASKS[@]}"
-do
-  # 이미 ${TASK}_<isotime>.json 결과 파일이 있으면 skip (부분 실패 후 재실행 시 시간 절약).
-  if compgen -G "$RESULTS_DIR/${TASK}_*.json" > /dev/null; then
+for TASK in "${TASKS[@]}"; do
+  if compgen -G "$RESULTS_DIR/${TASK}_*.json" >/dev/null; then
     existing=$(ls -1 "$RESULTS_DIR/${TASK}_"*.json | head -1)
     echo "[skip] $TASK: $existing 이미 존재"
     continue
   fi
-
+  if ! harness_recover_task "$TASK"; then
+    FAILED_TASKS+=("${TASK}(preserve_failed)")
+    continue
+  fi
   echo "Running task: $TASK"
-  HARNESS_TMP_DIR="$RESULTS_DIR/.tmp_${TASK}"
-  rm -rf "$HARNESS_TMP_DIR"
-  mkdir -p "$HARNESS_TMP_DIR"
-
-  if lm_eval \
+  PRESERVE_TMP=0
+  HARNESS_TMP_DIR=$(mktemp -d "$RESULTS_DIR/.tmp_${TASK}.XXXXXX") || {
+    FAILED_TASKS+=("${TASK}(temp_failed)"); continue;
+  }
+  lm_eval \
     --model "$LM_MODEL" \
     --tasks "$TASK" \
     --model_args "model=${MODEL_NAME},base_url=${BASE_URL},tokenizer_backend=huggingface,tokenizer=${TOKENIZER},num_concurrent=${NUM_CONCURRENT},max_retries=3,max_length=${MAX_LENGTH}" \
     --batch_size "$BATCH_SIZE" \
     "${EXTRA_ARGS[@]}" \
-    --output_path "$HARNESS_TMP_DIR/${TASK}.json"
-  then
-    # lm_eval 이 만든 ${TASK}_<isotime>.json (들) 을 정식 위치로 이동.
-    if compgen -G "$HARNESS_TMP_DIR/${TASK}_*.json" > /dev/null; then
-      mv "$HARNESS_TMP_DIR/${TASK}_"*.json "$RESULTS_DIR/"
-    else
-      # rc=0 인데 출력 파일이 없는 비정상 케이스 — 실패로 기록.
-      FAILED_TASKS+=("${TASK}(no_output)")
-      echo "[WARN] $TASK: lm_eval rc=0 but no output file produced" >&2
-    fi
+    --output_path "$HARNESS_TMP_DIR/${TASK}.json" </dev/null 9>&- &
+  LM_PID=$!
+  wait "$LM_PID"; rc=$?; LM_PID=""
+  if [ "$rc" -ne 0 ]; then
+    FAILED_TASKS+=("${TASK}(rc=$rc)")
+    echo "[WARN] failed: $TASK rc=$rc" >&2
+    PRESERVE_TMP=1
   else
-    FAILED_TASKS+=("$TASK")
-    echo "[WARN] failed: $TASK" >&2
+    outputs=()
+    for output in "$HARNESS_TMP_DIR/${TASK}_"*.json; do
+      [ -f "$output" ] && outputs+=("$output")
+    done
+    if [ "${#outputs[@]}" -ne 1 ]; then
+      reason="output_count:${#outputs[@]}"
+      FAILED_TASKS+=("${TASK}(invalid_output:$reason)")
+      echo "[WARN] $TASK: invalid_output:$reason" >&2
+      PRESERVE_TMP=1
+    elif ! reason=$(harness_validate_structure "${outputs[0]}" "$TASK"); then
+      FAILED_TASKS+=("${TASK}(invalid_output:$reason)")
+      echo "[WARN] $TASK: invalid_output:$reason" >&2
+      PRESERVE_TMP=1
+    # 이 러너는 lm_eval 에 --limit 을 넘기지 않는다 → 기대값은 항상 "없음".
+    #   환경의 LIMIT(일반적인 이름)을 쓰면 export 된 값 하나로 모든 과목이 거부된다.
+    elif ! reason=$(harness_validate_run_limit "${outputs[0]}" ""); then
+      FAILED_TASKS+=("${TASK}(invalid_output:$reason)")
+      echo "[WARN] $TASK: invalid_output:$reason" >&2
+      PRESERVE_TMP=1
+    elif ! mv "${outputs[0]}" "$RESULTS_DIR/"; then
+      FAILED_TASKS+=("${TASK}(move_failed)")
+      echo "[WARN] $TASK: move_failed" >&2
+      PRESERVE_TMP=1
+    fi
   fi
-
-  rm -rf "$HARNESS_TMP_DIR"
-  HARNESS_TMP_DIR=""
+  harness_cleanup_tmp
 done
-
 if ((${#FAILED_TASKS[@]} > 0)); then
   printf '[WARN] failed tasks (%d): %s\n' "${#FAILED_TASKS[@]}" "${FAILED_TASKS[*]}" >&2
   exit 1
 fi
+exit 0

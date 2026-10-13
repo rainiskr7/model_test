@@ -23,42 +23,39 @@ if [ -z "${_FULL_EVAL_REEXEC:-}" ]; then
     echo "[full_eval] WARN: 정식 평가는 리눅스에서 실행하세요." >&2
   fi
 fi
+source "$SCRIPT_DIR/shared/harness/harness_lib.sh" || exit 4
+TRACK_PID="" CANCELLING=0 FIRST_RC=""
+FULL_EVAL_CANCEL_GRACE=${FULL_EVAL_CANCEL_GRACE:-15}
 PGID="$(ps -o pgid= $$ | tr -d ' ')"
 cleanup() {
-  local sig="${1:-EXIT}"
-  trap - INT TERM EXIT  # 재진입 방지
+  local sig="${1:-EXIT}" original_rc="${2:-0}" victims="" p
+  [ "$CANCELLING" = 0 ] || return
+  CANCELLING=1
+  trap '' INT TERM
+  trap - EXIT
+  if [ -z "$FIRST_RC" ]; then
+    case "$sig" in INT) FIRST_RC=130 ;; TERM) FIRST_RC=143 ;; *) FIRST_RC=$original_rc ;; esac
+  fi
   echo "[full_eval] trap: cleanup pgid=$PGID sig=$sig" | tee -a "${LOG_DIR:-/tmp}/_master.log" 2>/dev/null
-  # 자기 자신($$)을 제외한 process group 멤버에만 시그널 → trap 함수가 KILL 라인까지 도달 보장.
-  # 우리가 그룹 리더일 때만 그룹 전체를 죽인다 (setsid 재실행에 성공한 경우).
-  # 리더가 아니면 이 그룹은 호출자의 것이므로 건드리면 안 된다.
-  if [ "$PGID" != "$$" ]; then
-    echo "[full_eval] cleanup: 그룹 리더가 아니므로 그룹 kill 을 건너뜁니다 (pgid=$PGID self=$$)" >&2
-    case "$sig" in
-      INT)  exit 130 ;;
-      TERM) exit 143 ;;
-    esac
-    return
+  if [ "$PGID" = "$$" ]; then
+    victims=$(pgrep -g "$PGID" 2>/dev/null | awk -v self="$$" '$0 != self { print }')
+  elif [ -n "$TRACK_PID" ]; then
+    victims=$(harness_descendants "$TRACK_PID")
   fi
-  local victims
-  victims=$(pgrep -g "$PGID" 2>/dev/null | awk -v self="$$" '$0 != self { print }' | tr '\n' ' ')
-  if [ -n "$victims" ]; then
-    # 1) 직속 + 손자 SIGTERM
-    kill -TERM $victims 2>/dev/null || true
-    sleep 2
-    # 2) 살아남은 것들 SIGKILL
-    victims=$(pgrep -g "$PGID" 2>/dev/null | awk -v self="$$" '$0 != self { print }' | tr '\n' ' ')
-    [ -n "$victims" ] && kill -KILL $victims 2>/dev/null || true
+  # Non-leader uses the original snapshot even after reparenting.
+  harness_stop_set "$FULL_EVAL_CANCEL_GRACE" "$victims"
+  if [ "$PGID" = "$$" ]; then
+    # A private group remains identifiable; also reap members born during grace.
+    victims=$(pgrep -g "$PGID" 2>/dev/null | awk -v self="$$" '$0 != self { print }')
+    for p in $victims; do kill -KILL "$p" 2>/dev/null || :; done
   fi
-  # bash trap 은 함수가 정상 반환해도 SIGINT/SIGTERM 의 default action 을 자동 재적용하지 않음.
-  # 종료 코드를 명시적으로 표준값으로 맞춤.
-  case "$sig" in
-    INT)  exit 130 ;;
-    TERM) exit 143 ;;
-  esac
+  if [ -n "$TRACK_PID" ]; then wait "$TRACK_PID" 2>/dev/null || :; fi
+  TRACK_PID=""
+  exit "$FIRST_RC"
 }
-trap 'cleanup INT'  INT
-trap 'cleanup TERM' TERM
-trap 'cleanup EXIT' EXIT
+trap 'cleanup INT 130' INT
+trap 'cleanup TERM 143' TERM
+trap 'cleanup EXIT $?' EXIT
 
 # venv 활성화 (lm_eval, python 등이 PATH 에 잡혀야 함)
 # shellcheck disable=SC1091
@@ -156,8 +153,10 @@ run_track() {
   local LOG="$LOG_DIR/${NAME}.log"
   echo "[$(date +%H:%M:%S)] === ${NAME} 시작 ===" | tee -a "$LOG_DIR/_master.log"
   echo "  CMD: $*" | tee -a "$LOG_DIR/_master.log"
-  ( "$@" ) >>"$LOG" 2>&1
-  local RC=$?
+  local RC
+  ( "$@" ) >>"$LOG" 2>&1 </dev/null &
+  TRACK_PID=$!
+  wait "$TRACK_PID"; RC=$?; TRACK_PID=""
   LAST_TRACK_RC=$RC
   if (( RC != 0 )); then
     TRACK_FAILURES+=("${NAME}(rc=${RC})")
@@ -165,7 +164,11 @@ run_track() {
   else
     echo "[$(date +%H:%M:%S)] === ${NAME} 종료 (rc=$RC) ===" | tee -a "$LOG_DIR/_master.log"
   fi
-  # 트랙 실패해도 다음 트랙은 계속 진행 → 호출 측에는 항상 성공 반환
+  # Reserved lock conflict / >=129 stop the sequence; ordinary failures continue.
+  if (( RC == 3 || RC >= 129 )); then
+    FIRST_RC=$RC
+    exit "$RC"
+  fi
   return 0
 }
 
