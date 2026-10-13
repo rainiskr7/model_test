@@ -35,7 +35,7 @@ korean_decisions:
     sha: d725461
     rows: "대화 4,201 (턴 84,594)"
     license: CC-BY-SA-4.0
-    label_source: "영어 SGD 를 기계 번역 후 전문 인력이 전수 검수, 원본 주석 오류도 수정 (카드)"
+    label_source: "영어 SGD 시뮬레이터가 대화 뼈대와 함께 만든 주석 + 크라우드가 문장만 바꿔 씀 (SGD 논문 §3). KoSGD 는 기계 번역 후 전문 인력 전수 검수·원본 주석 오류 수정(카드) — 단 행동·진행 중인 의도 라벨은 영어판과 USER 턴 전부 같다 (수정은 슬롯 쪽, 감사 v3)"
     schema: data/test/extended_schema.json      # 서비스 21 · 의도 38 — 서비스·의도 이름과 설명만 쓴다 (슬롯 없음)
     unit: "대화당 USER 턴 1개 (고정 seed) — 같은 대화의 턴끼리는 독립이 아니므로 대화 단위로 뽑는다"
     cap: 3000
@@ -60,7 +60,6 @@ korean_decisions:
     note: "Decision Index 에 영어 SGD/SGD-X 가 있다 (Clef 43.8 · Jev 43.0, 블로그) — 공개 점수가 있는 벤치라 개발 중 노출 가능성 표시"
     check: 다중 서비스 턴 8.5% 는 빼지 않는다 (active_intent 시점은 감사 v3 R6 PASS 로 판정 끝)
     label_review: "사람 재라벨 없음 (10-13) — 인증은 정답지 기준, 판정 여유 b_flip 함께 (계획 §4-2)"
-    label_source: "영어 SGD 시뮬레이터가 대화 뼈대와 함께 만든 주석 + 크라우드가 문장만 바꿔 씀 (SGD 논문 §3), 한국어는 번역 — 행동·진행 중인 의도 라벨은 영어판과 USER 턴 전부 같음"
     tier: 1
     group: A
 
