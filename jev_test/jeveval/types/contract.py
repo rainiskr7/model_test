@@ -15,6 +15,7 @@ class Validated(JsonRecord):
 @dataclass(frozen=True)
 class B1Config(JsonRecord):
     system: str
+    user_template: str
     labels: list[str]
     params: dict
 

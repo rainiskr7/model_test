@@ -6,7 +6,7 @@ import random
 
 from jeveval.data.grouping import group_rows
 from jeveval.data.pool import select_pool
-from jeveval.data.split import _demotions, _shuffled_groups, build_split_plan
+from jeveval.data.split import _demotions, _shuffled_groups, build_split_plan, check_split_plan
 from jeveval.types import Groups, PoolResult, SourceRow
 
 
@@ -123,3 +123,20 @@ def test_functionchat_extra_covers_every_nonrepresentative():
     assert set(plan.extra) | set(plan.representative.values()) == all_ids
     assert plan.extra == sorted(plan.extra)
     assert len(plan.dev) == 1 and len(plan.test) == 2
+
+
+def test_plan_semantics_extra_membership_without_set_inference():
+    from dataclasses import replace
+    from jeveval.types import SplitPlan
+
+    plan = SplitPlan("synthetic", 1, {}, {}, {"g": ["1", "2", "3"]},
+                     {"g": "synthetic:g:1"}, ["g"], [], [], [], {})
+    assert check_split_plan(plan) == []
+    assert check_split_plan(replace(plan, extra=["synthetic:g:2"])) == []
+    for edits in [dict(dev=[]), dict(test=["g"]), dict(dev=["g", "g"]),
+                  dict(representative={}), dict(representative={"g": "other:g:1"}),
+                  dict(representative={"g": "synthetic:h:1"}),
+                  dict(extra=["synthetic:g:1"]), dict(extra=["synthetic:g:9"]),
+                  dict(extra=["synthetic:g:3", "synthetic:g:2"]),
+                  dict(extra=["synthetic:g:2", "synthetic:g:2"])]:
+        assert check_split_plan(replace(plan, **edits)), edits

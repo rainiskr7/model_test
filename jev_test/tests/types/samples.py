@@ -86,7 +86,7 @@ def function_results():
     parsed = ParsedAnswer('noul', 'true', {'true': .5, 'false': .5}, .5)
     return [Validated(None, [], {'q': {'type': 'noul', 'noul': .5}}),
         AnswerParse(parsed, None, [], {'A': .5, 'B': .5}),
-        B1Config('시스템', ['A', 'B'], {'chat_template_kwargs': {'enable_thinking': False}}),
+        B1Config('시스템', '{state}\n\n질문: {instructions}\n{options}\n답:', ['A', 'B'], {'chat_template_kwargs': {'enable_thinking': False}}),
         B1Call('s:g:i/q', [{'role': 'user', 'content': '합성'}], ['A', 'B'],
                {'A': 'true', 'B': 'false'}, {'top_logprobs': 2}),
         F1Result(['true'], {'true': 1.0}, 1.0, {'true': {'support': 1, 'predicted': 1,

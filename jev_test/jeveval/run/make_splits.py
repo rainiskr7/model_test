@@ -7,19 +7,13 @@ from jeveval.data.grouping import group_rows
 from jeveval.data.pool import select_pool
 from jeveval.data.split import build_split_plan
 from jeveval.io.config import read_yaml
-from jeveval.io.sources import functionchat, klue_mrc, kmhas, korfin, kosgd, kote
+from jeveval.io.sources import READERS, kosgd, kote, read_set_rows
 from jeveval.io.splits import write_split_plan
-
-
-READERS = {"kosgd": kosgd, "fc_call_decision": functionchat, "kmhas": kmhas,
-           "kote_escalation": kote, "korfin_asc": korfin, "klue_mrc_answerable": klue_mrc}
 
 
 def _make_plan(set_name, cfg, rules, root):
     """입출력 결과를 순수 계산에 연결한다."""
-    reader = READERS[set_name]
-    kwargs = {"votes_cfg": cfg["votes"]} if set_name == "kote_escalation" else {}
-    rows = reader.read_rows(cfg["source"], root, **kwargs)
+    rows = read_set_rows(set_name, cfg, root)
     groups = group_rows(rows, cfg["group_key"])
     if "expect_groups" in cfg and len(groups.members) != cfg["expect_groups"]:
         raise ValueError(f"{set_name}: expected {cfg['expect_groups']} groups, got {len(groups.members)}")

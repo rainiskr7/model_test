@@ -14,10 +14,12 @@ def test_user_positions_and_sorted_files(tmp_path):
              {"speaker": "USER", "utterance": "다음", "frames": []}]
     for number in [2, 1]:
         (tmp_path / f"dialogues_{number:03}.json").write_text(json.dumps([
-            {"dialogue_id": f"d{number}", "turns": turns}]), encoding="utf-8")
+            {"dialogue_id": f"d{number}", "services": ["서비스"], "turns": turns}]), encoding="utf-8")
     rows = read_rows({"dir": ".", "dialogues_glob": "dialogues_*.json"}, tmp_path)
     assert [r.row_id for r in rows] == ["d1#0", "d1#2", "d2#0", "d2#2"]
-    assert rows[0].fields == {"dialogue_id": "d1", "turn_index": 0, "frames": [frame]}
+    assert rows[0].fields == {"dialogue_id": "d1", "turn_index": 0, "frames": [frame],
+                              "services": ["서비스"], "dialogue": [dict(speaker="USER", utterance="원문")]}
+    assert rows[1].fields["dialogue"] == [{k: t[k] for k in ("speaker", "utterance")} for t in turns]
     assert all("utterance" not in r.fields for r in rows)
     selected = [{"dialogue_id": "d1", "turn_index": 2}]
     (tmp_path / "audit.json").write_text(json.dumps({"selected_turns": selected, "ignored": 1}))

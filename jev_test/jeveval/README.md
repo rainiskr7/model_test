@@ -1,7 +1,7 @@
-# jeveval — P1 작업 ③a 기능 지도
+# jeveval — P1 작업 ③b 기능 지도
 
-P1_CONTRACT.md 판 3 보정 6까지의 요청·응답·기초 채점과 원본 읽기·묶음·평가 풀·분할을 구현했다.
-테스트는 합성 fixture와 tmp_path만 사용한다. 항목·질문 펼치기·정답·client·실행기는 후속 작업이다.
+P1_CONTRACT.md 판 3 보정 8까지의 요청·응답·기초 채점·분할과 질문 확장·항목·정답 규칙을 구현했다.
+테스트는 합성 fixture·tmp_path와 동결 task 설정을 사용한다. client·실행기는 후속 작업이다.
 
 ## 코드
 
@@ -21,26 +21,39 @@ P1_CONTRACT.md 판 3 보정 6까지의 요청·응답·기초 채점과 원본 �
 - `contract/request.py`: 질문·선택지 순서 보존 요청, UTF-8 바이트·SHA-256·로컬 검증.
 - `contract/response.py`: JSON 중복 키 거부, 전역 사유 우선순위·누적 경고·원 답 반환.
 - `contract/b1_prompt.py`: 설정 기반 문구·매개변수, 정렬된 선택지의 라벨 배정.
+- `score/labels.py`: 전체 라벨 이름 등록표, 33개 정답 규칙과 누락·타입 오류 거부.
 - `score/answers.py`: systemone 원 확률 보존, B1 토큰 대조·softmax·동률·경고 처리.
 - `score/f1.py`: 출현 클래스 macro-F1과 support·예측 수·tp·재현율·정밀도.
 - `score/calibration.py`: 15 bin top-label ECE·one-hot Brier·clip log loss.
 - `score/kosgd_slots.py`: 카탈로그 순서의 고정 정답 칸·중복·묶음 정답·순서 진단.
 - `io/__init__.py`: 파일 입출력 네임스페이스.
 - `io/config.py`: UTF-8 안전 YAML 읽기, 중첩 중복 키 거부, task 검사 위임.
-- `io/sources/kosgd.py`: USER 턴의 전체 위치·frames 읽기와 감사 selected_turns 읽기.
+- `io/tasks.py`: JSON 중복 키 거부 목록 읽기와 B1 네 필드·사용자 문구 틀 검사.
+- `io/sources/__init__.py`: 셋별 reader 공통 선택과 KOTE 투표 설정 전달.
+- `io/sources/kosgd.py`: USER 위치·frames·대상까지 dialogue·services와 감사 선정 읽기.
 - `io/sources/functionchat.py`: serial_num·메시지·중첩 도구를 보존하는 JSONL 읽기.
-- `io/sources/kmhas.py`: 물리 행 ID와 Python label 목록을 갖는 parquet 읽기.
+- `io/sources/kmhas.py`: 물리 행 ID·Python label 보존, 메타데이터 label_names 변환·범위 검사.
 - `io/sources/kote.py`: 보정 7의 raw 투표 검증·평가자별 중복 제거·votes/labels_majority 생성, 원본 labels 보존 및 메타데이터 이름 읽기.
 - `io/sources/korfin.py`: 원본 순서의 SID별 aspect 행 읽기.
 - `io/sources/klue_mrc.py`: is_impossible 양·음성 전체 행과 guid·source 읽기.
+- `data/expand.py`: 정적·항목별 질문 확장, 값의 중괄호 보존·ID 재검사·정답 소속 검사.
+- `data/items/common.py`: 분할 의미·묶음 대조, 단계별 조립·사본·라벨 충돌·원문 없는 요약.
+- `data/items/kosgd.py`: 두 판의 대화·카탈로그·정답·직전 USER 기준선.
+- `data/items/functionchat.py`: 시스템 문장 정규화·단일 도구 선택지 출처·대표/extra.
+- `data/items/kmhas.py`: 대표 문장·이름 라벨·묶음 라벨 충돌.
+- `data/items/kote.py`: 과반수 라벨·동결 감정 강등·묶음 라벨 충돌.
+- `data/items/korfin.py`: SRC별 원본 SID 순서의 aspect 질문·정답·미포함 flag.
+- `data/items/klue_mrc.py`: context/question·답변 가능성·source 층.
 - `data/grouping.py`: 정확 일치·union-find 묶음, ID·source 검사, 원본 행 연결과 항목 구성원.
 - `data/pool.py`: 고정 선정 검증, 전체·단순 cap·최대 나머지 비례 할당과 층별 추출.
-- `data/split.py`: 대표·dev/test·extra, 풀 대표 기준 KOTE 강등, 전체/풀 라벨 충돌·행 통계.
+- `data/split.py`: 대표·dev/test·extra, 풀 대표 기준 KOTE 강등, 전체/풀 라벨 충돌·행 통계 및 분할 의미 검사.
 - `io/splits.py`: 보정 6의 정렬된 UTF-8 JSON 바이트와 SplitPlan 왕복, 감정 이름 외 한글 거부.
 - `run/make_splits.py`: 원본·순수 계산·쓰기 조립과 셋별 한 줄 요약, expect_groups 불일치 종료.
+- `run/item_summary.py`: task 선택·입출력 연결, 단계별 원문 없는 JSONL 요약.
 - `README.md`: 기능 지도와 후속 작업 경계.
 
-의존 방향은 `run → io/data → types`, `io → contract → types`, `score → types`다.
+의존 방향은 `run → io/data → score/types`, `io → contract → types`, `score → types`다.
+data/items는 io·contract·run을 import하지 않는다. expand·items·labels는 파일·난수를 사용하지 않는다.
 전체 예정 방향은 `run → client/io → score/data/contract → types`다.
 types는 jeveval의 다른 패키지를 import하지 않는다.
 contract·score는 서로 import하지 않으며 파일·네트워크·시계·난수 접근이 없는 순수 함수다.
@@ -55,7 +68,7 @@ ThresholdFile은 by_tau 키와 값의 tau가 같은지도 검사한다.
 load_taskspec은 TaskSpec을 반환하며 오류 목록은 TaskSpecError.errors에 담는다.
 task yaml의 score 질문은 기존대로 오류 목록이며 NotImplementedError로 바꾸지 않는다.
 per_item_questions의 충돌 검사는 k 상한 없이 앞자리 0 없는 양의 정수를 대조한다.
-실제 질문 펼치기와 중복 재검사는 작업 ③의 data/expand에서 구현한다.
+실제 질문 펼치기와 중복 재검사는 data/expand가 수행한다. 무상한 패턴 충돌은 taskspec이 검사한다.
 Request가 봉투 구조를 보장하고 build_request가 질문 ID 중복을 거부한다.
 systemone criteria는 options 순서를 보존하며 B1만 코드포인트 순서로 라벨을 배정한다.
 usage 없음/null은 usage_input_tokens_invalid 경고를 내지 않는다. 추가 봉투 키 경고는 별도다.
@@ -81,8 +94,19 @@ B1 allowed_token_ids는 후속 client가 채운다. calibrate의 모집단 구�
 - `tests/score/test_f1.py`: 기존 F1 fixture·출현 클래스 순서·길이 불일치.
 - `tests/score/test_calibration.py`: 기존 보정 fixture·bin 경계·서로 다른 선택지·답 파서 연결.
 - `tests/score/test_kosgd_slots.py`: 기존 칸 fixture·copy_prev 별도 판정·칸별/평균 Brier 반례.
+- `tests/io/test_tasks.py`: 목록 순서·중복 JSON·B1 필수 키·틀 오류.
+- `tests/score/test_labels.py`: 모든 규칙 양/음성·정답 누락·타입·도구 호출·카탈로그 순서.
+- `tests/data/test_expand.py`: 기존 KorFin fixture·무상한/실제 ID 충돌·중괄호·정답 클래스.
+- `tests/data/items/conftest.py`: 동결 task와 합성 SplitPlan 준비.
+- `tests/data/items/test_kosgd.py`: 두 판·직전 USER·state·카탈로그/묶음 오류.
+- `tests/data/items/test_functionchat.py`: 정규화·도구 선택지·extra·원본 불변.
+- `tests/data/items/test_kmhas.py`: 단계 순서·충돌·분할 오류·동결 설정/B1 통합.
+- `tests/data/items/test_kote.py`: 과반수·감정 강등·라벨 충돌.
+- `tests/data/items/test_korfin.py`: SID 순서·정답 연결·미포함 flag의 항목 단위 요약.
+- `tests/data/items/test_klue_mrc.py`: state·bool 정답·층·빈 단계 요약.
+- `tests/run/test_item_summary.py`: tmp_path CLI 전체 경로·extra·원문 누출 없음·오류 종료.
 - `tests/io/test_config.py`: 안전 YAML·중복 키·검사기 위임.
-- `tests/io/test_sources_kosgd.py`: USER 위치·원문 제외·파일 순서·선정 읽기·중복 대화 거부.
+- `tests/io/test_sources_kosgd.py`: USER 위치·dialogue·services·파일 순서·선정 읽기·중복 대화 거부.
 - `tests/io/test_sources_functionchat.py`: system 선행·중첩 도구·첫 USER 기준의 전이 연결.
 - `tests/io/test_sources_kmhas.py`: 물리 행 번호와 Python 라벨 목록.
 - `tests/io/test_sources_kote.py`: info 메타데이터 경로와 메타데이터 누락 거부.
@@ -133,3 +157,11 @@ label_conflicts.expected.notes의 옛 키를 label_conflict_groups_total/pool (�
 deterministic.json은 변경하지 않았으며 중간 순서와 최종 정렬을 따로 검증한다.
 §10의 서버 인코더·문자→토큰 변환·길이 거부 응답 확인은 P0 후속 작업이다.
 현재 길이 fixture는 이미 측정된 합성 LengthInfo를 입력으로 삼는다.
+
+작업 ③b: 반박 반영 R1–R6 구현. extra 의미 검사는 셋 이름으로 사용 여부를 추정하지 않고 구성원 소속을 검사한다.
+라벨 변경 감지는 fingerprint 작업의 입력 해시 검사로 남긴다. 정답 규칙은 누락을 MISSING으로 대체하지 않는다.
+요약은 dev/test/extra별이며 noul 선택지 수는 2, flag 접두별 항목 수를 센다.
+
+```sh
+../foundation_model_test_non_thinking/.venv/bin/python -I -c 'import runpy, sys; from pathlib import Path; sys.path.insert(0, str(Path.cwd())); runpy.run_module("jeveval.run.item_summary", run_name="__main__")' --rules configs/splits/rules.yaml --root . --tasks configs/tasks --splits configs/splits --task all
+```

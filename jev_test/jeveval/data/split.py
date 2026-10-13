@@ -95,3 +95,32 @@ def build_split_plan(rows: list[SourceRow], groups: Groups, pool: PoolResult,
                      representative=representatives, dev=sorted(shuffled[:boundary]),
                      test=sorted(shuffled[boundary:]), diagnostic_demotions=demotions,
                      extra=extra, notes=notes)
+
+
+def check_split_plan(plan: SplitPlan) -> list[str]:
+    """단계·대표·extra의 의미를 검사한다. extra 사용 여부는 셋 이름으로 추정하지 않는다."""
+    errors = []
+    if not plan.set or ":" in plan.set:
+        errors.append("invalid set identifier")
+    for stage in ("dev", "test", "extra"):
+        values = getattr(plan, stage)
+        if values != sorted(set(values)):
+            errors.append(f"{stage}: expected sorted unique IDs")
+    if set(plan.dev) & set(plan.test):
+        errors.append("dev/test overlap")
+    if set(plan.dev) | set(plan.test) != set(plan.groups):
+        errors.append("dev/test union differs from groups")
+    if set(plan.representative) != set(plan.groups):
+        errors.append("representative keys differ from groups")
+    members = set()
+    for gid, items in plan.groups.items():
+        valid = {f"{plan.set}:{gid}:{item}" for item in items}
+        if not items or any(not isinstance(i, str) or not i or ":" in i for i in [gid, *items]):
+            errors.append(f"invalid group or member IDs: {gid}")
+        if plan.representative.get(gid) not in valid:
+            errors.append(f"representative outside group: {gid}")
+        members.update(valid)
+    nonrepresentatives = members - set(plan.representative.values())
+    if not set(plan.extra) <= nonrepresentatives:
+        errors.append("extra contains unknown or representative IDs")
+    return errors

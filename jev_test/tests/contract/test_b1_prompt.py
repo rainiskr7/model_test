@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from jeveval.contract.b1_prompt import build_b1_call
+from jeveval.contract.b1_prompt import build_b1_call, check_user_template
 from jeveval.types import B1Config, BoundQuestion, Rendered
 
 
@@ -36,7 +36,7 @@ def test_existing_label_mapping_option_lines():
     fixture = json.loads((ROOT / "label_mapping.json").read_text())
     question = BoundQuestion("pick", "success", fixture["question_type"], "골라요.",
                              fixture["criteria"], None, "synthetic", None)
-    result = build_b1_call(B1Config("시스템", fixture["labels"], {}), Rendered("원문", 2), question, "q")
+    result = build_b1_call(B1Config("시스템", "{state}\n\n질문: {instructions}\n{options}\n답:", fixture["labels"], {}), Rendered("원문", 2), question, "q")
     assert result.label_map == fixture["expected"]["label_map"]
     user = result.messages[1]["content"]
     assert user == "원문\n\n질문: 골라요.\n" + "\n".join(fixture["expected"]["option_lines"]) + "\n답:"
@@ -45,8 +45,26 @@ def test_existing_label_mapping_option_lines():
 def test_label_capacity_and_score():
     q = BoundQuestion("ready", "success", "noul", "준비?", None,
                       {"true": "예", "false": "아니오"}, "synthetic", None)
-    config, rendered = B1Config("시스템", ["A"], {}), Rendered("원문", 2)
+    config, rendered = B1Config("시스템", "{state}\n\n질문: {instructions}\n{options}\n답:", ["A"], {}), Rendered("원문", 2)
     with pytest.raises(ValueError):
         build_b1_call(config, rendered, q, "q")
     with pytest.raises(NotImplementedError):
         build_b1_call(config, rendered, replace(q, type="score"), "q")
+
+
+@pytest.mark.parametrize("template", [None, "{state}{options}", "{state}{state}{instructions}{options}",
+    "{state}{instructions}{options}{other}", "{state!r}{instructions}{options}",
+    "{state:>3}{instructions}{options}", "{state:}{instructions}{options}",
+    "{state}{instructions}{options}{", "{{state}}{instructions}{options}"])
+def test_invalid_templates(template):
+    assert check_user_template(template)
+
+
+def test_values_with_braces_and_escaped_literal():
+    fixture = json.loads((ROOT / "prompt.json").read_text())
+    config = B1Config.from_dict(fixture["config"])
+    config = replace(config, user_template="{{literal}}{state}|{instructions}|{options}")
+    q = BoundQuestion.from_dict(fixture["cases"][0]["question"])
+    q = replace(q, instructions="{state}")
+    call = build_b1_call(config, Rendered("{x}{options}", 12), q, "q")
+    assert call.messages[1]["content"].startswith("{literal}{x}{options}|{state}|")

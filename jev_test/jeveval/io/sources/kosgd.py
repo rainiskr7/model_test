@@ -7,7 +7,7 @@ from jeveval.types import SourceRow
 
 
 def read_rows(source_cfg: dict, root: Path) -> list[SourceRow]:
-    """전체 턴 위치를 유지하고 USER만 읽는다. 발화 원문은 보관하지 않는다."""
+    """USER 위치·frames와 대상까지의 대화, 대화의 서비스 목록을 보존한다."""
     rows, seen = [], set()
     paths = sorted((root / source_cfg["dir"]).glob(source_cfg["dialogues_glob"]))
     if not paths:
@@ -21,6 +21,9 @@ def read_rows(source_cfg: dict, root: Path) -> list[SourceRow]:
             for index, turn in enumerate(dialogue["turns"]):
                 if turn["speaker"] == "USER":
                     fields = dict(dialogue_id=did, turn_index=index, frames=turn["frames"])
+                    fields["dialogue"] = [{k: t[k] for k in ("speaker", "utterance")}
+                                          for t in dialogue["turns"][:index + 1]]
+                    fields["services"] = list(dialogue["services"])
                     rows.append(SourceRow("kosgd", f"{did}#{index}", fields))
     return rows
 

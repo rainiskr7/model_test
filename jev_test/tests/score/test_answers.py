@@ -83,7 +83,8 @@ def test_choice_tie_uses_label_order_not_token_order():
 def test_prompt_to_parser_boundary():
     question = BoundQuestion("pick", "success", "choice", "골라요.",
                              {"z": "마지막", "NONE": "없음"}, None, "synthetic", None)
-    call = build_b1_call(B1Config("시스템", ["X", "Y"], {}), Rendered("원문", 2), question, "q")
+    config = B1Config("시스템", "{state}\n\n질문: {instructions}\n{options}\n답:", ["X", "Y"], {})
+    call = build_b1_call(config, Rendered("원문", 2), question, "q")
     result = parse_b1([{"token": "Y", "logprob": -.1}, {"token": " X", "logprob": -2}],
                       call.label_order, call.label_map, question.type)
     assert result.parsed.answer == "z"

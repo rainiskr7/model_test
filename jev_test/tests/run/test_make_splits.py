@@ -26,7 +26,7 @@ def _parquet(root, name, rows, metadata=None):
 def _synthetic_json(root):
     directory = root / "kosgd"
     directory.mkdir()
-    dialogue = [{"dialogue_id": f"d{i}", "turns": [
+    dialogue = [{"dialogue_id": f"d{i}", "services": ["synthetic"], "turns": [
         {"speaker": "USER", "utterance": "시작", "frames": []},
         {"speaker": "SYSTEM", "utterance": "응답", "frames": []},
         {"speaker": "USER", "utterance": "다음", "frames": []}]} for i in range(6)]
@@ -49,7 +49,10 @@ def _synthetic_json(root):
 
 def _synthetic_rules(root):
     sets = _synthetic_json(root)
-    sets["kmhas"] = _parquet(root, "kmhas", [{"text": f"문장{i}", "label": [i % 2]} for i in range(6)])
+    metadata = {b"huggingface": json.dumps({"info": {"features": {
+        "label": {"feature": {"names": ["origin", "physical"]}}}}}).encode()}
+    sets["kmhas"] = _parquet(root, "kmhas",
+        [{"text": f"문장{i}", "label": [i % 2]} for i in range(6)], metadata)
     sets["kmhas"]["label_field"] = "label"
     sets["kote_escalation"] = _synthetic_kote(root)
     sets["korfin_asc"] = _parquet(root, "korfin", [

@@ -287,6 +287,20 @@ jev_test/results/_compare/<compare_id>/A/<set>/<variant>/compare.json   # 커밋
 - KOTE 강등 감정은 이때 `role = diagnostic` 으로 바꾼다.
 - FunctionChat 도구 선택지 = 정규화한 `input_tools` 의 `{function.name: function.description}` + `NONE`. call 행의 정답 도구가 선택지에 없으면 **멈춘다** (10-13 집계로는 0).
 - KoSGD: 정답 의도 ID 는 `서비스/의도` (서비스가 달라도 이름이 같은 의도 4개). 고정 칸 정답 = 이번 턴 frame 의 `active_intent` 중 `NONE` 아닌 것을 **카탈로그 순서**로 (사전순 아님). 앞 턴 베끼기 기준용 직전 정답은 `Item.baseline.copy_prev` (직전 USER 턴의 고정 칸 정답, 첫 USER 턴은 `["NONE","NONE"]`).
+- **판 3 보정 8 (③b 세부, 10-13 Claude — 실제 데이터 확인 포함)**:
+  - 만드는 항목 = 분할 파일의 dev·test **대표** + FunctionChat `extra`. 항목 순서는 `plan.dev`·`plan.test` 의 묶음 순서, `extra` 는 `plan.extra` 순서. `group_id`·`item_id` 는 `logical_id` 를 `:` 로 나눈 값. 항목을 만들기 전에 `data/grouping.py` 를 같은 행에 다시 돌려 풀 묶음 구성원이 `plan.groups` 와 같은지 본다 (다르면 멈춘다 — 원본이 분할 뒤 바뀐 것).
+  - 정답 규칙: `score/labels.py` 의 등록표 `RULES: {label 이름 전체: 함수}`, 함수 모양 `rule(rows, binding, options) -> str | None` (`options` = 그 질문의 선택지 dict, noul 은 None — KoSGD 칸이 카탈로그 순서를 선택지 순서에서 얻는다). 등록표에 없는 이름은 멈춘다. 만든 정답은 choice 면 선택지 ID 안, noul 이면 `"true"`·`"false"` 안이어야 한다 (밖이면 멈춘다).
+  - 질문 펼치기 `data/expand.py`: 정적 질문은 `options` 이름 → `lists/<이름>.json` 값 그대로(순서 유지), `per_item` → 항목이 준 선택지, noul 은 `criteria`. 펼친 질문은 `{k}` 를 `str(k)` 로, 지시문은 `{이름}` 자리를 binding 값으로 바꾼다 (`str.replace` — 값 안의 중괄호는 그대로). 틀의 `{이름}` 이 binding 에 없으면 멈춘다. 펼친 뒤 ID 중복·snake_case 를 다시 본다.
+  - KoSGD: `io/sources/kosgd.py` 가 USER 행 `fields` 에 `dialogue` (첫 턴~이 턴의 `{speaker, utterance}` 만) 와 `services` (대화의 `services` 그대로) 를 더한다. state = `{dialogue, catalog: lists/kosgd_catalog.json 그대로}`. 행동 정답 `act:<ACT>` = 이번 턴 모든 frame 의 `actions[].act` 에 있으면 `"true"` (`act:CLOSE` 는 `GOODBYE` 또는 `THANK_YOU`). act 11종 밖이 나오면 멈춘다. 칸 정답 `ongoing_slot_1/2` = 이번 턴 frame 순서대로 `서비스/active_intent` (NONE 제외, 중복 제거) 를 `fixed_gold` 로 고정한 칸. `kosgd_catalog.json` 의 의도 순서와 `catalog_intents_plus_none.json` 의 키 순서(NONE 제외)가 다르면 멈춘다. `meta.service` = 대화의 `services`. 두 판 모두 `baseline.copy_prev` 를 둔다.
+  - FunctionChat 정규화 (`datasets.yaml` normalize): 첫 메시지(`role == "system"`) `content` 안 `S + " " + S` 를 `S` 로 (S = "누락된 필수 정보가 여러가지이면, 각각을 모두 빠짐없이 구체적으로 요청하세요."). 원본 행은 바꾸지 않는다 (사본). 정규화 뒤에도 S 가 두 번 이상이면 멈춘다. state = `{input_messages: 정규화본, input_tools: 그대로}`. 도구 선택지 = `input_tools` 순서의 `{function.name: function.description}` 뒤에 `lists/functionchat_none.json`. 이름 중복·`NONE` 이름은 멈춘다. `fc:type_of_output` = 행의 `type_of_output`. `fc:tool` = call 이면 `ground_truth.tool_calls` 가 정확히 1개이고 그 이름 (선택지에 없으면 멈춘다), call 이 아니면 `NONE` (그런데 `tool_calls` 가 있으면 멈춘다).
+  - K-MHaS: `io/sources/kmhas.py` 가 `label_names` (parquet 메타데이터의 클래스 이름으로 바꾼 `label`, 원래 순서) 를 더한다. `kmhas:<이름>` = 그 이름이 있으면 `"true"`. state = `text`.
+  - KOTE: `kote:<감정>` = `labels_majority` 에 있으면 `"true"`. state = `text`. `plan.diagnostic_demotions` 의 감정은 label `kote:<감정>` 인 질문의 `role` 을 `diagnostic` 으로 (해당 질문이 없으면 멈춘다).
+  - K-MHaS·KOTE 의 `meta.flags` `label_conflict_group` = 그 항목 묶음의 구성원들 라벨(K-MHaS `label`, KOTE `labels_majority`, 정렬 비교) 이 서로 다를 때.
+  - KorFin: 항목 행 = 그 SRC 의 SID 행들 (원본 순서). SRC 가 서로 다르면·같은 ASPECT 가 두 번이면 멈춘다 (10-13 확인 0 건). binding = `{k, ASPECT}` (k 는 1부터 원본 순서), `korfin:sentiment` = 그 ASPECT 행의 `SENTIMENT`. state = SRC. flag `aspect_not_in_text:<질문 ID>` = ASPECT 가 SRC 에 글자 그대로 없을 때.
+  - KLUE-MRC: state = `{context, question}`. `klue:answerable` = `is_impossible` 이 False 면 `"true"`, True 면 `"false"` (bool 이 아니면 멈춘다). `meta.stratum` = `source`.
+  - `meta` 의 닫힌 키 셋은 늘 셋 다 둔다: KoSGD 밖의 `service`·KLUE 밖의 `stratum` 은 None, `flags` 는 정렬한 목록.
+  - 첫 실행 6셋의 정답 규칙은 None(MISSING) 을 돌려주지 않는다 — 정답 필드가 없거나 null·타입이 틀리면 멈춘다. 빈 라벨 목록은 음성. 항목을 만들기 전에 분할 의미 검사(dev·test 중복·겹침 없음, 합집합 == groups, 대표가 그 묶음 구성원, extra 는 대표 아닌 구성원)를 하고 어기면 멈춘다. 라벨 변경 감지는 입력 해시(fingerprint, §1-2) 쪽이다 (Codex 반박 R5·R6).
+  - B1 사용자 문구는 `b1.yaml` 의 `user_template` (`{state}`·`{instructions}`·`{options}` 를 각각 정확히 한 번, 다른 자리 없음 — 어기면 읽을 때 멈춘다). `B1Config` 에 `user_template` 을 더한다 (§8-5). 문구 결과는 판 3 의 하드코딩과 같은 바이트다 (b1.yaml 의 틀이 같은 문자열).
 
 ---
 
@@ -499,7 +513,7 @@ RequestOutcome(logical_id: str, group_id: str, stage: str,          # dev | test
 Validated(reason: str | None, warnings: list[str], answers: dict[str, dict] | None)   # contract/response.validate — reason 이 None 일 때만 answers (원 답 객체, 질문 ID 키)
 AnswerParse(parsed: ParsedAnswer | None, reason: str | None, warnings: list[str],
             label_probs: dict[str, float] | None)                                     # score/answers — systemone 은 label_probs None, B1 은 재정규화 라벨 분포
-B1Config(system: str, labels: list[str], params: dict)                                  # configs/tasks/b1.yaml 을 읽은 것 — labels 62개 순서, params 는 §2-5 고정 매개변수
+B1Config(system: str, user_template: str, labels: list[str], params: dict)           # configs/tasks/b1.yaml 을 읽은 것 (user_template 은 보정 8) — labels 62개 순서, params 는 §2-5 고정 매개변수
 B1Call(call_qid: str, messages: list[dict], label_order: list[str],
        label_map: dict[str, str], params: dict)                                         # contract/b1_prompt — params = config params + top_logprobs(=선택지 수); allowed_token_ids 는 client 가 모델 yaml 의 라벨 토큰으로 채운다 (④)
 F1Result(classes: list[str], per_class_f1: dict[str, float], macro_f1: float | None,
@@ -559,3 +573,4 @@ PoolResult(group_ids: list[str], allocation: dict[str, int])          # data/poo
 - 판 3 보정 5 (10-13, ③a 명세 전 Claude): 셋별 `item_id`·`group_id` 정의 · 정확 일치 묶음 키 · 분할 파일 정렬·바이트 규칙 · KOTE 강등은 풀 대표 기준 · `notes` 필드 · ③ 을 ③a(분할)·③b(항목·정답)로 나눔. 규칙 값은 `configs/splits/rules.yaml`.
 - 판 3 보정 6 (10-13, ③a 명세에 대한 Codex 반박 11건 — 실제 데이터 대조 포함, 전부 반영): KoSGD row_id·선정 검사 · FunctionChat 첫 user 는 role 로 찾기 · parquet 목록 열 변환 · KLUE 전체 행 · KorFin 행/항목 구별 · 비례 할당 경계 · `Groups`·`PoolResult` · 분할 파일 `sort_keys` · 한글은 강등 감정 이름만 · rules.yaml 의 KOTE 메타데이터 경로(`info` 누락 — Claude 실수). 기존 splits fixture 3개(정수 ID·정렬 전 순서·옛 notes 이름)는 계약에 맞게 고친다.
 - 판 3 보정 7 (10-13): KOTE 정답을 평가자 과반수(3/5, raw.json)로 — dichotomized 가 사실상 '1명 이상' 이라 (Claude 집계: 2명 이상은 전부 1, 1명만 고른 것도 81.5% 가 1). 사용자 결정.
+- 판 3 보정 8 (10-13, ③b 명세 전 Claude): 항목 범위·순서 · 정답 등록표 모양(`options` 인자) · 펼치기 치환 규칙 · 셋별 state·정답·meta (KoSGD 발화·services 를 reader 에 · FunctionChat 정규화 문장·도구 선택지 · K-MHaS 이름 라벨 · KOTE 강등 · KorFin binding · KLUE 층) · `B1Config.user_template`. 실제 데이터 확인: FunctionChat 중복 문장 406 행 모두 slot · KorFin SRC 안 ASPECT 중복 0 · 카탈로그 두 목록 순서 일치.
