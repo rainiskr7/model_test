@@ -74,7 +74,7 @@ def _load_save_detailed_results():
     parsed = ast.parse(RUNNER_PATH.read_text(encoding="utf-8"), filename=str(RUNNER_PATH))
     # 디코딩 프로비넌스 헬퍼도 **실제 구현으로** 함께 로드한다. 스텁으로 때우면
     # 산출물이 실제로 무엇을 기록하는지 이 테스트가 검증하지 못한다.
-    wanted = ("_decoding_provenance", "save_detailed_results")
+    wanted = ("_decoding_provenance", "resolve_results_model_dir", "save_detailed_results")
     functions = [
         node
         for node in parsed.body

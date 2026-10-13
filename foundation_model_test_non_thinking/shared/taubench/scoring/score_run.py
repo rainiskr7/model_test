@@ -44,6 +44,17 @@ def safe_model_name(model: str) -> str:
     return model.replace("/", "_").replace("-", "_").replace(":", "_")
 
 
+def results_model_dir_name(base_dir: Path, model: str) -> str:
+    """Reuse the sole casefold-matching directory; reject ambiguous spellings."""
+    requested = safe_model_name(model)
+    root = Path(base_dir) / "results"
+    matches = sorted(p.name for p in root.iterdir()
+                     if p.is_dir() and p.name.casefold() == requested.casefold()) if root.is_dir() else []
+    if len(matches) > 1:
+        raise ValueError(f"case-fold ambiguous results model directory for {requested!r}: {matches}")
+    return matches[0] if matches else requested
+
+
 def classify_task(task: Mapping[str, Any]) -> tuple[str, Optional[str]]:
     """태스크가 판정 없이 채점 가능한지 가린다. **선언이 아니라 내용을 본다.**
 
@@ -519,7 +530,7 @@ def _results_dir(args: argparse.Namespace) -> Path:
     timestamp = args.timestamp or os.environ.get("EVAL_TIMESTAMP")
     if not args.model or not timestamp:
         raise ValueError("--model and --timestamp (or EVAL_TIMESTAMP) are required")
-    return base / "results" / safe_model_name(args.model) / timestamp / "language" / args.track
+    return base / "results" / results_model_dir_name(base, args.model) / timestamp / "language" / args.track
 
 
 def parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:

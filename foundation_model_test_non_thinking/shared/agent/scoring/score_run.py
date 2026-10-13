@@ -16,6 +16,7 @@ if __package__:
         V4_HEADLINE_LEVELS,
         build_summary_from_loaded,
         safe_model_name,
+        results_model_dir_name,
     )
     from . import SCORING_VERSION, SCORING_VERSION_V3, SCORING_VERSION_V4
     from .context import load_metrics_module
@@ -30,6 +31,7 @@ else:
         V4_HEADLINE_LEVELS,
         build_summary_from_loaded,
         safe_model_name,
+        results_model_dir_name,
     )
     from __init__ import SCORING_VERSION, SCORING_VERSION_V3, SCORING_VERSION_V4
     from context import load_metrics_module
@@ -106,7 +108,7 @@ def _result_dir_from_args(args) -> Path:
     return (
         Path(base).resolve()
         / "results"
-        / safe_model_name(args.model)
+        / results_model_dir_name(Path(base), args.model)
         / args.timestamp
         / "language"
         / args.track

@@ -353,6 +353,21 @@ def _decoding_provenance(max_tokens, temperature=0.0):
     }
 
 
+def resolve_results_model_dir(model_name: str, output_dir: Optional[str] = None) -> Path:
+    """Resolve the result root and model spelling before evaluation or session writes."""
+    if output_dir is None:
+        env_base = os.environ.get("MODEL_TEST_BASE")
+        base_dir = Path(env_base).resolve() if env_base else Path(__file__).resolve().parent.parent.parent
+        output_dir = str(base_dir / "results")
+    root = Path(output_dir)
+    requested = model_name.replace("/", "_").replace("-", "_").replace(":", "_")
+    matches = sorted(p.name for p in root.iterdir()
+                     if p.is_dir() and p.name.casefold() == requested.casefold()) if root.is_dir() else []
+    if len(matches) > 1:
+        raise ValueError(f"case-fold ambiguous results model directory for {requested!r}: {matches}")
+    return root / (matches[0] if matches else requested)
+
+
 def save_detailed_results(
     results: List[Dict[str, Any]],
     model_name: str,
@@ -369,6 +384,7 @@ def save_detailed_results(
     max_retries: int,
     openai_sdk_version: str,
     sdk_max_retries: int,
+    resolved_model_dir: Optional[Path] = None,
 ) -> str:
     """Save detailed benchmark results including tool call information.
 
@@ -393,6 +409,7 @@ def save_detailed_results(
         max_retries: Logical-call attempt count used by the benchmark runner
         openai_sdk_version: Installed OpenAI Python SDK version
         sdk_max_retries: OpenAI SDK retry count actually configured on the client
+        resolved_model_dir: Model directory resolved before evaluation (root and spelling)
 
     Returns:
         Path to saved JSON file
@@ -400,21 +417,9 @@ def save_detailed_results(
     if run_timestamp is None:
         run_timestamp = os.environ.get("EVAL_TIMESTAMP") or datetime.now().strftime("%Y%m%d_%H%M%S")
 
-    # safe_model_name: replace '/', '-', ':' with '_'
-    model_safe_name = (
-        model_name.replace("/", "_").replace("-", "_").replace(":", "_")
-    )
-
-    if output_dir is None:
-        env_base = os.environ.get("MODEL_TEST_BASE")
-        if env_base:
-            base_dir = Path(env_base).resolve()
-        else:
-            # Runtime location after install: <BASE>/<class>/agent/Ko-AgentBench/<this_file>
-            base_dir = Path(__file__).resolve().parent.parent.parent
-        output_dir = str(base_dir / "results")
-
-    result_path = Path(output_dir) / model_safe_name / run_timestamp / "language" / track_name
+    result_path = (resolved_model_dir if resolved_model_dir is not None else
+                   resolve_results_model_dir(model_name, output_dir))
+    result_path = result_path / run_timestamp / "language" / track_name
     result_path.mkdir(parents=True, exist_ok=True)
 
     filename = f"{level_name}.json"
@@ -522,6 +527,7 @@ def run_benchmark_on_dataset(
     repetitions: int = 1,
     multiturn_mode: str = "seed_replay",
     track_name: str = "agent",
+    resolved_model_dir: Optional[Path] = None,
     **adapter_config: Any
 ) -> List[Dict[str, Any]]:
     """Run benchmark on a specific dataset level.
@@ -535,7 +541,8 @@ def run_benchmark_on_dataset(
         timeout: Timeout per task in seconds
         max_retries: Harness attempts per logical model call
         save_logs: Whether to save results to JSON
-        log_dir: Directory to save logs
+        log_dir: Override result root
+        resolved_model_dir: Model directory already resolved by main, if available
         run_timestamp: Timestamp for the entire run (shared across levels)
         repetitions: Number of repetitions for each task (for pass@k metric)
         multiturn_mode: (L6/L7) Multi-turn execution mode: 'seed_replay' (default) or 'full_rollout'
@@ -554,6 +561,10 @@ def run_benchmark_on_dataset(
     if isinstance(tasks, list) and len(tasks) > 0:
         print(f"DEBUG: first task type = {type(tasks[0])}")
     
+    # Direct callers with log_dir must also fail before any task is evaluated.
+    if resolved_model_dir is None:
+        resolved_model_dir = resolve_results_model_dir(model_name, log_dir)
+
     # Convert dataset format to runner format (always use full set)
     converted_tasks = convert_dataset_to_tasks(tasks)
     
@@ -798,6 +809,7 @@ def run_benchmark_on_dataset(
                 max_retries=runner.max_retries,
                 openai_sdk_version=adapter.openai_sdk_version,
                 sdk_max_retries=adapter.sdk_max_retries,
+                resolved_model_dir=resolved_model_dir,
             )
             print(f"\n{'='*80}")
             print(f"Results saved to: {filepath}")
@@ -1020,6 +1032,12 @@ def main():
         print(f"Device: {args.device}")
         print(f"Dtype: {args.dtype}")
     
+    try:
+        resolved_model_dir = resolve_results_model_dir(selected_model)
+    except ValueError as exc:
+        print(f"[ERROR] {exc}", file=sys.stderr)
+        sys.exit(2)
+
     # Prepare adapter config for local models
     adapter_config = build_adapter_config(args)
     if args.use_local:
@@ -1098,7 +1116,8 @@ def main():
                 timeout=args.timeout,
                 max_retries=args.max_retries,
                 save_logs=(not args.no_save_logs),
-                log_dir=None,  # auto-resolve to <MODEL_TEST_BASE>/results
+                log_dir=str(resolved_model_dir.parent),
+                resolved_model_dir=resolved_model_dir,
                 run_timestamp=run_timestamp,
                 repetitions=args.repetitions,
                 multiturn_mode=multiturn_mode,

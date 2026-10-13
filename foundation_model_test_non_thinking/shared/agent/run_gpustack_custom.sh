@@ -72,7 +72,13 @@ else
   SCORING_SAFE_MODEL="${MODEL//\//_}"
   SCORING_SAFE_MODEL="${SCORING_SAFE_MODEL//-/_}"
   SCORING_SAFE_MODEL="${SCORING_SAFE_MODEL//:/_}"
-  SCORING_RESULTS_DIR="$BASE_DIR/results/$SCORING_SAFE_MODEL/$SCORING_TS/language/$SCORING_TRACK"
+  if source "$SCRIPT_DIR/../results_dir.sh" &&
+     SCORING_SAFE_MODEL="$(results_model_dir "$BASE_DIR" "$SCORING_SAFE_MODEL")"; then
+    SCORING_RESULTS_DIR="$BASE_DIR/results/$SCORING_SAFE_MODEL/$SCORING_TS/language/$SCORING_TRACK"
+  else
+    echo "[agent-scoring] 결과 경로 철자를 해석하지 못했습니다. 기존 결과 폴더를 확인하세요 (scoring rc=$SCORING_RC)." >&2
+    exit "$SCORING_RC"
+  fi
   echo "[agent-scoring] 평가 결과(L*.json)는 ${SCORING_RESULTS_DIR}에 그대로 보존되어 있지만 채점에 실패하여 summary.json이 작성되지 않았습니다. 채점만 다시 실행하세요." >&2
   exit "$SCORING_RC"
 fi

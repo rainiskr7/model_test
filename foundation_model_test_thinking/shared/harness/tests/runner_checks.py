@@ -22,7 +22,7 @@ BASH = '/bin/bash'
 WORKSPACE = Path(__file__).resolve().parents[4]
 if not (WORKSPACE / 'foundation_model_test_non_thinking').is_dir():
     raise SystemExit('test helper must live in shared/harness/tests in a repository')
-WORK = WORKSPACE / '.codex_work' / 'harness_stop_guard'
+WORK = Path(os.environ.get('HARNESS_TEST_WORK', WORKSPACE / '.codex_work' / 'harness_stop_guard'))
 WORK.mkdir(parents=True, exist_ok=True)
 FAILURES = 0
 PASSES = 0
@@ -165,10 +165,17 @@ class Harness:
         write(self.bin / 'lm_eval', FAKE, True)
         write(ROOT / 'adapter.json', json.dumps({'non-thinking': 'PATH=<fixture>/bin:$PATH',
               'thinking': 'LM_EVAL_BIN=<fixture>/bin/lm_eval', 'fake_sha256': hashlib.sha256(FAKE.encode()).hexdigest()}, indent=2))
-    def case(self, label, mode='good', skip=True):
+    def case(self, label, mode='good', skip=True, results='lower'):
         case = ROOT / label; case.mkdir()
-        rd = case / 'results/fixture_model/session/language/harness'; rd.mkdir(parents=True)
-        if skip:
+        spelling = 'Fixture_Model' if results == 'upper' else 'fixture_model'
+        rd = case / 'results' / spelling / 'session/language/harness'
+        if results is not None:
+            (case / 'results' / spelling).mkdir(parents=True)
+        if results == 'both':
+            (case / 'results/Fixture_Model').mkdir(exist_ok=True)
+        if results in ('lower', 'upper'):
+            rd.mkdir(parents=True)
+        if skip and results in ('lower', 'upper'):
             for task in self.tasks[1:]: write(rd / (task + '_existing.json'), json.dumps(payload(task)))
         env = envbase(); env.update(MODEL_TEST_BASE=str(case), EVAL_TIMESTAMP='session', CASE=str(case),
             FAKE_MODE=mode, PATH=str(self.bin) + ':' + env['PATH'])
@@ -194,6 +201,9 @@ class Harness:
 
 def harness_suite(target):
     h = Harness(target)
+    # T does not source the helper: keep its runner and casing behavior untouched.
+    if re.search(r'^source .*results_dir\.sh', target.read_text(), re.M):
+        harness_results_spelling_tests(h)
     check('보존', 'C4 task list has 45 subjects', len(h.tasks) == 45)
     case, rd, env = h.case('normal45', skip=False)
     r = h.execute(case, env)
@@ -274,6 +284,48 @@ def harness_suite(target):
     if proc_available(): harness_process_tests(h)
     else:
         inconclusive('C1 TERM/INT/grace','ps denied: real process tests not launched')
+
+def harness_results_spelling_tests(h):
+    # Copy the actual runner and helper together, as installed in a fresh tree.
+    fixture = ROOT / 'spelling_runner/shared/harness'
+    fixture.mkdir(parents=True)
+    for source in (h.target, h.lib):
+        shutil.copy2(source, fixture / source.name)
+    shutil.copy2(h.target.parent.parent / 'results_dir.sh', fixture.parent / 'results_dir.sh')
+    original_target = h.target
+    h.target = fixture / original_target.name
+    try:
+        case, rd, env = h.case('spelling_upper', results='upper')
+        r = h.execute(case, env)
+        check('신규', 'T1(a) existing uppercase spelling reused',
+              r.returncode == 0 and f'[harness] RESULTS_DIR={rd}' in r.stdout
+              and len(h.one_result(rd)) == 1
+              and [p.name for p in (case / 'results').iterdir()] == ['Fixture_Model'], f'rc={r.returncode}')
+        case, rd, env = h.case('spelling_both', skip=False, results=None)
+        lower, upper = case / 'results/fixture_model', case / 'results/Fixture_Model'
+        try:
+            lower.mkdir(parents=True)
+            upper.mkdir(exist_ok=True)
+        except OSError as exc:
+            inconclusive('T1(b) ambiguous spelling fixture', str(exc))
+        else:
+            if os.path.samefile(lower, upper):
+                inconclusive('T1(b) ambiguous spelling', 'case-insensitive filesystem')
+            else:
+                env.pop('EVAL_TIMESTAMP')
+                r = h.execute(case, env)
+                check('신규', 'T1(b) ambiguous spelling rc2 before any output or lock',
+                      r.returncode == 2 and not any(p.is_file() for p in (case / 'results').rglob('*'))
+                      and not list(case.rglob('.harness.lock')) and not (case / '.eval_session').exists()
+                      and not (case / 'calls').exists(), f'rc={r.returncode}')
+        case, rd, env = h.case('spelling_lower')
+        r = h.execute(case, env)
+        check('보존', 'T1(c) original fixture path unchanged',
+              r.returncode == 0 and f'[harness] RESULTS_DIR={rd}' in r.stdout
+              and len(h.one_result(rd)) == 1, f'rc={r.returncode}')
+    finally:
+        h.target = original_target
+
 
 def harness_process_tests(h):
     for sig,expected in [(signal.SIGTERM,143),(signal.SIGINT,130)]:

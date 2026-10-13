@@ -47,6 +47,11 @@ BASE_DIR="${MODEL_TEST_BASE:-$(cd "$SCRIPT_DIR/../.." && pwd)}"
 SAFE_MODEL="${MODEL_NAME//\//_}"
 SAFE_MODEL="${SAFE_MODEL//-/_}"
 SAFE_MODEL="${SAFE_MODEL//:/_}"
+source "$SCRIPT_DIR/../results_dir.sh" || exit 2
+SAFE_MODEL="$(results_model_dir "$BASE_DIR" "$SAFE_MODEL")" || {
+  echo "[harness] ERROR: results model directory resolution failed" >&2
+  exit 2
+}
 
 # Timestamp 결정: EVAL_TIMESTAMP env > .eval_session 파일 > 새로 생성 + 저장
 if [ -n "${EVAL_TIMESTAMP:-}" ]; then

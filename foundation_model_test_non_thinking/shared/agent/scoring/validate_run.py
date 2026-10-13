@@ -25,6 +25,7 @@ if __package__:
         V4_EXCLUDED_LEVELS,
         V4_HEADLINE_LEVELS,
         safe_model_name,
+        results_model_dir_name,
     )
     from .level_spec import JUDGE_METRICS, LEVEL_SPECS, LEVEL_SPECS_V3
 else:
@@ -36,6 +37,7 @@ else:
         V4_EXCLUDED_LEVELS,
         V4_HEADLINE_LEVELS,
         safe_model_name,
+        results_model_dir_name,
     )
     from level_spec import JUDGE_METRICS, LEVEL_SPECS, LEVEL_SPECS_V3
 
@@ -111,7 +113,7 @@ def _results_dir_from_args(args) -> Path:
     return (
         Path(base).resolve()
         / "results"
-        / safe_model_name(args.model)
+        / results_model_dir_name(Path(base), args.model)
         / args.timestamp
         / "language"
         / (args.track or "agent")

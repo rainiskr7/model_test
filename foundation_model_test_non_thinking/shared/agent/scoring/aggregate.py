@@ -840,6 +840,17 @@ def safe_model_name(model: str) -> str:
     return model.replace("/", "_").replace("-", "_").replace(":", "_")
 
 
+def results_model_dir_name(base_dir: Path, model: str) -> str:
+    """Reuse the sole casefold-matching directory; reject ambiguous spellings."""
+    requested = safe_model_name(model)
+    root = Path(base_dir) / "results"
+    matches = sorted(p.name for p in root.iterdir()
+                     if p.is_dir() and p.name.casefold() == requested.casefold()) if root.is_dir() else []
+    if len(matches) > 1:
+        raise ValueError(f"case-fold ambiguous results model directory for {requested!r}: {matches}")
+    return matches[0] if matches else requested
+
+
 def _model_name(results_dir: Path, level_data: Iterable[Dict[str, Any]]) -> str:
     for data in level_data:
         metadata = data.get("metadata") or {}

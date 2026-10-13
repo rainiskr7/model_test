@@ -59,6 +59,7 @@ results/<safe_model_name>/<timestamp>/<category>/<track>/<benchmark>.json
 - `track`: `harness` | `nlu` | `agent` | `multimodal` | `customB`; agent 변형은 `AGENT_TRACK_NAME` 으로 `agent_<variant>` 를 선택 (`agent_passk`, 검증용 `agent_<purpose>` 등)
   - 변형 결과는 모델 비교 시 canonical `agent` 트랙과 절대 섞지 않는다.
 - 최상위 `results/` 통합 (클래스 폴더 안에 결과 만들지 말 것)
+- 결과 폴더명은 ASCII를 쓴다. 러너·채점기는 `results/`의 기존 철자를 `casefold()`로 재사용한다. 둘 이상이면 해당 러너는 0 이 아닌 rc 로 끝난다(harness·agent 채점·agent 러너는 2; KRETA 는 기존대로 1).
 
 ## 5. 결과 JSON 표준 (새 bench)
 
