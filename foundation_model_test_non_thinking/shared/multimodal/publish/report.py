@@ -313,6 +313,12 @@ def reproducibility_checks(selected: list[dict[str, Any]]) -> list[dict[str, Any
             "axes": axes,
             "comparable": True,
             "unit": unit,
+            "denominator": denominator,
+            # 대표값은 "가장 늦게 끝난 런" 이라 성능과 무관하게 정해진다. 반복이 있으면
+            # 같은 코호트 런들의 평균과 범위를 함께 낸다 (2026-09-27 결정).
+            "mean": sum(values) / len(values),
+            "min": min(values),
+            "max": max(values),
             "comparator": unit,
             "credential": aggregate_credential(values, k_runs=len(runs)),
             "spread": spread,
@@ -378,6 +384,17 @@ def comparison_notes(cohort: list[dict[str, Any]]) -> list[str]:
     return notes
 
 
+def _mean_range(check: dict[str, Any]) -> str:
+    """반복 코호트의 평균과 범위. fraction 은 %, score/10 은 점수로."""
+    if check.get("unit") == "fraction":
+        den = check["denominator"]
+        return (
+            f"{100 * check['mean'] / den:.2f}% "
+            f"({100 * check['min'] / den:.2f}–{100 * check['max'] / den:.2f}%)"
+        )
+    return f"{check['mean']:.2f}/10 ({check['min']:.2f}–{check['max']:.2f})"
+
+
 def _reproducibility_notes(cohort: list[dict[str, Any]]) -> list[str]:
     notes: list[str] = []
     for representative in cohort:
@@ -398,16 +415,21 @@ def _reproducibility_notes(cohort: list[dict[str, Any]]) -> list[str]:
         if not check.get("comparable"):
             notes.append(
                 f"> 재현성: `{_escape(_model(representative))}` — 이 코호트에 런 {len(check['runs'])}개. "
-                f"비교 불가 — **FAIL**"
+                f"비교 불가 — **재현성 판정 불가**"
             )
             notes.append(f">   **사유:** {_escape(check.get('reason'))}")
         else:
             credential = check["credential"]
             lo, hi = credential["instability_envelope"]
-            result = "PASS" if check["passed"] else "FAIL"
+            # "FAIL" 은 점수가 낮다는 뜻으로 읽혔다. 판정 대상은 반복 간 흔들림뿐이다.
+            result = (
+                "흔들림 허용 범위 안" if check["passed"]
+                else "흔들림 큼 — 정책 허용 초과. 점수가 낮다는 뜻이 아니라 단일 런 수치를 믿기 어렵다는 뜻"
+            )
             notes.append(
                 f"> 재현성: `{_escape(_model(representative))}` — 이 코호트에 런 {len(check['runs'])}개. "
-                f"`{credential['claim_class']}` · 관측 범위 {lo:g}–{hi:g} ({check['unit']}) · "
+                f"`{credential['claim_class']}` · {len(check['runs'])}회 평균 {_mean_range(check)} · "
+                f"관측 범위 {lo:g}–{hi:g} ({check['unit']}) · "
                 f"산포 {check['spread']:g} / 정책 허용 {check['tolerance']:g} — **{result}**"
             )
             if credential["envelope_is_lower_bound"]:
@@ -522,10 +544,15 @@ def _headline(
         )
         denominator = rows[0][1].get("denominator") if rows else None
         header = (
-            ["| 모델 | 결과 | 무답률 | 상태 |", "|---|---|---:|---|"]
+            ["| 모델 | 결과 (대표 런) | 반복 평균 (범위) | 무답률 | 상태 |", "|---|---|---|---:|---|"]
             if benchmark == "KRETA"
-            else ["| 모델 | 결과 | 상태 |", "|---|---|---|"]
+            else ["| 모델 | 결과 (대표 런) | 반복 평균 (범위) | 상태 |", "|---|---|---|---|"]
         )
+        mean_by_rep = {
+            id(check["representative"]): f"{_mean_range(check)} · k={len(check['runs'])}"
+            for check in reproducibility_checks(cohort)
+            if check.get("comparable")
+        }
         out.extend([
             f"### {_cohort_heading(benchmark, variant, fingerprint, denominator)}",
             "",
@@ -534,14 +561,15 @@ def _headline(
             *header,
         ])
         for sidecar, axis in rows:
+            mean_cell = _escape(mean_by_rep.get(id(sidecar), "— (k=1)"))
             if benchmark == "KRETA":
                 out.append(
-                    f"| {_escape(_model(sidecar))} | {_escape(_metric(axis))} | "
+                    f"| {_escape(_model(sidecar))} | {_escape(_metric(axis))} | {mean_cell} | "
                     f"{_no_answer_percent(sidecar)} | {_escape(_state(sidecar))} |"
                 )
             else:
                 out.append(
-                    f"| {_escape(_model(sidecar))} | {_escape(_metric(axis))} | {_escape(_state(sidecar))} |"
+                    f"| {_escape(_model(sidecar))} | {_escape(_metric(axis))} | {mean_cell} | {_escape(_state(sidecar))} |"
                 )
         out.append("")
         provenance_cohort = provenance_by_cohort.get((benchmark, variant, fingerprint), cohort)

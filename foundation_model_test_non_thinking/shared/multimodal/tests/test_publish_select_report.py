@@ -195,7 +195,7 @@ def test_different_fingerprints_render_in_separate_headline_tables():
     )
     markdown, _ = render_markdown([first, second], [])
     headline = markdown.split("## 헤드라인", 1)[1].split("## 상태 요약", 1)[0]
-    table_blocks = [block for block in headline.split("### ") if "| 모델 | 결과 | 무답률 | 상태 |" in block]
+    table_blocks = [block for block in headline.split("### ") if "| 모델 | 결과 (대표 런) | 반복 평균 (범위) | 무답률 | 상태 |" in block]
     assert len(table_blocks) == 2
     assert all(not ("model-alpha" in block and "model-beta" in block) for block in table_blocks)
 
@@ -247,7 +247,7 @@ def test_kreta_headline_shows_no_answer_column_and_quality_notes():
     )
     markdown, _ = render_markdown([result], [])
     headline = markdown.split("## 헤드라인", 1)[1].split("## 상태 요약", 1)[0]
-    assert "| 모델 | 결과 | 무답률 | 상태 |" in headline
+    assert "| 모델 | 결과 (대표 런) | 반복 평균 (범위) | 무답률 | 상태 |" in headline
     assert "21.0%" in headline
     assert "상류 parser와 23행 불일치(우리 무답 21, 다른 선택지 2)" in headline
     assert "점수를 능력 차이로만 해석하지 말 것" in headline
@@ -426,7 +426,8 @@ def test_reproducibility_tolerance_boundary_and_strict_failure():
     selected, ambiguous = select_representatives([baseline, boundary])
     assert strict_failed([boundary], [], [], [baseline, boundary]) is False
     markdown, _ = render_markdown([baseline, boundary], [])
-    assert "`snapshot` · 관측 범위 200–203 (fraction) · 산포 3 / 정책 허용 3 — **PASS**" in markdown
+    assert "관측 범위 200–203 (fraction) · 산포 3 / 정책 허용 3 — **흔들림 허용 범위 안**" in markdown
+    assert "`snapshot` · 2회 평균 " in markdown
     assert "실제 불안정의 **하한**" in markdown
     assert "`baseline`  200/240 = 83.33% (기준)" in markdown
     assert "`boundary`  203/240 = 84.58% (대표)" in markdown
@@ -453,7 +454,13 @@ def test_reproducibility_uses_full_cohort_spread_and_earns_a_claim_class():
     high = measured("high", "2026-01-03T00:00:00+00:00", 103)
     assert strict_failed([high], [], [], [baseline, low, high]) is True
     markdown, _ = render_markdown([baseline, low, high], [])
-    assert "`repeatability_observed` · 관측 범위 97–103 (fraction) · 산포 6 / 정책 허용 3 — **FAIL**" in markdown
+    assert (
+        "`repeatability_observed` · 3회 평균 41.67% (40.42–42.92%) · 관측 범위 97–103 (fraction) · "
+        "산포 6 / 정책 허용 3 — **흔들림 큼 — 정책 허용 초과. 점수가 낮다는 뜻이 아니라"
+    ) in markdown
+    # 헤드라인 표에도 대표 런 옆에 반복 평균과 범위가 나온다 — 대표 런은 "가장 늦게 끝난 런" 일 뿐이다.
+    assert "| 42.92% (103/240) | 41.67% (40.42–42.92%) · k=3 |" in markdown or "41.67% (40.42–42.92%) · k=3" in markdown
+    assert "**FAIL**" not in markdown and "**PASS**" not in markdown
 
 
 def test_missing_or_unsupported_repro_axis_is_not_comparable_failure():
@@ -467,7 +474,7 @@ def test_missing_or_unsupported_repro_axis_is_not_comparable_failure():
     )
     assert strict_failed([unsupported], [], [], [missing, unsupported]) is True
     markdown, _ = render_markdown([missing, unsupported], [])
-    assert "비교 불가 — **FAIL**" in markdown
+    assert "비교 불가 — **재현성 판정 불가**" in markdown
     assert "overall/rubric 비교 축이 없음" in markdown
 
 
@@ -486,7 +493,7 @@ def test_score_over_ten_uses_average_scale_not_score_sum_counts():
     close = judged("close", "2026-01-02T00:00:00+00:00", 5.02, "sha256:close")
     assert strict_failed([close], [], [], [baseline, close]) is False
     markdown, _ = render_markdown([baseline, close], [])
-    assert "`snapshot` · 관측 범위 5–5.02 (score/10) · 산포 0.02 / 정책 허용 0.1 — **PASS**" in markdown
+    assert "`snapshot` · 2회 평균 5.01/10 (5.00–5.02) · 관측 범위 5–5.02 (score/10) · 산포 0.02 / 정책 허용 0.1 — **흔들림 허용 범위 안**" in markdown
 
     far = judged("far", "2026-01-03T00:00:00+00:00", 5.11, "sha256:far")
     assert strict_failed([far], [], [], [baseline, far]) is True
@@ -504,7 +511,7 @@ def test_scoped_report_renders_comparison_failure_that_causes_strict_exit():
         axes=[{"name": "overall", "numerator": 190, "denominator": 240, "value": 190 / 240, "unit": "fraction"}],
     )
     markdown, ambiguous = render_markdown([current], [], [baseline, current])
-    assert "`snapshot` · 관측 범위 190–200 (fraction) · 산포 10 / 정책 허용 3 — **FAIL**" in markdown
+    assert "관측 범위 190–200 (fraction) · 산포 10 / 정책 허용 3 — **흔들림 큼" in markdown
     assert strict_failed([current], [], ambiguous, [baseline, current]) is True
 
 

@@ -144,9 +144,13 @@ def collect_claims(base: Path) -> Dict[str, Any]:
         if loaded:
             grouped.setdefault(module.cohort_key(loaded), []).append(loaded)
 
+    # 코호트 키에는 None(디코딩 기록이 없는 옛 산출물)과 튜플(새 산출물)이 같은
+    # 자리에 올 수 있어 튜플끼리 직접 비교하면 TypeError 로 보고 전체가 죽는다.
+    # 실제로 그랬다 — 반복 런을 추가하자 두 종류가 처음 공존했다.
+    # repr 정렬은 결정적이고 타입에 무관하다.
     creds = {
         key: credential([{"run_id": r["session"], "items": r["items"]} for r in members])
-        for key, members in sorted(grouped.items())
+        for key, members in sorted(grouped.items(), key=lambda kv: repr(kv[0]))
     }
     verified = [(key, cred) for key, cred in creds.items()
                 if cred["claim_class"] == "repeatability_observed"]
