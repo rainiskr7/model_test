@@ -248,6 +248,29 @@ def _repro_axis(sidecar: dict[str, Any]) -> tuple[dict[str, Any] | None, str | N
     return axis, f"지원하지 않는 재현성 비교 단위: {unit!r}"
 
 
+def _repro_spread(typed_axes, unit, denominator) -> tuple:
+    """Calculate cohort spread and the existing policy tolerance."""
+    values = (
+        [float(axis["numerator"]) for axis in typed_axes]
+        if unit == "fraction"
+        else [float(axis["value"]) for axis in typed_axes]
+    )
+    spread = max(values) - min(values)
+    # 허용대는 **측정된 신뢰구간이 아니라 정책값**이다. 그래도 유지한다 —
+    # `passed` 는 publish_blocked() 가 읽는 값이라(이 파일의 reproduction_failed),
+    # 무조건 True 로 두면 산포가 아무리 커도 차단되지 않는다. 임계가 임의적이라는
+    # 것은 그것을 지울 이유가 아니라 정책값이라고 표시할 이유다.
+    if unit == "fraction":
+        tolerance = math.ceil(0.01 * denominator)
+        passed = spread <= tolerance
+        spread_pp = 100 * spread / denominator
+    else:
+        tolerance = 0.10
+        passed = spread <= tolerance + 1e-12
+        spread_pp = 100 * spread / 10
+    return values, spread, tolerance, passed, spread_pp
+
+
 def reproducibility_checks(selected: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """집계값 범위만 기록해 multimodal 코호트의 클레임 자격을 만든다."""
 
@@ -289,24 +312,7 @@ def reproducibility_checks(selected: list[dict[str, Any]]) -> list[dict[str, Any
             })
             continue
         denominator = next(iter(denominators))
-        values = (
-            [float(axis["numerator"]) for axis in typed_axes]
-            if unit == "fraction"
-            else [float(axis["value"]) for axis in typed_axes]
-        )
-        spread = max(values) - min(values)
-        # 허용대는 **측정된 신뢰구간이 아니라 정책값**이다. 그래도 유지한다 —
-        # `passed` 는 publish_blocked() 가 읽는 값이라(이 파일의 reproduction_failed),
-        # 무조건 True 로 두면 산포가 아무리 커도 차단되지 않는다. 임계가 임의적이라는
-        # 것은 그것을 지울 이유가 아니라 정책값이라고 표시할 이유다.
-        if unit == "fraction":
-            tolerance = math.ceil(0.01 * denominator)
-            passed = spread <= tolerance
-            spread_pp = 100 * spread / denominator
-        else:
-            tolerance = 0.10
-            passed = spread <= tolerance + 1e-12
-            spread_pp = 100 * spread / 10
+        values, spread, tolerance, passed, spread_pp = _repro_spread(typed_axes, unit, denominator)
         checks.append({
             "representative": representative,
             "runs": runs,
@@ -678,6 +684,24 @@ def _latency(out: list[str], selected: list[dict[str, Any]]) -> None:
             out.extend(selection_notes + [""])
 
 
+def _render_ambiguities(ambiguous, *, out) -> None:
+    """Append ambiguous representative provenance to the supplied report lines."""
+    if ambiguous:
+        out.extend(["", "## 대표 런 자동 선정 불가 — 수치 비노출", ""])
+        for item in ambiguous:
+            benchmark, variant, _, model = item["key"]
+            out.append(f"- **{_escape(benchmark)} / {_escape(variant)} / {_escape(model)}** — {_escape(item['reason'])}")
+            for candidate in item["candidates"]:
+                out.append(f"  - `{_escape(candidate['source']['unit'])}`")
+            for group in item.get("folded_duplicates") or []:
+                out.append(
+                    f"  - 동일 artifact role/SHA-256·측정 payload 복사본 접음; "
+                    f"유지: `{_escape(group['kept'])}`"
+                )
+                for folded in group.get("folded") or []:
+                    out.append(f"    - 접음: `{_escape(folded)}`")
+
+
 def render_markdown(
     sidecars: list[dict[str, Any]],
     missing: list[dict[str, str]],
@@ -734,20 +758,7 @@ def render_markdown(
             facts = json.dumps(sidecar["protocol"]["inferred"], ensure_ascii=False, sort_keys=True)
             out.append(f"- `{_escape(sidecar['source']['unit'])}`: `{_escape(facts)}`")
 
-    if ambiguous:
-        out.extend(["", "## 대표 런 자동 선정 불가 — 수치 비노출", ""])
-        for item in ambiguous:
-            benchmark, variant, _, model = item["key"]
-            out.append(f"- **{_escape(benchmark)} / {_escape(variant)} / {_escape(model)}** — {_escape(item['reason'])}")
-            for candidate in item["candidates"]:
-                out.append(f"  - `{_escape(candidate['source']['unit'])}`")
-            for group in item.get("folded_duplicates") or []:
-                out.append(
-                    f"  - 동일 artifact role/SHA-256·측정 payload 복사본 접음; "
-                    f"유지: `{_escape(group['kept'])}`"
-                )
-                for folded in group.get("folded") or []:
-                    out.append(f"    - 접음: `{_escape(folded)}`")
+    _render_ambiguities(ambiguous, out=out)
 
     if blocked:
         out.extend(["", "## 발행 불가 — 점수를 인용하지 마십시오", ""])

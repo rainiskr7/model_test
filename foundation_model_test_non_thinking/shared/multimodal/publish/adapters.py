@@ -73,25 +73,8 @@ def _counts(records: Iterable[Mapping[str, Any]], response_field: str = "respons
     return counts, classified
 
 
-def summarize_records(
-    benchmark_id: str,
-    records: Iterable[Mapping[str, Any]],
-    *,
-    response_field: str = "response",
-    expected_count: int | None = None,
-    verify_stored_prediction: bool = True,
-) -> dict[str, Any]:
-    """Pure runner/adapter aggregation over raw records.
-
-    Stored ``correct`` fields are intentionally ignored.  Only records
-    classified as MEASURED are eligible for the numerator.
-    """
-
-    rows = list(records)
-    key = BENCHMARK_KEYS.get(benchmark_id.lower())
-    if key not in {"k_dtcbench", "k_mmbench", "mtvqa_kr", "kreta", "koffvqa"}:
-        raise ValueError(f"summarize_records does not support {benchmark_id!r}")
-    counts, classified = _counts(rows, response_field)
+def _score_classified_records(key, classified, response_field, verify_stored_prediction) -> tuple:
+    """Score classified responses and retain parser disagreement diagnostics."""
     correct = 0
     by_category: dict[str, list[int]] = defaultdict(lambda: [0, 0])
     score_accuracy = key != "koffvqa"
@@ -124,6 +107,32 @@ def summarize_records(
         if is_correct:
             correct += 1
             by_category[category][0] += 1
+    return correct, by_category, stored_prediction_mismatches, disagreement_ours_empty, disagreement_different_choice, no_answer
+
+
+def summarize_records(
+    benchmark_id: str,
+    records: Iterable[Mapping[str, Any]],
+    *,
+    response_field: str = "response",
+    expected_count: int | None = None,
+    verify_stored_prediction: bool = True,
+) -> dict[str, Any]:
+    """Pure runner/adapter aggregation over raw records.
+
+    Stored ``correct`` fields are intentionally ignored.  Only records
+    classified as MEASURED are eligible for the numerator.
+    """
+
+    rows = list(records)
+    key = BENCHMARK_KEYS.get(benchmark_id.lower())
+    if key not in {"k_dtcbench", "k_mmbench", "mtvqa_kr", "kreta", "koffvqa"}:
+        raise ValueError(f"summarize_records does not support {benchmark_id!r}")
+    counts, classified = _counts(rows, response_field)
+    (correct, by_category, stored_prediction_mismatches, disagreement_ours_empty,
+     disagreement_different_choice, no_answer) = _score_classified_records(
+        key, classified, response_field, verify_stored_prediction
+    )
     counts["correct_measured"] = correct
     failures: list[str] = []
     if expected_count is not None and counts["attempted"] != expected_count:
@@ -860,24 +869,8 @@ def _b4_summary_matches(stored: Mapping[str, Any], calculated: Mapping[str, Any]
     return True
 
 
-def adapt_b4(source_dir: Path) -> dict[str, Any]:
-    runs_path, summary_path = source_dir / "runs.json", source_dir / "summary.json"
-    failures: list[str] = []
-    warnings: list[str] = []
-    try:
-        runs, summary = load_json(runs_path), load_json(summary_path)
-    except Exception as exc:
-        runs, summary = {}, {}
-        failures.append(f"산출물 읽기 실패: {type(exc).__name__}")
-    if not isinstance(runs, dict) or not isinstance(summary, dict):
-        runs, summary = {}, {}
-        failures.append("runs.json/summary.json 형식이 올바르지 않음")
-    config = _run_config(summary, source_dir)
-    extra = config.get("extra") or {}
-    expected_names = {"text_only", "image_256px", "image_1024px"}
-    if not extra.get("skip_multi_image"):
-        expected_names.add("multi_image_3x512px")
-    reps = extra.get("reps_per_condition")
+def _aggregate_latency_conditions(runs, summary, expected_names, reps, *, failures) -> tuple:
+    """Reaggregate latency records and append ordered consistency failures."""
     attempted = measured = errored = unresolved = 0
     for name in expected_names:
         entries = runs.get(name)
@@ -919,6 +912,30 @@ def adapt_b4(source_dir: Path) -> dict[str, Any]:
         # For latency, a completed record is the contract-valid measurement.
         "correct_measured": measured,
     }
+    return counts, raw_by_name
+
+
+def adapt_b4(source_dir: Path) -> dict[str, Any]:
+    runs_path, summary_path = source_dir / "runs.json", source_dir / "summary.json"
+    failures: list[str] = []
+    warnings: list[str] = []
+    try:
+        runs, summary = load_json(runs_path), load_json(summary_path)
+    except Exception as exc:
+        runs, summary = {}, {}
+        failures.append(f"산출물 읽기 실패: {type(exc).__name__}")
+    if not isinstance(runs, dict) or not isinstance(summary, dict):
+        runs, summary = {}, {}
+        failures.append("runs.json/summary.json 형식이 올바르지 않음")
+    config = _run_config(summary, source_dir)
+    extra = config.get("extra") or {}
+    expected_names = {"text_only", "image_256px", "image_1024px"}
+    if not extra.get("skip_multi_image"):
+        expected_names.add("multi_image_3x512px")
+    reps = extra.get("reps_per_condition")
+    counts, raw_by_name = _aggregate_latency_conditions(
+        runs, summary, expected_names, reps, failures=failures
+    )
     axes: list[dict[str, Any]] = []
     for name in sorted(expected_names):
         entry = raw_by_name.get(name) or {}

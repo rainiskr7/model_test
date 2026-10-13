@@ -109,6 +109,37 @@ def collect(base: Path) -> List[Dict[str, Any]]:
     return rows
 
 
+def _exact_claims(grouped, credential, comparable) -> tuple:
+    """Build exact-match credentials and pairwise verdicts in cohort order."""
+    creds = {
+        key: credential([{"run_id": r["session"], "items": r["items"]} for r in members])
+        for key, members in sorted(grouped.items(), key=lambda kv: repr(kv[0]))
+    }
+    verified = [(key, cred) for key, cred in creds.items()
+                if cred["claim_class"] == "repeatability_observed"]
+    verdicts = []
+    for i in range(len(verified)):
+        for j in range(i + 1, len(verified)):
+            (ka, ca), (kb, cb) = verified[i], verified[j]
+            verdicts.append((ka[2], kb[2], comparable(ca, cb)))
+    return creds, verdicts
+
+
+def _judge_verdicts(judge_credentials, comparable) -> list:
+    """Compare judge credentials from different models in input order."""
+    judge_verdicts = []
+    for i in range(len(judge_credentials)):
+        for j in range(i + 1, len(judge_credentials)):
+            left, right = judge_credentials[i], judge_credentials[j]
+            if left["model"] == right["model"]:
+                continue
+            judge_verdicts.append((
+                left["model"], right["model"],
+                comparable(left["credential"], right["credential"]),
+            ))
+    return judge_verdicts
+
+
 def collect_claims(base: Path) -> Dict[str, Any]:
     """모델별 클레임 자격과 발행 가능한 우열 주장.
 
@@ -150,17 +181,7 @@ def collect_claims(base: Path) -> Dict[str, Any]:
     # 자리에 올 수 있어 튜플끼리 직접 비교하면 TypeError 로 보고 전체가 죽는다.
     # 실제로 그랬다 — 반복 런을 추가하자 두 종류가 처음 공존했다.
     # repr 정렬은 결정적이고 타입에 무관하다.
-    creds = {
-        key: credential([{"run_id": r["session"], "items": r["items"]} for r in members])
-        for key, members in sorted(grouped.items(), key=lambda kv: repr(kv[0]))
-    }
-    verified = [(key, cred) for key, cred in creds.items()
-                if cred["claim_class"] == "repeatability_observed"]
-    verdicts = []
-    for i in range(len(verified)):
-        for j in range(i + 1, len(verified)):
-            (ka, ca), (kb, cb) = verified[i], verified[j]
-            verdicts.append((ka[2], kb[2], comparable(ca, cb)))
+    creds, verdicts = _exact_claims(grouped, credential, comparable)
     judge_credentials = []
     for run_dir in sorted(base.glob("results/*/*/language/functionchat")):
         judge = load(run_dir / "judge.json")
@@ -175,16 +196,7 @@ def collect_claims(base: Path) -> Dict[str, Any]:
     # judge 축의 우열도 낸다. 내지 않으면 독자는 exact 축의 승자만 보고 "이 모델이
     # 낫다"로 읽는다. 실측에서 두 축의 승자가 서로 달랐다 — exact 는 qwen,
     # judge 는 gemma 가 앞섰다. 한쪽만 보이면 그것이 곧 과대 주장이 된다.
-    judge_verdicts = []
-    for i in range(len(judge_credentials)):
-        for j in range(i + 1, len(judge_credentials)):
-            left, right = judge_credentials[i], judge_credentials[j]
-            if left["model"] == right["model"]:
-                continue
-            judge_verdicts.append((
-                left["model"], right["model"],
-                comparable(left["credential"], right["credential"]),
-            ))
+    judge_verdicts = _judge_verdicts(judge_credentials, comparable)
     return {
         "credentials": creds,
         "verdicts": verdicts,
@@ -193,18 +205,12 @@ def collect_claims(base: Path) -> Dict[str, Any]:
     }
 
 
-def render_claims(claims: Dict[str, Any]) -> List[str]:
-    if not claims:
-        return []
-    out = ["## 클레임 등급", ""]
-    out.append(
-        "**1회 실행 숫자는 순위표에 올리지 않는다.** 저장·표시·역사 인용은 되지만 "
-        "우열 주장의 근거는 아니다. 반복 3회 이상이어야 반복성을 관측했다고 말한다."
-    )
-    out.append("")
+def _render_exact_credentials(credentials) -> list:
+    """Render the exact-match credential section."""
+    out = []
     out.append("### exact-match 축")
     out.append("")
-    for key, cred in claims["credentials"].items():
+    for key, cred in credentials.items():
         model, version = key[2], key[0]
         if cred["claim_class"] != "repeatability_observed":
             out.append(f"- `{model}` (`{version}`) — `{cred['claim_class']}` (k={cred['k']}) · {cred['reason']}")
@@ -217,7 +223,12 @@ def render_claims(claims: Dict[str, Any]) -> List[str]:
             f"불안정 예산 {lo}–{hi}"
         )
     out.append("")
-    judge_credentials = claims.get("judge_credentials") or []
+    return out
+
+
+def _render_judge_credentials(judge_credentials) -> list:
+    """Render the optional within-run judge credential section."""
+    out = []
     if judge_credentials:
         out.append("### judge 축 — 런 내부 3표")
         out.append("")
@@ -236,6 +247,12 @@ def render_claims(claims: Dict[str, Any]) -> List[str]:
                 f"표 갈림 {len(cred['unstable_items'])}건 · 불안정 예산 {lo}–{hi}{provisional}"
             )
         out.append("")
+    return out
+
+
+def _render_claim_verdicts(claims) -> list:
+    """Render verdicts and the warning when the two axes disagree."""
+    out = []
     out.append("### 발행 가능한 우열 주장")
     out.append("")
     out.append("**exact-match 축**")
@@ -275,6 +292,21 @@ def render_claims(claims: Dict[str, Any]) -> List[str]:
                 "재며, 어느 쪽이 '진짜'인지 이 데이터는 말하지 않는다."
             )
             out.append("")
+    return out
+
+
+def render_claims(claims: Dict[str, Any]) -> List[str]:
+    if not claims:
+        return []
+    out = ["## 클레임 등급", ""]
+    out.append(
+        "**1회 실행 숫자는 순위표에 올리지 않는다.** 저장·표시·역사 인용은 되지만 "
+        "우열 주장의 근거는 아니다. 반복 3회 이상이어야 반복성을 관측했다고 말한다."
+    )
+    out.append("")
+    out.extend(_render_exact_credentials(claims["credentials"]))
+    out.extend(_render_judge_credentials(claims.get("judge_credentials") or []))
+    out.extend(_render_claim_verdicts(claims))
 
     out.append(
         "> 가설검정이 아니다. 신뢰구간도 p-value 도 아니다. **관측된 불안정으로 "

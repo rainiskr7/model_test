@@ -58,14 +58,8 @@ def _metadata_identity(values: Iterable[Any]) -> Any:
     return decoded[0] if len(decoded) == 1 else tuple(sorted(encoded))
 
 
-def load_run(run_dir: Path) -> dict[str, Any] | None:
-    """한 런의 요약과 항목별 판정을 모은다. 읽을 수 없으면 None."""
-
-    run_dir = Path(run_dir)
-    try:
-        summary = json.loads((run_dir / "summary.json").read_text(encoding="utf-8"))
-    except Exception:
-        return None
+def _read_run_datasets(run_dir: Path) -> tuple:
+    """Read saved datasets from run_dir and recompute item-level judgments."""
     items: dict[str, bool] = {}
     unreadable: list[str] = []
     metadata: list[Mapping[str, Any]] = []
@@ -104,6 +98,11 @@ def load_run(run_dir: Path) -> dict[str, Any] | None:
             items[str(record.get("item_id"))] = exact_match(
                 dict(record), record.get("model_output")
             )
+    return items, unreadable, metadata, timeouts_observed
+
+
+def _removed_sampling_controls(metadata) -> tuple:
+    """Collect recorded sampling removals without inventing missing provenance."""
     # 디코딩 프로비넌스는 데이터셋 산출물의 metadata 에 있다. 없으면(계약 이전
     # 산출물) None — "제어됐다"고 단정하지 않는다.
     # 첫 데이터셋에서 멈추지 않는다. 데이터셋마다 다른 제약으로 돌았다면 그
@@ -118,6 +117,19 @@ def load_run(run_dir: Path) -> dict[str, Any] | None:
     removed = sorted(set().union(*removed_sets)) if removed_sets else []
     # 기록이 없으면(계약 이전 산출물) None — "제거되지 않았다" 고 단정하지 않는다.
     controls_removed = ("temperature" in removed) if removed_sets else None
+    return removed_sets, removed, controls_removed
+
+
+def load_run(run_dir: Path) -> dict[str, Any] | None:
+    """한 런의 요약과 항목별 판정을 모은다. 읽을 수 없으면 None."""
+
+    run_dir = Path(run_dir)
+    try:
+        summary = json.loads((run_dir / "summary.json").read_text(encoding="utf-8"))
+    except Exception:
+        return None
+    items, unreadable, metadata, timeouts_observed = _read_run_datasets(run_dir)
+    removed_sets, removed, controls_removed = _removed_sampling_controls(metadata)
 
     return {
         "session": run_dir.parents[1].name,

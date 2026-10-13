@@ -152,6 +152,31 @@ def _shared_integrity(raw_by_dataset: Mapping[str, Mapping[str, Any]]) -> Dict[s
     return shared
 
 
+def _not_measured_coverage(coverage, by_dataset) -> tuple:
+    """Validate declared unmeasured counts against observed dataset counts."""
+    declared_not_measured = coverage.get("not_measured") or {}
+    decision_declared = dict(declared_not_measured.get("call_decision") or {})
+    decision_observed = by_dataset["call_decision"]["not_measured"]
+    if _nonzero(decision_declared) != _nonzero(decision_observed):
+        raise ValueError(
+            "CallDecision not-measured counts disagree: "
+            f"coverage={decision_declared}, raw={decision_observed}"
+        )
+    dialog_declared = dict(declared_not_measured.get("dialog") or {})
+    # call_decision 과 마찬가지로 선언값을 관측값과 대조한다. 예전에는 dialog 만
+    # 그냥 믿었고, 러너가 시나리오 수(45)를 적는 바람에 판정 필요 항목이 130 대신
+    # 45 로 집계돼 total_items 가 551(실제 636)로 발행됐다.
+    if "dialog" in by_dataset:
+        dialog_observed = by_dataset["dialog"]["not_measured"]
+        if _nonzero(dialog_declared) != _nonzero(dialog_observed):
+            raise ValueError(
+                "Dialog not-measured counts disagree: "
+                f"coverage={dialog_declared}, raw={dialog_observed}"
+            )
+    not_measured_total = sum(decision_declared.values()) + sum(dialog_declared.values())
+    return decision_declared, dialog_declared, not_measured_total
+
+
 def build_summary(
     raw_by_dataset: Mapping[str, Mapping[str, Any]],
     coverage: Mapping[str, Any],
@@ -180,26 +205,7 @@ def build_summary(
     passed = sum(entry["passed"] for entry in by_dataset.values())
     failed = sum(entry["failed"] for entry in by_dataset.values())
 
-    declared_not_measured = coverage.get("not_measured") or {}
-    decision_declared = dict(declared_not_measured.get("call_decision") or {})
-    decision_observed = by_dataset["call_decision"]["not_measured"]
-    if _nonzero(decision_declared) != _nonzero(decision_observed):
-        raise ValueError(
-            "CallDecision not-measured counts disagree: "
-            f"coverage={decision_declared}, raw={decision_observed}"
-        )
-    dialog_declared = dict(declared_not_measured.get("dialog") or {})
-    # call_decision 과 마찬가지로 선언값을 관측값과 대조한다. 예전에는 dialog 만
-    # 그냥 믿었고, 러너가 시나리오 수(45)를 적는 바람에 판정 필요 항목이 130 대신
-    # 45 로 집계돼 total_items 가 551(실제 636)로 발행됐다.
-    if "dialog" in by_dataset:
-        dialog_observed = by_dataset["dialog"]["not_measured"]
-        if _nonzero(dialog_declared) != _nonzero(dialog_observed):
-            raise ValueError(
-                "Dialog not-measured counts disagree: "
-                f"coverage={dialog_declared}, raw={dialog_observed}"
-            )
-    not_measured_total = sum(decision_declared.values()) + sum(dialog_declared.values())
+    decision_declared, dialog_declared, not_measured_total = _not_measured_coverage(coverage, by_dataset)
 
     return {
         "benchmark": "kakao/FunctionChat-Bench (call exact match)",

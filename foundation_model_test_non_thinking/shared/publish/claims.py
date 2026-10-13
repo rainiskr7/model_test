@@ -65,6 +65,31 @@ NOT_MEASURED = "not_measured"
 MIN_REPEATS = 3
 
 
+def _instability_budget(shared_items, passed_sets, pass_counts, run_count) -> tuple:
+    """Calculate unanimous passes, unstable items and the majority envelope."""
+    unanimous_pass = set.intersection(*passed_sets)
+    unanimous_fail = shared_items - set().union(*passed_sets)
+    unstable = sorted(shared_items - unanimous_pass - unanimous_fail)
+
+    # 다수결: 과반 런에서 통과한 항목. 점추정을 n=1 보다 안정화할 뿐이고,
+    # 비교가 "진짜"라는 증명은 아니다.
+    majority = {
+        item
+        for item in shared_items
+        if sum(1 for s in passed_sets if item in s) * 2 > run_count
+    }
+
+    # 불안정 예산. 뒤집힌 항목이 모두 한쪽으로 몰리면 점수가 그만큼 움직일 수
+    # 있다는 **상한**이다. 관측된 건수 범위만 쓰면 위 반례(범위 0, 뒤집힘 10)를
+    # 놓치므로, 둘 중 넓은 쪽을 쓴다. 신뢰구간이 아니라 보수적 마진이다.
+    center = len(majority)
+    envelope = [
+        min(center - len(unstable), min(pass_counts)),
+        max(center + len(unstable), max(pass_counts)),
+    ]
+    return unanimous_pass, unstable, center, envelope
+
+
 def credential(runs: Iterable[Mapping[str, Any]]) -> dict[str, Any]:
     """한 코호트(같은 모델·같은 규약)의 반복 런에서 클레임 자격을 만든다.
 
@@ -122,26 +147,9 @@ def credential(runs: Iterable[Mapping[str, Any]]) -> dict[str, Any]:
             ),
         }
 
-    unanimous_pass = set.intersection(*passed_sets)
-    unanimous_fail = shared_items - set().union(*passed_sets)
-    unstable = sorted(shared_items - unanimous_pass - unanimous_fail)
-
-    # 다수결: 과반 런에서 통과한 항목. 점추정을 n=1 보다 안정화할 뿐이고,
-    # 비교가 "진짜"라는 증명은 아니다.
-    majority = {
-        item
-        for item in shared_items
-        if sum(1 for s in passed_sets if item in s) * 2 > len(runs)
-    }
-
-    # 불안정 예산. 뒤집힌 항목이 모두 한쪽으로 몰리면 점수가 그만큼 움직일 수
-    # 있다는 **상한**이다. 관측된 건수 범위만 쓰면 위 반례(범위 0, 뒤집힘 10)를
-    # 놓치므로, 둘 중 넓은 쪽을 쓴다. 신뢰구간이 아니라 보수적 마진이다.
-    center = len(majority)
-    envelope = [
-        min(center - len(unstable), min(pass_counts)),
-        max(center + len(unstable), max(pass_counts)),
-    ]
+    unanimous_pass, unstable, center, envelope = _instability_budget(
+        shared_items, passed_sets, pass_counts, len(runs)
+    )
 
     return {
         "claim_class": REPEATABILITY_OBSERVED,

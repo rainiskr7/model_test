@@ -54,14 +54,8 @@ def task_set_digest(summary: Mapping[str, Any]) -> str:
     return _digest(ids)[:16]
 
 
-def comparison_fingerprint(summary: Mapping[str, Any]) -> dict[str, Any]:
-    """후보를 제외한 실행 규약의 지문.
-
-    후보 모델명, 후보 엔드포인트, 후보의 timeout/max_tokens 는 **넣지 않는다** —
-    그것들이 바로 비교 대상이다. 반대로 사용자 시뮬레이터 설정은 넣는다: 후보가
-    아니라 실험 조건이므로 달라지면 비교가 성립하지 않는다.
-    """
-
+def _comparison_facts(summary: Mapping[str, Any]) -> dict:
+    """Collect candidate-independent protocol facts in fingerprint order."""
     split = summary.get("split") or {}
     integrity = summary.get("harness_integrity") or {}
     facts = {
@@ -85,6 +79,19 @@ def comparison_fingerprint(summary: Mapping[str, Any]) -> dict[str, Any]:
         # 쟀다"를 구분할 수 없다. 기록만 하고 지문에서 빼면 둘이 한 코호트에 들어간다.
         "trials": integrity.get("trials"),
     }
+    return facts
+
+
+def comparison_fingerprint(summary: Mapping[str, Any]) -> dict[str, Any]:
+    """후보를 제외한 실행 규약의 지문.
+
+    후보 모델명, 후보 엔드포인트, 후보의 timeout/max_tokens 는 **넣지 않는다** —
+    그것들이 바로 비교 대상이다. 반대로 사용자 시뮬레이터 설정은 넣는다: 후보가
+    아니라 실험 조건이므로 달라지면 비교가 성립하지 않는다.
+    """
+
+    integrity = summary.get("harness_integrity") or {}
+    facts = _comparison_facts(summary)
     # 사용자 인자를 기록하지 않는 구버전 산출물은 두 런이 같은 규약이었다는 증거가
     # 없다. 실측: retail 두 런은 둘 다 gpt-4.1-mini 를 썼지만 timeout 600s/8192
     # tokens 와 120s/16384 tokens 로 달랐다.

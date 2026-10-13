@@ -399,6 +399,92 @@ def _check_headline_v2(
                 )
 
 
+def _check_v3_levels(v3_by_level, *, failures) -> None:
+    """Append v3 level and metric contract failures in traversal order."""
+    for level, result in v3_by_level.items():
+        if level not in ALL_LEVELS or not isinstance(result, dict):
+            failures.append(f"scoring_v3 invalid level entry: {level!r}")
+            continue
+        _check_score(
+            result.get("score"), f"scoring_v3.{level}.score", failures
+        )
+        metrics = result.get("metrics")
+        if not isinstance(metrics, dict):
+            failures.append(f"scoring_v3.{level}.metrics must be an object")
+            continue
+        expected_in_score = {
+            spec.name for spec in LEVEL_SPECS_V3[level] if spec.in_score
+        }
+        actual_in_score = {
+            name
+            for name, entry in metrics.items()
+            if isinstance(entry, dict) and entry.get("in_score") is True
+        }
+        if actual_in_score != expected_in_score:
+            failures.append(
+                f"scoring_v3.{level} in_score metric set mismatch: "
+                f"expected {sorted(expected_in_score)}, got {sorted(actual_in_score)}"
+            )
+        for spec in LEVEL_SPECS_V3[level]:
+            entry = metrics.get(spec.name)
+            if not isinstance(entry, dict):
+                failures.append(
+                    f"scoring_v3.{level}.{spec.name} metric is missing"
+                )
+                continue
+            if entry.get("in_score") is not spec.in_score:
+                failures.append(
+                    f"scoring_v3.{level}.{spec.name}.in_score mismatch"
+                )
+            _check_score(
+                entry.get("score"),
+                f"scoring_v3.{level}.{spec.name}.score",
+                failures,
+            )
+            _check_task_spread(
+                f"scoring_v3.{level}", spec.name, entry, failures
+            )
+
+
+def _check_v3_headline(v3, v3_by_level, *, failures) -> None:
+    """Append v3 completeness and six-level mean failures."""
+    v3_headline = v3.get("agent_score")
+    _check_score(v3_headline, "scoring_v3.agent_score", failures)
+    v3_status = v3.get("agent_score_status")
+    if v3_status not in {"complete", "incomplete"}:
+        failures.append(
+            "scoring_v3.agent_score_status must be 'complete' or 'incomplete'"
+        )
+    v3_complete = v3_status == "complete"
+    v3_scores = [
+        (v3_by_level.get(level) or {}).get("score")
+        if isinstance(v3_by_level.get(level), dict)
+        else None
+        for level in SCORABLE_LEVELS
+    ]
+    v3_all_six = all(_is_finite_score(score) for score in v3_scores)
+    if _is_finite_score(v3_headline) != v3_complete:
+        failures.append(
+            "scoring_v3.agent_score must be finite if and only if status is complete"
+        )
+    if v3_complete != v3_all_six:
+        failures.append(
+            "scoring_v3 status is complete if and only if all six scorable levels have scores"
+        )
+    if v3_complete:
+        if v3.get("scored_levels") != 6 or v3.get("required_levels") != 6:
+            failures.append(
+                "complete scoring_v3 run must have scored_levels == required_levels == 6"
+            )
+        if _is_finite_score(v3_headline) and v3_all_six:
+            reconstructed_v3 = sum(v3_scores) / len(v3_scores)
+            if abs(v3_headline - reconstructed_v3) >= 1e-9:
+                failures.append(
+                    "scoring_v3.agent_score mean invariant failed: "
+                    f"got {v3_headline!r}, expected {reconstructed_v3!r}"
+                )
+
+
 def _check_scoring_v3(
     summary: Dict[str, Any],
     failures: List[str],
@@ -420,85 +506,8 @@ def _check_scoring_v3(
             if not isinstance(v3_by_level, dict):
                 failures.append("scoring_v3.by_level must be an object")
                 v3_by_level = {}
-            for level, result in v3_by_level.items():
-                if level not in ALL_LEVELS or not isinstance(result, dict):
-                    failures.append(f"scoring_v3 invalid level entry: {level!r}")
-                    continue
-                _check_score(
-                    result.get("score"), f"scoring_v3.{level}.score", failures
-                )
-                metrics = result.get("metrics")
-                if not isinstance(metrics, dict):
-                    failures.append(f"scoring_v3.{level}.metrics must be an object")
-                    continue
-                expected_in_score = {
-                    spec.name for spec in LEVEL_SPECS_V3[level] if spec.in_score
-                }
-                actual_in_score = {
-                    name
-                    for name, entry in metrics.items()
-                    if isinstance(entry, dict) and entry.get("in_score") is True
-                }
-                if actual_in_score != expected_in_score:
-                    failures.append(
-                        f"scoring_v3.{level} in_score metric set mismatch: "
-                        f"expected {sorted(expected_in_score)}, got {sorted(actual_in_score)}"
-                    )
-                for spec in LEVEL_SPECS_V3[level]:
-                    entry = metrics.get(spec.name)
-                    if not isinstance(entry, dict):
-                        failures.append(
-                            f"scoring_v3.{level}.{spec.name} metric is missing"
-                        )
-                        continue
-                    if entry.get("in_score") is not spec.in_score:
-                        failures.append(
-                            f"scoring_v3.{level}.{spec.name}.in_score mismatch"
-                        )
-                    _check_score(
-                        entry.get("score"),
-                        f"scoring_v3.{level}.{spec.name}.score",
-                        failures,
-                    )
-                    _check_task_spread(
-                        f"scoring_v3.{level}", spec.name, entry, failures
-                    )
-
-            v3_headline = v3.get("agent_score")
-            _check_score(v3_headline, "scoring_v3.agent_score", failures)
-            v3_status = v3.get("agent_score_status")
-            if v3_status not in {"complete", "incomplete"}:
-                failures.append(
-                    "scoring_v3.agent_score_status must be 'complete' or 'incomplete'"
-                )
-            v3_complete = v3_status == "complete"
-            v3_scores = [
-                (v3_by_level.get(level) or {}).get("score")
-                if isinstance(v3_by_level.get(level), dict)
-                else None
-                for level in SCORABLE_LEVELS
-            ]
-            v3_all_six = all(_is_finite_score(score) for score in v3_scores)
-            if _is_finite_score(v3_headline) != v3_complete:
-                failures.append(
-                    "scoring_v3.agent_score must be finite if and only if status is complete"
-                )
-            if v3_complete != v3_all_six:
-                failures.append(
-                    "scoring_v3 status is complete if and only if all six scorable levels have scores"
-                )
-            if v3_complete:
-                if v3.get("scored_levels") != 6 or v3.get("required_levels") != 6:
-                    failures.append(
-                        "complete scoring_v3 run must have scored_levels == required_levels == 6"
-                    )
-                if _is_finite_score(v3_headline) and v3_all_six:
-                    reconstructed_v3 = sum(v3_scores) / len(v3_scores)
-                    if abs(v3_headline - reconstructed_v3) >= 1e-9:
-                        failures.append(
-                            "scoring_v3.agent_score mean invariant failed: "
-                            f"got {v3_headline!r}, expected {reconstructed_v3!r}"
-                        )
+            _check_v3_levels(v3_by_level, failures=failures)
+            _check_v3_headline(v3, v3_by_level, failures=failures)
 
             task_data = v3.get("task_data")
             if not isinstance(task_data, dict):
@@ -509,6 +518,47 @@ def _check_scoring_v3(
                         failures.append(
                             f"scoring_v3.task_data.{name} required when join_needed is true"
                         )
+
+
+def _check_v4_headline(v4, v4_by_level, *, failures) -> None:
+    """Append v4 completeness, denominator and five-level mean failures."""
+    v4_headline = v4.get("agent_score")
+    _check_score(v4_headline, "scoring_v4.agent_score", failures)
+    v4_status = v4.get("agent_score_status")
+    if v4_status not in {"complete", "incomplete"}:
+        failures.append(
+            "scoring_v4.agent_score_status must be 'complete' or 'incomplete'"
+        )
+    v4_scores = [
+        (v4_by_level.get(level) or {}).get("score")
+        if isinstance(v4_by_level.get(level), dict)
+        else None
+        for level in V4_HEADLINE_LEVELS
+    ]
+    v4_scored = sum(_is_finite_score(score) for score in v4_scores)
+    v4_complete = v4_status == "complete"
+    v4_all_five = v4_scored == len(V4_HEADLINE_LEVELS)
+    if _is_finite_score(v4_headline) != v4_complete:
+        failures.append(
+            "scoring_v4.agent_score must be finite if and only if status is complete"
+        )
+    if v4_complete != v4_all_five:
+        failures.append(
+            "scoring_v4 status is complete if and only if all five headline levels have scores"
+        )
+    if v4.get("scored_levels") != v4_scored:
+        failures.append(
+            f"scoring_v4.scored_levels must equal {v4_scored}"
+        )
+    if v4.get("required_levels") != len(V4_HEADLINE_LEVELS):
+        failures.append("scoring_v4.required_levels must equal 5")
+    if _is_finite_score(v4_headline) and v4_all_five:
+        reconstructed_v4 = sum(v4_scores) / len(v4_scores)
+        if abs(v4_headline - reconstructed_v4) >= 1e-9:
+            failures.append(
+                "scoring_v4.agent_score mean invariant failed: "
+                f"got {v4_headline!r}, expected {reconstructed_v4!r}"
+            )
 
 
 def _check_scoring_v4(
@@ -557,43 +607,7 @@ def _check_scoring_v4(
                     "scoring_v4.by_level must preserve the full scoring_v3 level matrix"
                 )
 
-            v4_headline = v4.get("agent_score")
-            _check_score(v4_headline, "scoring_v4.agent_score", failures)
-            v4_status = v4.get("agent_score_status")
-            if v4_status not in {"complete", "incomplete"}:
-                failures.append(
-                    "scoring_v4.agent_score_status must be 'complete' or 'incomplete'"
-                )
-            v4_scores = [
-                (v4_by_level.get(level) or {}).get("score")
-                if isinstance(v4_by_level.get(level), dict)
-                else None
-                for level in V4_HEADLINE_LEVELS
-            ]
-            v4_scored = sum(_is_finite_score(score) for score in v4_scores)
-            v4_complete = v4_status == "complete"
-            v4_all_five = v4_scored == len(V4_HEADLINE_LEVELS)
-            if _is_finite_score(v4_headline) != v4_complete:
-                failures.append(
-                    "scoring_v4.agent_score must be finite if and only if status is complete"
-                )
-            if v4_complete != v4_all_five:
-                failures.append(
-                    "scoring_v4 status is complete if and only if all five headline levels have scores"
-                )
-            if v4.get("scored_levels") != v4_scored:
-                failures.append(
-                    f"scoring_v4.scored_levels must equal {v4_scored}"
-                )
-            if v4.get("required_levels") != len(V4_HEADLINE_LEVELS):
-                failures.append("scoring_v4.required_levels must equal 5")
-            if _is_finite_score(v4_headline) and v4_all_five:
-                reconstructed_v4 = sum(v4_scores) / len(v4_scores)
-                if abs(v4_headline - reconstructed_v4) >= 1e-9:
-                    failures.append(
-                        "scoring_v4.agent_score mean invariant failed: "
-                        f"got {v4_headline!r}, expected {reconstructed_v4!r}"
-                    )
+            _check_v4_headline(v4, v4_by_level, failures=failures)
 
             denominators = summary.get("headline_denominators")
             expected_denominators = {

@@ -699,16 +699,8 @@ def _classify_incompletions(simulations) -> tuple:
     return candidate, environment, unclassified
 
 
-def validate_summary(summary: dict) -> tuple:
-    """발행 가능 여부를 판정한다. (failures, warnings) 를 돌려준다.
-
-    tau2 는 시뮬레이션이 인프라 오류로 죽어도 "Successfully completed all simulations!"
-    를 찍고 0 으로 나간다. 2026-08-19 에 telecom test 40/40 이 infrastructure_error 로
-    끝났는데도 전체 파이프라인이 성공으로 보였다. 그 구멍을 여기서 막는다.
-    """
-    failures = []
-    warnings = []
-
+def _validate_observed_user_protocol(summary, *, failures, warnings) -> None:
+    """Append observed user-protocol mismatch or missing-pin diagnostics."""
     user_protocol = (
         ((summary.get("harness_integrity") or {}).get("upstream_result_evidence") or {})
         .get("user_protocol") or {}
@@ -725,12 +717,9 @@ def validate_summary(summary: dict) -> tuple:
             "사용자 시뮬레이터 인자가 기록돼 있지 않다 — 이 런은 모델 간 비교에 쓸 수 없다"
         )
 
-    overall = summary.get("overall") or {}
-    if overall.get("pass_rate") is None or not overall.get("measured"):
-        failures.append(
-            "overall.pass_rate 가 없다 — 보상값을 낸 태스크가 하나도 없다"
-        )
 
+def _validate_domain_coverage(summary, *, failures, warnings) -> None:
+    """Append per-domain completion, trial-count and attribution diagnostics."""
     for domain, entry in (summary.get("by_domain") or {}).items():
         if not isinstance(entry, dict):
             continue
@@ -791,6 +780,27 @@ def validate_summary(summary: dict) -> tuple:
             failures.append(
                 f"by_domain.{domain}: 완주 실패 {infra}건 ({detail}) — 완전 측정이 아니다"
             )
+
+
+def validate_summary(summary: dict) -> tuple:
+    """발행 가능 여부를 판정한다. (failures, warnings) 를 돌려준다.
+
+    tau2 는 시뮬레이션이 인프라 오류로 죽어도 "Successfully completed all simulations!"
+    를 찍고 0 으로 나간다. 2026-08-19 에 telecom test 40/40 이 infrastructure_error 로
+    끝났는데도 전체 파이프라인이 성공으로 보였다. 그 구멍을 여기서 막는다.
+    """
+    failures = []
+    warnings = []
+
+    _validate_observed_user_protocol(summary, failures=failures, warnings=warnings)
+
+    overall = summary.get("overall") or {}
+    if overall.get("pass_rate") is None or not overall.get("measured"):
+        failures.append(
+            "overall.pass_rate 가 없다 — 보상값을 낸 태스크가 하나도 없다"
+        )
+
+    _validate_domain_coverage(summary, failures=failures, warnings=warnings)
 
     return failures, warnings
 

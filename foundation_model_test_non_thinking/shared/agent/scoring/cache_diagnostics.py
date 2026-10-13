@@ -241,6 +241,48 @@ def _semantic_projection(tool_name: str, args: Mapping[str, Any]) -> Dict[str, A
     return {name: value for name, value in args.items() if name not in presentation}
 
 
+def _classify_reachable(tool_name, normalized, reachable, *, result) -> dict:
+    """Update the supplied classification with reachable semantic alternatives."""
+    requested_semantic = _semantic_projection(tool_name, normalized)
+    presentation_candidates = [
+        fixture
+        for fixture in reachable
+        if fixture.get("args") != normalized
+        and _semantic_projection(tool_name, fixture.get("args") or {})
+        == requested_semantic
+    ]
+    if presentation_candidates:
+        result["bucket"] = "presentation_sibling"
+        result["fixture_key"] = min(
+            fixture["key"] for fixture in presentation_candidates
+        )
+        return result
+
+    identity = _identity_value(tool_name, normalized)
+    if identity is None:
+        return result
+    same_identity_reachable = [
+        fixture
+        for fixture in reachable
+        if _identity_value(tool_name, fixture.get("args") or {}) == identity
+    ]
+    semantic_candidates = [
+        fixture
+        for fixture in same_identity_reachable
+        if _semantic_projection(tool_name, fixture.get("args") or {})
+        != requested_semantic
+    ]
+    if semantic_candidates:
+        result["bucket"] = "semantic_mismatch"
+        result["fixture_key"] = min(
+            fixture["key"] for fixture in semantic_candidates
+        )
+        return result
+    if not same_identity_reachable:
+        result["bucket"] = "query_absent"
+    return result
+
+
 def classify_call(
     call: Mapping[str, Any],
     catalog: Mapping[str, Mapping[str, Any]],
@@ -278,44 +320,7 @@ def classify_call(
         result.update(bucket="exact", fixture_key=min(fixture["key"] for fixture in exact))
         return result
     if reachable:
-        requested_semantic = _semantic_projection(tool_name, normalized)
-        presentation_candidates = [
-            fixture
-            for fixture in reachable
-            if fixture.get("args") != normalized
-            and _semantic_projection(tool_name, fixture.get("args") or {})
-            == requested_semantic
-        ]
-        if presentation_candidates:
-            result["bucket"] = "presentation_sibling"
-            result["fixture_key"] = min(
-                fixture["key"] for fixture in presentation_candidates
-            )
-            return result
-
-        identity = _identity_value(tool_name, normalized)
-        if identity is None:
-            return result
-        same_identity_reachable = [
-            fixture
-            for fixture in reachable
-            if _identity_value(tool_name, fixture.get("args") or {}) == identity
-        ]
-        semantic_candidates = [
-            fixture
-            for fixture in same_identity_reachable
-            if _semantic_projection(tool_name, fixture.get("args") or {})
-            != requested_semantic
-        ]
-        if semantic_candidates:
-            result["bucket"] = "semantic_mismatch"
-            result["fixture_key"] = min(
-                fixture["key"] for fixture in semantic_candidates
-            )
-            return result
-        if not same_identity_reachable:
-            result["bucket"] = "query_absent"
-        return result
+        return _classify_reachable(tool_name, normalized, reachable, result=result)
 
     if fixtures:
         result["bucket"] = "signature_mismatch"

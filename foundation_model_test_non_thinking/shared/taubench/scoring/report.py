@@ -160,40 +160,8 @@ def _task_vector(summary: Mapping[str, Any]) -> dict[str, bool]:
     }
 
 
-def _claims(summaries: Iterable[Mapping[str, Any]]) -> dict[str, Any]:
-    """단일 시행 코호트만 항목 벡터 기반 클레임 자격으로 바꾼다."""
-
-    grouped: dict[tuple[str, str], list[Mapping[str, Any]]] = defaultdict(list)
-    excluded: list[dict[str, str]] = []
-    for summary in summaries:
-        if is_multi_trial(summary):
-            excluded.append({
-                "model": str(summary.get("model")),
-                "session": str(summary.get("_session") or summary.get("session") or "?"),
-                "reason": "다중 시행 산출물이다 — 통과 집합 비교는 Pass^k 를 대신할 수 없다",
-            })
-            continue
-        grouped[replicate_key(summary)].append(summary)
-
-    credentials: list[dict[str, Any]] = []
-    for (fingerprint, model, removed_controls), members in sorted(grouped.items()):
-        protocol = comparison_fingerprint(members[0])
-        credentials.append({
-            "fingerprint": fingerprint,
-            "model": model,
-            # 서빙 제약으로 후보 쪽에서 뺀 샘플링 제어. 비어 있지 않으면 그
-            # 코호트는 그 제어 없이 돌았다 (예: diffusion 은 seed 를 못 받는다).
-            "removed_sampling_controls": removed_controls,
-            "protocol": protocol,
-            "credential": credential([
-                {
-                    "run_id": str(member.get("_session") or member.get("session") or "?"),
-                    "items": _task_vector(member),
-                }
-                for member in members
-            ]),
-        })
-
+def _cohort_verdicts(credentials) -> list:
+    """Compare credential pairs within each protocol, preserving serving controls."""
     verdicts: list[dict[str, Any]] = []
     by_protocol: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for entry in credentials:
@@ -244,6 +212,44 @@ def _claims(summaries: Iterable[Mapping[str, Any]]) -> dict[str, Any]:
                     "right_removed_sampling_controls": right["removed_sampling_controls"],
                     "verdict": verdict,
                 })
+    return verdicts
+
+
+def _claims(summaries: Iterable[Mapping[str, Any]]) -> dict[str, Any]:
+    """단일 시행 코호트만 항목 벡터 기반 클레임 자격으로 바꾼다."""
+
+    grouped: dict[tuple[str, str], list[Mapping[str, Any]]] = defaultdict(list)
+    excluded: list[dict[str, str]] = []
+    for summary in summaries:
+        if is_multi_trial(summary):
+            excluded.append({
+                "model": str(summary.get("model")),
+                "session": str(summary.get("_session") or summary.get("session") or "?"),
+                "reason": "다중 시행 산출물이다 — 통과 집합 비교는 Pass^k 를 대신할 수 없다",
+            })
+            continue
+        grouped[replicate_key(summary)].append(summary)
+
+    credentials: list[dict[str, Any]] = []
+    for (fingerprint, model, removed_controls), members in sorted(grouped.items()):
+        protocol = comparison_fingerprint(members[0])
+        credentials.append({
+            "fingerprint": fingerprint,
+            "model": model,
+            # 서빙 제약으로 후보 쪽에서 뺀 샘플링 제어. 비어 있지 않으면 그
+            # 코호트는 그 제어 없이 돌았다 (예: diffusion 은 seed 를 못 받는다).
+            "removed_sampling_controls": removed_controls,
+            "protocol": protocol,
+            "credential": credential([
+                {
+                    "run_id": str(member.get("_session") or member.get("session") or "?"),
+                    "items": _task_vector(member),
+                }
+                for member in members
+            ]),
+        })
+
+    verdicts = _cohort_verdicts(credentials)
     return {"credentials": credentials, "excluded": excluded, "verdicts": verdicts}
 
 
@@ -293,23 +299,9 @@ def _render_claims(claims: Mapping[str, Any]) -> list[str]:
     return out
 
 
-def render_markdown(summaries: Iterable[dict[str, Any]], unreadable: list[dict[str, str]]) -> str:
-    summaries = list(summaries)
-    out: list[str] = [
-        "# taubench 트랙 결과",
-        "",
-        "이 파일은 `reports/report_taubench_tracks.py` 가 `summary.json` 에서 생성한다. 손으로 고치지 말 것.",
-        "",
-        "읽는 법:",
-        "",
-        "- **도메인을 가로질러 평균하지 않는다.** 상류 Overall 은 retail/airline/telecom 을",
-        "  `base` split 전 과제로 재야 성립한다. 여기 수치는 `test` split 이고 retail 은 부분집합이다.",
-        "- 점수는 `Pass^1` 을 100점 척도로 적은 것이다. 괄호는 통과/측정 건수다.",
-        "- 부분집합은 도메인 이름을 달지 않는다 (`retail/test/judge-free-29`).",
-        "- 사용자 시뮬레이터 프로토콜이 고정되지 않은 런은 모델 간 표에 넣지 않는다.",
-        "",
-    ]
-
+def _render_comparison_cohorts(summaries) -> list:
+    """Render protocol cohorts and their comparison exclusion reasons."""
+    out = []
     groups: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for summary in summaries:
         groups[comparison_fingerprint(summary)["fingerprint"]].append(summary)
@@ -348,7 +340,12 @@ def render_markdown(summaries: Iterable[dict[str, Any]], unreadable: list[dict[s
                 f"| {run.get('model')} | {_axis_name(run)} | {_score(run)} | {reasons} |"
             )
         out.append("")
+    return out
 
+
+def _render_reproducibility(summaries) -> list:
+    """Render per-candidate reproducibility status and observed variation."""
+    out = []
     out += ["## 재현성", ""]
     checks = reproducibility_report(summaries)
     if not checks:
@@ -370,6 +367,29 @@ def render_markdown(summaries: Iterable[dict[str, Any]], unreadable: list[dict[s
         if check.get("reason"):
             out.append(f"  - {check['reason']}")
     out.append("")
+    return out
+
+
+def render_markdown(summaries: Iterable[dict[str, Any]], unreadable: list[dict[str, str]]) -> str:
+    summaries = list(summaries)
+    out: list[str] = [
+        "# taubench 트랙 결과",
+        "",
+        "이 파일은 `reports/report_taubench_tracks.py` 가 `summary.json` 에서 생성한다. 손으로 고치지 말 것.",
+        "",
+        "읽는 법:",
+        "",
+        "- **도메인을 가로질러 평균하지 않는다.** 상류 Overall 은 retail/airline/telecom 을",
+        "  `base` split 전 과제로 재야 성립한다. 여기 수치는 `test` split 이고 retail 은 부분집합이다.",
+        "- 점수는 `Pass^1` 을 100점 척도로 적은 것이다. 괄호는 통과/측정 건수다.",
+        "- 부분집합은 도메인 이름을 달지 않는다 (`retail/test/judge-free-29`).",
+        "- 사용자 시뮬레이터 프로토콜이 고정되지 않은 런은 모델 간 표에 넣지 않는다.",
+        "",
+    ]
+
+    out.extend(_render_comparison_cohorts(summaries))
+
+    out.extend(_render_reproducibility(summaries))
 
     out.extend(_render_claims(_claims(summaries)))
 

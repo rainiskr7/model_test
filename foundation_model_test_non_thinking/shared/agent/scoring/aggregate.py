@@ -260,6 +260,50 @@ def _build_swallowed_exception_diagnostics(
     }
 
 
+def _l3_retry_class(task: Dict[str, Any]) -> tuple:
+    """Normalize saved calls and classify the position of cache misses."""
+    calls = task.get("tool_calls")
+    calls = calls if isinstance(calls, list) else []
+    golden_action = task.get("golden_action")
+    if isinstance(golden_action, dict):
+        golden_action = [golden_action]
+    elif not isinstance(golden_action, list):
+        golden_action = []
+    miss_indexes = [
+        index
+        for index, call in enumerate(calls)
+        if isinstance(call, dict)
+        and CACHE_MISS_RE.search(str(call.get("error") or ""))
+    ]
+    if not calls:
+        class_name = "no_tool_calls_emitted"
+    elif not miss_indexes:
+        class_name = "no_cache_miss"
+    elif miss_indexes == [len(calls) - 1]:
+        class_name = "cache_miss_only_at_final_call"
+    else:
+        class_name = "cache_miss_before_final_call"
+    return calls, golden_action, miss_indexes, class_name
+
+
+def _count_following_calls(calls, miss_indexes, *, after_non_final_miss) -> None:
+    """Accumulate tool/argument transitions into the supplied miss counters."""
+    for index in miss_indexes:
+        if index >= len(calls) - 1:
+            continue
+        current = calls[index]
+        following = calls[index + 1]
+        if not isinstance(current, dict) or not isinstance(following, dict):
+            after_non_final_miss["different_tool"] += 1
+        elif _call_tool(current) != _call_tool(following):
+            after_non_final_miss["different_tool"] += 1
+        elif _call_arguments(current) == _call_arguments(following):
+            after_non_final_miss["same_tool_identical_arguments"] += 1
+        else:
+            after_non_final_miss["same_tool_different_arguments"] += 1
+        after_non_final_miss["misses_with_following_call"] += 1
+
+
 def _build_l3_retry_inflation(level_data: Dict[str, Any]) -> Dict[str, Any]:
     class_names = (
         "no_tool_calls_emitted",
@@ -295,47 +339,14 @@ def _build_l3_retry_inflation(level_data: Dict[str, Any]) -> Dict[str, Any]:
             if first_context_error is None:
                 first_context_error = exc
         # L3 수치는 저장된 call만 읽으므로 context 실패와 무관하게 기존 분류를 유지한다.
-        calls = task.get("tool_calls")
-        calls = calls if isinstance(calls, list) else []
-        golden_action = task.get("golden_action")
-        if isinstance(golden_action, dict):
-            golden_action = [golden_action]
-        elif not isinstance(golden_action, list):
-            golden_action = []
-        miss_indexes = [
-            index
-            for index, call in enumerate(calls)
-            if isinstance(call, dict)
-            and CACHE_MISS_RE.search(str(call.get("error") or ""))
-        ]
-        if not calls:
-            class_name = "no_tool_calls_emitted"
-        elif not miss_indexes:
-            class_name = "no_cache_miss"
-        elif miss_indexes == [len(calls) - 1]:
-            class_name = "cache_miss_only_at_final_call"
-        else:
-            class_name = "cache_miss_before_final_call"
+        calls, golden_action, miss_indexes, class_name = _l3_retry_class(task)
 
         entry = classes[class_name]
         entry["tasks"] += 1
         entry["calls_emitted"] += len(calls)
         entry["golden_action_calls"] += len(golden_action)
 
-        for index in miss_indexes:
-            if index >= len(calls) - 1:
-                continue
-            current = calls[index]
-            following = calls[index + 1]
-            if not isinstance(current, dict) or not isinstance(following, dict):
-                after_non_final_miss["different_tool"] += 1
-            elif _call_tool(current) != _call_tool(following):
-                after_non_final_miss["different_tool"] += 1
-            elif _call_arguments(current) == _call_arguments(following):
-                after_non_final_miss["same_tool_identical_arguments"] += 1
-            else:
-                after_non_final_miss["same_tool_different_arguments"] += 1
-            after_non_final_miss["misses_with_following_call"] += 1
+        _count_following_calls(calls, miss_indexes, after_non_final_miss=after_non_final_miss)
 
     for name, entry in classes.items():
         if name == "no_tool_calls_emitted":

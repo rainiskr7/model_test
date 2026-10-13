@@ -362,6 +362,64 @@ def sidecar_path(source_dir: Path, source_name: str | None = None) -> Path:
     return source_dir / "_derived" / name
 
 
+def _validate_model_identity(sidecar) -> None:
+    """Validate optional model identity without changing the publication record."""
+    identity = sidecar.get("model_identity")
+    if identity is not None:
+        if not isinstance(identity, Mapping):
+            raise ValueError("model_identity must be an object")
+        if not isinstance(identity.get("canonical_id"), str) or not identity.get("canonical_id"):
+            raise ValueError("model_identity.canonical_id is required")
+        if identity.get("serving_name") != str(sidecar.get("model")):
+            raise ValueError("model_identity.serving_name must preserve model")
+        if not isinstance(identity.get("mapped"), bool):
+            raise ValueError("model_identity.mapped must be boolean")
+
+
+def _validate_accuracy_axis(sidecar, status) -> None:
+    """Validate the overall fraction axis for publishable accuracy records."""
+    if status.publishable and sidecar.get("benchmark_id") in ACCURACY_BENCHMARK_IDS:
+        axes = ((sidecar.get("metrics") or {}).get("axes") or [])
+        overall = next(
+            (axis for axis in axes if isinstance(axis, Mapping) and axis.get("name") == "overall"),
+            None,
+        )
+        if not isinstance(overall, Mapping) or overall.get("unit") != "fraction":
+            raise ValueError("publishable accuracy sidecar requires overall fraction axis")
+        numerator, denominator, value = (
+            overall.get("numerator"), overall.get("denominator"), overall.get("value")
+        )
+        if (
+            isinstance(numerator, bool) or not isinstance(numerator, int)
+            or isinstance(denominator, bool) or not isinstance(denominator, int)
+            or denominator <= 0 or not 0 <= numerator <= denominator
+            or isinstance(value, bool) or not isinstance(value, (int, float))
+            or not math.isclose(float(value), numerator / denominator, rel_tol=1e-12, abs_tol=1e-12)
+        ):
+            raise ValueError("invalid publishable overall fraction axis")
+
+
+def _validate_counts(sidecar, status) -> None:
+    """Validate count types, ordering and completion invariants."""
+    counts = sidecar.get("counts") or {}
+    attempted = counts.get("attempted")
+    measured = counts.get("measured")
+    errored = counts.get("errored")
+    unresolved = counts.get("unresolved")
+    correct_measured = counts.get("correct_measured")
+    if status.publishable:
+        required_counts = (attempted, measured, errored, unresolved, correct_measured)
+        if any(isinstance(value, bool) or not isinstance(value, int) or value < 0 for value in required_counts):
+            raise ValueError("publishable counts must contain nonnegative integer attempted/measured/errored/unresolved/correct_measured")
+        if not correct_measured <= measured <= attempted:
+            raise ValueError("publishable count ordering invariant failed")
+    if all(isinstance(x, int) and not isinstance(x, bool) for x in (attempted, measured, errored, unresolved)):
+        if attempted != measured + errored + unresolved:
+            raise ValueError("attempted count invariant failed")
+    if status.publishable and (errored or unresolved):
+        raise ValueError("publishable sidecar contains failed records")
+
+
 def validate_sidecar(sidecar: Mapping[str, Any]) -> None:
     """Raise ``ValueError`` when a publication record violates v1 invariants."""
 
@@ -380,16 +438,7 @@ def validate_sidecar(sidecar: Mapping[str, Any]) -> None:
         raise ValueError("UNSCORED is only valid for KOFFVQA / generation")
     if sidecar.get("aggregation_allowed") is not False:
         raise ValueError("aggregation_allowed must be false in v1")
-    identity = sidecar.get("model_identity")
-    if identity is not None:
-        if not isinstance(identity, Mapping):
-            raise ValueError("model_identity must be an object")
-        if not isinstance(identity.get("canonical_id"), str) or not identity.get("canonical_id"):
-            raise ValueError("model_identity.canonical_id is required")
-        if identity.get("serving_name") != str(sidecar.get("model")):
-            raise ValueError("model_identity.serving_name must preserve model")
-        if not isinstance(identity.get("mapped"), bool):
-            raise ValueError("model_identity.mapped must be boolean")
+    _validate_model_identity(sidecar)
     protocol = sidecar.get("protocol")
     if not isinstance(protocol, Mapping):
         raise ValueError("protocol is required")
@@ -415,42 +464,8 @@ def validate_sidecar(sidecar: Mapping[str, Any]) -> None:
             or recorded.get("answer_parser_hash") != KRETA_ANSWER_PARSER_HASH
         ):
             raise ValueError("KRETA sidecar does not bind the current answer parser")
-    if status.publishable and sidecar.get("benchmark_id") in ACCURACY_BENCHMARK_IDS:
-        axes = ((sidecar.get("metrics") or {}).get("axes") or [])
-        overall = next(
-            (axis for axis in axes if isinstance(axis, Mapping) and axis.get("name") == "overall"),
-            None,
-        )
-        if not isinstance(overall, Mapping) or overall.get("unit") != "fraction":
-            raise ValueError("publishable accuracy sidecar requires overall fraction axis")
-        numerator, denominator, value = (
-            overall.get("numerator"), overall.get("denominator"), overall.get("value")
-        )
-        if (
-            isinstance(numerator, bool) or not isinstance(numerator, int)
-            or isinstance(denominator, bool) or not isinstance(denominator, int)
-            or denominator <= 0 or not 0 <= numerator <= denominator
-            or isinstance(value, bool) or not isinstance(value, (int, float))
-            or not math.isclose(float(value), numerator / denominator, rel_tol=1e-12, abs_tol=1e-12)
-        ):
-            raise ValueError("invalid publishable overall fraction axis")
-    counts = sidecar.get("counts") or {}
-    attempted = counts.get("attempted")
-    measured = counts.get("measured")
-    errored = counts.get("errored")
-    unresolved = counts.get("unresolved")
-    correct_measured = counts.get("correct_measured")
-    if status.publishable:
-        required_counts = (attempted, measured, errored, unresolved, correct_measured)
-        if any(isinstance(value, bool) or not isinstance(value, int) or value < 0 for value in required_counts):
-            raise ValueError("publishable counts must contain nonnegative integer attempted/measured/errored/unresolved/correct_measured")
-        if not correct_measured <= measured <= attempted:
-            raise ValueError("publishable count ordering invariant failed")
-    if all(isinstance(x, int) and not isinstance(x, bool) for x in (attempted, measured, errored, unresolved)):
-        if attempted != measured + errored + unresolved:
-            raise ValueError("attempted count invariant failed")
-    if status.publishable and (errored or unresolved):
-        raise ValueError("publishable sidecar contains failed records")
+    _validate_accuracy_axis(sidecar, status)
+    _validate_counts(sidecar, status)
 
 
 def sidecar_json(sidecar: Mapping[str, Any]) -> str:

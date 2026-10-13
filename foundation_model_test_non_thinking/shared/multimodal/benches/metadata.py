@@ -92,6 +92,31 @@ def resolve_dataset_revision(dataset_id: str, cli_arg: Optional[str], env_var: s
     return sha, "latest_captured" if sha else "latest_unknown"
 
 
+def _resolve_provenance(dataset_id, dataset_revision, dataset_revision_source, repo_dir, repo_commit, eval_script_path, eval_script_hash) -> tuple:
+    """Resolve missing dataset, repository and script provenance from external sources."""
+    if dataset_id and dataset_revision is None:
+        dataset_revision = get_hf_dataset_revision(dataset_id)
+        if dataset_revision_source is None:
+            dataset_revision_source = "latest_captured" if dataset_revision else "latest_unknown"
+    if repo_dir is not None and repo_commit is None:
+        repo_commit = get_git_commit(repo_dir)
+    if eval_script_path and eval_script_hash is None:
+        eval_script_hash = get_eval_script_hash(eval_script_path)
+    return dataset_revision, dataset_revision_source, repo_commit, eval_script_hash
+
+
+def _capture_environment() -> dict:
+    """Read interpreter, platform and installed package versions."""
+    return {
+        "python": sys.version.split()[0],
+        "platform": platform.platform(),
+        "openai_pkg": get_package_version("openai"),
+        "datasets_pkg": get_package_version("datasets"),
+        "pillow_pkg": get_package_version("pillow"),
+        "huggingface_hub_pkg": get_package_version("huggingface_hub"),
+    }
+
+
 def build_run_config(
     *,
     benchmark: str,
@@ -118,15 +143,10 @@ def build_run_config(
 
     summary.json 의 'run_config' 필드에 그대로 박아 넣음.
     """
-    if dataset_id and dataset_revision is None:
-        dataset_revision = get_hf_dataset_revision(dataset_id)
-        if dataset_revision_source is None:
-            dataset_revision_source = "latest_captured" if dataset_revision else "latest_unknown"
-    if repo_dir is not None and repo_commit is None:
-        repo_commit = get_git_commit(repo_dir)
-    if eval_script_path and eval_script_hash is None:
-        eval_script_hash = get_eval_script_hash(eval_script_path)
-
+    dataset_revision, dataset_revision_source, repo_commit, eval_script_hash = _resolve_provenance(
+        dataset_id, dataset_revision, dataset_revision_source, repo_dir, repo_commit,
+        eval_script_path, eval_script_hash,
+    )
     requested_decoding, applied_decoding, serving_constraints = effective_decoding(
         temperature=temperature,
         max_tokens=max_tokens,
@@ -165,14 +185,7 @@ def build_run_config(
             "script_path": eval_script_path,
             "script_hash_sha256_16": eval_script_hash,
         },
-        "environment": {
-            "python": sys.version.split()[0],
-            "platform": platform.platform(),
-            "openai_pkg": get_package_version("openai"),
-            "datasets_pkg": get_package_version("datasets"),
-            "pillow_pkg": get_package_version("pillow"),
-            "huggingface_hub_pkg": get_package_version("huggingface_hub"),
-        },
+        "environment": _capture_environment(),
         "env_vars": {
             "MODEL_TEST_BASE": os.environ.get("MODEL_TEST_BASE"),
             "EVAL_TIMESTAMP": os.environ.get("EVAL_TIMESTAMP"),
