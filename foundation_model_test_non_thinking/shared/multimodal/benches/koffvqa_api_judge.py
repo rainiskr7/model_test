@@ -156,17 +156,8 @@ def file_sha256(path):
     return "sha256:" + digest.hexdigest()
 
 
-def main():
-    # Runner helpers use direct-script imports internally.  Delay loading so
-    # pure column/score validation remains importable without runner deps.
-    benches_dir = str(Path(__file__).resolve().parent)
-    if benches_dir not in sys.path:
-        sys.path.insert(0, benches_dir)
-    from common import (  # pylint: disable=import-outside-toplevel
-        get_base_dir, get_timestamp, get_results_dir,
-        save_json, build_run_config, make_client,
-    )
-
+def _parse_args():
+    """Parse args."""
     ap = argparse.ArgumentParser()
     ap.add_argument("--predfile", required=True, help="KOFFVQA generate.py 결과 .xlsx")
     ap.add_argument("--target-model", required=True, help="평가 대상 모델명 (결과 폴더 명명용)")
@@ -182,7 +173,11 @@ def main():
     ap.add_argument("--response-column", "--prediction-column", dest="response_column", default=None,
                     help="모델 응답 컬럼 override (default: prediction)")
     args = ap.parse_args()
+    return args
 
+
+def _load_predictions(args):
+    """Load the workbook and validate column bindings."""
     df = pd.read_excel(args.predfile)
     cols = df.columns.tolist()
     print(f"[koffvqa_judge] loaded {args.predfile}: {len(df)} rows / cols: {cols}")
@@ -200,9 +195,11 @@ def main():
 
     if args.limit:
         df = df.head(args.limit)
+    return df, q_col, crit_col, resp_col
 
-    client = make_client(args.judge_base_url, args.judge_api_key)
 
+def _prepare_output(args, get_base_dir, get_timestamp, get_results_dir):
+    """Prepare output."""
     base_dir = get_base_dir(__file__)
     ts = get_timestamp()
     out_dir = get_results_dir(
@@ -213,7 +210,11 @@ def main():
     print(f"[koffvqa_judge] judge={args.judge_model}")
     print(f"[koffvqa_judge] target={args.target_model}")
     print(f"[koffvqa_judge] out={out_dir}")
+    return out_dir
 
+
+def _judge_rows(args, df, q_col, crit_col, resp_col, client):
+    """Judge workbook rows and collect served identity."""
     identity = ServedIdentity()
     results = []
     scores = []
@@ -244,7 +245,11 @@ def main():
         if (i + 1) % 25 == 0:
             avg = sum(scores) / len(scores) if scores else 0.0
             print(f"[koffvqa_judge] {i+1}/{len(df)} scored={len(scores)} avg={avg:.2f}")
+    return results, scores, identity
 
+
+def _build_summary(args, results, scores, identity, build_run_config):
+    """Build summary."""
     summary = {
         "benchmark": "KOFFVQA (API judge)",
         "judge_model": args.judge_model,
@@ -275,12 +280,36 @@ def main():
             },
         ),
     }
+    return summary
 
+
+def _save_results(out_dir, results, summary, save_json):
+    """Write judge artifacts and print the final score."""
     save_json(out_dir / "results.json", results)
     save_json(out_dir / "summary.json", summary)
 
     print(f"\n[koffvqa_judge] avg score = {summary['avg_score']}")
     print(f"[koffvqa_judge] saved → {out_dir}")
+
+
+def main():
+    """Coordinate delayed imports, workbook loading, judging and storage."""
+    # Runner helpers use direct-script imports internally.  Delay loading so
+    # pure column/score validation remains importable without runner deps.
+    benches_dir = str(Path(__file__).resolve().parent)
+    if benches_dir not in sys.path:
+        sys.path.insert(0, benches_dir)
+    from common import (  # pylint: disable=import-outside-toplevel
+        get_base_dir, get_timestamp, get_results_dir,
+        save_json, build_run_config, make_client,
+    )
+    args = _parse_args()
+    df, q_col, crit_col, resp_col = _load_predictions(args)
+    client = make_client(args.judge_base_url, args.judge_api_key)
+    out_dir = _prepare_output(args, get_base_dir, get_timestamp, get_results_dir)
+    results, scores, identity = _judge_rows(args, df, q_col, crit_col, resp_col, client)
+    summary = _build_summary(args, results, scores, identity, build_run_config)
+    _save_results(out_dir, results, summary, save_json)
 
 
 if __name__ == "__main__":

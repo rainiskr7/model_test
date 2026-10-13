@@ -55,7 +55,35 @@ __all__ = [
     "build_resume_context",
     "native_sidecar_from_records", "native_sidecar_from_source",
     "summarize_records", "write_sidecar",
+    "prepare_native_output", "save_native_results",
 ]
+
+
+def prepare_native_output(script_path, model, benchmark_id, *, get_base_dir,
+                          get_timestamp, get_results_dir, print_base=False):
+    """Resolve output paths and print the native runner startup messages."""
+    base_dir = get_base_dir(script_path)
+    ts = get_timestamp(base_dir)
+    out_dir = get_results_dir(base_dir, model, ts, benchmark_id)
+    print(f"[{benchmark_id}] model={model}")
+    if print_base:
+        print(f"[{benchmark_id}] base={base_dir}")
+    print(f"[{benchmark_id}] out={out_dir}")
+    return base_dir, out_dir
+
+
+def save_native_results(out_dir, base_dir, results, summary, *, benchmark_id,
+                        expected_count, save_json, native_sidecar_from_records,
+                        write_sidecar):
+    """Save native records, summary and sidecar in their existing order."""
+    save_json(out_dir / "results.json", results)
+    save_json(out_dir / "summary.json", summary)
+    sidecar_path, sidecar = native_sidecar_from_records(
+        out_dir, base_dir, results,
+        benchmark_id=benchmark_id, expected_count=expected_count,
+    )
+    write_sidecar(sidecar_path, sidecar)
+    return sidecar
 
 
 # ── CLI: 셸 wrapper(KRETA, KOFFVQA, KO-VLM-Benchmark)에서 run_config.json 작성 ──

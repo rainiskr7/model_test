@@ -24,6 +24,7 @@ import os
 import sys
 from collections import Counter, defaultdict
 from concurrent.futures import ThreadPoolExecutor
+from functools import partial
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -115,7 +116,8 @@ def merge_retry_records(
     return merged
 
 
-def main(argv: Optional[List[str]] = None) -> int:
+def _parse_args(argv):
+    """Parse args."""
     ap = argparse.ArgumentParser()
     ap.add_argument("--results-dir", required=True, type=Path)
     ap.add_argument("--data-dir", type=Path, default=Path("data/FunctionChat-Bench/data"))
@@ -134,11 +136,19 @@ def main(argv: Optional[List[str]] = None) -> int:
         help="기존 judge.json 의 판정 불가 항목만 다시 판정해 병합한다",
     )
     args = ap.parse_args(argv)
+    return args
 
+
+def _load_api_key(args):
+    """Read the required key from the selected environment variable."""
     api_key = os.environ.get(args.api_key_env)
     if not api_key:
         raise SystemExit(f"{args.api_key_env} 환경변수가 필요합니다 (값은 인자로 받지 않습니다).")
+    return api_key
 
+
+def _load_inputs(args):
+    """Load rubrics and candidates and select unresolved records for retry."""
     rubrics = load_rubrics(args.data_dir)
     items = collect_items(args.results_dir)
 
@@ -152,36 +162,36 @@ def main(argv: Optional[List[str]] = None) -> int:
         previous = json.loads(out_path.read_text(encoding="utf-8"))
         items = select_retry_items(items, previous["records"])
         print(f"[judge] 재판정 대상 {len(items)}건 (기존 판정 불가)")
+    return rubrics, items, previous
 
-    # 서빙 정체성 기록의 시작점을 잡는다. 리셋하지 않으면 같은 프로세스의 앞선
-    # 실행이 새 산출물로 새고, 재판정에서 이전 기록을 안 물려받으면 이미 확정된
-    # 항목을 어느 리비전이 판정했는지가 사라진다.
-    reset_served_identity(((previous or {}).get("judge") or {}).get("served_identity"))
 
-    print(f"[judge] 대상 {len(items)}건, 판정기 {args.judge_model}, 반복 {args.repeats}")
+def _judge_item(item: Dict[str, Any], *, rubrics, args, api_key):
+    """Request all repeated votes for one candidate unless generation failed."""
+    kind = str(item.get("type_of_output"))
+    # 후보 생성이 실패한 항목은 판정하지 않는다. 판정할 응답이 없기 때문이다.
+    # 그러나 **조용히 빼지도 않는다** — candidate_generation_error 로 남겨
+    # 커버리지 게이트가 잡게 한다.
+    if item.get("generation_failed"):
+        return item, []
+    prompt = render_prompt(rubrics[kind], item)
+    return item, [
+        call_judge(prompt, args.judge_model, api_key, args.timeout, args.retries)
+        for _ in range(args.repeats)
+    ]
 
+
+def _run_judgments(args, rubrics, items, api_key):
+    """Request candidate votes with the configured worker pool."""
+    with ThreadPoolExecutor(max_workers=args.concurrency) as pool:
+        pairs = list(pool.map(partial(_judge_item, rubrics=rubrics, args=args, api_key=api_key), items))
+    return pairs
+
+
+def _aggregate_votes(pairs, item_count):
+    """Aggregate votes, lost votes and errors and print progress."""
     per_type: Dict[str, Counter] = defaultdict(Counter)
     records = []
     errors = Counter()
-
-    # 항목마다 독립이고 temperature=0 이므로 병렬 호출이 결과를 바꾸지 않는다.
-    # 순차로는 636건 x 2회에 4시간이 걸렸다 (2026-08-23 실측).
-    def judge_one(item: Dict[str, Any]):
-        kind = str(item.get("type_of_output"))
-        # 후보 생성이 실패한 항목은 판정하지 않는다. 판정할 응답이 없기 때문이다.
-        # 그러나 **조용히 빼지도 않는다** — candidate_generation_error 로 남겨
-        # 커버리지 게이트가 잡게 한다.
-        if item.get("generation_failed"):
-            return item, []
-        prompt = render_prompt(rubrics[kind], item)
-        return item, [
-            call_judge(prompt, args.judge_model, api_key, args.timeout, args.retries)
-            for _ in range(args.repeats)
-        ]
-
-    with ThreadPoolExecutor(max_workers=args.concurrency) as pool:
-        pairs = list(pool.map(judge_one, items))
-
     for index, (item, runs) in enumerate(pairs, start=1):
         kind = str(item.get("type_of_output"))
         verdicts = [r.get("verdict") for r in runs]
@@ -232,9 +242,13 @@ def main(argv: Optional[List[str]] = None) -> int:
                 "justification_ko": runs[0].get("justification_ko"),
             }
         )
-        if index % 50 == 0 or index == len(items):
-            print(f"[judge] {index}/{len(items)}")
+        if index % 50 == 0 or index == item_count:
+            print(f"[judge] {index}/{item_count}")
+    return records, per_type, errors
 
+
+def _merge_previous(previous, records, per_type):
+    """Merge only unresolved records and rebuild type counts."""
     if previous is not None:
         # 재판정하지 않은 기존 레코드를 합치고 유형별 집계를 다시 만든다.
         records = merge_retry_records(previous["records"], records)
@@ -244,7 +258,11 @@ def main(argv: Optional[List[str]] = None) -> int:
             per_type[kind][r["verdict"] or r["status"]] += 1
             if r["unstable"]:
                 per_type[kind]["unstable"] += 1
+    return records, per_type
 
+
+def _build_summary(args, rubrics, records, per_type, errors):
+    """Build judge metadata, vote distribution and aggregate metrics."""
     judged = sum(c["pass"] + c["fail"] for c in per_type.values())
     passed = sum(c["pass"] for c in per_type.values())
     summary = {
@@ -287,6 +305,12 @@ def main(argv: Optional[List[str]] = None) -> int:
     summary["judge"]["votes_per_item"] = {
         str(k): v for k, v in sorted(_C(len(r["verdicts"]) for r in records).items())
     }
+    return summary
+
+
+def _apply_publish_gate(summary, items, previous, records):
+    """Record coverage failures without dropping unjudged candidates."""
+    judged = summary["overall"]["judged"]
     # **발행 게이트.** 지금까지 이 스크립트는 무슨 일이 있어도 exit 0 이었다.
     # 분모가 조용히 줄어드는 것이 이 층의 주된 오염 경로이므로 코드로 막는다.
     expected = len(items) if previous is None else len(previous["records"])
@@ -313,7 +337,11 @@ def main(argv: Optional[List[str]] = None) -> int:
         "failures": gate_failures,
         "expected_records": expected,
     }
+    return gate_failures
 
+
+def _save_summary(args, summary, gate_failures):
+    """Write judge JSON, print results and return the existing gate status."""
     out = args.results_dir / "judge.json"
     out.write_text(json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8")
     o = summary["overall"]
@@ -332,6 +360,21 @@ def main(argv: Optional[List[str]] = None) -> int:
         )
         return 1
     return 0
+
+
+def main(argv: Optional[List[str]] = None) -> int:
+    """Coordinate input validation, repeated judging, merging and reporting."""
+    args = _parse_args(argv)
+    api_key = _load_api_key(args)
+    rubrics, items, previous = _load_inputs(args)
+    reset_served_identity(((previous or {}).get("judge") or {}).get("served_identity"))
+    print(f"[judge] 대상 {len(items)}건, 판정기 {args.judge_model}, 반복 {args.repeats}")
+    pairs = _run_judgments(args, rubrics, items, api_key)
+    records, per_type, errors = _aggregate_votes(pairs, len(items))
+    records, per_type = _merge_previous(previous, records, per_type)
+    summary = _build_summary(args, rubrics, records, per_type, errors)
+    gate_failures = _apply_publish_gate(summary, items, previous, records)
+    return _save_summary(args, summary, gate_failures)
 
 
 if __name__ == "__main__":

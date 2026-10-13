@@ -17,6 +17,7 @@ from common import (
     get_base_dir, get_timestamp, get_results_dir, save_json,
     build_run_config, resolve_dataset_revision,
     native_sidecar_from_records, summarize_records, write_sidecar,
+    prepare_native_output, save_native_results,
 )
 
 
@@ -27,18 +28,15 @@ Options: A: {A}, B: {B}, C: {C}, D: {D}
 EXPECTED_COUNT = 240
 
 
-def main():
+def _parse_args():
+    """Parse the existing command line."""
     parser = standard_argparser()
     args = parser.parse_args()
+    return args
 
-    base_dir = get_base_dir(__file__)
-    ts = get_timestamp(base_dir)
-    out_dir = get_results_dir(base_dir, args.model, ts, "k_dtcbench")
 
-    print(f"[k_dtcbench] model={args.model}")
-    print(f"[k_dtcbench] base={base_dir}")
-    print(f"[k_dtcbench] out={out_dir}")
-
+def _load_inputs(args):
+    """Resolve revision and load the selected dataset."""
     # HF dataset revision 결정 (강제 pin: CLI > env > latest)
     revision, rev_source = resolve_dataset_revision(
         "NCSOFT/K-DTCBench", args.revision, "K_DTCBENCH_REVISION",
@@ -51,9 +49,11 @@ def main():
     ds = load_dataset("NCSOFT/K-DTCBench", **load_kwargs)
     if args.limit:
         ds = ds.select(range(min(args.limit, len(ds))))
+    return ds, revision, rev_source
 
-    client = make_client(args.base_url, args.api_key)
 
+def _run_samples(args, ds, client):
+    """Request and score samples in their original order."""
     results = []
     correct = 0
     by_category = {"document": [0, 0], "table": [0, 0], "chart": [0, 0]}
@@ -102,7 +102,11 @@ def main():
         if (i + 1) % 20 == 0:
             acc = correct / (i + 1)
             print(f"[k_dtcbench] {i+1}/{len(ds)} acc={acc:.3f}")
+    return results
 
+
+def _build_summary(args, ds, results, revision, rev_source):
+    """Build the aggregate and reproducibility metadata."""
     aggregate = summarize_records("k_dtcbench", results, expected_count=EXPECTED_COUNT)
     correct = aggregate["correct"]
     summary = {
@@ -133,19 +137,35 @@ def main():
             extra={"limit": args.limit},
         ),
     }
+    return summary, aggregate
 
-    save_json(out_dir / "results.json", results)
-    save_json(out_dir / "summary.json", summary)
-    sidecar_path, sidecar = native_sidecar_from_records(
-        out_dir, base_dir, results,
-        benchmark_id="k_dtcbench", expected_count=EXPECTED_COUNT,
-    )
-    write_sidecar(sidecar_path, sidecar)
 
-    print(f"\n[k_dtcbench] FINAL acc={summary['accuracy']:.3f} ({correct}/{summary['total']})")
+def _print_summary(summary, aggregate, sidecar):
+    """Print the summary and return the publication status."""
+    print(f"\n[k_dtcbench] FINAL acc={summary['accuracy']:.3f} ({summary['correct']}/{summary['total']})")
     for cat, stats in summary["by_category"].items():
         print(f"  {cat}: {stats['accuracy']:.3f} ({stats['correct']}/{stats['total']})")
     return 0 if aggregate["publish_status"]["publishable"] and sidecar["publishable"] else 1
+
+
+def main():
+    """Coordinate input loading, requests, storage and reporting."""
+    args = _parse_args()
+    base_dir, out_dir = prepare_native_output(
+        __file__, args.model, "k_dtcbench",
+        get_base_dir=get_base_dir, get_timestamp=get_timestamp,
+        get_results_dir=get_results_dir, print_base=True,
+    )
+    ds, revision, rev_source = _load_inputs(args)
+    client = make_client(args.base_url, args.api_key)
+    results = _run_samples(args, ds, client)
+    summary, aggregate = _build_summary(args, ds, results, revision, rev_source)
+    sidecar = save_native_results(
+        out_dir, base_dir, results, summary, benchmark_id="k_dtcbench",
+        expected_count=EXPECTED_COUNT, save_json=save_json,
+        native_sidecar_from_records=native_sidecar_from_records, write_sidecar=write_sidecar,
+    )
+    return _print_summary(summary, aggregate, sidecar)
 
 
 if __name__ == "__main__":

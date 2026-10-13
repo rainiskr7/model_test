@@ -1,0 +1,100 @@
+[
+  {
+    "rc": 1,
+    "calls": [
+      {
+        "url": "https://openrouter.ai/api/v1/chat/completions",
+        "headers": {
+          "Authorization": "Bearer synthetic-key",
+          "Content-type": "application/json"
+        },
+        "body": "{\"model\": \"alias\", \"temperature\": 0, \"max_tokens\": 700, \"messages\": [{\"role\": \"user\", \"content\": \"slot\\n[{\\\"name\\\": \\\"\\ub3c4\\uad6c\\\"}]\\n[{\\\"role\\\": \\\"user\\\", \\\"content\\\": \\\"\\uc9c8\\ubb38\\\"}]\\n\\\"\\uc815\\ub2f5\\\"\\n{\\\"content\\\": \\\"\\uc751\\ub2f5\\\", \\\"tool_calls\\\": []}\"}], \"response_format\": {\"type\": \"json_schema\", \"json_schema\": {\"name\": \"verdict\", \"strict\": true, \"schema\": {\"type\": \"object\", \"properties\": {\"verdict\": {\"type\": \"string\", \"enum\": [\"pass\", \"fail\"]}, \"justification_ko\": {\"type\": \"string\"}}, \"required\": [\"verdict\", \"justification_ko\"], \"additionalProperties\": false}}}}",
+        "timeout": 4.0
+      },
+      {
+        "url": "https://openrouter.ai/api/v1/chat/completions",
+        "headers": {
+          "Authorization": "Bearer synthetic-key",
+          "Content-type": "application/json"
+        },
+        "body": "{\"model\": \"alias\", \"temperature\": 0, \"max_tokens\": 700, \"messages\": [{\"role\": \"user\", \"content\": \"slot\\n[{\\\"name\\\": \\\"\\ub3c4\\uad6c\\\"}]\\n[{\\\"role\\\": \\\"user\\\", \\\"content\\\": \\\"\\uc9c8\\ubb38\\\"}]\\n\\\"\\uc815\\ub2f5\\\"\\n{\\\"content\\\": \\\"\\uc751\\ub2f5\\\", \\\"tool_calls\\\": []}\"}], \"response_format\": {\"type\": \"json_schema\", \"json_schema\": {\"name\": \"verdict\", \"strict\": true, \"schema\": {\"type\": \"object\", \"properties\": {\"verdict\": {\"type\": \"string\", \"enum\": [\"pass\", \"fail\"]}, \"justification_ko\": {\"type\": \"string\"}}, \"required\": [\"verdict\", \"justification_ko\"], \"additionalProperties\": false}}}}",
+        "timeout": 4.0
+      },
+      {
+        "url": "https://openrouter.ai/api/v1/chat/completions",
+        "headers": {
+          "Authorization": "Bearer synthetic-key",
+          "Content-type": "application/json"
+        },
+        "body": "{\"model\": \"alias\", \"temperature\": 0, \"max_tokens\": 700, \"messages\": [{\"role\": \"user\", \"content\": \"completion\\n[{\\\"name\\\": \\\"\\ub3c4\\uad6c\\\"}]\\n[{\\\"role\\\": \\\"user\\\", \\\"content\\\": \\\"\\uc9c8\\ubb38\\\"}]\\n\\\"\\uc815\\ub2f5\\\"\\n{\\\"content\\\": \\\"\\uc751\\ub2f5\\\", \\\"tool_calls\\\": []}\"}], \"response_format\": {\"type\": \"json_schema\", \"json_schema\": {\"name\": \"verdict\", \"strict\": true, \"schema\": {\"type\": \"object\", \"properties\": {\"verdict\": {\"type\": \"string\", \"enum\": [\"pass\", \"fail\"]}, \"justification_ko\": {\"type\": \"string\"}}, \"required\": [\"verdict\", \"justification_ko\"], \"additionalProperties\": false}}}}",
+        "timeout": 4.0
+      },
+      {
+        "url": "https://openrouter.ai/api/v1/chat/completions",
+        "headers": {
+          "Authorization": "Bearer synthetic-key",
+          "Content-type": "application/json"
+        },
+        "body": "{\"model\": \"alias\", \"temperature\": 0, \"max_tokens\": 700, \"messages\": [{\"role\": \"user\", \"content\": \"completion\\n[{\\\"name\\\": \\\"\\ub3c4\\uad6c\\\"}]\\n[{\\\"role\\\": \\\"user\\\", \\\"content\\\": \\\"\\uc9c8\\ubb38\\\"}]\\n\\\"\\uc815\\ub2f5\\\"\\n{\\\"content\\\": \\\"\\uc751\\ub2f5\\\", \\\"tool_calls\\\": []}\"}], \"response_format\": {\"type\": \"json_schema\", \"json_schema\": {\"name\": \"verdict\", \"strict\": true, \"schema\": {\"type\": \"object\", \"properties\": {\"verdict\": {\"type\": \"string\", \"enum\": [\"pass\", \"fail\"]}, \"justification_ko\": {\"type\": \"string\"}}, \"required\": [\"verdict\", \"justification_ko\"], \"additionalProperties\": false}}}}",
+        "timeout": 4.0
+      }
+    ],
+    "constructors": [],
+    "sleeps": [],
+    "files": {
+      "judge.json": "{\n  \"benchmark\": \"kakao/FunctionChat-Bench (LLM judge layer)\",\n  \"scoring_version\": \"functionchat_judge_v1\",\n  \"judge\": {\n    \"model\": \"alias\",\n    \"repeats_requested_this_invocation\": 2,\n    \"votes_per_item\": {\n      \"2\": 2\n    },\n    \"temperature\": 0,\n    \"output_contract\": \"json_schema strict {verdict, justification_ko}\",\n    \"rubric_source\": \"upstream data/rubric_{type}.txt\",\n    \"rubric_sha256\": {\n      \"call\": \"sha256:<HASH>\",\n      \"completion\": \"sha256:<HASH>\",\n      \"relevance\": \"sha256:<HASH>\",\n      \"slot\": \"sha256:<HASH>\"\n    },\n    \"endpoint\": \"https://openrouter.ai/api/v1/chat/completions\",\n    \"served_identity\": {\n      \"model\": [\n        \"first\"\n      ],\n      \"system_fingerprint\": [\n        \"fp\"\n      ],\n      \"provider\": [\n        \"provider\"\n      ]\n    },\n    \"human_validation\": \"not performed\"\n  },\n  \"caveat\": \"판정기 기준 점수다. 인간 라벨 검증을 하지 않았으므로 정답률의 추정치가 아니다. exact 층(functionchat_exact_v2)과 합산하지 말 것.\",\n  \"overall\": {\n    \"judged\": 1,\n    \"passed\": 1,\n    \"failed\": 0,\n    \"pass_rate\": 1.0,\n    \"judge_errors\": 1,\n    \"unstable\": 1\n  },\n  \"by_type\": {\n    \"completion\": {\n      \"judge_error\": 1,\n      \"unstable\": 1\n    },\n    \"slot\": {\n      \"pass\": 1\n    }\n  },\n  \"errors\": {},\n  \"records\": [\n    {\n      \"serial_num\": 1,\n      \"dataset\": \"call_decision\",\n      \"type_of_output\": \"slot\",\n      \"verdict\": \"pass\",\n      \"status\": \"judged\",\n      \"unstable\": false,\n      \"vote_integrity\": {\n        \"requested\": 2,\n        \"received\": 2,\n        \"lost\": 0,\n        \"single_vote\": false\n      },\n      \"verdicts\": [\n        \"pass\",\n        \"pass\"\n      ],\n      \"justification_ko\": \"근거\"\n    },\n    {\n      \"serial_num\": 1,\n      \"dataset\": \"dialog\",\n      \"type_of_output\": \"completion\",\n      \"verdict\": null,\n      \"status\": \"judge_error\",\n      \"unstable\": true,\n      \"vote_integrity\": {\n        \"requested\": 2,\n        \"received\": 2,\n        \"lost\": 0,\n        \"single_vote\": false\n      },\n      \"verdicts\": [\n        \"pass\",\n        \"fail\"\n      ],\n      \"justification_ko\": \"근거\"\n    }\n  ],\n  \"publish_status\": {\n    \"publishable\": false,\n    \"failures\": [\n      \"판정 불가 1건 — 완전 측정이 아니다\"\n    ],\n    \"expected_records\": 2\n  }\n}"
+    },
+    "stdout": "[judge] 대상 2건, 판정기 alias, 반복 2\n[judge] 2/2\n[judge] completion   0/0 = -  unstable=1\n[judge] slot         1/1 = 1.0000  unstable=0\n[judge] overall 1/1 = 1.000000  errors=1  unstable=1\n[judge] wrote <TMP>/synthetic-output/judge.json\n",
+    "stderr": "[judge] FAIL: 판정 불가 1건 — 완전 측정이 아니다\n[judge] NOT PUBLISHABLE: 1건의 검증 실패\n"
+  },
+  {
+    "rc": 0,
+    "calls": [
+      {
+        "url": "https://openrouter.ai/api/v1/chat/completions",
+        "headers": {
+          "Authorization": "Bearer synthetic-key",
+          "Content-type": "application/json"
+        },
+        "body": "{\"model\": \"alias\", \"temperature\": 0, \"max_tokens\": 700, \"messages\": [{\"role\": \"user\", \"content\": \"completion\\n[{\\\"name\\\": \\\"\\ub3c4\\uad6c\\\"}]\\n[{\\\"role\\\": \\\"user\\\", \\\"content\\\": \\\"\\uc9c8\\ubb38\\\"}]\\n\\\"\\uc815\\ub2f5\\\"\\n{\\\"content\\\": \\\"\\uc751\\ub2f5\\\", \\\"tool_calls\\\": []}\"}], \"response_format\": {\"type\": \"json_schema\", \"json_schema\": {\"name\": \"verdict\", \"strict\": true, \"schema\": {\"type\": \"object\", \"properties\": {\"verdict\": {\"type\": \"string\", \"enum\": [\"pass\", \"fail\"]}, \"justification_ko\": {\"type\": \"string\"}}, \"required\": [\"verdict\", \"justification_ko\"], \"additionalProperties\": false}}}}",
+        "timeout": 4.0
+      },
+      {
+        "url": "https://openrouter.ai/api/v1/chat/completions",
+        "headers": {
+          "Authorization": "Bearer synthetic-key",
+          "Content-type": "application/json"
+        },
+        "body": "{\"model\": \"alias\", \"temperature\": 0, \"max_tokens\": 700, \"messages\": [{\"role\": \"user\", \"content\": \"completion\\n[{\\\"name\\\": \\\"\\ub3c4\\uad6c\\\"}]\\n[{\\\"role\\\": \\\"user\\\", \\\"content\\\": \\\"\\uc9c8\\ubb38\\\"}]\\n\\\"\\uc815\\ub2f5\\\"\\n{\\\"content\\\": \\\"\\uc751\\ub2f5\\\", \\\"tool_calls\\\": []}\"}], \"response_format\": {\"type\": \"json_schema\", \"json_schema\": {\"name\": \"verdict\", \"strict\": true, \"schema\": {\"type\": \"object\", \"properties\": {\"verdict\": {\"type\": \"string\", \"enum\": [\"pass\", \"fail\"]}, \"justification_ko\": {\"type\": \"string\"}}, \"required\": [\"verdict\", \"justification_ko\"], \"additionalProperties\": false}}}}",
+        "timeout": 4.0
+      },
+      {
+        "url": "https://openrouter.ai/api/v1/chat/completions",
+        "headers": {
+          "Authorization": "Bearer synthetic-key",
+          "Content-type": "application/json"
+        },
+        "body": "{\"model\": \"alias\", \"temperature\": 0, \"max_tokens\": 700, \"messages\": [{\"role\": \"user\", \"content\": \"completion\\n[{\\\"name\\\": \\\"\\ub3c4\\uad6c\\\"}]\\n[{\\\"role\\\": \\\"user\\\", \\\"content\\\": \\\"\\uc9c8\\ubb38\\\"}]\\n\\\"\\uc815\\ub2f5\\\"\\n{\\\"content\\\": \\\"\\uc751\\ub2f5\\\", \\\"tool_calls\\\": []}\"}], \"response_format\": {\"type\": \"json_schema\", \"json_schema\": {\"name\": \"verdict\", \"strict\": true, \"schema\": {\"type\": \"object\", \"properties\": {\"verdict\": {\"type\": \"string\", \"enum\": [\"pass\", \"fail\"]}, \"justification_ko\": {\"type\": \"string\"}}, \"required\": [\"verdict\", \"justification_ko\"], \"additionalProperties\": false}}}}",
+        "timeout": 4.0
+      },
+      {
+        "url": "https://openrouter.ai/api/v1/chat/completions",
+        "headers": {
+          "Authorization": "Bearer synthetic-key",
+          "Content-type": "application/json"
+        },
+        "body": "{\"model\": \"alias\", \"temperature\": 0, \"max_tokens\": 700, \"messages\": [{\"role\": \"user\", \"content\": \"completion\\n[{\\\"name\\\": \\\"\\ub3c4\\uad6c\\\"}]\\n[{\\\"role\\\": \\\"user\\\", \\\"content\\\": \\\"\\uc9c8\\ubb38\\\"}]\\n\\\"\\uc815\\ub2f5\\\"\\n{\\\"content\\\": \\\"\\uc751\\ub2f5\\\", \\\"tool_calls\\\": []}\"}], \"response_format\": {\"type\": \"json_schema\", \"json_schema\": {\"name\": \"verdict\", \"strict\": true, \"schema\": {\"type\": \"object\", \"properties\": {\"verdict\": {\"type\": \"string\", \"enum\": [\"pass\", \"fail\"]}, \"justification_ko\": {\"type\": \"string\"}}, \"required\": [\"verdict\", \"justification_ko\"], \"additionalProperties\": false}}}}",
+        "timeout": 4.0
+      }
+    ],
+    "constructors": [],
+    "sleeps": [
+      1.0
+    ],
+    "files": {
+      "judge.json": "{\n  \"benchmark\": \"kakao/FunctionChat-Bench (LLM judge layer)\",\n  \"scoring_version\": \"functionchat_judge_v1\",\n  \"judge\": {\n    \"model\": \"alias\",\n    \"repeats_requested_this_invocation\": 3,\n    \"votes_per_item\": {\n      \"2\": 1,\n      \"3\": 1\n    },\n    \"temperature\": 0,\n    \"output_contract\": \"json_schema strict {verdict, justification_ko}\",\n    \"rubric_source\": \"upstream data/rubric_{type}.txt\",\n    \"rubric_sha256\": {\n      \"call\": \"sha256:<HASH>\",\n      \"completion\": \"sha256:<HASH>\",\n      \"relevance\": \"sha256:<HASH>\",\n      \"slot\": \"sha256:<HASH>\"\n    },\n    \"endpoint\": \"https://openrouter.ai/api/v1/chat/completions\",\n    \"served_identity\": {\n      \"model\": [\n        \"first\",\n        \"second\"\n      ],\n      \"system_fingerprint\": [\n        \"fp\"\n      ],\n      \"provider\": [\n        \"provider\"\n      ]\n    },\n    \"human_validation\": \"not performed\"\n  },\n  \"caveat\": \"판정기 기준 점수다. 인간 라벨 검증을 하지 않았으므로 정답률의 추정치가 아니다. exact 층(functionchat_exact_v2)과 합산하지 말 것.\",\n  \"overall\": {\n    \"judged\": 2,\n    \"passed\": 1,\n    \"failed\": 1,\n    \"pass_rate\": 0.5,\n    \"judge_errors\": 0,\n    \"unstable\": 1\n  },\n  \"by_type\": {\n    \"completion\": {\n      \"fail\": 1,\n      \"unstable\": 1\n    },\n    \"slot\": {\n      \"pass\": 1\n    }\n  },\n  \"errors\": {},\n  \"records\": [\n    {\n      \"serial_num\": 1,\n      \"dataset\": \"call_decision\",\n      \"type_of_output\": \"slot\",\n      \"verdict\": \"pass\",\n      \"status\": \"judged\",\n      \"unstable\": false,\n      \"vote_integrity\": {\n        \"requested\": 2,\n        \"received\": 2,\n        \"lost\": 0,\n        \"single_vote\": false\n      },\n      \"verdicts\": [\n        \"pass\",\n        \"pass\"\n      ],\n      \"justification_ko\": \"근거\"\n    },\n    {\n      \"serial_num\": 1,\n      \"dataset\": \"dialog\",\n      \"type_of_output\": \"completion\",\n      \"verdict\": \"fail\",\n      \"status\": \"judged\",\n      \"unstable\": true,\n      \"vote_integrity\": {\n        \"requested\": 3,\n        \"received\": 3,\n        \"lost\": 0,\n        \"single_vote\": false\n      },\n      \"verdicts\": [\n        \"fail\",\n        \"fail\",\n        \"pass\"\n      ],\n      \"justification_ko\": \"근거\"\n    }\n  ],\n  \"publish_status\": {\n    \"publishable\": true,\n    \"failures\": [],\n    \"expected_records\": 2\n  }\n}"
+    },
+    "stdout": "[judge] 재판정 대상 1건 (기존 판정 불가)\n[judge] 대상 1건, 판정기 alias, 반복 3\n[judge] 1/1\n[judge] completion   0/1 = 0.0000  unstable=1\n[judge] slot         1/1 = 1.0000  unstable=0\n[judge] overall 1/2 = 0.500000  errors=0  unstable=1\n[judge] wrote <TMP>/synthetic-output/judge.json\n",
+    "stderr": ""
+  }
+]

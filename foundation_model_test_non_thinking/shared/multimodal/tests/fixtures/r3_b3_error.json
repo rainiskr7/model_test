@@ -1,0 +1,68 @@
+{
+  "rc": 1,
+  "calls": [
+    {
+      "model": "test/model-a:1",
+      "messages": [
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "text",
+              "text": "합계 JSON"
+            },
+            {
+              "type": "image_url",
+              "image_url": {
+                "url": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAADCAIAAAA2iEnWAAAAE0lEQVR4nGP8z8DAwMDAxIBMAQAUQAEF3SN5DgAAAABJRU5ErkJggg=="
+              }
+            }
+          ]
+        }
+      ],
+      "temperature": 0.25,
+      "max_tokens": 37,
+      "seed": 7,
+      "timeout": 4.0
+    },
+    {
+      "model": "test/model-a:1",
+      "messages": [
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "text",
+              "text": "두 번째 JSON"
+            },
+            {
+              "type": "image_url",
+              "image_url": {
+                "url": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAADCAIAAAA2iEnWAAAAE0lEQVR4nGP8z8DAwMDAxIBMAQAUQAEF3SN5DgAAAABJRU5ErkJggg=="
+              }
+            }
+          ]
+        }
+      ],
+      "temperature": 0.25,
+      "max_tokens": 37,
+      "seed": 7,
+      "timeout": 4.0
+    }
+  ],
+  "constructors": [
+    {
+      "base_url": "http://unused.invalid/v1",
+      "api_key": "synthetic-key"
+    }
+  ],
+  "sleeps": [],
+  "files": {
+    "_derived/.publish.json.lock": "",
+    "_derived/publish.json": "{\n  \"aggregation_allowed\": false,\n  \"benchmark_id\": \"B3-structured-output\",\n  \"benchmark_key\": \"b3_structured_output\",\n  \"completed_at_source\": \"artifact\",\n  \"completed_at_utc\": \"<TIME>\",\n  \"counts\": {\n    \"attempted\": 2,\n    \"correct_measured\": 1,\n    \"errored\": 1,\n    \"measured\": 1,\n    \"unresolved\": 0\n  },\n  \"failures\": [\n    \"오류 또는 미해결 응답이 포함됨\"\n  ],\n  \"metrics\": {\n    \"axes\": [\n      {\n        \"denominator\": 2,\n        \"name\": \"json_parse\",\n        \"numerator\": 1,\n        \"unit\": \"fraction\",\n        \"value\": 0.5\n      },\n      {\n        \"denominator\": 2,\n        \"name\": \"schema_pass\",\n        \"numerator\": 1,\n        \"unit\": \"fraction\",\n        \"value\": 0.5\n      },\n      {\n        \"denominator\": 2,\n        \"name\": \"value_match\",\n        \"numerator\": null,\n        \"unit\": \"fraction\",\n        \"value\": 0.5\n      }\n    ]\n  },\n  \"model\": \"test/model-a:1\",\n  \"model_identity\": {\n    \"canonical_id\": \"test/model-a:1\",\n    \"mapped\": false,\n    \"serving_name\": \"test/model-a:1\"\n  },\n  \"protocol\": {\n    \"complete\": false,\n    \"fingerprint\": \"sha256:<HASH>\",\n    \"fingerprint_version\": 2,\n    \"inferred\": {},\n    \"recorded\": {\n      \"benchmark\": \"B3\",\n      \"limit\": null,\n      \"manifest_size\": 2,\n      \"max_tokens\": 37,\n      \"seed\": 7,\n      \"serving_constraints\": {\n        \"force_skip_special_tokens\": null,\n        \"max_output_tokens\": null,\n        \"removed_parameters\": [],\n        \"skip_special_tokens\": null,\n        \"unsupported_sampling_params\": []\n      },\n      \"temperature\": 0.25\n    },\n    \"unknown\": [\n      \"answer_parser_hash\",\n      \"image_preprocessing_version\",\n      \"prompt_template_hash\"\n    ]\n  },\n  \"provisional\": false,\n  \"publishable\": false,\n  \"schema_version\": 1,\n  \"session\": \"r3-session\",\n  \"source\": {\n    \"artifacts\": [\n      {\n        \"path\": \"results/test_model_a_1/r3-session/vision/customB/b3_structured_output/results.json\",\n        \"sha256\": \"sha256:<HASH>\"\n      },\n      {\n        \"path\": \"results/test_model_a_1/r3-session/vision/customB/b3_structured_output/summary.json\",\n        \"sha256\": \"sha256:<HASH>\"\n      }\n    ],\n    \"unit\": \"results/test_model_a_1/r3-session/vision/customB/b3_structured_output\"\n  },\n  \"status\": \"REJECTED\",\n  \"variant\": \"manifest\",\n  \"warnings\": [\n    \"모델 정체성 미매핑: test/model-a:1 — 자기 이름을 canonical id로 사용\"\n  ]\n}\n",
+    "results.json": "[\n  {\n    \"id\": \"one\",\n    \"category\": \"table\",\n    \"response\": \"{\\\"합계\\\": 5}\",\n    \"parsed\": {\n      \"합계\": 5\n    },\n    \"parse_ok\": true,\n    \"schema_check\": {\n      \"required_fields_present\": true,\n      \"missing_fields\": [],\n      \"type_match\": true\n    },\n    \"value_check\": {\n      \"checked\": 1,\n      \"matched\": 1,\n      \"match_rate\": 1.0,\n      \"details\": [\n        {\n          \"path\": \"$.합계\",\n          \"expected\": 5,\n          \"mode\": \"exact\",\n          \"actual\": 5,\n          \"matched\": true\n        }\n      ]\n    },\n    \"error\": null\n  },\n  {\n    \"id\": \"two\",\n    \"category\": \"receipt\",\n    \"response\": {\n      \"error\": \"invalid request\"\n    },\n    \"parsed\": null,\n    \"parse_ok\": false,\n    \"schema_check\": {\n      \"required_fields_present\": false,\n      \"missing_fields\": [],\n      \"type_match\": false\n    },\n    \"value_check\": {\n      \"checked\": 1,\n      \"matched\": 0,\n      \"match_rate\": 0.0,\n      \"details\": [\n        {\n          \"path\": \"$.합계\",\n          \"expected\": 5,\n          \"mode\": \"exact\",\n          \"actual\": null,\n          \"matched\": false\n        }\n      ]\n    },\n    \"error\": \"invalid request\"\n  }\n]",
+    "summary.json": "{\n  \"benchmark\": \"B-3 Structured Output\",\n  \"model\": \"test/model-a:1\",\n  \"total\": 2,\n  \"json_parse_rate\": 0.5,\n  \"schema_pass_rate\": 0.5,\n  \"value_match_rate\": 0.5,\n  \"publish_status\": {\n    \"publishable\": false,\n    \"failures\": [\n      \"오류 응답 1건 포함\"\n    ]\n  },\n  \"by_category\": {\n    \"table\": {\n      \"total\": 1,\n      \"parse_rate\": 1.0,\n      \"schema_pass_rate\": 1.0\n    },\n    \"receipt\": {\n      \"total\": 1,\n      \"parse_rate\": 0.0,\n      \"schema_pass_rate\": 0.0\n    }\n  },\n  \"run_config\": {\n    \"benchmark\": \"B-3 Structured Output\",\n    \"timestamp_utc\": \"<TIME>\",\n    \"model\": {\n      \"name\": \"test/model-a:1\",\n      \"safe_name\": \"test_model_a_1\"\n    },\n    \"endpoint\": {\n      \"base_url\": \"http://unused.invalid/v1/chat/completions/\"\n    },\n    \"decoding\": {\n      \"temperature\": 0.25,\n      \"max_tokens\": 37,\n      \"seed\": 7\n    },\n    \"decoding_requested\": {\n      \"temperature\": 0.25,\n      \"max_tokens\": 37,\n      \"seed\": 7\n    },\n    \"serving_constraints\": {\n      \"unsupported_sampling_params\": [],\n      \"max_output_tokens\": null,\n      \"force_skip_special_tokens\": null,\n      \"removed_parameters\": [],\n      \"skip_special_tokens\": null\n    },\n    \"request_policy\": {\n      \"timeout\": 4.0,\n      \"retry_max\": 2,\n      \"retry_backoff\": 0.0\n    },\n    \"dataset\": {\n      \"huggingface_id\": null,\n      \"revision\": null,\n      \"revision_source\": null,\n      \"git_repo\": null,\n      \"git_commit\": null\n    },\n    \"judge\": {\n      \"model\": null,\n      \"prompt_version\": null\n    },\n    \"eval_framework\": {\n      \"script_path\": \"<REPO>/shared/multimodal/benches/b3_structured_output.py\",\n      \"script_hash_sha256_16\": \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"\n    },\n    \"environment\": {\n      \"python\": \"<PYTHON>\",\n      \"platform\": \"synthetic-platform\",\n      \"openai_pkg\": \"synthetic-version\",\n      \"datasets_pkg\": \"synthetic-version\",\n      \"pillow_pkg\": \"synthetic-version\",\n      \"huggingface_hub_pkg\": \"synthetic-version\"\n    },\n    \"env_vars\": {\n      \"MODEL_TEST_BASE\": \"<TMP>\",\n      \"EVAL_TIMESTAMP\": \"r3-session\"\n    },\n    \"extra\": {\n      \"manifest\": \"<TMP>/manifest.json\",\n      \"manifest_size\": 2,\n      \"limit\": null\n    }\n  }\n}"
+  },
+  "stdout": "[b3] model=test/model-a:1\n[b3] manifest=<TMP>/manifest.json (2 items)\n[b3] out=<TMP>/results/test_model_a_1/r3-session/vision/customB/b3_structured_output\n[b3] 1/2 table parse=True schema=True\n[b3] 2/2 receipt parse=False schema=False\n\n[b3] FINAL parse=0.500 schema=0.500 value=0.5\n",
+  "stderr": ""
+}

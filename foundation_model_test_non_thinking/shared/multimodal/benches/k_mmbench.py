@@ -20,6 +20,7 @@ from common import (
     get_base_dir, get_timestamp, get_results_dir, save_json,
     build_run_config, resolve_dataset_revision,
     native_sidecar_from_records, summarize_records, write_sidecar,
+    prepare_native_output, save_native_results,
 )
 
 
@@ -37,7 +38,8 @@ Options: A: {A}, B: {B}, C: {C}, D: {D}
 EXPECTED_COUNT = 4329
 
 
-def main():
+def _parse_args():
+    """Parse the existing command line."""
     parser = standard_argparser()
     parser.add_argument(
         "--categories",
@@ -55,14 +57,11 @@ def main():
              "(stratified=카테고리별 균등 [default], random=무작위, head=앞에서부터)",
     )
     args = parser.parse_args()
+    return args
 
-    base_dir = get_base_dir(__file__)
-    ts = get_timestamp(base_dir)
-    out_dir = get_results_dir(base_dir, args.model, ts, "k_mmbench")
 
-    print(f"[k_mmbench] model={args.model}")
-    print(f"[k_mmbench] out={out_dir}")
-
+def _load_inputs(args):
+    """Resolve revision and load the selected dataset."""
     revision, rev_source = resolve_dataset_revision(
         "NCSOFT/K-MMBench", args.revision, "K_MMBENCH_REVISION",
     )
@@ -113,9 +112,11 @@ def main():
             chosen.sort()  # 원본 순서 유지
             print(f"[k_mmbench] stratified sampling: {n_cats} categories × ~{per_cat_base} = {len(chosen)}")
         ds = ds.select(chosen)
+    return ds, revision, rev_source
 
-    client = make_client(args.base_url, args.api_key)
 
+def _run_samples(args, ds, client):
+    """Request and score samples in their original order."""
     results = []
     correct = 0
     by_category: dict[str, list[int]] = {}
@@ -170,7 +171,11 @@ def main():
 
         if (i + 1) % 50 == 0:
             print(f"[k_mmbench] {i+1}/{len(ds)} acc={correct/(i+1):.3f}")
+    return results
 
+
+def _build_summary(args, ds, results, revision, rev_source):
+    """Build the aggregate and reproducibility metadata."""
     selected_variant = bool(args.categories or args.limit)
     expected_count = len(ds) if selected_variant else EXPECTED_COUNT
     aggregate = summarize_records("k_mmbench", results, expected_count=expected_count)
@@ -208,20 +213,36 @@ def main():
             },
         ),
     }
+    return summary, aggregate, expected_count
 
-    save_json(out_dir / "results.json", results)
-    save_json(out_dir / "summary.json", summary)
-    sidecar_path, sidecar = native_sidecar_from_records(
-        out_dir, base_dir, results,
-        benchmark_id="k_mmbench", expected_count=expected_count,
-    )
-    write_sidecar(sidecar_path, sidecar)
 
-    print(f"\n[k_mmbench] FINAL acc={summary['accuracy']:.3f} ({correct}/{summary['total']})")
+def _print_summary(summary, aggregate, sidecar):
+    """Print the summary and return the publication status."""
+    print(f"\n[k_mmbench] FINAL acc={summary['accuracy']:.3f} ({summary['correct']}/{summary['total']})")
     for cat in sorted(summary["by_category"].keys()):
         s = summary["by_category"][cat]
         print(f"  {cat}: {s['accuracy']:.3f} ({s['correct']}/{s['total']})")
     return 0 if aggregate["publish_status"]["publishable"] and sidecar["publishable"] else 1
+
+
+def main():
+    """Coordinate input loading, requests, storage and reporting."""
+    args = _parse_args()
+    base_dir, out_dir = prepare_native_output(
+        __file__, args.model, "k_mmbench",
+        get_base_dir=get_base_dir, get_timestamp=get_timestamp,
+        get_results_dir=get_results_dir, print_base=False,
+    )
+    ds, revision, rev_source = _load_inputs(args)
+    client = make_client(args.base_url, args.api_key)
+    results = _run_samples(args, ds, client)
+    summary, aggregate, expected_count = _build_summary(args, ds, results, revision, rev_source)
+    sidecar = save_native_results(
+        out_dir, base_dir, results, summary, benchmark_id="k_mmbench",
+        expected_count=expected_count, save_json=save_json,
+        native_sidecar_from_records=native_sidecar_from_records, write_sidecar=write_sidecar,
+    )
+    return _print_summary(summary, aggregate, sidecar)
 
 
 if __name__ == "__main__":

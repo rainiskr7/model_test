@@ -255,10 +255,8 @@ def check_no_clobber(manifest, model: str, endpoint: str) -> None:
             )
 
 
-def main():
-    global api_key
-    api_key = load_api_key()
-
+def _parse_args():
+    """Parse args."""
     parser = argparse.ArgumentParser(description="NLU evaluation client (gpustack endpoint).")
     parser.add_argument("--model", default="qwen/qwen3-32b", help="Model name (default: qwen/qwen3-32b)")
     parser.add_argument(
@@ -278,10 +276,13 @@ def main():
         help="같은 세션의 기존 산출물을 다시 만든다 (기본은 완료된 프롬프트를 건너뛴다).",
     )
     args = parser.parse_args()
+    return args
 
+
+def _prepare_paths(args):
+    """Resolve prompt and output paths and print their locations."""
     model = args.model
     prompt_arg = args.prompt
-    endpoint = args.endpoint
 
     if prompt_arg:
         prompt_paths = [Path(prompt_arg)]
@@ -306,7 +307,12 @@ def main():
         path if path.is_absolute() else (SCRIPT_DIR / path).resolve()
         for path in prompt_paths
     ]
+    return prompt_paths, base_dir, model_out_dir
 
+
+def _prepare_manifest(args, api_key, prompt_paths, model_out_dir):
+    """Validate credentials and resume identity before writing the running manifest."""
+    model, endpoint = args.model, args.endpoint
     if not api_key:
         # 없는 채로 보내면 엔드포인트는 401 만 준다. 무엇이 없는지 여기서 말한다.
         raise SystemExit(
@@ -382,79 +388,98 @@ def main():
         "failure": None,
     }
     write_json_atomic(manifest_path, manifest)
+    return contract, manifest_path, manifest, expected, done
 
-    def finalize(failure=None) -> None:
-        manifest["status"] = (
-            "complete"
-            if not failure and sorted(manifest["completed_prompts"]) == sorted(expected)
-            else "partial"
+
+def _finalize_manifest(manifest_path, manifest, expected, failure=None) -> None:
+    """Record complete or partial status using the existing atomic writer."""
+    manifest["status"] = (
+        "complete"
+        if not failure and sorted(manifest["completed_prompts"]) == sorted(expected)
+        else "partial"
+    )
+    manifest["completed_at"] = datetime.now().astimezone().isoformat()
+    manifest["failure"] = failure
+    write_json_atomic(manifest_path, manifest)
+
+
+def _run_prompts(args, prompt_paths, base_dir, model_out_dir, contract, manifest_path, manifest, done):
+    """Request pending prompts and atomically persist each response and completion."""
+    model, endpoint = args.model, args.endpoint
+    for prompt_path in prompt_paths:
+        if prompt_path.stem in done:
+            print(f"[nlu] 이미 완료됨, 건너뜀: {prompt_path.stem} (--overwrite 로 재실행)")
+            continue
+
+        with open(prompt_path, "r", encoding="utf-8") as f:
+            prompt = f.read()
+
+        # 본문은 바이트 그대로 두고 계약만 뒤에 덧붙인다. 본문을 고치면 이미
+        # 커밋된 산출물과 비교할 수 없게 된다.
+        addendum = "" if args.no_contract else render(contract, prompt_path.stem)
+        sent = prompt + addendum
+
+        print("프롬프트 파일:", str(prompt_path))
+        print("프롬프트:")
+        print(prompt)
+        print("\n" + "=" * 50 + "\n")
+
+        # API 호출
+        request_snapshot: dict = {}
+        response, served = get_response(
+            sent, model, endpoint, request_snapshot=request_snapshot
         )
-        manifest["completed_at"] = datetime.now().astimezone().isoformat()
-        manifest["failure"] = failure
+
+        # 결과 저장
+        output = {
+            "model": model,
+            # 기존 산출물과의 호환을 위해 남기되, 호스트 홈 디렉토리가 박히지
+            # 않도록 저장소 상대 경로로 적는다.
+            "prompt_file": repo_relative(base_dir, prompt_path),
+            "prompt": prompt,
+            "response": response,
+            "prompt_sha256": hashlib.sha256(prompt.encode("utf-8")).hexdigest(),
+            # 실제로 보낸 본문 = prompt + 계약. 둘을 따로 적어야 계약을 바꿨을 때
+            # 무엇이 달라졌는지가 보인다.
+            "prompt_sent_sha256": hashlib.sha256(sent.encode("utf-8")).hexdigest(),
+            "answer_contract": None if not addendum else {
+                "version": contract["version"],
+                "sha256": _digest(addendum),
+                "items": [item["id"] for item in items_for(contract, prompt_path.stem)],
+            },
+            "endpoint": endpoint,
+            "served_identity": served,
+            "request": request_snapshot,
+            "serving_constraints": constraint_snapshot(),
+        }
+
+        output_file = model_out_dir / f"{prompt_path.stem}.json"
+        write_json_atomic(output_file, output)
+        manifest["completed_prompts"].append(prompt_path.stem)
         write_json_atomic(manifest_path, manifest)
 
+        print("응답:")
+        print(response)
+        print(f"\nResults saved to {output_file}")
+
+
+def main():
+    """Coordinate credentials, paths, manifest, requests and finalization."""
+    global api_key
+    api_key = load_api_key()
+    args = _parse_args()
+    prompt_paths, base_dir, model_out_dir = _prepare_paths(args)
+    contract, manifest_path, manifest, expected, done = _prepare_manifest(
+        args, api_key, prompt_paths, model_out_dir,
+    )
     try:
-        for prompt_path in prompt_paths:
-            if prompt_path.stem in done:
-                print(f"[nlu] 이미 완료됨, 건너뜀: {prompt_path.stem} (--overwrite 로 재실행)")
-                continue
-
-            with open(prompt_path, "r", encoding="utf-8") as f:
-                prompt = f.read()
-
-            # 본문은 바이트 그대로 두고 계약만 뒤에 덧붙인다. 본문을 고치면 이미
-            # 커밋된 산출물과 비교할 수 없게 된다.
-            addendum = "" if args.no_contract else render(contract, prompt_path.stem)
-            sent = prompt + addendum
-
-            print("프롬프트 파일:", str(prompt_path))
-            print("프롬프트:")
-            print(prompt)
-            print("\n" + "=" * 50 + "\n")
-
-            # API 호출
-            request_snapshot: dict = {}
-            response, served = get_response(
-                sent, model, endpoint, request_snapshot=request_snapshot
-            )
-
-            # 결과 저장
-            output = {
-                "model": model,
-                # 기존 산출물과의 호환을 위해 남기되, 호스트 홈 디렉토리가 박히지
-                # 않도록 저장소 상대 경로로 적는다.
-                "prompt_file": repo_relative(base_dir, prompt_path),
-                "prompt": prompt,
-                "response": response,
-                "prompt_sha256": hashlib.sha256(prompt.encode("utf-8")).hexdigest(),
-                # 실제로 보낸 본문 = prompt + 계약. 둘을 따로 적어야 계약을 바꿨을 때
-                # 무엇이 달라졌는지가 보인다.
-                "prompt_sent_sha256": hashlib.sha256(sent.encode("utf-8")).hexdigest(),
-                "answer_contract": None if not addendum else {
-                    "version": contract["version"],
-                    "sha256": _digest(addendum),
-                    "items": [item["id"] for item in items_for(contract, prompt_path.stem)],
-                },
-                "endpoint": endpoint,
-                "served_identity": served,
-                "request": request_snapshot,
-                "serving_constraints": constraint_snapshot(),
-            }
-
-            output_file = model_out_dir / f"{prompt_path.stem}.json"
-            write_json_atomic(output_file, output)
-            manifest["completed_prompts"].append(prompt_path.stem)
-            write_json_atomic(manifest_path, manifest)
-
-            print("응답:")
-            print(response)
-            print(f"\nResults saved to {output_file}")
+        _run_prompts(args, prompt_paths, base_dir, model_out_dir,
+                     contract, manifest_path, manifest, done)
     except BaseException as exc:
-        # 실패해도 종료코드는 그대로 전파한다. 매니페스트는 남은 파일이 부분
-        # 산출물이라는 사실만 기록한다.
-        finalize(f"{type(exc).__name__}: {exc}")
+        # Preserve the original exception while recording partial output.
+        _finalize_manifest(manifest_path, manifest, expected, f"{type(exc).__name__}: {exc}")
         raise
-    finalize()
+    _finalize_manifest(manifest_path, manifest, expected)
 
 
 if __name__ == "__main__":
