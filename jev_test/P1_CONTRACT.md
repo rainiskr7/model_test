@@ -240,6 +240,7 @@ jev_test/results/_compare/<compare_id>/A/<set>/<variant>/compare.json   # 커밋
   - 읽기에서 `from_dict` 의 `TypeError` 도 줄 번호를 담은 `ValueError` 로 (끝 줄이어도 버리지 않는다 — 버리는 것은 JSON 이 아닌 끝 줄뿐). 기존 자료형의 허용 범위(예: `retry_after` 숫자)는 넓히지도 좁히지도 않는다 — 새로 쓰는 값은 문자열.
   - `read_attempts` 는 같은 `call_id` 안에서 terminal 뒤 시도, terminal 둘 이상, `logical_id`·`request_sha256` 변경도 거부한다. 예산(5회)·5회째 non-terminal 처리는 ⑤.
   - 재시도 예산 5회는 **기록된 시도** 기준이다. 보낸 뒤 기록 fsync 전에 프로세스가 죽으면 실제 전송이 한 번 더 될 수 있다 — 한계로 적는다 (결정 기록: 가정 = 중단은 드물다, 다시 볼 조건 = P0·P3 에서 중단이 잦으면 '시도 시작' 기록을 먼저 쓴다).
+  - (⑤b 확인 중 명확화, 10-13) B1 의 `top_logprobs_raw` 는 200 응답을 `read_b1_response` 가 통과시키면 `parse_b1` 결과와 무관하게 남긴다 (`b1_missing_label` 이어도 — 어느 라벨이 빠졌는지 진단용). `bad_body`·200 밖 응답은 null.
   - ⑤ 로 넘김: 200 밖의 2xx·1xx(103 포함)·3xx → `error/http_<code>` 재시도 없음 · `Retry-After` 해석(초 정수만, 그 밖은 기본 대기) · 같은 최악 상태 B1 호출들의 사유 선택 · 422 길이 거부 판별(P0).
 
 ### 5-6. 비공개 보존 (커밋하지 않는 재현 자료)
