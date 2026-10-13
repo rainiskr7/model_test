@@ -222,6 +222,26 @@ jev_test/results/_compare/<compare_id>/A/<set>/<variant>/compare.json   # 커밋
 5. 줄마다 flush + fsync. final 줄은 그 논리 요청의 모든 attempts 줄 뒤에.
 6. 시험 단계 resume 은 `test/seal.json` 의 `threshold_sha256` 이 지금 `threshold.json` 과 같아야 한다. 다르면 거부 (§5-7).
 
+### 5-5b. 작업 ④ 세부 — client 한 번의 시도 · 기록 파일 (판 3 보정 9, 10-13 Claude)
+- **client 는 한 번만 보낸다.** 재시도·대기·terminal 판정·상태 결합은 `run/executor` (⑤). client 결과 = `AttemptResult(started_at, ended_at, latency_ms, http_status, retry_after, transport_error, response_raw)` (메모리 전용). `http_status` 는 모든 HTTP 응답 코드(4xx·5xx 포함 — 예외로 바꾸지 않는다), 연결·시간 초과면 None. `retry_after` = 응답 `Retry-After` 머리글 원문 문자열 또는 None. `transport_error` = `"timeout"` (소켓 시간 초과) 또는 `"transport:<예외 클래스 이름>"` (예외 메시지는 담지 않는다), 응답이 있으면 None. `response_raw` = 본문을 UTF-8 strict 로 읽은 문자열, 못 읽으면 `{"b64": <표준 base64>}`, 응답이 없으면 `""`.
+- 시각: `started_at`·`ended_at` 은 UTC `YYYY-MM-DDTHH:MM:SS.mmmZ`, `latency_ms` 는 단조 시계 차(밀리초, float). 시계는 주입 가능.
+- 전송: 표준 라이브러리 `urllib.request`, **환경 proxy 를 쓰지 않는다** (`ProxyHandler({})`), `Content-Type: application/json; charset=utf-8`, 시간 초과 600초는 소켓 단위 (총 시간 상한은 강제하지 않는다 — 한계로 적는다). 리디렉트는 따르지 않는다 (3xx 는 그대로 `http_3xx` 감).
+- systemone: `POST <base_url>/v1/systemone`, 본문 = `request_bytes(Request)` 그대로 (§2-1).
+- B1: `POST <base_url>/v1/chat/completions`, 본문 = `{"model": served_name, "messages": B1Call.messages, **B1Call.params, "allowed_token_ids": [label_token_ids[l] for l in B1Call.label_order]}` 을 §2-1 과 같은 직렬화(`ensure_ascii=False, separators=(",",":")`) — 이 바이트의 sha256 이 그 호출의 `request_sha256`. 라벨 토큰 ID 가 빠지거나 겹치거나, params 에 `model`·`messages`·`allowed_token_ids` 가 있으면 멈춘다.
+- B1 응답 읽기 `contract/b1_response.py` (순수): 중복 키 거부 JSON 객체 · `choices[0].logprobs.content[0].top_logprobs` 가 `{token: str, logprob: 수}` 목록 (bool·NaN 거부, −inf 는 통과 — `parse_b1` 이 빠진 라벨로 처리) — 아니면 사유 `bad_body`. `usage.prompt_tokens` 가 정수면 `usage = {"input_tokens": prompt_tokens}`, 그 밖은 None (usage 가 있는데 정수가 아니면 경고 `usage_input_tokens_invalid`).
+- 기록 파일 `io/records.py`: 줄 = `json.dumps(record.to_dict(), ensure_ascii=False, separators=(",",":")) + "\n"`, 줄마다 write → flush → `os.fsync`. 읽기: 파일이 없으면 빈 목록. **끝 줄**이 JSON 이 아니면 그 줄만 버리고 경고 `truncated_last_line`; 끝 줄이 JSON 이지만 줄바꿈이 없으면 남기고 경고 `missing_final_newline`; **중간 줄**이 JSON 이 아니거나, 어느 줄이든 자료형 검사(`from_dict`)에 실패하면 거부 (`ValueError`). `final.jsonl` 은 `logical_id` 중복을 거부, `attempts.jsonl` 은 `(call_id, attempt)` 중복과 호출 안 시도 번호가 1부터 연속이 아닌 것을 거부.
+
+- **보정 9b (④ 명세 반박 12건 반영, 10-13)**:
+  - 헤더를 받은 뒤 본문 수신이 실패하면 (`IncompleteRead`·시간 초과·끊김) `http_status` 와 `transport_error` 를 **둘 다** 남기고 `response_raw` 는 받은 부분 본문 (없으면 `""`). ⑤ executor 는 `transport_error` 가 있으면 상태 코드와 무관하게 전송 오류(재시도 대상)로 다룬다.
+  - 예외 분류: `HTTPError` 는 응답(상태·머리글·본문)으로 받는다. `URLError` 는 `reason` 을 본다 — 시간 초과(`TimeoutError`/`socket.timeout`)면 `"timeout"`, 아니면 `"transport:<reason 의 클래스>"`. 감싸지 않고 올라온 `TimeoutError` 는 `"timeout"`, 그 밖 `OSError`·`http.client.HTTPException` 은 `"transport:<클래스>"`.
+  - B1 logprob: 실수로 바꿀 수 있고 (큰 정수 overflow 는 거부) 유한한 ≤ 0 값, 또는 −inf 만 받는다. +inf·NaN·양수·bool 은 `bad_body`. 메모리 `top_logprobs` 는 float 그대로, 기록용 `CallRecord.top_logprobs_raw` 는 −inf 를 문자열 `"-inf"` 로 바꾼 사본 (JSON 왕복 가능).
+  - usage 는 답 검증과 **따로** 뽑는다: 본문이 JSON 객체면 (답 구조가 틀려도) systemone `usage.input_tokens`, B1 `usage.prompt_tokens` 가 정수(bool 제외)일 때 `{"input_tokens": n}`, 아니면 None. usage 가 있고 null 이 아닌데 그 값이 정수가 아니면 경고 `usage_input_tokens_invalid` (null·없음은 경고 없음). `CallRecord.usage` 는 이 정규화 값.
+  - 기록 파일 복구 `repair_tail(path) -> list[str]` (io/records): 끝 줄이 JSON 이 아니면 마지막 줄바꿈 다음까지 잘라내고, JSON 이지만 줄바꿈이 없으면 줄바꿈을 더한다 — 바꾼 뒤 fsync, 경고를 돌려준다. resume 은 append 전에 반드시 부른다. `read_*` 는 파일을 바꾸지 않는다.
+  - 읽기에서 `from_dict` 의 `TypeError` 도 줄 번호를 담은 `ValueError` 로 (끝 줄이어도 버리지 않는다 — 버리는 것은 JSON 이 아닌 끝 줄뿐). 기존 자료형의 허용 범위(예: `retry_after` 숫자)는 넓히지도 좁히지도 않는다 — 새로 쓰는 값은 문자열.
+  - `read_attempts` 는 같은 `call_id` 안에서 terminal 뒤 시도, terminal 둘 이상, `logical_id`·`request_sha256` 변경도 거부한다. 예산(5회)·5회째 non-terminal 처리는 ⑤.
+  - 재시도 예산 5회는 **기록된 시도** 기준이다. 보낸 뒤 기록 fsync 전에 프로세스가 죽으면 실제 전송이 한 번 더 될 수 있다 — 한계로 적는다 (결정 기록: 가정 = 중단은 드물다, 다시 볼 조건 = P0·P3 에서 중단이 잦으면 '시도 시작' 기록을 먼저 쓴다).
+  - ⑤ 로 넘김: 200 밖의 2xx·1xx(103 포함)·3xx → `error/http_<code>` 재시도 없음 · `Retry-After` 해석(초 정수만, 그 밖은 기본 대기) · 같은 최악 상태 B1 호출들의 사유 선택 · 422 길이 거부 판별(P0).
+
 ### 5-6. 비공개 보존 (커밋하지 않는 재현 자료)
 - 실행이 끝나면 `jev_test/archive/<run_id>.tar.zst` (git 제외) 를 만든다: `dev/`·`test/`·`extra/` 의 `attempts.jsonl`·`final.jsonl` · 쓰인 task yaml · 목록 · 분할 파일 · `b1.yaml` · 입력 데이터 파일 해시 목록 + 그 아카이브의 sha256 을 `fingerprint.json` 에 기록.
 - 입력 데이터 자체는 `jev_test/dataset/<set>/` (git 제외)에 고정 revision 으로 두고, 파일별 sha256 을 `dataset/<set>/SHA256SUMS` 로 남긴다. 재채점은 아카이브 + 같은 해시의 데이터로 한다.
@@ -574,3 +594,4 @@ PoolResult(group_ids: list[str], allocation: dict[str, int])          # data/poo
 - 판 3 보정 6 (10-13, ③a 명세에 대한 Codex 반박 11건 — 실제 데이터 대조 포함, 전부 반영): KoSGD row_id·선정 검사 · FunctionChat 첫 user 는 role 로 찾기 · parquet 목록 열 변환 · KLUE 전체 행 · KorFin 행/항목 구별 · 비례 할당 경계 · `Groups`·`PoolResult` · 분할 파일 `sort_keys` · 한글은 강등 감정 이름만 · rules.yaml 의 KOTE 메타데이터 경로(`info` 누락 — Claude 실수). 기존 splits fixture 3개(정수 ID·정렬 전 순서·옛 notes 이름)는 계약에 맞게 고친다.
 - 판 3 보정 7 (10-13): KOTE 정답을 평가자 과반수(3/5, raw.json)로 — dichotomized 가 사실상 '1명 이상' 이라 (Claude 집계: 2명 이상은 전부 1, 1명만 고른 것도 81.5% 가 1). 사용자 결정.
 - 판 3 보정 8 (10-13, ③b 명세 전 Claude): 항목 범위·순서 · 정답 등록표 모양(`options` 인자) · 펼치기 치환 규칙 · 셋별 state·정답·meta (KoSGD 발화·services 를 reader 에 · FunctionChat 정규화 문장·도구 선택지 · K-MHaS 이름 라벨 · KOTE 강등 · KorFin binding · KLUE 층) · `B1Config.user_template`. 실제 데이터 확인: FunctionChat 중복 문장 406 행 모두 slot · KorFin SRC 안 ASPECT 중복 0 · 카탈로그 두 목록 순서 일치.
+- 판 3 보정 9 (10-13, 작업 ④ 명세 전 Claude): client 는 한 번의 시도만 (재시도·terminal 은 ⑤) · AttemptResult · 전송 규칙(proxy 없음·리디렉트 안 따름·소켓 단위 600초) · B1 chat 본문·sha · B1 응답 읽기 · 기록 파일 줄·fsync·깨진 줄 규칙 (§5-5b).

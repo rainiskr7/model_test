@@ -1,7 +1,7 @@
-# jeveval — P1 작업 ③b 기능 지도
+# jeveval — P1 작업 ④ 기능 지도
 
-P1_CONTRACT.md 판 3 보정 8까지의 요청·응답·기초 채점·분할과 질문 확장·항목·정답 규칙을 구현했다.
-테스트는 합성 fixture·tmp_path와 동결 task 설정을 사용한다. client·실행기는 후속 작업이다.
+P1_CONTRACT.md 판 3 보정 9b까지의 단일 시도 client·응답 읽기·기록 입출력을 구현했다.
+테스트는 합성 fixture·tmp_path와 동결 task 설정, 127.0.0.1 서버를 사용한다. 실행기는 후속 작업이다.
 
 ## 코드
 
@@ -11,15 +11,16 @@ P1_CONTRACT.md 판 3 보정 8까지의 요청·응답·기초 채점·분할과 
 - `types/specs.py`: SourceRow, BoundQuestion, Item, QuestionSpec, TaskSpec, SplitPlan, Groups, PoolResult.
 - `types/results.py`: Rendered, ParsedAnswer, 호출별 LengthInfo.
 - `types/scores.py`: Threshold, ThresholdFile, RiskCell, QStats, Population, Cost, ScoreTable.
-- `types/records.py`: Request, session_id를 포함한 AttemptRecord, CallRecord, FinalRecord.
+- `types/records.py`: Request, 메모리 전용 AttemptResult, session_id를 포함한 AttemptRecord, CallRecord, FinalRecord.
 - `types/outcomes.py`: 메모리 전용 RequestOutcome, 테스트용 JSON 왕복 지원.
-- `types/contract.py`: Validated·B1Config·B1Call의 frozen JsonRecord 자료형.
+- `types/contract.py`: Validated·B1Config·B1Call·B1Response의 frozen JsonRecord 자료형.
 - `types/scoring.py`: AnswerParse·F1Result·CalibResult·SlotJudgement 자료형.
 - `contract/__init__.py`: 계약 검사 네임스페이스.
 - `contract/taskspec.py`: target_key·state 키 중복·정적/동적 질문·성공 질문·ID 충돌 검사.
 - `contract/render.py`: 설정 키 순서의 state 문자열과 대상 끝 문자 위치 계산.
 - `contract/request.py`: 질문·선택지 순서 보존 요청, UTF-8 바이트·SHA-256·로컬 검증.
-- `contract/response.py`: JSON 중복 키 거부, 전역 사유 우선순위·누적 경고·원 답 반환.
+- `contract/response.py`: JSON 중복 키 거부, 전역 사유 우선순위·누적 경고·원 답 반환·독립 usage 추출.
+- `contract/b1_response.py`: B1 로그확률 검증·독립 usage 추출·기록용 -inf 문자열 사본.
 - `contract/b1_prompt.py`: 설정 기반 문구·매개변수, 정렬된 선택지의 라벨 배정.
 - `score/labels.py`: 전체 라벨 이름 등록표, 33개 정답 규칙과 누락·타입 오류 거부.
 - `score/answers.py`: systemone 원 확률 보존, B1 토큰 대조·softmax·동률·경고 처리.
@@ -27,6 +28,12 @@ P1_CONTRACT.md 판 3 보정 8까지의 요청·응답·기초 채점·분할과 
 - `score/calibration.py`: 15 bin top-label ECE·one-hot Brier·clip log loss.
 - `score/kosgd_slots.py`: 카탈로그 순서의 고정 정답 칸·중복·묶음 정답·순서 진단.
 - `io/__init__.py`: 파일 입출력 네임스페이스.
+- `io/records.py`: JSONL 추가·flush/fsync·타입/호출 연속성 검사·읽기와 분리된 끝 줄 복구.
+- `client/__init__.py`: 단일 시도 전송 네임스페이스.
+- `client/http.py`: proxy·리디렉트 없는 urllib POST, 소켓 timeout·부분 본문·HTTP 오류 응답 보존.
+- `client/systemone.py`: request_bytes 그대로 전송하고 SHA-256 반환.
+- `client/vllm_chat.py`: 라벨 순서 토큰 제한·params 보존·chat 바이트와 SHA-256·단일 전송.
+- `client/attempt.py`: executor가 준 식별자·terminal과 AttemptResult를 독립 AttemptRecord로 변환.
 - `io/config.py`: UTF-8 안전 YAML 읽기, 중첩 중복 키 거부, task 검사 위임.
 - `io/tasks.py`: JSON 중복 키 거부 목록 읽기와 B1 네 필드·사용자 문구 틀 검사.
 - `io/sources/__init__.py`: 셋별 reader 공통 선택과 KOTE 투표 설정 전달.
@@ -62,6 +69,8 @@ data도 파일·네트워크·시계에 접근하지 않고, 난수는 계약의
 모든 dataclass는 frozen이다. 내부 list/dict까지 불변인 것은 아니다.
 from_dict는 중첩 타입을 복원하고 별칭 없는 사본을 만든다.
 알 수 없는 필드·필수 필드 누락·비선택 필드의 null·잘못된 타입·NaN/Infinity를 거부한다.
+B1Response는 메모리 로그확률의 -inf를 JSON 왕복 때만 "-inf"로 인코딩하고 복원한다.
+CallRecord.top_logprobs_raw에는 storable_top_logprobs가 만든 사본을 넣는다.
 ThresholdFile은 by_tau 키와 값의 tau가 같은지도 검사한다.
 요청·응답·채점 도메인 검사는 각 contract/score 함수, 실행 상태 결합은 후속 run의 책임이다.
 
@@ -73,11 +82,22 @@ Request가 봉투 구조를 보장하고 build_request가 질문 ID 중복을 �
 systemone criteria는 options 순서를 보존하며 B1만 코드포인트 순서로 라벨을 배정한다.
 usage 없음/null은 usage_input_tokens_invalid 경고를 내지 않는다. 추가 봉투 키 경고는 별도다.
 응답 검증 실패 시 answers는 None이며, 그때까지 수집한 경고는 중복 없이 보존한다.
-B1 allowed_token_ids는 후속 client가 채운다. calibrate의 모집단 구성은 호출자 책임이다.
+B1 allowed_token_ids는 client가 채운다. calibrate의 모집단 구성은 호출자 책임이다.
+client는 재시도·terminal·상태 결합을 결정하지 않는다. 본문 수신 오류는 HTTP 코드와 함께 남긴다.
+timeout은 소켓 단위이며 총 소요 시간 상한이 아니다. clock.utc_now()는 aware datetime을 돌려준다.
+resume은 append 전에 repair_tail을 호출해야 한다. read_attempts/read_finals는 파일을 바꾸지 않는다.
+재시도 5회는 기록된 시도 기준이다. 전송 뒤 fsync 전에 중단되면 실제 전송이 더 일어날 수 있다.
 
 ## 테스트
 
-- `tests/conftest.py`: 격리 Python의 저장소 import 경로.
+- `tests/client/test_http.py`: 가짜 연결/opener의 감싸진·직접 예외, 부분 본문, HTTPError, 시계, 빈 proxy 표.
+- `tests/client/test_http_live.py`: loopback 바이트·상태·리디렉트·부분 본문·timeout·실제 가짜 proxy 무접촉.
+- `tests/client/test_systemone.py`: request_bytes·경로·해시·한 번 전송.
+- `tests/client/test_vllm_chat.py`: 기존 prompt fixture의 params·토큰 순서·해시·충돌 거부.
+- `tests/client/test_attempt.py`: 식별자·terminal 주입, 부분 응답과 독립 사본 보존.
+- `tests/contract/test_b1_response.py`: 로그확률·usage·중복 키·채점 연결·terminal 복구와 final 저장.
+- `tests/io/test_records.py`: 기존 resume/roundtrip fixture, 타입·연속성, repair→append→read, fsync.
+- `tests/conftest.py`: 격리 Python·공통 도우미 경로, 동명 시험의 importlib 수집.
 - `tests/types/samples.py`: 자료형 테스트용 합성 표본.
 - `tests/types/test_base.py`: 전체 자료형 왕복·frozen·null·알 수 없는 필드.
 - `tests/types/test_specs.py`: 설정·항목·분할·중첩 질문·사본 분리.

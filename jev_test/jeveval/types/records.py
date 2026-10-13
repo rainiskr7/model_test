@@ -15,6 +15,19 @@ class Request(JsonRecord):
 
 
 @dataclass(frozen=True)
+class AttemptResult(JsonRecord):
+    """한 번 전송의 관측값. terminal·식별자·재시도 정책은 executor가 붙인다 (§5-5b)."""
+
+    started_at: str
+    ended_at: str
+    latency_ms: float
+    http_status: int | None
+    retry_after: str | None
+    transport_error: str | None
+    response_raw: str | dict[str, str]
+
+
+@dataclass(frozen=True)
 class AttemptRecord(JsonRecord):
     call_id: str
     logical_id: str

@@ -105,3 +105,19 @@ def validate_response(raw: str | bytes, request: Request) -> Validated:
     if reason is None:
         reason = _value_reason(answers, request.questions)
     return Validated(reason, warnings, answers if reason is None else None)
+
+
+def read_usage(raw: str | bytes) -> tuple[dict | None, list[str]]:
+    """답 검증과 독립적으로 systemone 입력 토큰을 추출한다 (§5-5b 보정 9b)."""
+    try:
+        if isinstance(raw, bytes):
+            raw = raw.decode("utf-8")
+        body = json.loads(raw, object_pairs_hook=_unique_object)
+    except (ValueError, TypeError):
+        return None, []
+    if not isinstance(body, dict) or body.get("usage") is None:
+        return None, []
+    usage = body["usage"]
+    if isinstance(usage, dict) and type(usage.get("input_tokens")) is int:
+        return {"input_tokens": usage["input_tokens"]}, []
+    return None, ["usage_input_tokens_invalid"]

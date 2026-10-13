@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from jeveval.contract.response import validate_response
+from jeveval.contract.response import read_usage, validate_response
 from jeveval.types import Request
 
 
@@ -104,3 +104,20 @@ def test_malformed_answer_type(answer):
 def test_score_request_stops_even_on_bad_json():
     with pytest.raises(NotImplementedError):
         validate_response("not json", Request("m", "s", {"q": {"type": "score"}}))
+
+
+@pytest.mark.parametrize("usage,expected", [(None, (None, [])), ({"input_tokens": 12}, ({"input_tokens": 12}, [])),
+    ({"input_tokens": 0}, ({"input_tokens": 0}, [])),
+    ({"input_tokens": True}, (None, ["usage_input_tokens_invalid"])),
+    ({"input_tokens": 1.0}, (None, ["usage_input_tokens_invalid"])),
+    ({}, (None, ["usage_input_tokens_invalid"])), ([], (None, ["usage_input_tokens_invalid"]))])
+def test_read_usage_independent_of_answers(usage, expected):
+    raw = json.dumps({"error": "synthetic 422", "usage": usage})
+    assert read_usage(raw) == read_usage(raw.encode()) == expected
+    assert validate_response(raw, request()).reason == "bad_body"
+
+
+@pytest.mark.parametrize("raw", ["{}", "null", "[]", "not json", b"\xff",
+    '{"usage":{"input_tokens":1,"input_tokens":2}}'])
+def test_read_usage_missing_or_unparseable(raw):
+    assert read_usage(raw) == (None, [])
