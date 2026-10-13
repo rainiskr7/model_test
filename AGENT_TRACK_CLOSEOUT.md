@@ -11,11 +11,11 @@
 파일만 보고 여러 차례 인용했다. 그래서 규칙을 코드로 옮겼다:
 
 ```
-python3 report_agent_tracks.py            # functionchat — 발행 가능한 수치만 출력
-python3 report_agent_tracks.py --strict   # 거부된 런이 있으면 exit 1 (CI)
+python3 foundation_model_test_non_thinking/reports/report_agent_tracks.py            # functionchat — 발행 가능한 수치만 출력
+python3 foundation_model_test_non_thinking/reports/report_agent_tracks.py --strict   # 거부된 런이 있으면 exit 1 (CI)
 
 cd foundation_model_test_non_thinking
-python3 report_taubench_tracks.py --strict   # taubench — 같은 역할 (CI)
+python3 reports/report_taubench_tracks.py --strict   # taubench — 같은 역할 (CI)
 ```
 
 **CI 는 두 명령을 모두 돌려야 한다.** taubench 를 분리하면서 이 문서가 약속한
@@ -61,7 +61,7 @@ Ko-AgentBench 를 폐기하고 두 트랙으로 교체했다. 파이프라인 �
 > 변동폭 안이었다. `retail` 도 공식 split 40 중 29만 잰 부분집합이라 도메인 점수가
 > 아니다.
 >
-> **현재 판정은 `TAUBENCH_TRACK_RESULTS.md`(`report_taubench_tracks.py` 가 생성)가
+> **현재 판정은 `TAUBENCH_TRACK_RESULTS.md`(`foundation_model_test_non_thinking/reports/report_taubench_tracks.py` 가 생성)가
 > 갖는다.** 아래 수치는 당시 기록으로만 남긴다.
 
 | 도메인 | qwen | gemma | 당시 상태 |
@@ -214,7 +214,7 @@ tau2          원 test 태스크           100  (telecom 40 + retail 40 + airlin
    - 상류 자신이 NL assertion 을 experimental/WIP 로 표시한다(tasks.py:252).
    - 평가기에 결함도 있다: 판정 결과가 빈 목록이면 `all([])` 가 통과한다
      (evaluator_nl_assertions.py:46,127).
-   - report_agent_tracks.py 는 tau2 축을 항상 non-provisional 로 출력한다(:80).
+   - foundation_model_test_non_thinking/reports/report_agent_tracks.py 는 tau2 축을 항상 non-provisional 로 출력한다(:80).
      판정만 붙이면 판정 조건부 결과가 '확정' 으로 찍힌다 — 보고 계층까지 고쳐야 한다.
 
    **잃는 것**: 공식 composite 커버리지, tau2 헤드라인과의 직접 비교, 그 11건에 대한

@@ -36,6 +36,8 @@ configs/                         # 모델별 YAML
 
 YAML config 에서 MODEL, TOKENIZER, endpoint, tracks 자동 로드. **MODEL 변수 하드코딩 금지** — 새 모델 추가 = `configs/models/X.yaml` 한 파일.
 
+새 config 파일명은 서빙 id를 소문자로 적은 `<org>_<model>[_<quant>].yaml`을 쓴다. 결과 폴더명은 서빙 id의 대소문자를 그대로 보존하며 기존 이름을 바꾸지 않는다. 철자 차이는 `configs/model_identity.json`으로 묶는다. 로더는 정확한 파일명을 우선하고, 대소문자 오입력은 casefold 일치 후보가 유일할 때만 받아 준다. 리눅스에서 예전에는 실패하던 대소문자 오입력이 이제 해석되는 것은 의도된 변경이다.
+
 ## 3. 인자 처리 (shell)
 
 bash `shift N` 은 `$# < N` 일 때 fail. 안전 패턴:

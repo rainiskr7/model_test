@@ -13,7 +13,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
-BASE_DEFAULT = Path(__file__).resolve().parent / "foundation_model_test_non_thinking"
+BASE = Path(__file__).resolve().parents[1]
 
 
 def _load_scorer(base: Path):
@@ -244,7 +244,7 @@ def render_markdown(summaries: list[dict[str, Any]], folded: list[dict[str, Any]
 
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--base", type=Path, default=BASE_DEFAULT)
+    parser.add_argument("--base", type=Path, default=BASE)
     parser.add_argument("--write-markdown", type=Path)
     parser.add_argument("--strict", action="store_true", help="발행 불가 런이 있으면 exit 1")
     args = parser.parse_args(argv)

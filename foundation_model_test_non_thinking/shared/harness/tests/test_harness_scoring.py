@@ -10,7 +10,6 @@ import unittest
 from pathlib import Path
 
 HARNESS_DIR = Path(__file__).resolve().parents[1]
-REPO_ROOT = HARNESS_DIR.parents[2]
 
 
 def load_module(name, path):
@@ -124,7 +123,7 @@ class CoverageAndDuplicateRulesCannotHideRuns(unittest.TestCase):
         self.assertNotEqual(scorer.subject_set_digest(left), scorer.subject_set_digest(right))
 
     def test_bad_copy_loses_representative_tiebreak_only_after_same_digest(self):
-        report = load_module("report_harness_under_test", REPO_ROOT / "report_harness_tracks.py")
+        report = load_module("report_harness_under_test", HARNESS_DIR.parents[1] / "reports" / "report_harness_tracks.py")
         with tempfile.TemporaryDirectory() as tmp:
             good = scorer.score_run(write_run(tmp, "m", "s", {"a": artifact("a", .9)}), ["a"])
             bad = scorer.score_run(write_run(tmp, "m.bad", "s", {"a": artifact("a", .9)}), ["a"])
@@ -135,7 +134,7 @@ class CoverageAndDuplicateRulesCannotHideRuns(unittest.TestCase):
 
 class ReportNeverPlacesRejectedRunInPrimaryTable(unittest.TestCase):
     def test_rejected_numbers_stay_in_rejection_section(self):
-        report = load_module("report_harness_for_rejection_test", REPO_ROOT / "report_harness_tracks.py")
+        report = load_module("report_harness_for_rejection_test", HARNESS_DIR.parents[1] / "reports" / "report_harness_tracks.py")
         with tempfile.TemporaryDirectory() as tmp:
             summary = scorer.score_run(write_run(tmp, "m", "s", {"a": artifact("a", .9)}), ["a", "b"])
         text = report.render_markdown([summary], [], scorer)
@@ -177,7 +176,7 @@ class ADifferentPromptProtocolIsADifferentExam(unittest.TestCase):
         self.assertTrue(off["publish_status"]["publishable"], off["publish_status"]["failures"])
 
     def test_the_report_does_not_sort_the_two_protocols_into_one_table(self):
-        report = load_module("report_harness_protocol_test", REPO_ROOT / "report_harness_tracks.py")
+        report = load_module("report_harness_protocol_test", HARNESS_DIR.parents[1] / "reports" / "report_harness_tracks.py")
         with tempfile.TemporaryDirectory() as tmp:
             on = self._summary(tmp, "with_template", True)
             off = self._summary(tmp, "no_template", False)
@@ -244,7 +243,7 @@ class MissingProvenanceIsNotEvidenceOfSameness(unittest.TestCase):
     def test_the_report_degrades_instead_of_dying_when_claims_cannot_load(self):
         # 부가 계층을 못 읽는다고 수치 보고 전체가 죽으면, 사람들은 이 스크립트를
         # 건너뛰고 산출물을 직접 읽는다 — 게이트가 무력해진다.
-        report = load_module("report_harness_degrade_test", REPO_ROOT / "report_harness_tracks.py")
+        report = load_module("report_harness_degrade_test", HARNESS_DIR.parents[1] / "reports" / "report_harness_tracks.py")
         with tempfile.TemporaryDirectory() as tmp:
             summary = self._summary(tmp, max_length=4095)
             with contextlib.redirect_stderr(io.StringIO()):
@@ -253,7 +252,7 @@ class MissingProvenanceIsNotEvidenceOfSameness(unittest.TestCase):
 
     def test_the_report_renders_warnings_rather_than_swallowing_them(self):
         # 채점기가 경고를 내도 보고가 렌더링하지 않으면 독자에게는 없는 것과 같다.
-        report = load_module("report_harness_warn_test", REPO_ROOT / "report_harness_tracks.py")
+        report = load_module("report_harness_warn_test", HARNESS_DIR.parents[1] / "reports" / "report_harness_tracks.py")
         with tempfile.TemporaryDirectory() as tmp:
             summary = self._summary(tmp, max_length=None)
             # base 는 실제 저장소여야 claims 계층을 찾는다.

@@ -16,14 +16,29 @@ from pathlib import Path
 import yaml
 
 
+def _candidate_stems(config_dir: Path) -> list[str]:
+    """실제 파일(파일로 가는 링크 포함)의 정확한 .yaml stem 목록."""
+    return sorted(
+        path.stem
+        for path in config_dir.iterdir()
+        if path.name.endswith(".yaml") and path.is_file()
+    )
+
+
 def load(config_name: str) -> dict:
     config_dir = Path(__file__).parent / "models"
-    # 확장자 없이도 받음
-    name = config_name if config_name.endswith(".yaml") else f"{config_name}.yaml"
-    path = config_dir / name
-    if not path.exists():
-        available = sorted(p.stem for p in config_dir.glob("*.yaml"))
+    stem = config_name[:-5] if config_name.endswith((".yaml", ".YAML")) else config_name
+    available = _candidate_stems(config_dir)
+    path = config_dir / f"{stem}.yaml"
+    # 파일시스템의 대소문자 구분 여부에 기대지 않고 목록의 정확한 철자로 판정한다.
+    if not stem or "/" in config_name or ".." in config_name or config_name.startswith("."):
         sys.exit(f"ERROR: config 없음 {path}\n사용 가능: {available}")
+    if stem not in available:
+        matches = [candidate for candidate in available if candidate.casefold() == stem.casefold()]
+        if len(matches) != 1:
+            sys.exit(f"ERROR: config 없음 {path}\n사용 가능: {available}")
+        stem = matches[0]
+    path = config_dir / f"{stem}.yaml"
     cfg = yaml.safe_load(path.read_text()) or {}
     cfg = apply_serving_profile(cfg)
     validate_agent_native_tool_calling(cfg)

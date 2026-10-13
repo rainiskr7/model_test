@@ -9,8 +9,8 @@ agent 트랙(`../AGENT_TRACK_CLOSEOUT.md`)과 같은 교훈에서 출발한다: 
 
 ```
 python3 derive_multimodal_publish.py --base . --write   # 산출물 -> sidecar
-python3 report_multimodal_tracks.py  --base .           # 발행 가능한 수치만 출력
-python3 report_multimodal_tracks.py  --base . --run <session> --strict  # CI
+python3 reports/report_multimodal_tracks.py  --base .           # 발행 가능한 수치만 출력
+python3 reports/report_multimodal_tracks.py  --base . --run <session> --strict  # CI
 ```
 
 ---
@@ -255,7 +255,7 @@ canonical id로 사용하면서 보고서에 경고한다. 특히 fp8과 non-fp8
    모델이 표에서 통째로 사라진다 — 유효한 측정을 잃고 아무것도 새로 말하지 못한다.
    후보가 **전부** 무시각이면 종전대로 자동 선정하지 않는다.
 6. **점수·분모·런 이름 문자열을 tie-break 로 쓰지 않는다.**
-   (`report_agent_tracks.py:125` 가 `(den, run_name)` 튜플 비교라 동일 분모에서
+   (`reports/report_agent_tracks.py:125` 가 `(den, run_name)` 튜플 비교라 동일 분모에서
    문자열 정렬로 떨어지는 버그가 남아 있다. 여기서는 반복하지 않는다.)
 7. 결정 불가(후보가 전부 timestamp null, 동시각 동률) → 자동 선정하지 않고
    후보 목록만 점수 없이 표시. `--strict` 에서 exit 1.

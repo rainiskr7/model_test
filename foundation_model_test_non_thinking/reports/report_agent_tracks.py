@@ -24,6 +24,8 @@ import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+BASE = Path(__file__).resolve().parents[1]
+
 # 판정 축이 provisional 인 조건. 산출물의 judge.human_validation 이 이 값이면
 # 아무리 점수가 좋아도 확정 수치로 내지 않는다.
 UNVALIDATED = "not performed"
@@ -343,7 +345,7 @@ def render_markdown(
     out.append("# agent 트랙 결과")
     out.append("")
     out.append(
-        "이 파일은 `report_agent_tracks.py` 가 산출물에서 생성한다. "
+        "이 파일은 `foundation_model_test_non_thinking/reports/report_agent_tracks.py` 가 산출물에서 생성한다. "
         "손으로 고치지 말 것 — 다시 생성하면 덮어써진다."
     )
     out.append("")
@@ -477,7 +479,7 @@ def render_markdown(
 
 def main(argv: Optional[List[str]] = None) -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--base", type=Path, default=Path("foundation_model_test_non_thinking"))
+    ap.add_argument("--base", type=Path, default=BASE)
     ap.add_argument("--strict", action="store_true", help="거부된 런이 있으면 exit 1")
     ap.add_argument("--show-rejected", action="store_true", default=True)
     ap.add_argument(

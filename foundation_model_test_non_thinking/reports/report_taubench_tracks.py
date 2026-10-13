@@ -7,15 +7,16 @@ import argparse
 import sys
 from pathlib import Path
 
+BASE = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(BASE))
+
 from shared.taubench.scoring.report import collect, render_markdown
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser()
-    # 이 스크립트는 저장소 루트에서 `python3 foundation_model_test_non_thinking/...`로
-    # 실행한다. `.`를 기본값으로 두면 실제 산출물 아래가 아니라 호출 위치를 읽어
-    # "산출물이 없다"고 끝난다.
-    parser.add_argument("--base", type=Path, default=Path(__file__).resolve().parent)
+    # 호출 cwd와 관계없이 기본 산출물 기준은 <N>이다.
+    parser.add_argument("--base", type=Path, default=BASE)
     parser.add_argument("--write-markdown", type=Path)
     parser.add_argument(
         "--strict",
@@ -35,7 +36,7 @@ def main(argv: list[str] | None = None) -> int:
     else:
         print(markdown)
 
-    # taubench 가 report_agent_tracks.py 에서 분리되면서 그쪽 --strict 의 CI 검사도
+    # taubench 가 reports/report_agent_tracks.py 에서 분리되면서 그쪽 --strict 의 CI 검사도
     # 함께 사라졌다. 거부된 런이 조용히 통과하면 게이트를 만든 의미가 없다.
     if args.strict:
         rejected = [

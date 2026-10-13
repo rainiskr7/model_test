@@ -298,7 +298,7 @@ def render_markdown(summaries: Iterable[dict[str, Any]], unreadable: list[dict[s
     out: list[str] = [
         "# taubench 트랙 결과",
         "",
-        "이 파일은 `report_taubench_tracks.py` 가 `summary.json` 에서 생성한다. 손으로 고치지 말 것.",
+        "이 파일은 `reports/report_taubench_tracks.py` 가 `summary.json` 에서 생성한다. 손으로 고치지 말 것.",
         "",
         "읽는 법:",
         "",

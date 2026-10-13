@@ -202,8 +202,8 @@ class TheReportDoesNotContradictItself(unittest.TestCase):
     def _report(self):
         import importlib.util as il
 
-        root = NLU_DIR.parents[2]
-        spec = il.spec_from_file_location("report_nlu_under_test", root / "report_nlu_tracks.py")
+        root = NLU_DIR.parents[1]
+        spec = il.spec_from_file_location("report_nlu_under_test", root / "reports" / "report_nlu_tracks.py")
         module = il.module_from_spec(spec)
         sys.path.insert(0, str(root))
         try:

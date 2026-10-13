@@ -906,7 +906,7 @@ class TestReportStrict(unittest.TestCase):
         }, ensure_ascii=False), encoding="utf-8")
         import importlib.util
         spec = importlib.util.spec_from_file_location(
-            "report_taubench_cli", TAUBENCH_DIR.parent.parent / "report_taubench_tracks.py"
+            "report_taubench_cli", TAUBENCH_DIR.parents[1] / "reports" / "report_taubench_tracks.py"
         )
         module = importlib.util.module_from_spec(spec)
         sys.path.insert(0, str(TAUBENCH_DIR.parent.parent))
@@ -940,7 +940,7 @@ class TestReportStrict(unittest.TestCase):
             import importlib.util
 
             spec = importlib.util.spec_from_file_location(
-                "report_taubench_cli_bad", TAUBENCH_DIR.parent.parent / "report_taubench_tracks.py"
+                "report_taubench_cli_bad", TAUBENCH_DIR.parents[1] / "reports" / "report_taubench_tracks.py"
             )
             module = importlib.util.module_from_spec(spec)
             sys.path.insert(0, str(TAUBENCH_DIR.parent.parent))

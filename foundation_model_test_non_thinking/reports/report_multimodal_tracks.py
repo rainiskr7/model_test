@@ -7,12 +7,15 @@ import argparse
 import sys
 from pathlib import Path
 
+BASE = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(BASE))
+
 from shared.multimodal.publish.report import collect, render_markdown, strict_failed
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--base", type=Path, default=Path("."))
+    parser.add_argument("--base", type=Path, default=BASE)
     parser.add_argument("--run", help="scope report/strict validation to one session")
     parser.add_argument("--strict", action="store_true")
     parser.add_argument("--write-markdown", type=Path)

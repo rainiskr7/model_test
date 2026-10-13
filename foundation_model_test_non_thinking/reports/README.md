@@ -1,0 +1,23 @@
+# 트랙 보고 스크립트
+
+- `report_harness_tracks.py`: KMMLU 채점·발행 보고서.
+- `report_agent_tracks.py`: functionchat의 발행 가능한 exact·judge 결과.
+- `report_nlu_tracks.py`: NLU 항목 벡터 보고서(stdout).
+- `report_taubench_tracks.py`: taubench 발행 결과와 거부 사유.
+- `report_multimodal_tracks.py`: multimodal sidecar 기반 발행 보고서.
+
+어디서 실행해도 `<N>` 기준(`--base` 기본값)으로 산출물을 읽는다.
+`<N>`은 `foundation_model_test_non_thinking`, `<R>`은 그 상위 디렉터리다.
+`report_agent_levels.{py,sh}`는 두 저장소 공용이라 `<R>`에 있다.
+`--write-markdown`의 상대 경로는 호출 cwd 기준이며, NLU는 stdout만 지원한다.
+
+세 cwd 실행 예(먼저 실제 `<N>` 절대 경로를 지정):
+
+```bash
+N=/absolute/path/to/foundation_model_test_non_thinking
+R="$(dirname "$N")"
+
+(cd / && env -u PYTHONPATH "$N/.venv/bin/python" "$N/reports/report_agent_tracks.py" --write-markdown /tmp/agent-from-root.md)
+(cd "$R" && env -u PYTHONPATH "$N/.venv/bin/python" "$N/reports/report_multimodal_tracks.py" --write-markdown /tmp/multimodal-from-parent.md)
+(cd "$N" && env -u PYTHONPATH "$N/.venv/bin/python" "$N/reports/report_taubench_tracks.py" --write-markdown /tmp/taubench-from-n.md)
+```

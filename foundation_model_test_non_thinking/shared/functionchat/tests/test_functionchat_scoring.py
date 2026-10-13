@@ -918,8 +918,8 @@ def test_the_report_refuses_to_rank_a_single_run_model():
 
     import importlib.util as _il
 
-    root = EXACT_PATH.parents[4]
-    spec = _il.spec_from_file_location("report_agent_claims_test", root / "report_agent_tracks.py")
+    root = TREE_ROOT
+    spec = _il.spec_from_file_location("report_agent_claims_test", root / "reports" / "report_agent_tracks.py")
     module = _il.module_from_spec(spec)
     _sys.path.insert(0, str(root))
     try:
@@ -945,8 +945,8 @@ def test_the_report_refuses_to_rank_a_single_run_model():
 def test_the_report_states_the_rule_is_not_a_significance_test():
     import importlib.util as _il
 
-    root = EXACT_PATH.parents[4]
-    spec = _il.spec_from_file_location("report_agent_claims_test2", root / "report_agent_tracks.py")
+    root = TREE_ROOT
+    spec = _il.spec_from_file_location("report_agent_claims_test2", root / "reports" / "report_agent_tracks.py")
     module = _il.module_from_spec(spec)
     _sys.path.insert(0, str(root))
     try:
@@ -1014,8 +1014,8 @@ def test_the_report_publishes_verdicts_for_both_axes_and_flags_disagreement():
 
     import importlib.util as _il
 
-    root = EXACT_PATH.parents[4]
-    spec = _il.spec_from_file_location("report_agent_axes_test", root / "report_agent_tracks.py")
+    root = TREE_ROOT
+    spec = _il.spec_from_file_location("report_agent_axes_test", root / "reports" / "report_agent_tracks.py")
     module = _il.module_from_spec(spec)
     _sys.path.insert(0, str(root))
     try:
@@ -1044,8 +1044,8 @@ def test_the_report_publishes_verdicts_for_both_axes_and_flags_disagreement():
 def test_the_report_stays_quiet_when_both_axes_agree():
     import importlib.util as _il
 
-    root = EXACT_PATH.parents[4]
-    spec = _il.spec_from_file_location("report_agent_axes_test2", root / "report_agent_tracks.py")
+    root = TREE_ROOT
+    spec = _il.spec_from_file_location("report_agent_axes_test2", root / "reports" / "report_agent_tracks.py")
     module = _il.module_from_spec(spec)
     _sys.path.insert(0, str(root))
     try:

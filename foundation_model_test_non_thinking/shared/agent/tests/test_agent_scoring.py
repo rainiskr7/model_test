@@ -4081,7 +4081,7 @@ def test_level_report_says_when_all_five_diagnostics_are_zero_or_absent():
 
 
 def _load_agent_tracks_report():
-    path = TREE_ROOT.parent / "report_agent_tracks.py"
+    path = TREE_ROOT / "reports" / "report_agent_tracks.py"
     spec = importlib.util.spec_from_file_location("report_agent_tracks_under_test", path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
@@ -4130,7 +4130,7 @@ def test_agent_tracks_report_leaves_taubench_to_its_own_layer():
     """한 트랙을 두 스크립트가 다른 규칙으로 보고하면 반드시 어긋난다."""
 
     module = _load_agent_tracks_report()
-    source = (TREE_ROOT.parent / "report_agent_tracks.py").read_text(encoding="utf-8")
+    source = (TREE_ROOT / "reports" / "report_agent_tracks.py").read_text(encoding="utf-8")
     assert 'track != "functionchat"' in source, "taubench 를 다시 끌어들이면 안 된다"
     collected = module.collect(TREE_ROOT)
     assert collected, "functionchat 산출물을 하나도 못 찾았다"

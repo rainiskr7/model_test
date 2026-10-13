@@ -697,7 +697,7 @@ def render_markdown(
     out = [
         "# multimodal 트랙 결과",
         "",
-        "이 파일은 `report_multimodal_tracks.py`가 `_derived` sidecar에서 생성한다. 손으로 고치지 말 것.",
+        "이 파일은 `reports/report_multimodal_tracks.py`가 `_derived` sidecar에서 생성한다. 손으로 고치지 말 것.",
         "",
         "판단 기준: [`MULTIMODAL_PUBLISH_CONTRACT.md`](MULTIMODAL_PUBLISH_CONTRACT.md).",
         "",

@@ -1,6 +1,6 @@
 # agent 트랙 결과
 
-이 파일은 `report_agent_tracks.py` 가 산출물에서 생성한다. 손으로 고치지 말 것 — 다시 생성하면 덮어써진다.
+이 파일은 `foundation_model_test_non_thinking/reports/report_agent_tracks.py` 가 산출물에서 생성한다. 손으로 고치지 말 것 — 다시 생성하면 덮어써진다.
 
 발행 가능한 **런** 25개 / 거부 0개. 아래 표는 축별 대표 런만 보여주므로 행 수는 이보다 적다. 판단 기준은 [`AGENT_TRACK_CLOSEOUT.md`](AGENT_TRACK_CLOSEOUT.md).
 
