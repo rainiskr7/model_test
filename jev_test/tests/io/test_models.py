@@ -40,7 +40,7 @@ def test_six_registered_models_and_pending_run_fields():
             expected += ["b1.label_token_ids", "b1.label_token_ids: incomplete"]
             assert cfg.serving["engine"] == "vllm" and cfg.auth_env == "OPENAI_API_KEY"
         if cfg.id == "b1_qwen3_8_27b":
-            expected.remove("served_name")
+            expected = ["base_url"]
             assert cfg.served_name == "qwen_qwen3.8_27b"
         else:
             assert cfg.served_name is None

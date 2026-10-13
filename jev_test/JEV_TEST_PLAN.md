@@ -69,7 +69,7 @@ Jev(TypeSafe AI, 2026-09-15 early access)가 처음 내놓은 형식을 오픈�
 | **B1** | 같은 백본 LLM 의 **logprob** — 질문마다 호출 1번, 선택지에 단일 토큰 라벨, `allowed_token_ids` 로 제한, 유효 후보로 재정규화. **chat + 생각 끔** 필수 (Qwen 템플릿이 `<think>` 를 열면 보기 확률이 무너진다 — KMMLU 에서 두 번). 세부 계약은 아래 | 모든 셋 | "백본을 그냥 쓰면 어떤가" 하는 **운영 대안**. head·attention·프롬프트·보정이 함께 다르므로 "후학습만의 효과" 로 해석하지 않는다. 대상: Qwen3.8-27B **BF16** (`foundation_model_test_non_thinking/configs/models/qwen_qwen3.8_27b.yaml`, 엔진 vLLM — line 23), FP8 은 별도 열 |
 | **B2** | 임베딩 + 로지스틱 회귀 (MTEB Classification 방식) | **학습 split 이 있는 고정 라벨 셋만** (K-MHaS · KOTE · KorFin-ASC · KLUE-MRC 등) | 해당 과제 라벨로 학습한 **지도학습 참고치**. 결정 모델은 처음 보는 상태라 "대안이 더 싸다" 결론에는 학습 데이터가 필요하다는 단서를 붙인다. KoSGD·FunctionChat 처럼 선택지가 요청마다 바뀌거나 학습 split 이 없으면 B2 를 내지 않는다. KorFin 은 한 문장에 종목(aspect)별 정답이 여럿이라 입력을 `(SRC, ASPECT)` 로 조건화하고 분할은 문장 단위로 한다 |
 
-**B1 계약 (개정 12, vLLM 0.19.0 기준)**:
+**B1 계약 (개정 12, vLLM 0.19.0 기준 — 10-13 실서버는 0.28.0, 아래 서버 옵션 두 개가 실제로 필수임을 확인: 없으면 400·라벨 누락, P1 계약 §10)**:
 - **라벨**: `A–Z · a–z · 0–9` 62개 — Qwen3.8 토크나이저에서 모두 단일 토큰·서로 다른 ID (10-13 확인. 숫자 `0`–`38` 은 10개만 단일 토큰이라 쓰지 않는다). 선택지 60개(MASSIVE)까지 된다. 라벨 대응표와 토크나이저 해시를 동결하고, chat 템플릿의 답 위치에서도 단일 토큰인지 P0 에서 본다. 선택지 편향 검사(§4-5)는 이 62개 안에서 대응을 재배정한다.
 - **서버**: `--logprobs-mode processed_logprobs --max-logprobs 64`. 기본값(`raw_logprobs`, 20)이면 허용 토큰 마스크 **전** 전체 어휘의 상위 20개가 와서 보기가 빠진다 — v0.19.0 `vllm/v1/sample/sampler.py` 에서 raw 는 82행에서 계산되고 마스크는 그 뒤(92 → 288행), processed 는 마스크 뒤 `sample()` 에서 계산된다 (소스 확인, 실서버 미확인).
 - **요청**: `max_tokens=1`, `logprobs=true`, `top_logprobs ≥ 선택지 수`, `temperature=1`, `top_p=1`, `top_k=-1`, `min_p=0`, repetition penalty 1, frequency·presence penalty 0, logit bias·bad words·추가 processor 없음. 명시하지 않으면 모델 `generation_config` 기본값(top_k 등)이 들어와 후보가 잘린다.

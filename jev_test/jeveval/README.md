@@ -1,6 +1,6 @@
-# jeveval — P1 작업 ⑥a-1 기능 지도
+# jeveval — P1 작업 ⑥a-1·P0-B1 길이 측정 기능 지도
 
-P1_CONTRACT.md 판 3 보정 10의 공유 실행 기반과 순수 호출 계획·길이·재시도 정책·결과 변환, 요청 채점·개발 임계값을 구현했다.
+P1_CONTRACT.md 판 3 보정 10의 공유 실행 기반과 순수 호출 계획·길이·재시도 정책·결과 변환, 요청 채점·개발 임계값과 로컬 B1 길이 측정기를 구현했다.
 테스트는 합성 fixture·tmp_path와 동결 task 설정, 127.0.0.1 서버를 사용한다. 실행기는 후속 작업이다.
 
 ## 코드
@@ -66,35 +66,31 @@ P1_CONTRACT.md 판 3 보정 10의 공유 실행 기반과 순수 호출 계획·
 - `run/item_summary.py`: task 선택·입출력 연결, 단계별 원문 없는 JSONL 요약.
 - `run/plan_calls.py`: 공통 항목 검증·고유 B1 호출 ID·렌더 실패를 포함한 로컬 오류 계획·전송 바이트.
 - `run/length.py`: 호출별 잘림·문자 끝→토큰 끝·길이 구간, P0 측정 구현용 Measurer Protocol.
+- `run/encoders/__init__.py`: ENCODERS 등록표·measurer_for, 미확정·미등록 규칙 거부.
+- `run/encoders/hf_chat_template.py`: 파일 해시 대조·오프라인 no-think 템플릿·ID 재인코딩 일치·state offsets 기반 LengthInfo.
 - `run/policy.py`: MAX_ATTEMPTS=5·전송 오류 우선·정수 Retry-After·누적 번호에 따른 Decision.
 - `run/outcome.py`: 기록 연결·예산·길이 필수 검사, 독립 usage·답 변환·거부 우선·논리 상태 합성.
 - `README.md`: 기능 지도와 후속 작업 경계.
 
-의존 방향은 `run → io/data → score/types`, `io → contract → types`, `score → types`다.
-data/items는 io·contract·run을 import하지 않는다. expand·items·labels는 파일·난수를 사용하지 않는다.
-전체 예정 방향은 `run → client/io → score/data/contract → types`다.
-types는 jeveval의 다른 패키지를 import하지 않는다.
-contract·score는 서로 import하지 않으며 파일·네트워크·시계·난수 접근이 없는 순수 함수다.
-data도 파일·네트워크·시계에 접근하지 않고, 난수는 계약의 문자열 seed로 만든 random.Random만 쓴다.
+의존 방향은 `run → io/data → score/types`, `io → contract → types`, `score → types`다. 전체 예정 방향은 `run → client/io → score/data/contract → types`다.
+data/items는 io·contract·run을 import하지 않는다. expand·items·labels는 파일·난수를 사용하지 않는다. types는 jeveval의 다른 패키지를 import하지 않는다.
+contract·score는 서로 import하지 않으며 파일·네트워크·시계·난수 접근이 없는 순수 함수다. data도 파일·네트워크·시계에 접근하지 않고, 난수는 계약의 문자열 seed로 만든 random.Random만 쓴다.
+run/encoders의 의존은 types·io.hashes·run.length·표준 라이브러리·transformers/tokenizers로 제한한다. 로드는 HF_HUB_OFFLINE=1·TRANSFORMERS_OFFLINE=1, local_files_only=True·trust_remote_code=False다.
 
-모든 dataclass는 frozen이다. 내부 list/dict까지 불변인 것은 아니다. from_dict는 중첩 타입을 복원하고 별칭 없는 사본을 만든다.
-알 수 없는 필드·필수 필드 누락·비선택 필드의 null·잘못된 타입·NaN/Infinity를 거부한다.
+모든 dataclass는 frozen이다. 내부 list/dict까지 불변인 것은 아니다. from_dict는 중첩 타입을 복원하고 별칭 없는 사본을 만들며 알 수 없는 필드·필수 필드 누락·비선택 필드의 null·잘못된 타입·NaN/Infinity를 거부한다.
 B1Response는 메모리 로그확률의 -inf를 JSON 왕복 때만 "-inf"로 인코딩하고 복원한다. CallRecord.top_logprobs_raw에는 storable_top_logprobs가 만든 사본을 넣는다.
-ThresholdFile은 by_tau 키와 값의 tau가 같은지도 검사한다.
-요청·응답·채점 도메인 검사는 contract/score, 순수 상태 결합은 run/outcome, 전송·기록 순서 제어는 후속 executor의 책임이다.
+ThresholdFile은 by_tau 키와 값의 tau가 같은지도 검사한다. 요청·응답·채점 도메인 검사는 contract/score, 순수 상태 결합은 run/outcome, 전송·기록 순서 제어는 후속 executor의 책임이다.
 
 load_taskspec은 TaskSpec을 반환하며 오류 목록은 TaskSpecError.errors에 담는다. task yaml의 score 질문은 기존대로 오류 목록이며 NotImplementedError로 바꾸지 않는다.
 per_item_questions의 충돌 검사는 k 상한 없이 앞자리 0 없는 양의 정수를 대조한다. 실제 질문 펼치기와 중복 재검사는 data/expand가 수행한다. 무상한 패턴 충돌은 taskspec이 검사한다.
 Request가 봉투 구조를 보장하고 build_request가 질문 ID 중복을 거부한다. systemone criteria는 options 순서를 보존하며 B1만 코드포인트 순서로 라벨을 배정한다.
 usage 없음/null은 usage_input_tokens_invalid 경고를 내지 않는다. 추가 봉투 키 경고는 별도다. 응답 검증 실패 시 answers는 None이며, 그때까지 수집한 경고는 중복 없이 보존한다.
-B1 allowed_token_ids는 client가 채운다. calibrate의 모집단 구성은 호출자 책임이다.
-client는 재시도·terminal·상태 결합을 결정하지 않는다. 본문 수신 오류는 HTTP 코드와 함께 남긴다. headers는 전송에만 사용하고 Content-Type 덮어쓰기·머리글 값의 예외 메시지 노출을 막는다.
+B1 allowed_token_ids는 client가 채운다. calibrate의 모집단 구성은 호출자 책임이다. client는 재시도·terminal·상태 결합을 결정하지 않는다. 본문 수신 오류는 HTTP 코드와 함께 남긴다. headers는 전송에만 사용하고 Content-Type 덮어쓰기·머리글 값의 예외 메시지 노출을 막는다.
 missing_for_run의 B1 라벨 인자는 b1.yaml에서 읽어 전달한다. 생략하면 incomplete로 판정한다.
 timeout은 소켓 단위이며 총 소요 시간 상한이 아니다. clock.utc_now()는 aware datetime을 돌려준다.
-resume은 append 전에 repair_tail을 호출해야 한다. read_attempts/read_finals는 파일을 바꾸지 않는다.
-재시도 5회는 기록된 시도 기준이다. 전송 뒤 fsync 전에 중단되면 실제 전송이 더 일어날 수 있다.
+resume은 append 전에 repair_tail을 호출해야 한다. read_attempts/read_finals는 파일을 바꾸지 않는다. 재시도 5회는 기록된 시도 기준이다. 전송 뒤 fsync 전에 중단되면 실제 전송이 더 일어날 수 있다.
 call_record는 상한에 이른 non-terminal도 재전송 없이 복구하며, 상한 초과·기록 연결 불일치는 거부한다.
-plan_calls·length·policy·outcome은 파일·네트워크·시계·난수를 쓰지 않는다. 실제 길이 측정은 P0, executor·gate는 후속 작업이다.
+plan_calls·length·policy·outcome은 파일·네트워크·시계·난수를 쓰지 않는다. B1은 hf_chat_template_no_think로 로컬 측정하며 systemone 측정은 NotImplementedError다. executor·gate는 후속 작업이다.
 score/tasks는 KoSGD 한 칸만 MISSING이면 상태와 무관하게 거부하고, 두 칸 모두 MISSING이면 묶음을 마스크에서 뺀다.
 score/threshold의 호출자는 dev_complete를 통과한 dev 결과와 원본 바이트 sha256·nbytes를 넘긴다. 단계 입력 복원·gate·seal은 후속 ⑤c, certify는 ⑥b다.
 
@@ -103,6 +99,7 @@ score/threshold의 호출자는 dev_complete를 통과한 dev 결과와 원본 �
 - `tests/run/conftest.py`: 합성 설정·항목·시도와 기존 fixture 읽기 도우미.
 - `tests/run/test_plan_calls.py`: 공통 검증·중복/렌더 실패·호출별 오류·B1 prompt/대응표 통합.
 - `tests/run/test_length.py`: 기존 boundaries의 거부·mismatch·호출별 고정부, offsets·구간 경계.
+- `tests/run/test_encoders.py`: tmp_path 합성 WordLevel/BPE·해시·오프라인 로드·수동 길이·B1 계획 통합·규칙/상한/ID/위치 오류. `tests/run/test_encoder_trim.py`: Jinja trim·앞 공백 보정·뒤쪽 trim 경계·전부 공백 거부.
 - `tests/run/test_policy.py`: 대기·소진·부분 응답, retry_budget fixture와 non-terminal 소진 복구.
 - `tests/run/test_outcome.py`: 전체 responses·B1 분포·terminal 복구·부분 실패 fixture, usage·경고·기록 거부.
 - `tests/types/test_run.py`: 실행 공유 타입 왕복·frozen·CallPlan 메모리 경계.
@@ -169,10 +166,8 @@ score/threshold의 호출자는 dev_complete를 통과한 dev 결과와 원본 �
 - `tests/fixtures/test_split_fixtures.py`: ID 묶음·라벨 충돌·연결요소·분할·비례 할당.
 - `tests/fixtures/test_resume_fixtures.py`: JSONL 손상·중복·완료 ID·누적 재시도 자료.
 
-fixture 폴더: render, responses, answers, scoring, splits, expand, records, resume, length, seal, temperature, b1, canary. 각 README는 한 줄이다.
-fixture 검산은 실제 실행 모듈 통합 테스트를 대신하지 않는다. 작업 ②·⑤b·⑥a-1 짝 테스트는 기존 fixture를 실제 함수에 통과시키며 기대값은 변경하지 않는다.
-추가 fixture `tests/fixtures/b1/prompt.json`은 합성 설정으로 choice/noul 문구·매개변수를 고정한다.
-canary는 표식 있는 입력만 만들며, 일곱 커밋 출력의 누출 검사는 작업 ⑥에서 한다.
+fixture 폴더: render, responses, answers, scoring, splits, expand, records, resume, length, seal, temperature, b1, canary. 각 README는 한 줄이다. fixture 검산은 실제 실행 모듈 통합 테스트를 대신하지 않는다. 작업 ②·⑤b·⑥a-1 짝 테스트는 기존 fixture를 실제 함수에 통과시키며 기대값은 변경하지 않는다.
+추가 fixture `tests/fixtures/b1/prompt.json`은 합성 설정으로 choice/noul 문구·매개변수를 고정한다. canary는 표식 있는 입력만 만들며, 일곱 커밋 출력의 누출 검사는 작업 ⑥에서 한다.
 
 검사: `../foundation_model_test_non_thinking/.venv/bin/python -I -m pytest -q -p no:cacheprovider -rs tests`
 
@@ -182,10 +177,8 @@ canary는 표식 있는 입력만 만들며, 일곱 커밋 출력의 누출 검�
 ../foundation_model_test_non_thinking/.venv/bin/python -I -c 'import runpy, sys; from pathlib import Path; sys.path.insert(0, str(Path.cwd())); runpy.run_module("jeveval.run.make_splits", run_name="__main__")' --rules configs/splits/rules.yaml --root . --set all --out .work/splits_preview
 ```
 
-분할 파일에는 평가 풀 묶음만 담는다. KOTE 강등 이름만 한글을 허용하며 원문 묶음 키는 저장하지 않는다.
-`pool_rule`은 YAML pool 객체 그대로, 바이트는 `ensure_ascii=False, indent=1, sort_keys=True`와 끝 LF다.
-`Groups`·`PoolResult`는 frozen JsonRecord이며, strata 입력은 group_id→층 이름이다.
-KoSGD 고정 선정은 원본 USER 구성원 존재 여부로 검증한다 (없는 대화·중복·SYSTEM·범위 밖 거부).
+분할 파일에는 평가 풀 묶음만 담는다. KOTE 강등 이름만 한글을 허용하며 원문 묶음 키는 저장하지 않는다. `pool_rule`은 YAML pool 객체 그대로, 바이트는 `ensure_ascii=False, indent=1, sort_keys=True`와 끝 LF다.
+`Groups`·`PoolResult`는 frozen JsonRecord이며, strata 입력은 group_id→층 이름이다. KoSGD 고정 선정은 원본 USER 구성원 존재 여부로 검증한다 (없는 대화·중복·SYSTEM·범위 밖 거부).
 CLI의 상대 `--rules`와 source/선정 경로는 `--root` 기준, 상대 `--out`은 실행 cwd 기준이다.
 
 ## SPEC_AMBIGUOUS
@@ -194,13 +187,13 @@ CLI의 상대 `--rules`와 source/선정 경로는 `--root` 기준, 상대 `--ou
 작업 ③a의 반박 11건은 보정 6과 사용자 승인으로 해결했다. 남은 SPEC_AMBIGUOUS / FIXTURE_CONFLICT 없음.
 승인된 fixture 변경: union_find.expected.groups의 구성원 11–15를 문자열로 변경; label_conflicts.expected.notes의 옛 키를 label_conflict_groups_total/pool (각 1)로 대체.
 deterministic.json은 변경하지 않았으며 중간 순서와 최종 정렬을 따로 검증한다.
-§10의 서버 인코더·토큰 offsets 생성·길이 거부 응답 확인은 P0 후속 작업이다.
+§10의 systemone 서버 인코더·길이 거부 응답 확인은 P0 후속 작업이다. B1 로컬 offsets 생성은 구현했다.
 ⑤a SPEC_AMBIGUOUS: threshold_cases의 232개 축약 outcome에는 질문 ID가 없어 roles={}로 추가했다.
 현재 길이 fixture는 이미 측정된 합성 LengthInfo를 입력으로 삼는다. ⑤b SPEC_AMBIGUOUS / FIXTURE_CONFLICT 없음.
 ⑥a-1 반박 R1은 §7-2의 부분 결측 거부로 반영했다. 남은 SPEC_AMBIGUOUS / FIXTURE_CONFLICT 없음.
+P0-B1: null/빈 해시 목록은 미확정으로 거부한다. user는 하나이며 state 접두사·trim 뒤 본문의 유일성을 검사하고 앞 공백만큼 state 범위·대상 끝을 보정한다. 전부 공백 state·state로 끝나는 user·state까지 침범하는 뒤쪽 trim은 거부한다. offsets는 start 비감소·0 ≤ start ≤ end를 요구하며 겹침·반복을 허용하고 대상 문자를 덮는 마지막 토큰 다음 번호를 반환한다. state 시작 경계를 가로지르는 음수 상대 offset은 ValueError이며 임의로 자르지 않는다.
 
-작업 ③b: 반박 반영 R1–R6 구현. extra 의미 검사는 구성원 소속을 검사한다. 라벨 변경 감지는 fingerprint 입력 해시 검사로 남긴다. 정답 규칙은 누락을 MISSING으로 대체하지 않는다.
-요약은 dev/test/extra별이며 noul 선택지 수는 2, flag 접두별 항목 수를 센다.
+작업 ③b: 반박 반영 R1–R6 구현. extra 의미 검사는 구성원 소속을 검사한다. 라벨 변경 감지는 fingerprint 입력 해시 검사로 남긴다. 정답 규칙은 누락을 MISSING으로 대체하지 않는다. 요약은 dev/test/extra별이며 noul 선택지 수는 2, flag 접두별 항목 수를 센다.
 
 ```sh
 ../foundation_model_test_non_thinking/.venv/bin/python -I -c 'import runpy, sys; from pathlib import Path; sys.path.insert(0, str(Path.cwd())); runpy.run_module("jeveval.run.item_summary", run_name="__main__")' --rules configs/splits/rules.yaml --root . --tasks configs/tasks --splits configs/splits --task all

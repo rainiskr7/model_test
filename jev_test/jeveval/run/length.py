@@ -21,7 +21,7 @@ def classify(info: LengthInfo) -> Literal["not_truncated", "target_cut", "tail_c
 
 
 def token_end(offsets: list[tuple[int, int]], char_end: int) -> int:
-    """정렬·비겹침 offsets에서 대상 마지막 문자를 덮는 토큰의 다음 번호를 준다."""
+    """start 비감소 offsets의 겹침·반복을 허용하고 대상 문자를 덮는 마지막 토큰 다음 번호를 준다."""
     if type(char_end) is not int or char_end < 0:
         raise ValueError("char_end must be a nonnegative integer")
     previous, found = 0, None
@@ -31,10 +31,10 @@ def token_end(offsets: list[tuple[int, int]], char_end: int) -> int:
         start, end = pair
         if (type(start) is not int or type(end) is not int
                 or start < previous or end < start):
-            raise ValueError("offsets must be nonnegative, sorted and nonoverlapping")
+            raise ValueError("offsets must be nonnegative with nondecreasing starts and end >= start")
         if start <= char_end - 1 < end:
             found = index + 1
-        previous = end
+        previous = start
     if char_end == 0:
         return 0
     if found is None:

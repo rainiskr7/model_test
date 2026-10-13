@@ -606,6 +606,12 @@ PoolResult(group_ids: list[str], allocation: dict[str, int])          # data/poo
 
 ## 10. P0 에서 확인해 이 문서를 고칠 것
 
+**10-13 확인 — B1 (Qwen3.8-27B BF16, aitopatom-22c3 GPUStack, 스모크 7 task × dev 3 = 129 호출)** — 값은 `configs/models/b1_qwen3_8_27b.yaml`:
+- 서버 vLLM **0.28.0** (계획의 0.19.0 과 다름). `--max-logprobs 64`·`--logprobs-mode processed_logprobs` **필수** — 없을 때 실측: 선택지 39 개 칸 `400 max allowed: 20`, raw 모드라 top_logprobs 에 `<|im_end|>` 가 끼어 라벨 누락 9/123. 넣은 뒤 129/129 ok, 라벨 아닌 토큰 0, 뽑힌 토큰 129/129 라벨.
+- 인코더 규칙 `hf_chat_template_no_think` (로컬 토크나이저 `apply_chat_template(add_generation_prompt=True, enable_thinking=False)` 길이) == `usage.prompt_tokens` 129/129.
+- 상한 65,536 (입력+출력) → 입력 상한 65,535, 넘치면 **HTTP 400** `This model's maximum context length is 65536 tokens ...` 거부.
+- **보정 11 (예정, 다음 작업)**: `input_limit_response.status` 를 422 고정에서 모델별 값(400·422)으로 — B1 길이 거부가 400 이라 지금은 `error/http_400` 이 된다. `base_url` 은 네트워크마다 바뀌어 yaml 에 null 로 두고 실행 인자로 받는다 (⑥b cli `--base-url`).
+
 - pplx: 길이 초과 응답 형태(422 메시지) · 반올림 · 문자열 state 처리 · `choice` 가 확률표 argmax 인지. Clef(SGLang): `usage.input_tokens` · 길이 초과 동작. 각 서버의 `served_name`.
 - 모델별 인코더 규칙(래퍼 포함)·$L_m$·`fixed_tokens` 계산법·문자 위치 → 토큰 위치 변환.
 - B1 진입 조건 (계획 §2-3) · 서버별 안전 동시성.
@@ -625,3 +631,4 @@ PoolResult(group_ids: list[str], allocation: dict[str, int])          # data/poo
 - 판 3 보정 8 (10-13, ③b 명세 전 Claude): 항목 범위·순서 · 정답 등록표 모양(`options` 인자) · 펼치기 치환 규칙 · 셋별 state·정답·meta (KoSGD 발화·services 를 reader 에 · FunctionChat 정규화 문장·도구 선택지 · K-MHaS 이름 라벨 · KOTE 강등 · KorFin binding · KLUE 층) · `B1Config.user_template`. 실제 데이터 확인: FunctionChat 중복 문장 406 행 모두 slot · KorFin SRC 안 ASPECT 중복 0 · 카탈로그 두 목록 순서 일치.
 - 판 3 보정 9 (10-13, 작업 ④ 명세 전 Claude): client 는 한 번의 시도만 (재시도·terminal 은 ⑤) · AttemptResult · 전송 규칙(proxy 없음·리디렉트 안 따름·소켓 단위 600초) · B1 chat 본문·sha · B1 응답 읽기 · 기록 파일 줄·fsync·깨진 줄 규칙 (§5-5b).
 - 판 3 보정 10 (10-13, 남은 부분 설계 — Claude 초안 → Codex 아키텍처 검토 14건): 작업 순서 7단계(봉인 재계산을 위해 채점·임계값을 실행기 앞으로) · 진입 검사 순서 · resume 의 현재 요청 대조·예산 소진 · CallPlan 에 B1 대응표 · RequestOutcome.roles · Item 복원·dev 완료 검사 · fingerprint 와 archive 분리(archive.json) · 모델 yaml 재현 필드·t0 · 참조 구현 세 API·temperature 실경로 검사는 P0 · check-config · 파생 판 흐름 · compare 의 C4·두 bootstrap 모집단 · 입출력 소유 · 중단 위치별 검증.
+- 10-13 P0 B1 실측 (§10): vLLM 0.28.0·필수 옵션 2개·인코더 규칙·상한 65,536/400 거부 기록, 보정 11 예정(길이 거부 상태 코드 모델별·base_url 실행 인자).

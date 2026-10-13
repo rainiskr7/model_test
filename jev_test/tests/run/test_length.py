@@ -63,11 +63,28 @@ def test_token_end(end, expected):
     assert token_end([(0, 2), (2, 3), (3, 5)], end) == expected
 
 
-@pytest.mark.parametrize("offsets,end", [([(1, 3), (0, 1)], 1), ([(0, 2), (1, 3)], 2),
+@pytest.mark.parametrize("end,expected", [(0, 0), (1, 3), (2, 6)])
+def test_korean_byte_fragments(end, expected):
+    """'한글'의 각 글자를 공유하는 UTF-8 세 조각 중 마지막 조각 다음을 반환한다."""
+    assert token_end([(0, 1)] * 3 + [(1, 2)] * 3, end) == expected
+
+
+@pytest.mark.parametrize("offsets,end,expected", [
+    ([(0, 2), (1, 3)], 2, 2),
+    ([(0, 3), (1, 2), (1, 2), (2, 3)], 2, 3),
+    ([(0, 3), (1, 2)], 3, 1),
+    ([(0, 1), (1, 1)], 1, 1), ([], 0, 0)])
+def test_overlapping_offsets(offsets, end, expected):
+    """끝 위치가 감소해도 start 순서가 맞으면 허용하고 마지막 덮는 토큰을 고른다."""
+    assert token_end(offsets, end) == expected
+
+
+@pytest.mark.parametrize("offsets,end", [([(1, 3), (0, 1)], 1),
+    ([(0, 2), (1, 3), (0, 2)], 2),
     ([(0, 1), (2, 3)], 2), ([], 1), ([(0, 1)], 2), ([(-1, 1)], 0), ([(2, 1)], 0),
     ([(0, 1)], -1), ([(0, 1)], True)])
 def test_invalid_offsets(offsets, end):
-    """정렬·겹침·미포함·음수 입력을 조용히 잘못 측정하지 않는다."""
+    """start 감소·미포함·음수·뒤집힌 범위 입력을 조용히 잘못 측정하지 않는다."""
     with pytest.raises(ValueError):
         token_end(offsets, end)
 
