@@ -4,7 +4,7 @@
 
 판단 기준: [`MULTIMODAL_PUBLISH_CONTRACT.md`](MULTIMODAL_PUBLISH_CONTRACT.md).
 
-발행 가능 source **73** / 발행 불가 source **48** / 게이트 기록 없음 **0**.
+발행 가능 source **142** / 발행 불가 source **66** / 게이트 기록 없음 **0**.
 
 읽는 법:
 
@@ -18,6 +18,8 @@
 다음 서빙명은 `configs/model_identity.json`에 미매핑이다. 추측해서 합치지 않고 자기 이름을 canonical id로 사용한다.
 
 - `Qwen3.5_122B_A10B_GPTQ_Int4`
+- `google_diffusiongemma_26B_A4B_it`
+- `nvidia_nvidia_nemotron_3.5_lightning_30b_a3b_bf16`
 - `qwen3.5_27b`
 - `qwen_qwen3.5_27b_fp8`
 - `qwen_qwen3.5_35b_a3b`
@@ -25,6 +27,8 @@
 - `qwen_qwen3.6_27b`
 - `qwen_qwen3.6_27b_fp8`
 - `qwen_qwen3.6_35b_a3b_fp8`
+- `qwen_qwen3.8_27B_FP8`
+- `qwen_qwen3.8_27b`
 
 ## 헤드라인 — 벤치마크별 overall
 
@@ -32,34 +36,76 @@
 
 전체 protocol fingerprint: `sha256:163ee4cd4504e498b92b629ee195dcc50e1f652c88a23818ef86065113d28f87`
 
-| 모델 | 결과 | 무답률 | 상태 |
-|---|---|---:|---|
-| qwen_qwen3.6_35b_a3b_fp8 | 2290/2577 = 88.86% | 4.4% | LEGACY_REVALIDATED |
-| qwen_qwen3.5_35b_a3b_fp8 | 2233/2577 = 86.65% | 3.1% | LEGACY_REVALIDATED |
+| 모델 | 결과 (대표 런) | 반복 평균 (범위) | 무답률 | 상태 |
+|---|---|---|---:|---|
+| gemma_4_26b_a4b_it | 2323/2577 = 90.14% | 90.08% (89.76–90.34%) · k=3 | 2.3% | NATIVE |
+| qwen_qwen3.8_27b | 2311/2577 = 89.68% | 89.78% (89.68–89.87%) · k=3 | 4.2% | NATIVE |
+| qwen_qwen3.8_27B_FP8 | 2308/2577 = 89.56% | 89.74% (89.37–90.30%) · k=3 | 4.5% | NATIVE |
+| qwen_qwen3.6_35b_a3b_fp8 | 2290/2577 = 88.86% | — (k=1) | 4.4% | LEGACY_REVALIDATED |
+| qwen_qwen3.5_35b_a3b_fp8 | 2233/2577 = 86.65% | — (k=1) | 3.1% | LEGACY_REVALIDATED |
 
-> 각주: 기록된 repo commit이 런마다 다름(문항 집합은 동일): `3104bffac9fe`, `9219dbd6b1f7`.
+> 각주: 기록된 repo commit이 런마다 다름(문항 집합은 동일): `3104bffac9fe`, `9219dbd6b1f7`, `c273302ade2c`.
 
+> 각주: `gemma_4_26b_a4b_it` — 상류 parser와 76행 불일치(우리 무답 60, 다른 선택지 16) — 독립 재채점 점수임.
 > 각주: `qwen_qwen3.5_35b_a3b_fp8` — 상류 parser와 91행 불일치(우리 무답 80, 다른 선택지 11) — 독립 재채점 점수임.
 > 각주: `qwen_qwen3.6_35b_a3b_fp8` — 상류 parser와 132행 불일치(우리 무답 113, 다른 선택지 19) — 독립 재채점 점수임.
+> 각주: `qwen_qwen3.8_27B_FP8` — 상류 parser와 124행 불일치(우리 무답 115, 다른 선택지 9) — 독립 재채점 점수임.
+> 각주: `qwen_qwen3.8_27b` — 상류 parser와 114행 불일치(우리 무답 109, 다른 선택지 5) — 독립 재채점 점수임.
 
 > 재현성: `qwen_qwen3.5_35b_a3b_fp8` — 이 코호트에 런 1개. 비교 대상 없음 — **UNVERIFIED**(발행은 유지; 산출물·채점 계약은 유효)
 > 재현성: `qwen_qwen3.6_35b_a3b_fp8` — 이 코호트에 런 1개. 비교 대상 없음 — **UNVERIFIED**(발행은 유지; 산출물·채점 계약은 유효)
+> 재현성: `gemma_4_26b_a4b_it` — 이 코호트에 런 3개. `repeatability_observed` · 3회 평균 90.08% (89.76–90.34%) · 관측 범위 2313–2328 (fraction) · 산포 15 / 정책 허용 26 — **흔들림 허용 범위 안**
+>   **주의:** 항목 벡터가 없어 값이 같아도 서로 다른 문항을 맞혔는지 알 수 없다. 이 관측 범위는 실제 불안정의 **하한**이며, exact-match 축보다 약한 근거다.
+>   `20260830_095733_r1`  2313/2577 = 89.76% (기준)
+>   `20260830_095733_r2`  2328/2577 = 90.34%
+>   `20260927_230250_r3`  2323/2577 = 90.14% (대표)
+> 재현성: `qwen_qwen3.8_27B_FP8` — 이 코호트에 런 3개. `repeatability_observed` · 3회 평균 89.74% (89.37–90.30%) · 관측 범위 2303–2327 (fraction) · 산포 24 / 정책 허용 26 — **흔들림 허용 범위 안**
+>   **주의:** 항목 벡터가 없어 값이 같아도 서로 다른 문항을 맞혔는지 알 수 없다. 이 관측 범위는 실제 불안정의 **하한**이며, exact-match 축보다 약한 근거다.
+>   `20261003_171917_r1`  2303/2577 = 89.37% (기준)
+>   `20261003_171917_r2`  2327/2577 = 90.30%
+>   `20261003_171917_r3`  2308/2577 = 89.56% (대표)
+> 재현성: `qwen_qwen3.8_27b` — 이 코호트에 런 3개. `repeatability_observed` · 3회 평균 89.78% (89.68–89.87%) · 관측 범위 2311–2316 (fraction) · 산포 5 / 정책 허용 26 — **흔들림 허용 범위 안**
+>   **주의:** 항목 벡터가 없어 값이 같아도 서로 다른 문항을 맞혔는지 알 수 없다. 이 관측 범위는 실제 불안정의 **하한**이며, exact-match 축보다 약한 근거다.
+>   `20260927_232851_r1`  2316/2577 = 89.87% (기준)
+>   `20260927_232851_r2`  2314/2577 = 89.79%
+>   `20260927_232851_r3`  2311/2577 = 89.68% (대표)
+> 모델 간 우열 — `KRETA` (fraction)
+>   `gemma_4_26b_a4b_it` vs `qwen_qwen3.8_27B_FP8` — **발행 불가**: 불안정 예산이 겹친다 (2313.0–2328.0 vs 2303.0–2327.0) — 차이가 관측된 흔들림으로 설명된다
+>   `gemma_4_26b_a4b_it` vs `qwen_qwen3.8_27b` — **발행 불가**: 불안정 예산이 겹친다 (2313.0–2328.0 vs 2311.0–2316.0) — 차이가 관측된 흔들림으로 설명된다
+>   `qwen_qwen3.8_27B_FP8` vs `qwen_qwen3.8_27b` — **발행 불가**: 불안정 예산이 겹친다 (2303.0–2327.0 vs 2311.0–2316.0) — 차이가 관측된 흔들림으로 설명된다
+>   **주의:** 집계 축이라 항목 벡터가 없다. 값이 같아도 서로 다른 문항을 맞혔는지 알 수 없으므로 이 판정은 exact-match 축보다 약한 근거다. 가설검정도 신뢰구간도 아니다.
+
+### KRETA — default, 2577문항 — protocol `17225b3254b1`
+
+전체 protocol fingerprint: `sha256:17225b3254b1d8278061c003ee9810bbcb1117f9c57d52f51b9bb1575b6b84ed`
+
+| 모델 | 결과 (대표 런) | 반복 평균 (범위) | 무답률 | 상태 |
+|---|---|---|---:|---|
+| google_diffusiongemma_26B_A4B_it | 2156/2577 = 83.66% | 83.73% (83.66–83.82%) · k=3 | 1.0% | NATIVE |
+
+> 각주: `google_diffusiongemma_26B_A4B_it` — 상류 parser와 27행 불일치(우리 무답 26, 다른 선택지 1) — 독립 재채점 점수임.
+
+> 재현성: `google_diffusiongemma_26B_A4B_it` — 이 코호트에 런 3개. `repeatability_observed` · 3회 평균 83.73% (83.66–83.82%) · 관측 범위 2156–2160 (fraction) · 산포 4 / 정책 허용 26 — **흔들림 허용 범위 안**
+>   **주의:** 항목 벡터가 없어 값이 같아도 서로 다른 문항을 맞혔는지 알 수 없다. 이 관측 범위는 실제 불안정의 **하한**이며, exact-match 축보다 약한 근거다.
+>   `20260830_222550_r2`  2160/2577 = 83.82% (기준)
+>   `20260907_001502_r3`  2157/2577 = 83.70%
+>   `20260830_222550_r1`  2156/2577 = 83.66% (대표)
 
 ### KRETA — direct, 2577문항 — protocol `8097cc67ee15`
 
 전체 protocol fingerprint: `sha256:8097cc67ee15fcb067ad01034e481ca525e36400a8bb9fefa727476e80639c48`
 
-| 모델 | 결과 | 무답률 | 상태 |
-|---|---|---:|---|
-| gemma_4_31b_it | 2030/2577 = 78.77% | 0.1% | LEGACY_REVALIDATED |
-| gemma_4_26b_a4b_it | 1860/2577 = 72.18% | 0.4% | LEGACY_REVALIDATED |
-| qwen3.5_27b | 1839/2577 = 71.36% | 1.1% | LEGACY_REVALIDATED |
-| qwen_qwen3.5_27b_fp8 | 1821/2577 = 70.66% | 1.1% | LEGACY_REVALIDATED |
-| qwen_qwen3.6_27b_fp8 | 1819/2577 = 70.59% | 0.3% | LEGACY_REVALIDATED |
-| qwen_qwen3.5_35b_a3b | 1769/2577 = 68.65% | 1.3% | LEGACY_REVALIDATED |
-| qwen3.6-35b-a3b | 1731/2577 = 67.17% | 0.0% | LEGACY_REVALIDATED |
-| qwen_qwen3.6_27b | 1725/2577 = 66.94% | 2.8% | LEGACY_REVALIDATED |
-| Qwen3.5_122B_A10B_GPTQ_Int4 | 1494/2577 = 57.97% | 21.1% | LEGACY_REVALIDATED |
+| 모델 | 결과 (대표 런) | 반복 평균 (범위) | 무답률 | 상태 |
+|---|---|---|---:|---|
+| gemma_4_31b_it | 2030/2577 = 78.77% | — (k=1) | 0.1% | LEGACY_REVALIDATED |
+| gemma_4_26b_a4b_it | 1860/2577 = 72.18% | — (k=1) | 0.4% | LEGACY_REVALIDATED |
+| qwen3.5_27b | 1839/2577 = 71.36% | — (k=1) | 1.1% | LEGACY_REVALIDATED |
+| qwen_qwen3.5_27b_fp8 | 1821/2577 = 70.66% | — (k=1) | 1.1% | LEGACY_REVALIDATED |
+| qwen_qwen3.6_27b_fp8 | 1819/2577 = 70.59% | — (k=1) | 0.3% | LEGACY_REVALIDATED |
+| qwen_qwen3.5_35b_a3b | 1769/2577 = 68.65% | — (k=1) | 1.3% | LEGACY_REVALIDATED |
+| qwen3.6-35b-a3b | 1731/2577 = 67.17% | — (k=1) | 0.0% | LEGACY_REVALIDATED |
+| qwen_qwen3.6_27b | 1725/2577 = 66.94% | — (k=1) | 2.8% | LEGACY_REVALIDATED |
+| Qwen3.5_122B_A10B_GPTQ_Int4 | 1494/2577 = 57.97% | — (k=1) | 21.1% | LEGACY_REVALIDATED |
 
 > 각주: 기록된 repo commit이 런마다 다름(문항 집합은 동일): `736779d467f6`, `7c0155d6bfa1`, `aad99f4759b9`, `c273302ade2c`, `ffe124392283`.
 
@@ -88,33 +134,51 @@
 
 전체 protocol fingerprint: `sha256:54e6a6c9ad08ec4b7ead056833d60bf04373ba27df8ce42286dea9a908c30a2f`
 
-| 모델 | 결과 | 상태 |
-|---|---|---|
-| gemma_4_26b_a4b_it | 3758/4329 = 86.81% | LEGACY_REVALIDATED |
+| 모델 | 결과 (대표 런) | 반복 평균 (범위) | 상태 |
+|---|---|---|---|
+| gemma_4_26b_a4b_it | 3758/4329 = 86.81% | — (k=1) | LEGACY_REVALIDATED |
 
 > 중복 접기: `gemma_4_26b_a4b_it` — `results/gemma_4_26b_a4b_it/20260503_122218/vision/multimodal/k_mmbench` 유지; 동일 artifact role/SHA-256·측정 payload 복사본 `results/gemma_4_26b_a4b_it.bad/20260503_122218/vision/multimodal/k_mmbench` 접음.
 > 재현성: `gemma_4_26b_a4b_it` — 이 코호트에 런 1개. 비교 대상 없음 — **UNVERIFIED**(발행은 유지; 산출물·채점 계약은 유효)
+
+### K-MMBench — full, 4329문항 — protocol `664089f27792`
+
+전체 protocol fingerprint: `sha256:664089f27792bdf5a50df380e0bd0e91aad47e56c61390657d7712000c0d2341`
+
+| 모델 | 결과 (대표 런) | 반복 평균 (범위) | 상태 |
+|---|---|---|---|
+| google_diffusiongemma_26B_A4B_it | 3745/4329 = 86.51% | 86.44% (86.26–86.56%) · k=3 | NATIVE |
+
+> 재현성: `google_diffusiongemma_26B_A4B_it` — 이 코호트에 런 3개. `repeatability_observed` · 3회 평균 86.44% (86.26–86.56%) · 관측 범위 3734–3747 (fraction) · 산포 13 / 정책 허용 44 — **흔들림 허용 범위 안**
+>   **주의:** 항목 벡터가 없어 값이 같아도 서로 다른 문항을 맞혔는지 알 수 없다. 이 관측 범위는 실제 불안정의 **하한**이며, exact-match 축보다 약한 근거다.
+>   `20260830_222550_r1`  3747/4329 = 86.56% (기준)
+>   `20260830_222550_r2`  3734/4329 = 86.26%
+>   `20260907_001502_r3`  3745/4329 = 86.51% (대표)
+>   **주의:** `20260830_222550_r1` 의 `split` 는 산출물에 기록된 값이 아니라 러너 규약에서 복원한 추론값이다. 요청 규약이 같았다는 증명은 아니다.
+>   **주의:** `20260830_222550_r2` 의 `split` 는 산출물에 기록된 값이 아니라 러너 규약에서 복원한 추론값이다. 요청 규약이 같았다는 증명은 아니다.
+>   **주의:** `20260907_001502_r3` 의 `split` 는 산출물에 기록된 값이 아니라 러너 규약에서 복원한 추론값이다. 요청 규약이 같았다는 증명은 아니다.
 
 ### K-MMBench — full, 4329문항 — protocol `aa74d55ecd55`
 
 전체 protocol fingerprint: `sha256:aa74d55ecd55e431459c1f5f572195c5b4e516d0a9462dd128f0cd12e4064a30`
 
-| 모델 | 결과 | 상태 |
-|---|---|---|
-| qwen3.6-35b-a3b | 3907/4329 = 90.25% | LEGACY_REVALIDATED |
-| gemma_4_26b_a4b_it | 3776/4329 = 87.23% | LEGACY_REVALIDATED |
-| qwen3.5_27b | 3701/4329 = 85.49% | LEGACY_REVALIDATED |
-| qwen_qwen3.5_27b_fp8 | 3688/4329 = 85.19% | LEGACY_REVALIDATED |
-| qwen_qwen3.6_27b | 3610/4329 = 83.39% | LEGACY_REVALIDATED |
-| qwen_qwen3.6_27b_fp8 | 3608/4329 = 83.34% | LEGACY_REVALIDATED |
-| qwen_qwen3.6_35b_a3b_fp8 | 3584/4329 = 82.79% | LEGACY_REVALIDATED |
-| Qwen3.5_122B_A10B_GPTQ_Int4 | 3489/4329 = 80.60% | LEGACY_REVALIDATED |
-| qwen_qwen3.5_35b_a3b_fp8 | 3425/4329 = 79.12% | LEGACY_REVALIDATED |
-| qwen_qwen3.5_35b_a3b | 3395/4329 = 78.42% | LEGACY_REVALIDATED |
+| 모델 | 결과 (대표 런) | 반복 평균 (범위) | 상태 |
+|---|---|---|---|
+| qwen3.6-35b-a3b | 3907/4329 = 90.25% | — (k=1) | LEGACY_REVALIDATED |
+| gemma_4_26b_a4b_it | 3772/4329 = 87.13% | 87.19% (87.13–87.25%) · k=4 | NATIVE |
+| qwen3.5_27b | 3701/4329 = 85.49% | — (k=1) | LEGACY_REVALIDATED |
+| qwen_qwen3.5_27b_fp8 | 3688/4329 = 85.19% | — (k=1) | LEGACY_REVALIDATED |
+| qwen_qwen3.8_27B_FP8 | 3661/4329 = 84.57% | 84.57% (84.55–84.59%) · k=3 | NATIVE |
+| qwen_qwen3.8_27b | 3660/4329 = 84.55% | 84.54% (84.50–84.57%) · k=3 | NATIVE |
+| qwen_qwen3.6_27b | 3610/4329 = 83.39% | — (k=1) | LEGACY_REVALIDATED |
+| qwen_qwen3.6_27b_fp8 | 3608/4329 = 83.34% | — (k=1) | LEGACY_REVALIDATED |
+| qwen_qwen3.6_35b_a3b_fp8 | 3584/4329 = 82.79% | — (k=1) | LEGACY_REVALIDATED |
+| Qwen3.5_122B_A10B_GPTQ_Int4 | 3489/4329 = 80.60% | — (k=1) | LEGACY_REVALIDATED |
+| qwen_qwen3.5_35b_a3b_fp8 | 3425/4329 = 79.12% | — (k=1) | LEGACY_REVALIDATED |
+| qwen_qwen3.5_35b_a3b | 3395/4329 = 78.42% | — (k=1) | LEGACY_REVALIDATED |
 
 > 중복 접기: `gemma_4_26b_a4b_it` — `results/gemma_4_26b_a4b_it/20260505_124246/vision/multimodal/k_mmbench` 유지; 동일 artifact role/SHA-256·측정 payload 복사본 `results/google_gemma_4_26B_A4B_it/20260505_124246/vision/multimodal/k_mmbench`, `results/gemma_4_26b_a4b_it.bad/20260505_124246/vision/multimodal/k_mmbench`, `results/google_gemma_4_26B_A4B_it/20260505_124246.bad/vision/multimodal/k_mmbench` 접음.
 > 재현성: `Qwen3.5_122B_A10B_GPTQ_Int4` — 이 코호트에 런 1개. 비교 대상 없음 — **UNVERIFIED**(발행은 유지; 산출물·채점 계약은 유효)
-> 재현성: `gemma_4_26b_a4b_it` — 이 코호트에 런 1개. 비교 대상 없음 — **UNVERIFIED**(발행은 유지; 산출물·채점 계약은 유효)
 > 재현성: `qwen3.5_27b` — 이 코호트에 런 1개. 비교 대상 없음 — **UNVERIFIED**(발행은 유지; 산출물·채점 계약은 유효)
 > 재현성: `qwen3.6-35b-a3b` — 이 코호트에 런 1개. 비교 대상 없음 — **UNVERIFIED**(발행은 유지; 산출물·채점 계약은 유효)
 > 재현성: `qwen_qwen3.5_27b_fp8` — 이 코호트에 런 1개. 비교 대상 없음 — **UNVERIFIED**(발행은 유지; 산출물·채점 계약은 유효)
@@ -123,18 +187,50 @@
 > 재현성: `qwen_qwen3.6_27b` — 이 코호트에 런 1개. 비교 대상 없음 — **UNVERIFIED**(발행은 유지; 산출물·채점 계약은 유효)
 > 재현성: `qwen_qwen3.6_27b_fp8` — 이 코호트에 런 1개. 비교 대상 없음 — **UNVERIFIED**(발행은 유지; 산출물·채점 계약은 유효)
 > 재현성: `qwen_qwen3.6_35b_a3b_fp8` — 이 코호트에 런 1개. 비교 대상 없음 — **UNVERIFIED**(발행은 유지; 산출물·채점 계약은 유효)
+> 재현성: `gemma_4_26b_a4b_it` — 이 코호트에 런 4개. `repeatability_observed` · 4회 평균 87.19% (87.13–87.25%) · 관측 범위 3772–3777 (fraction) · 산포 5 / 정책 허용 44 — **흔들림 허용 범위 안**
+>   **주의:** 항목 벡터가 없어 값이 같아도 서로 다른 문항을 맞혔는지 알 수 없다. 이 관측 범위는 실제 불안정의 **하한**이며, exact-match 축보다 약한 근거다.
+>   `20260505_124246`  3776/4329 = 87.23% (기준)
+>   `20260830_095733_r1`  3773/4329 = 87.16%
+>   `20260830_095733_r2`  3777/4329 = 87.25%
+>   `20260927_230250_r3`  3772/4329 = 87.13% (대표)
+>   **주의:** `20260505_124246` 의 `split` 는 산출물에 기록된 값이 아니라 러너 규약에서 복원한 추론값이다. 요청 규약이 같았다는 증명은 아니다.
+>   **주의:** `20260830_095733_r1` 의 `split` 는 산출물에 기록된 값이 아니라 러너 규약에서 복원한 추론값이다. 요청 규약이 같았다는 증명은 아니다.
+>   **주의:** `20260830_095733_r2` 의 `split` 는 산출물에 기록된 값이 아니라 러너 규약에서 복원한 추론값이다. 요청 규약이 같았다는 증명은 아니다.
+>   **주의:** `20260927_230250_r3` 의 `split` 는 산출물에 기록된 값이 아니라 러너 규약에서 복원한 추론값이다. 요청 규약이 같았다는 증명은 아니다.
+> 재현성: `qwen_qwen3.8_27B_FP8` — 이 코호트에 런 3개. `repeatability_observed` · 3회 평균 84.57% (84.55–84.59%) · 관측 범위 3660–3662 (fraction) · 산포 2 / 정책 허용 44 — **흔들림 허용 범위 안**
+>   **주의:** 항목 벡터가 없어 값이 같아도 서로 다른 문항을 맞혔는지 알 수 없다. 이 관측 범위는 실제 불안정의 **하한**이며, exact-match 축보다 약한 근거다.
+>   `20261003_171917_r1`  3662/4329 = 84.59% (기준)
+>   `20261003_171917_r2`  3660/4329 = 84.55%
+>   `20261003_171917_r3`  3661/4329 = 84.57% (대표)
+>   **주의:** `20261003_171917_r1` 의 `split` 는 산출물에 기록된 값이 아니라 러너 규약에서 복원한 추론값이다. 요청 규약이 같았다는 증명은 아니다.
+>   **주의:** `20261003_171917_r2` 의 `split` 는 산출물에 기록된 값이 아니라 러너 규약에서 복원한 추론값이다. 요청 규약이 같았다는 증명은 아니다.
+>   **주의:** `20261003_171917_r3` 의 `split` 는 산출물에 기록된 값이 아니라 러너 규약에서 복원한 추론값이다. 요청 규약이 같았다는 증명은 아니다.
+> 재현성: `qwen_qwen3.8_27b` — 이 코호트에 런 3개. `repeatability_observed` · 3회 평균 84.54% (84.50–84.57%) · 관측 범위 3658–3661 (fraction) · 산포 3 / 정책 허용 44 — **흔들림 허용 범위 안**
+>   **주의:** 항목 벡터가 없어 값이 같아도 서로 다른 문항을 맞혔는지 알 수 없다. 이 관측 범위는 실제 불안정의 **하한**이며, exact-match 축보다 약한 근거다.
+>   `20260927_232851_r1`  3658/4329 = 84.50% (기준)
+>   `20260927_232851_r2`  3661/4329 = 84.57%
+>   `20260927_232851_r3`  3660/4329 = 84.55% (대표)
+>   **주의:** `20260927_232851_r1` 의 `split` 는 산출물에 기록된 값이 아니라 러너 규약에서 복원한 추론값이다. 요청 규약이 같았다는 증명은 아니다.
+>   **주의:** `20260927_232851_r2` 의 `split` 는 산출물에 기록된 값이 아니라 러너 규약에서 복원한 추론값이다. 요청 규약이 같았다는 증명은 아니다.
+>   **주의:** `20260927_232851_r3` 의 `split` 는 산출물에 기록된 값이 아니라 러너 규약에서 복원한 추론값이다. 요청 규약이 같았다는 증명은 아니다.
+> 모델 간 우열 — `K-MMBench` (fraction)
+>   `gemma_4_26b_a4b_it` 우세 — 불안정 예산이 겹치지 않는다 (3772.0–3777.0 vs 3660.0–3662.0). 통계적 유의성이 아니라, 이 데이터로 반박되지 않는다는 뜻이다
+>   `gemma_4_26b_a4b_it` 우세 — 불안정 예산이 겹치지 않는다 (3772.0–3777.0 vs 3658.0–3661.0). 통계적 유의성이 아니라, 이 데이터로 반박되지 않는다는 뜻이다
+>   `qwen_qwen3.8_27B_FP8` vs `qwen_qwen3.8_27b` — **발행 불가**: 불안정 예산이 겹친다 (3660.0–3662.0 vs 3658.0–3661.0) — 차이가 관측된 흔들림으로 설명된다
+>   **주의:** 집계 축이라 항목 벡터가 없다. 값이 같아도 서로 다른 문항을 맞혔는지 알 수 없으므로 이 판정은 exact-match 축보다 약한 근거다. 가설검정도 신뢰구간도 아니다.
 
 ### K-DTCBench — full, 240문항 — protocol `0d96dcdd622f`
 
 전체 protocol fingerprint: `sha256:0d96dcdd622f6aad9fbf3619c30e03be87f0be3af65202af7d8d299cfa5124e6`
 
-| 모델 | 결과 | 상태 |
-|---|---|---|
-| gemma_4_26b_a4b_it | 205/240 = 85.42% | LEGACY_REVALIDATED |
+| 모델 | 결과 (대표 런) | 반복 평균 (범위) | 상태 |
+|---|---|---|---|
+| gemma_4_26b_a4b_it | 205/240 = 85.42% | 85.00% (84.58–85.42%) · k=2 | LEGACY_REVALIDATED |
 
 > 중복 접기: `gemma_4_26b_a4b_it` — `results/gemma_4_26b_a4b_it/20260503_120151/vision/multimodal/k_dtcbench` 유지; 동일 artifact role/SHA-256·측정 payload 복사본 `results/gemma_4_26b_a4b_it.bad/20260503_120151/vision/multimodal/k_dtcbench` 접음.
 > 중복 접기: `gemma_4_26b_a4b_it` — `results/gemma_4_26b_a4b_it/20260503_120309/vision/multimodal/k_dtcbench` 유지; 동일 artifact role/SHA-256·측정 payload 복사본 `results/gemma_4_26b_a4b_it.bad/20260503_120309/vision/multimodal/k_dtcbench` 접음.
-> 재현성: `gemma_4_26b_a4b_it` — 이 코호트에 런 2개. 코호트 산포 2건 (0.83%p), 허용 3건 — **PASS**
+> 재현성: `gemma_4_26b_a4b_it` — 이 코호트에 런 2개. `snapshot` · 2회 평균 85.00% (84.58–85.42%) · 관측 범위 203–205 (fraction) · 산포 2 / 정책 허용 3 — **흔들림 허용 범위 안**
+>   **주의:** 항목 벡터가 없어 값이 같아도 서로 다른 문항을 맞혔는지 알 수 없다. 이 관측 범위는 실제 불안정의 **하한**이며, exact-match 축보다 약한 근거다.
 >   `20260503_120151`  203/240 = 84.58% (기준)
 >   `20260503_120309`  205/240 = 85.42% (대표)
 >   **주의:** `20260503_120151` 의 `split` 는 산출물에 기록된 값이 아니라 러너 규약에서 복원한 추론값이다. 요청 규약이 같았다는 증명은 아니다.
@@ -144,17 +240,19 @@
 
 전체 protocol fingerprint: `sha256:a3fa0d693a36a437873ca73a1aa224e76ecd220dc0c4fe1c88973ee13b6e8d6b`
 
-| 모델 | 결과 | 상태 |
-|---|---|---|
-| qwen3.6-35b-a3b | 214/240 = 89.17% | LEGACY_REVALIDATED |
-| gemma_4_26b_a4b_it | 206/240 = 85.83% | NATIVE |
-| qwen3.5_27b | 196/240 = 81.67% | LEGACY_REVALIDATED |
-| qwen_qwen3.6_35b_a3b_fp8 | 196/240 = 81.67% | LEGACY_REVALIDATED |
-| qwen_qwen3.5_27b_fp8 | 195/240 = 81.25% | LEGACY_REVALIDATED |
-| Qwen3.5_122B_A10B_GPTQ_Int4 | 185/240 = 77.08% | LEGACY_REVALIDATED |
-| qwen_qwen3.6_27b | 182/240 = 75.83% | LEGACY_REVALIDATED |
-| qwen_qwen3.5_35b_a3b | 173/240 = 72.08% | LEGACY_REVALIDATED |
-| qwen_qwen3.5_35b_a3b_fp8 | 172/240 = 71.67% | LEGACY_REVALIDATED |
+| 모델 | 결과 (대표 런) | 반복 평균 (범위) | 상태 |
+|---|---|---|---|
+| qwen3.6-35b-a3b | 214/240 = 89.17% | — (k=1) | LEGACY_REVALIDATED |
+| gemma_4_26b_a4b_it | 204/240 = 85.00% | 85.75% (85.00–86.25%) · k=5 | NATIVE |
+| qwen3.5_27b | 196/240 = 81.67% | — (k=1) | LEGACY_REVALIDATED |
+| qwen_qwen3.6_35b_a3b_fp8 | 196/240 = 81.67% | — (k=1) | LEGACY_REVALIDATED |
+| qwen_qwen3.5_27b_fp8 | 195/240 = 81.25% | — (k=1) | LEGACY_REVALIDATED |
+| Qwen3.5_122B_A10B_GPTQ_Int4 | 185/240 = 77.08% | — (k=1) | LEGACY_REVALIDATED |
+| qwen_qwen3.6_27b | 182/240 = 75.83% | — (k=1) | LEGACY_REVALIDATED |
+| qwen_qwen3.8_27B_FP8 | 180/240 = 75.00% | 75.00% (75.00–75.00%) · k=3 | NATIVE |
+| qwen_qwen3.8_27b | 178/240 = 74.17% | 73.89% (73.33–74.17%) · k=3 | NATIVE |
+| qwen_qwen3.5_35b_a3b | 173/240 = 72.08% | — (k=1) | LEGACY_REVALIDATED |
+| qwen_qwen3.5_35b_a3b_fp8 | 172/240 = 71.67% | — (k=1) | LEGACY_REVALIDATED |
 
 > 중복 접기: `gemma_4_26b_a4b_it` — `results/gemma_4_26b_a4b_it/20260505_124246/vision/multimodal/k_dtcbench` 유지; 동일 artifact role/SHA-256·측정 payload 복사본 `results/google_gemma_4_26B_A4B_it/20260505_124246/vision/multimodal/k_dtcbench`, `results/gemma_4_26b_a4b_it.bad/20260505_124246/vision/multimodal/k_dtcbench`, `results/google_gemma_4_26B_A4B_it/20260505_124246.bad/vision/multimodal/k_dtcbench` 접음.
 > 재현성: `Qwen3.5_122B_A10B_GPTQ_Int4` — 이 코호트에 런 1개. 비교 대상 없음 — **UNVERIFIED**(발행은 유지; 산출물·채점 계약은 유효)
@@ -165,29 +263,90 @@
 > 재현성: `qwen_qwen3.5_35b_a3b_fp8` — 이 코호트에 런 1개. 비교 대상 없음 — **UNVERIFIED**(발행은 유지; 산출물·채점 계약은 유효)
 > 재현성: `qwen_qwen3.6_27b` — 이 코호트에 런 1개. 비교 대상 없음 — **UNVERIFIED**(발행은 유지; 산출물·채점 계약은 유효)
 > 재현성: `qwen_qwen3.6_35b_a3b_fp8` — 이 코호트에 런 1개. 비교 대상 없음 — **UNVERIFIED**(발행은 유지; 산출물·채점 계약은 유효)
-> 재현성: `gemma_4_26b_a4b_it` — 이 코호트에 런 2개. 코호트 산포 1건 (0.42%p), 허용 3건 — **PASS**
+> 재현성: `gemma_4_26b_a4b_it` — 이 코호트에 런 5개. `repeatability_observed` · 5회 평균 85.75% (85.00–86.25%) · 관측 범위 204–207 (fraction) · 산포 3 / 정책 허용 3 — **흔들림 허용 범위 안**
+>   **주의:** 항목 벡터가 없어 값이 같아도 서로 다른 문항을 맞혔는지 알 수 없다. 이 관측 범위는 실제 불안정의 **하한**이며, exact-match 축보다 약한 근거다.
 >   `20260505_124246`  207/240 = 86.25% (기준)
->   `v2b_20260824`  206/240 = 85.83% (대표)
+>   `v2b_20260824`  206/240 = 85.83%
+>   `20260830_095733_r1`  206/240 = 85.83%
+>   `20260830_095733_r2`  206/240 = 85.83%
+>   `20260927_230250_r3`  204/240 = 85.00% (대표)
 >   **주의:** `20260505_124246` 의 `split` 는 산출물에 기록된 값이 아니라 러너 규약에서 복원한 추론값이다. 요청 규약이 같았다는 증명은 아니다.
 >   **주의:** `v2b_20260824` 의 `split` 는 산출물에 기록된 값이 아니라 러너 규약에서 복원한 추론값이다. 요청 규약이 같았다는 증명은 아니다.
+>   **주의:** `20260830_095733_r1` 의 `split` 는 산출물에 기록된 값이 아니라 러너 규약에서 복원한 추론값이다. 요청 규약이 같았다는 증명은 아니다.
+>   **주의:** `20260830_095733_r2` 의 `split` 는 산출물에 기록된 값이 아니라 러너 규약에서 복원한 추론값이다. 요청 규약이 같았다는 증명은 아니다.
+>   **주의:** `20260927_230250_r3` 의 `split` 는 산출물에 기록된 값이 아니라 러너 규약에서 복원한 추론값이다. 요청 규약이 같았다는 증명은 아니다.
+> 재현성: `qwen_qwen3.8_27B_FP8` — 이 코호트에 런 3개. `repeatability_observed` · 3회 평균 75.00% (75.00–75.00%) · 관측 범위 180–180 (fraction) · 산포 0 / 정책 허용 3 — **흔들림 허용 범위 안**
+>   **주의:** 항목 벡터가 없어 값이 같아도 서로 다른 문항을 맞혔는지 알 수 없다. 이 관측 범위는 실제 불안정의 **하한**이며, exact-match 축보다 약한 근거다.
+>   `20261003_171917_r1`  180/240 = 75.00% (기준)
+>   `20261003_171917_r2`  180/240 = 75.00%
+>   `20261003_171917_r3`  180/240 = 75.00% (대표)
+>   **주의:** `20261003_171917_r1` 의 `split` 는 산출물에 기록된 값이 아니라 러너 규약에서 복원한 추론값이다. 요청 규약이 같았다는 증명은 아니다.
+>   **주의:** `20261003_171917_r2` 의 `split` 는 산출물에 기록된 값이 아니라 러너 규약에서 복원한 추론값이다. 요청 규약이 같았다는 증명은 아니다.
+>   **주의:** `20261003_171917_r3` 의 `split` 는 산출물에 기록된 값이 아니라 러너 규약에서 복원한 추론값이다. 요청 규약이 같았다는 증명은 아니다.
+> 재현성: `qwen_qwen3.8_27b` — 이 코호트에 런 3개. `repeatability_observed` · 3회 평균 73.89% (73.33–74.17%) · 관측 범위 176–178 (fraction) · 산포 2 / 정책 허용 3 — **흔들림 허용 범위 안**
+>   **주의:** 항목 벡터가 없어 값이 같아도 서로 다른 문항을 맞혔는지 알 수 없다. 이 관측 범위는 실제 불안정의 **하한**이며, exact-match 축보다 약한 근거다.
+>   `20260927_232851_r1`  176/240 = 73.33% (기준)
+>   `20260927_232851_r2`  178/240 = 74.17%
+>   `20260927_232851_r3`  178/240 = 74.17% (대표)
+>   **주의:** `20260927_232851_r1` 의 `split` 는 산출물에 기록된 값이 아니라 러너 규약에서 복원한 추론값이다. 요청 규약이 같았다는 증명은 아니다.
+>   **주의:** `20260927_232851_r2` 의 `split` 는 산출물에 기록된 값이 아니라 러너 규약에서 복원한 추론값이다. 요청 규약이 같았다는 증명은 아니다.
+>   **주의:** `20260927_232851_r3` 의 `split` 는 산출물에 기록된 값이 아니라 러너 규약에서 복원한 추론값이다. 요청 규약이 같았다는 증명은 아니다.
+> 모델 간 우열 — `K-DTCBench` (fraction)
+>   `gemma_4_26b_a4b_it` 우세 — 불안정 예산이 겹치지 않는다 (204.0–207.0 vs 180.0–180.0). 통계적 유의성이 아니라, 이 데이터로 반박되지 않는다는 뜻이다
+>   `gemma_4_26b_a4b_it` 우세 — 불안정 예산이 겹치지 않는다 (204.0–207.0 vs 176.0–178.0). 통계적 유의성이 아니라, 이 데이터로 반박되지 않는다는 뜻이다
+>   `qwen_qwen3.8_27B_FP8` 우세 — 불안정 예산이 겹치지 않는다 (180.0–180.0 vs 176.0–178.0). 통계적 유의성이 아니라, 이 데이터로 반박되지 않는다는 뜻이다
+>   **주의:** 집계 축이라 항목 벡터가 없다. 값이 같아도 서로 다른 문항을 맞혔는지 알 수 없으므로 이 판정은 exact-match 축보다 약한 근거다. 가설검정도 신뢰구간도 아니다.
+
+### K-DTCBench — full, 240문항 — protocol `a8e50b0990bb`
+
+전체 protocol fingerprint: `sha256:a8e50b0990bb322cad1ca860efd99f48293c3d86f215dd77258108a563f0ebc9`
+
+| 모델 | 결과 (대표 런) | 반복 평균 (범위) | 상태 |
+|---|---|---|---|
+| google_diffusiongemma_26B_A4B_it | 190/240 = 79.17% | 78.89% (77.50–80.00%) · k=3 | NATIVE |
+
+> 재현성: `google_diffusiongemma_26B_A4B_it` — 이 코호트에 런 3개. `repeatability_observed` · 3회 평균 78.89% (77.50–80.00%) · 관측 범위 186–192 (fraction) · 산포 6 / 정책 허용 3 — **흔들림 큼 — 정책 허용 초과. 점수가 낮다는 뜻이 아니라 단일 런 수치를 믿기 어렵다는 뜻**
+>   **주의:** 항목 벡터가 없어 값이 같아도 서로 다른 문항을 맞혔는지 알 수 없다. 이 관측 범위는 실제 불안정의 **하한**이며, exact-match 축보다 약한 근거다.
+>   `20260830_222550_r1`  186/240 = 77.50% (기준)
+>   `20260830_222550_r2`  192/240 = 80.00%
+>   `20260907_001502_r3`  190/240 = 79.17% (대표)
+>   **주의:** `20260830_222550_r1` 의 `split` 는 산출물에 기록된 값이 아니라 러너 규약에서 복원한 추론값이다. 요청 규약이 같았다는 증명은 아니다.
+>   **주의:** `20260830_222550_r2` 의 `split` 는 산출물에 기록된 값이 아니라 러너 규약에서 복원한 추론값이다. 요청 규약이 같았다는 증명은 아니다.
+>   **주의:** `20260907_001502_r3` 의 `split` 는 산출물에 기록된 값이 아니라 러너 규약에서 복원한 추론값이다. 요청 규약이 같았다는 증명은 아니다.
+
+### MTVQA-KR — full, 558문항 — protocol `356cc6eae2af`
+
+전체 protocol fingerprint: `sha256:356cc6eae2af10c9107886531b679f05cf23e79431df2970ae7662dfbdded969`
+
+| 모델 | 결과 (대표 런) | 반복 평균 (범위) | 상태 |
+|---|---|---|---|
+| google_diffusiongemma_26B_A4B_it | 221/558 = 39.61% | 39.73% (38.89–40.68%) · k=3 | NATIVE |
+
+> 재현성: `google_diffusiongemma_26B_A4B_it` — 이 코호트에 런 3개. `repeatability_observed` · 3회 평균 39.73% (38.89–40.68%) · 관측 범위 217–227 (fraction) · 산포 10 / 정책 허용 6 — **흔들림 큼 — 정책 허용 초과. 점수가 낮다는 뜻이 아니라 단일 런 수치를 믿기 어렵다는 뜻**
+>   **주의:** 항목 벡터가 없어 값이 같아도 서로 다른 문항을 맞혔는지 알 수 없다. 이 관측 범위는 실제 불안정의 **하한**이며, exact-match 축보다 약한 근거다.
+>   `20260830_222550_r1`  227/558 = 40.68% (기준)
+>   `20260830_222550_r2`  217/558 = 38.89%
+>   `20260907_001502_r3`  221/558 = 39.61% (대표)
 
 ### MTVQA-KR — full, 558문항 — protocol `5db43694610d`
 
 전체 protocol fingerprint: `sha256:5db43694610d33e25662146cd959377ac1f1a67d9dfdfb1cdae26ab070ac866d`
 
-| 모델 | 결과 | 상태 |
-|---|---|---|
-| qwen_qwen3.5_35b_a3b | 292/558 = 52.33% | LEGACY_REVALIDATED |
-| qwen_qwen3.6_35b_a3b_fp8 | 292/558 = 52.33% | LEGACY_REVALIDATED |
-| qwen_qwen3.6_27b | 291/558 = 52.15% | LEGACY_REVALIDATED |
-| Qwen3.5_122B_A10B_GPTQ_Int4 | 290/558 = 51.97% | LEGACY_REVALIDATED |
-| qwen_qwen3.6_27b_fp8 | 290/558 = 51.97% | LEGACY_REVALIDATED |
-| qwen_qwen3.5_35b_a3b_fp8 | 288/558 = 51.61% | LEGACY_REVALIDATED |
-| qwen_qwen3.5_27b_fp8 | 287/558 = 51.43% | LEGACY_REVALIDATED |
-| qwen3.5_27b | 286/558 = 51.25% | LEGACY_REVALIDATED |
-| qwen3.6-35b-a3b | 273/558 = 48.92% | LEGACY_REVALIDATED |
-| gemma_4_31b_it | 268/558 = 48.03% | LEGACY_REVALIDATED |
-| gemma_4_26b_a4b_it | 255/558 = 45.70% | NATIVE |
+| 모델 | 결과 (대표 런) | 반복 평균 (범위) | 상태 |
+|---|---|---|---|
+| qwen_qwen3.8_27B_FP8 | 295/558 = 52.87% | 52.75% (52.69–52.87%) · k=3 | NATIVE |
+| qwen_qwen3.8_27b | 294/558 = 52.69% | 52.87% (52.69–53.05%) · k=3 | NATIVE |
+| qwen_qwen3.5_35b_a3b | 292/558 = 52.33% | — (k=1) | LEGACY_REVALIDATED |
+| qwen_qwen3.6_35b_a3b_fp8 | 292/558 = 52.33% | — (k=1) | LEGACY_REVALIDATED |
+| qwen_qwen3.6_27b | 291/558 = 52.15% | — (k=1) | LEGACY_REVALIDATED |
+| Qwen3.5_122B_A10B_GPTQ_Int4 | 290/558 = 51.97% | — (k=1) | LEGACY_REVALIDATED |
+| qwen_qwen3.6_27b_fp8 | 290/558 = 51.97% | — (k=1) | LEGACY_REVALIDATED |
+| qwen_qwen3.5_35b_a3b_fp8 | 288/558 = 51.61% | — (k=1) | LEGACY_REVALIDATED |
+| qwen_qwen3.5_27b_fp8 | 287/558 = 51.43% | — (k=1) | LEGACY_REVALIDATED |
+| qwen3.5_27b | 286/558 = 51.25% | — (k=1) | LEGACY_REVALIDATED |
+| qwen3.6-35b-a3b | 273/558 = 48.92% | — (k=1) | LEGACY_REVALIDATED |
+| gemma_4_31b_it | 268/558 = 48.03% | 48.21% (48.03–48.39%) · k=2 | LEGACY_REVALIDATED |
+| gemma_4_26b_a4b_it | 259/558 = 46.42% | 46.09% (45.70–46.42%) · k=5 | NATIVE |
 
 > 중복 접기: `gemma_4_26b_a4b_it` — `results/gemma_4_26b_a4b_it/20260505_124246/vision/multimodal/mtvqa_kr` 유지; 동일 artifact role/SHA-256·측정 payload 복사본 `results/google_gemma_4_26B_A4B_it/20260505_124246/vision/multimodal/mtvqa_kr`, `results/gemma_4_26b_a4b_it.bad/20260505_124246/vision/multimodal/mtvqa_kr`, `results/google_gemma_4_26B_A4B_it/20260505_124246.bad/vision/multimodal/mtvqa_kr` 접음.
 > 중복 접기: `gemma_4_31b_it` — `results/gemma_4_31b_it/20260505_130752/vision/multimodal/mtvqa_kr` 유지; 동일 artifact role/SHA-256·측정 payload 복사본 `results/google_gemma_4_31B_it/20260505_130752/vision/multimodal/mtvqa_kr` 접음.
@@ -200,22 +359,85 @@
 > 재현성: `qwen_qwen3.6_27b` — 이 코호트에 런 1개. 비교 대상 없음 — **UNVERIFIED**(발행은 유지; 산출물·채점 계약은 유효)
 > 재현성: `qwen_qwen3.6_27b_fp8` — 이 코호트에 런 1개. 비교 대상 없음 — **UNVERIFIED**(발행은 유지; 산출물·채점 계약은 유효)
 > 재현성: `qwen_qwen3.6_35b_a3b_fp8` — 이 코호트에 런 1개. 비교 대상 없음 — **UNVERIFIED**(발행은 유지; 산출물·채점 계약은 유효)
-> 재현성: `gemma_4_26b_a4b_it` — 이 코호트에 런 2개. 코호트 산포 3건 (0.54%p), 허용 6건 — **PASS**
+> 재현성: `gemma_4_26b_a4b_it` — 이 코호트에 런 5개. `repeatability_observed` · 5회 평균 46.09% (45.70–46.42%) · 관측 범위 255–259 (fraction) · 산포 4 / 정책 허용 6 — **흔들림 허용 범위 안**
+>   **주의:** 항목 벡터가 없어 값이 같아도 서로 다른 문항을 맞혔는지 알 수 없다. 이 관측 범위는 실제 불안정의 **하한**이며, exact-match 축보다 약한 근거다.
 >   `20260505_124246`  258/558 = 46.24% (기준)
->   `v2b_20260824`  255/558 = 45.70% (대표)
-> 재현성: `gemma_4_31b_it` — 이 코호트에 런 2개. 코호트 산포 2건 (0.36%p), 허용 6건 — **PASS**
+>   `v2b_20260824`  255/558 = 45.70%
+>   `20260830_095733_r1`  257/558 = 46.06%
+>   `20260830_095733_r2`  257/558 = 46.06%
+>   `20260927_230250_r3`  259/558 = 46.42% (대표)
+> 재현성: `gemma_4_31b_it` — 이 코호트에 런 2개. `snapshot` · 2회 평균 48.21% (48.03–48.39%) · 관측 범위 268–270 (fraction) · 산포 2 / 정책 허용 6 — **흔들림 허용 범위 안**
+>   **주의:** 항목 벡터가 없어 값이 같아도 서로 다른 문항을 맞혔는지 알 수 없다. 이 관측 범위는 실제 불안정의 **하한**이며, exact-match 축보다 약한 근거다.
 >   `20260505_130752`  270/558 = 48.39% (기준)
 >   `20260525_152204`  268/558 = 48.03% (대표)
+> 재현성: `qwen_qwen3.8_27B_FP8` — 이 코호트에 런 3개. `repeatability_observed` · 3회 평균 52.75% (52.69–52.87%) · 관측 범위 294–295 (fraction) · 산포 1 / 정책 허용 6 — **흔들림 허용 범위 안**
+>   **주의:** 항목 벡터가 없어 값이 같아도 서로 다른 문항을 맞혔는지 알 수 없다. 이 관측 범위는 실제 불안정의 **하한**이며, exact-match 축보다 약한 근거다.
+>   `20261003_171917_r1`  294/558 = 52.69% (기준)
+>   `20261003_171917_r2`  294/558 = 52.69%
+>   `20261003_171917_r3`  295/558 = 52.87% (대표)
+> 재현성: `qwen_qwen3.8_27b` — 이 코호트에 런 3개. `repeatability_observed` · 3회 평균 52.87% (52.69–53.05%) · 관측 범위 294–296 (fraction) · 산포 2 / 정책 허용 6 — **흔들림 허용 범위 안**
+>   **주의:** 항목 벡터가 없어 값이 같아도 서로 다른 문항을 맞혔는지 알 수 없다. 이 관측 범위는 실제 불안정의 **하한**이며, exact-match 축보다 약한 근거다.
+>   `20260927_232851_r1`  296/558 = 53.05% (기준)
+>   `20260927_232851_r2`  295/558 = 52.87%
+>   `20260927_232851_r3`  294/558 = 52.69% (대표)
+> 모델 간 우열 — `MTVQA-KR` (fraction)
+>   `gemma_4_26b_a4b_it` vs `gemma_4_31b_it` — **발행 불가**: right 가 `snapshot` 이다 — 반복 2회로는 비교 근거가 없다
+>   `qwen_qwen3.8_27B_FP8` 우세 — 불안정 예산이 겹치지 않는다 (255.0–259.0 vs 294.0–295.0). 통계적 유의성이 아니라, 이 데이터로 반박되지 않는다는 뜻이다
+>   `qwen_qwen3.8_27b` 우세 — 불안정 예산이 겹치지 않는다 (255.0–259.0 vs 294.0–296.0). 통계적 유의성이 아니라, 이 데이터로 반박되지 않는다는 뜻이다
+>   `gemma_4_31b_it` vs `qwen_qwen3.8_27B_FP8` — **발행 불가**: left 가 `snapshot` 이다 — 반복 2회로는 비교 근거가 없다
+>   `gemma_4_31b_it` vs `qwen_qwen3.8_27b` — **발행 불가**: left 가 `snapshot` 이다 — 반복 2회로는 비교 근거가 없다
+>   `qwen_qwen3.8_27B_FP8` vs `qwen_qwen3.8_27b` — **발행 불가**: 불안정 예산이 겹친다 (294.0–295.0 vs 294.0–296.0) — 차이가 관측된 흔들림으로 설명된다
+>   **주의:** 집계 축이라 항목 벡터가 없다. 값이 같아도 서로 다른 문항을 맞혔는지 알 수 없으므로 이 판정은 exact-match 축보다 약한 근거다. 가설검정도 신뢰구간도 아니다.
+
+### KOFFVQA-judge — api_judge_end_to_end, 275문항 — protocol `e9b7bebe099f`
+
+전체 protocol fingerprint: `sha256:e9b7bebe099f58615ff95622fcfb7f829bed4f102a9444d4d5bbc9cb36b1e162`
+
+| 모델 | 결과 (대표 런) | 반복 평균 (범위) | 상태 |
+|---|---|---|---|
+| gemma_4_26b_a4b_it | 8.67/10 | 8.62/10 (8.57–8.67) · k=3 | PROVISIONAL — 판정기 기준, 인간 검증 없음 |
+| google_diffusiongemma_26B_A4B_it | 8.56/10 | 8.42/10 (8.33–8.56) · k=3 | PROVISIONAL — 판정기 기준, 인간 검증 없음 |
+| qwen_qwen3.8_27B_FP8 | 8.46/10 | 8.50/10 (8.46–8.53) · k=3 | PROVISIONAL — 판정기 기준, 인간 검증 없음 |
+| qwen_qwen3.8_27b | 8.20/10 | 8.31/10 (8.20–8.39) · k=3 | PROVISIONAL — 판정기 기준, 인간 검증 없음 |
+
+> 재현성: `gemma_4_26b_a4b_it` — 이 코호트에 런 3개. `repeatability_observed` · 3회 평균 8.62/10 (8.57–8.67) · 관측 범위 8.56727–8.66545 (score/10) · 산포 0.0981818 / 정책 허용 0.1 — **흔들림 허용 범위 안**
+>   **주의:** 항목 벡터가 없어 값이 같아도 서로 다른 문항을 맞혔는지 알 수 없다. 이 관측 범위는 실제 불안정의 **하한**이며, exact-match 축보다 약한 근거다.
+>   `20260830_095733_r1`  8.57/10 (기준)
+>   `20260830_095733_r2`  8.64/10
+>   `20260927_230250_r3`  8.67/10 (대표)
+> 재현성: `google_diffusiongemma_26B_A4B_it` — 이 코호트에 런 3개. `repeatability_observed` · 3회 평균 8.42/10 (8.33–8.56) · 관측 범위 8.33091–8.55636 (score/10) · 산포 0.225455 / 정책 허용 0.1 — **흔들림 큼 — 정책 허용 초과. 점수가 낮다는 뜻이 아니라 단일 런 수치를 믿기 어렵다는 뜻**
+>   **주의:** 항목 벡터가 없어 값이 같아도 서로 다른 문항을 맞혔는지 알 수 없다. 이 관측 범위는 실제 불안정의 **하한**이며, exact-match 축보다 약한 근거다.
+>   `20260830_222550_r1`  8.33/10 (기준)
+>   `20260830_222550_r2`  8.36/10
+>   `20260907_001502_r3`  8.56/10 (대표)
+> 재현성: `qwen_qwen3.8_27B_FP8` — 이 코호트에 런 3개. `repeatability_observed` · 3회 평균 8.50/10 (8.46–8.53) · 관측 범위 8.46182–8.53091 (score/10) · 산포 0.0690909 / 정책 허용 0.1 — **흔들림 허용 범위 안**
+>   **주의:** 항목 벡터가 없어 값이 같아도 서로 다른 문항을 맞혔는지 알 수 없다. 이 관측 범위는 실제 불안정의 **하한**이며, exact-match 축보다 약한 근거다.
+>   `20261003_171917_r1`  8.53/10 (기준)
+>   `20261003_171917_r2`  8.50/10
+>   `20261003_171917_r3`  8.46/10 (대표)
+> 재현성: `qwen_qwen3.8_27b` — 이 코호트에 런 3개. `repeatability_observed` · 3회 평균 8.31/10 (8.20–8.39) · 관측 범위 8.19636–8.39273 (score/10) · 산포 0.196364 / 정책 허용 0.1 — **흔들림 큼 — 정책 허용 초과. 점수가 낮다는 뜻이 아니라 단일 런 수치를 믿기 어렵다는 뜻**
+>   **주의:** 항목 벡터가 없어 값이 같아도 서로 다른 문항을 맞혔는지 알 수 없다. 이 관측 범위는 실제 불안정의 **하한**이며, exact-match 축보다 약한 근거다.
+>   `20260927_232851_r1`  8.39/10 (기준)
+>   `20260927_232851_r2`  8.34/10
+>   `20260927_232851_r3`  8.20/10 (대표)
+> 모델 간 우열 — `KOFFVQA-judge` (score/10)
+>   `gemma_4_26b_a4b_it` 우세 — 불안정 예산이 겹치지 않는다 (8.567272727272726–8.665454545454546 vs 8.33090909090909–8.556363636363637). 통계적 유의성이 아니라, 이 데이터로 반박되지 않는다는 뜻이다
+>   `gemma_4_26b_a4b_it` 우세 — 불안정 예산이 겹치지 않는다 (8.567272727272726–8.665454545454546 vs 8.461818181818181–8.530909090909091). 통계적 유의성이 아니라, 이 데이터로 반박되지 않는다는 뜻이다
+>   `gemma_4_26b_a4b_it` 우세 — 불안정 예산이 겹치지 않는다 (8.567272727272726–8.665454545454546 vs 8.196363636363637–8.392727272727273). 통계적 유의성이 아니라, 이 데이터로 반박되지 않는다는 뜻이다
+>   `google_diffusiongemma_26B_A4B_it` vs `qwen_qwen3.8_27B_FP8` — **발행 불가**: 불안정 예산이 겹친다 (8.33090909090909–8.556363636363637 vs 8.461818181818181–8.530909090909091) — 차이가 관측된 흔들림으로 설명된다
+>   `google_diffusiongemma_26B_A4B_it` vs `qwen_qwen3.8_27b` — **발행 불가**: 불안정 예산이 겹친다 (8.33090909090909–8.556363636363637 vs 8.196363636363637–8.392727272727273) — 차이가 관측된 흔들림으로 설명된다
+>   `qwen_qwen3.8_27B_FP8` 우세 — 불안정 예산이 겹치지 않는다 (8.461818181818181–8.530909090909091 vs 8.196363636363637–8.392727272727273). 통계적 유의성이 아니라, 이 데이터로 반박되지 않는다는 뜻이다
+>   **주의:** 집계 축이라 항목 벡터가 없다. 값이 같아도 서로 다른 문항을 맞혔는지 알 수 없으므로 이 판정은 exact-match 축보다 약한 근거다. 가설검정도 신뢰구간도 아니다.
 
 ## 상태 요약
 
 | 상태 | source 수 |
 |---|---:|
-| NATIVE | 2 |
-| LEGACY_REVALIDATED | 71 |
-| REJECTED | 34 |
+| NATIVE | 59 |
+| LEGACY_REVALIDATED | 83 |
+| REJECTED | 40 |
 | INSUFFICIENT_PROVENANCE | 0 |
-| UNSCORED | 14 |
+| UNSCORED | 26 |
 
 ## 세부 축
 
@@ -228,6 +450,23 @@
 
 | 모델 | 축 | 결과 | 상태 |
 |---|---|---|---|
+| gemma_4_26b_a4b_it | domain:Arts and Humanities | 82/83 = 98.80% | NATIVE |
+| gemma_4_26b_a4b_it | domain:CSAT History | 58/60 = 96.67% | NATIVE |
+| gemma_4_26b_a4b_it | domain:CSAT Science | 301/478 = 62.97% | NATIVE |
+| gemma_4_26b_a4b_it | domain:Economics and Finance | 100/104 = 96.15% | NATIVE |
+| gemma_4_26b_a4b_it | domain:Education and Academia | 210/215 = 97.67% | NATIVE |
+| gemma_4_26b_a4b_it | domain:Entertainment and Media | 159/168 = 94.64% | NATIVE |
+| gemma_4_26b_a4b_it | domain:Hospitality and Food Service | 258/264 = 97.73% | NATIVE |
+| gemma_4_26b_a4b_it | domain:Marketing and Advertising | 145/145 = 100.00% | NATIVE |
+| gemma_4_26b_a4b_it | domain:Medical and Healthcare | 85/90 = 94.44% | NATIVE |
+| gemma_4_26b_a4b_it | domain:Personal and Lifestyle | 198/204 = 97.06% | NATIVE |
+| gemma_4_26b_a4b_it | domain:Public and Administration | 239/245 = 97.55% | NATIVE |
+| gemma_4_26b_a4b_it | domain:Retail and Commerce | 143/154 = 92.86% | NATIVE |
+| gemma_4_26b_a4b_it | domain:Science and Technology | 87/92 = 94.57% | NATIVE |
+| gemma_4_26b_a4b_it | domain:Transportation and Logistics | 153/167 = 91.62% | NATIVE |
+| gemma_4_26b_a4b_it | domain:Travel and Tourism | 105/108 = 97.22% | NATIVE |
+| gemma_4_26b_a4b_it | system:System1 | 1393/1426 = 97.69% | NATIVE |
+| gemma_4_26b_a4b_it | system:System2 | 930/1151 = 80.80% | NATIVE |
 | qwen_qwen3.5_35b_a3b_fp8 | domain:Arts and Humanities | 80/83 = 96.39% | LEGACY_REVALIDATED |
 | qwen_qwen3.5_35b_a3b_fp8 | domain:CSAT History | 42/60 = 70.00% | LEGACY_REVALIDATED |
 | qwen_qwen3.5_35b_a3b_fp8 | domain:CSAT Science | 242/478 = 50.63% | LEGACY_REVALIDATED |
@@ -262,6 +501,67 @@
 | qwen_qwen3.6_35b_a3b_fp8 | domain:Travel and Tourism | 108/108 = 100.00% | LEGACY_REVALIDATED |
 | qwen_qwen3.6_35b_a3b_fp8 | system:System1 | 1385/1426 = 97.12% | LEGACY_REVALIDATED |
 | qwen_qwen3.6_35b_a3b_fp8 | system:System2 | 905/1151 = 78.63% | LEGACY_REVALIDATED |
+| qwen_qwen3.8_27B_FP8 | domain:Arts and Humanities | 79/83 = 95.18% | NATIVE |
+| qwen_qwen3.8_27B_FP8 | domain:CSAT History | 43/60 = 71.67% | NATIVE |
+| qwen_qwen3.8_27B_FP8 | domain:CSAT Science | 298/478 = 62.34% | NATIVE |
+| qwen_qwen3.8_27B_FP8 | domain:Economics and Finance | 103/104 = 99.04% | NATIVE |
+| qwen_qwen3.8_27B_FP8 | domain:Education and Academia | 209/215 = 97.21% | NATIVE |
+| qwen_qwen3.8_27B_FP8 | domain:Entertainment and Media | 159/168 = 94.64% | NATIVE |
+| qwen_qwen3.8_27B_FP8 | domain:Hospitality and Food Service | 253/264 = 95.83% | NATIVE |
+| qwen_qwen3.8_27B_FP8 | domain:Marketing and Advertising | 143/145 = 98.62% | NATIVE |
+| qwen_qwen3.8_27B_FP8 | domain:Medical and Healthcare | 89/90 = 98.89% | NATIVE |
+| qwen_qwen3.8_27B_FP8 | domain:Personal and Lifestyle | 199/204 = 97.55% | NATIVE |
+| qwen_qwen3.8_27B_FP8 | domain:Public and Administration | 237/245 = 96.73% | NATIVE |
+| qwen_qwen3.8_27B_FP8 | domain:Retail and Commerce | 148/154 = 96.10% | NATIVE |
+| qwen_qwen3.8_27B_FP8 | domain:Science and Technology | 85/92 = 92.39% | NATIVE |
+| qwen_qwen3.8_27B_FP8 | domain:Transportation and Logistics | 155/167 = 92.81% | NATIVE |
+| qwen_qwen3.8_27B_FP8 | domain:Travel and Tourism | 108/108 = 100.00% | NATIVE |
+| qwen_qwen3.8_27B_FP8 | system:System1 | 1390/1426 = 97.48% | NATIVE |
+| qwen_qwen3.8_27B_FP8 | system:System2 | 918/1151 = 79.76% | NATIVE |
+| qwen_qwen3.8_27b | domain:Arts and Humanities | 80/83 = 96.39% | NATIVE |
+| qwen_qwen3.8_27b | domain:CSAT History | 43/60 = 71.67% | NATIVE |
+| qwen_qwen3.8_27b | domain:CSAT Science | 298/478 = 62.34% | NATIVE |
+| qwen_qwen3.8_27b | domain:Economics and Finance | 101/104 = 97.12% | NATIVE |
+| qwen_qwen3.8_27b | domain:Education and Academia | 206/215 = 95.81% | NATIVE |
+| qwen_qwen3.8_27b | domain:Entertainment and Media | 160/168 = 95.24% | NATIVE |
+| qwen_qwen3.8_27b | domain:Hospitality and Food Service | 260/264 = 98.48% | NATIVE |
+| qwen_qwen3.8_27b | domain:Marketing and Advertising | 143/145 = 98.62% | NATIVE |
+| qwen_qwen3.8_27b | domain:Medical and Healthcare | 87/90 = 96.67% | NATIVE |
+| qwen_qwen3.8_27b | domain:Personal and Lifestyle | 200/204 = 98.04% | NATIVE |
+| qwen_qwen3.8_27b | domain:Public and Administration | 239/245 = 97.55% | NATIVE |
+| qwen_qwen3.8_27b | domain:Retail and Commerce | 146/154 = 94.81% | NATIVE |
+| qwen_qwen3.8_27b | domain:Science and Technology | 86/92 = 93.48% | NATIVE |
+| qwen_qwen3.8_27b | domain:Transportation and Logistics | 154/167 = 92.22% | NATIVE |
+| qwen_qwen3.8_27b | domain:Travel and Tourism | 108/108 = 100.00% | NATIVE |
+| qwen_qwen3.8_27b | system:System1 | 1384/1426 = 97.05% | NATIVE |
+| qwen_qwen3.8_27b | system:System2 | 927/1151 = 80.54% | NATIVE |
+
+</details>
+
+<details>
+<summary>KRETA — default — protocol `17225b3254b1`</summary>
+
+전체 protocol fingerprint: `sha256:17225b3254b1d8278061c003ee9810bbcb1117f9c57d52f51b9bb1575b6b84ed`
+
+| 모델 | 축 | 결과 | 상태 |
+|---|---|---|---|
+| google_diffusiongemma_26B_A4B_it | domain:Arts and Humanities | 82/83 = 98.80% | NATIVE |
+| google_diffusiongemma_26B_A4B_it | domain:CSAT History | 49/60 = 81.67% | NATIVE |
+| google_diffusiongemma_26B_A4B_it | domain:CSAT Science | 212/478 = 44.35% | NATIVE |
+| google_diffusiongemma_26B_A4B_it | domain:Economics and Finance | 96/104 = 92.31% | NATIVE |
+| google_diffusiongemma_26B_A4B_it | domain:Education and Academia | 204/215 = 94.88% | NATIVE |
+| google_diffusiongemma_26B_A4B_it | domain:Entertainment and Media | 152/168 = 90.48% | NATIVE |
+| google_diffusiongemma_26B_A4B_it | domain:Hospitality and Food Service | 246/264 = 93.18% | NATIVE |
+| google_diffusiongemma_26B_A4B_it | domain:Marketing and Advertising | 142/145 = 97.93% | NATIVE |
+| google_diffusiongemma_26B_A4B_it | domain:Medical and Healthcare | 82/90 = 91.11% | NATIVE |
+| google_diffusiongemma_26B_A4B_it | domain:Personal and Lifestyle | 194/204 = 95.10% | NATIVE |
+| google_diffusiongemma_26B_A4B_it | domain:Public and Administration | 231/245 = 94.29% | NATIVE |
+| google_diffusiongemma_26B_A4B_it | domain:Retail and Commerce | 138/154 = 89.61% | NATIVE |
+| google_diffusiongemma_26B_A4B_it | domain:Science and Technology | 84/92 = 91.30% | NATIVE |
+| google_diffusiongemma_26B_A4B_it | domain:Transportation and Logistics | 142/167 = 85.03% | NATIVE |
+| google_diffusiongemma_26B_A4B_it | domain:Travel and Tourism | 102/108 = 94.44% | NATIVE |
+| google_diffusiongemma_26B_A4B_it | system:System1 | 1359/1426 = 95.30% | NATIVE |
+| google_diffusiongemma_26B_A4B_it | system:System2 | 797/1151 = 69.24% | NATIVE |
 
 </details>
 
@@ -459,6 +759,36 @@
 </details>
 
 <details>
+<summary>K-MMBench — full — protocol `664089f27792`</summary>
+
+전체 protocol fingerprint: `sha256:664089f27792bdf5a50df380e0bd0e91aad47e56c61390657d7712000c0d2341`
+
+| 모델 | 축 | 결과 | 상태 |
+|---|---|---|---|
+| google_diffusiongemma_26B_A4B_it | category:action_recognition | 206/215 = 95.81% | NATIVE |
+| google_diffusiongemma_26B_A4B_it | category:attribute_comparison | 94/141 = 66.67% | NATIVE |
+| google_diffusiongemma_26B_A4B_it | category:attribute_recognition | 232/264 = 87.88% | NATIVE |
+| google_diffusiongemma_26B_A4B_it | category:celebrity_recognition | 381/396 = 96.21% | NATIVE |
+| google_diffusiongemma_26B_A4B_it | category:function_reasoning | 278/304 = 91.45% | NATIVE |
+| google_diffusiongemma_26B_A4B_it | category:future_prediction | 102/130 = 78.46% | NATIVE |
+| google_diffusiongemma_26B_A4B_it | category:identity_reasoning | 175/176 = 99.43% | NATIVE |
+| google_diffusiongemma_26B_A4B_it | category:image_emotion | 174/200 = 87.00% | NATIVE |
+| google_diffusiongemma_26B_A4B_it | category:image_quality | 81/150 = 54.00% | NATIVE |
+| google_diffusiongemma_26B_A4B_it | category:image_scene | 396/407 = 97.30% | NATIVE |
+| google_diffusiongemma_26B_A4B_it | category:image_style | 198/212 = 93.40% | NATIVE |
+| google_diffusiongemma_26B_A4B_it | category:image_topic | 137/140 = 97.86% | NATIVE |
+| google_diffusiongemma_26B_A4B_it | category:nature_relation | 165/179 = 92.18% | NATIVE |
+| google_diffusiongemma_26B_A4B_it | category:object_localization | 219/315 = 69.52% | NATIVE |
+| google_diffusiongemma_26B_A4B_it | category:ocr | 153/156 = 98.08% | NATIVE |
+| google_diffusiongemma_26B_A4B_it | category:physical_property_reasoning | 169/219 = 77.17% | NATIVE |
+| google_diffusiongemma_26B_A4B_it | category:physical_relation | 60/94 = 63.83% | NATIVE |
+| google_diffusiongemma_26B_A4B_it | category:social_relation | 139/172 = 80.81% | NATIVE |
+| google_diffusiongemma_26B_A4B_it | category:spatial_relationship | 134/177 = 75.71% | NATIVE |
+| google_diffusiongemma_26B_A4B_it | category:structuralized_imagetext_understanding | 252/282 = 89.36% | NATIVE |
+
+</details>
+
+<details>
 <summary>K-MMBench — full — protocol `aa74d55ecd55`</summary>
 
 전체 protocol fingerprint: `sha256:aa74d55ecd55e431459c1f5f572195c5b4e516d0a9462dd128f0cd12e4064a30`
@@ -485,26 +815,26 @@
 | Qwen3.5_122B_A10B_GPTQ_Int4 | category:social_relation | 125/172 = 72.67% | LEGACY_REVALIDATED |
 | Qwen3.5_122B_A10B_GPTQ_Int4 | category:spatial_relationship | 129/177 = 72.88% | LEGACY_REVALIDATED |
 | Qwen3.5_122B_A10B_GPTQ_Int4 | category:structuralized_imagetext_understanding | 231/282 = 81.91% | LEGACY_REVALIDATED |
-| gemma_4_26b_a4b_it | category:action_recognition | 204/215 = 94.88% | LEGACY_REVALIDATED |
-| gemma_4_26b_a4b_it | category:attribute_comparison | 110/141 = 78.01% | LEGACY_REVALIDATED |
-| gemma_4_26b_a4b_it | category:attribute_recognition | 242/264 = 91.67% | LEGACY_REVALIDATED |
-| gemma_4_26b_a4b_it | category:celebrity_recognition | 383/396 = 96.72% | LEGACY_REVALIDATED |
-| gemma_4_26b_a4b_it | category:function_reasoning | 279/304 = 91.78% | LEGACY_REVALIDATED |
-| gemma_4_26b_a4b_it | category:future_prediction | 101/130 = 77.69% | LEGACY_REVALIDATED |
-| gemma_4_26b_a4b_it | category:identity_reasoning | 175/176 = 99.43% | LEGACY_REVALIDATED |
-| gemma_4_26b_a4b_it | category:image_emotion | 176/200 = 88.00% | LEGACY_REVALIDATED |
-| gemma_4_26b_a4b_it | category:image_quality | 92/150 = 61.33% | LEGACY_REVALIDATED |
-| gemma_4_26b_a4b_it | category:image_scene | 396/407 = 97.30% | LEGACY_REVALIDATED |
-| gemma_4_26b_a4b_it | category:image_style | 199/212 = 93.87% | LEGACY_REVALIDATED |
-| gemma_4_26b_a4b_it | category:image_topic | 137/140 = 97.86% | LEGACY_REVALIDATED |
-| gemma_4_26b_a4b_it | category:nature_relation | 163/179 = 91.06% | LEGACY_REVALIDATED |
-| gemma_4_26b_a4b_it | category:object_localization | 210/315 = 66.67% | LEGACY_REVALIDATED |
-| gemma_4_26b_a4b_it | category:ocr | 150/156 = 96.15% | LEGACY_REVALIDATED |
-| gemma_4_26b_a4b_it | category:physical_property_reasoning | 163/219 = 74.43% | LEGACY_REVALIDATED |
-| gemma_4_26b_a4b_it | category:physical_relation | 68/94 = 72.34% | LEGACY_REVALIDATED |
-| gemma_4_26b_a4b_it | category:social_relation | 135/172 = 78.49% | LEGACY_REVALIDATED |
-| gemma_4_26b_a4b_it | category:spatial_relationship | 137/177 = 77.40% | LEGACY_REVALIDATED |
-| gemma_4_26b_a4b_it | category:structuralized_imagetext_understanding | 256/282 = 90.78% | LEGACY_REVALIDATED |
+| gemma_4_26b_a4b_it | category:action_recognition | 203/215 = 94.42% | NATIVE |
+| gemma_4_26b_a4b_it | category:attribute_comparison | 107/141 = 75.89% | NATIVE |
+| gemma_4_26b_a4b_it | category:attribute_recognition | 242/264 = 91.67% | NATIVE |
+| gemma_4_26b_a4b_it | category:celebrity_recognition | 384/396 = 96.97% | NATIVE |
+| gemma_4_26b_a4b_it | category:function_reasoning | 278/304 = 91.45% | NATIVE |
+| gemma_4_26b_a4b_it | category:future_prediction | 101/130 = 77.69% | NATIVE |
+| gemma_4_26b_a4b_it | category:identity_reasoning | 175/176 = 99.43% | NATIVE |
+| gemma_4_26b_a4b_it | category:image_emotion | 175/200 = 87.50% | NATIVE |
+| gemma_4_26b_a4b_it | category:image_quality | 89/150 = 59.33% | NATIVE |
+| gemma_4_26b_a4b_it | category:image_scene | 395/407 = 97.05% | NATIVE |
+| gemma_4_26b_a4b_it | category:image_style | 199/212 = 93.87% | NATIVE |
+| gemma_4_26b_a4b_it | category:image_topic | 137/140 = 97.86% | NATIVE |
+| gemma_4_26b_a4b_it | category:nature_relation | 168/179 = 93.85% | NATIVE |
+| gemma_4_26b_a4b_it | category:object_localization | 209/315 = 66.35% | NATIVE |
+| gemma_4_26b_a4b_it | category:ocr | 150/156 = 96.15% | NATIVE |
+| gemma_4_26b_a4b_it | category:physical_property_reasoning | 165/219 = 75.34% | NATIVE |
+| gemma_4_26b_a4b_it | category:physical_relation | 66/94 = 70.21% | NATIVE |
+| gemma_4_26b_a4b_it | category:social_relation | 139/172 = 80.81% | NATIVE |
+| gemma_4_26b_a4b_it | category:spatial_relationship | 135/177 = 76.27% | NATIVE |
+| gemma_4_26b_a4b_it | category:structuralized_imagetext_understanding | 255/282 = 90.43% | NATIVE |
 | qwen3.5_27b | category:action_recognition | 209/215 = 97.21% | LEGACY_REVALIDATED |
 | qwen3.5_27b | category:attribute_comparison | 98/141 = 69.50% | LEGACY_REVALIDATED |
 | qwen3.5_27b | category:attribute_recognition | 223/264 = 84.47% | LEGACY_REVALIDATED |
@@ -665,6 +995,46 @@
 | qwen_qwen3.6_35b_a3b_fp8 | category:social_relation | 144/172 = 83.72% | LEGACY_REVALIDATED |
 | qwen_qwen3.6_35b_a3b_fp8 | category:spatial_relationship | 134/177 = 75.71% | LEGACY_REVALIDATED |
 | qwen_qwen3.6_35b_a3b_fp8 | category:structuralized_imagetext_understanding | 234/282 = 82.98% | LEGACY_REVALIDATED |
+| qwen_qwen3.8_27B_FP8 | category:action_recognition | 209/215 = 97.21% | NATIVE |
+| qwen_qwen3.8_27B_FP8 | category:attribute_comparison | 103/141 = 73.05% | NATIVE |
+| qwen_qwen3.8_27B_FP8 | category:attribute_recognition | 228/264 = 86.36% | NATIVE |
+| qwen_qwen3.8_27B_FP8 | category:celebrity_recognition | 373/396 = 94.19% | NATIVE |
+| qwen_qwen3.8_27B_FP8 | category:function_reasoning | 285/304 = 93.75% | NATIVE |
+| qwen_qwen3.8_27B_FP8 | category:future_prediction | 76/130 = 58.46% | NATIVE |
+| qwen_qwen3.8_27B_FP8 | category:identity_reasoning | 172/176 = 97.73% | NATIVE |
+| qwen_qwen3.8_27B_FP8 | category:image_emotion | 164/200 = 82.00% | NATIVE |
+| qwen_qwen3.8_27B_FP8 | category:image_quality | 78/150 = 52.00% | NATIVE |
+| qwen_qwen3.8_27B_FP8 | category:image_scene | 389/407 = 95.58% | NATIVE |
+| qwen_qwen3.8_27B_FP8 | category:image_style | 198/212 = 93.40% | NATIVE |
+| qwen_qwen3.8_27B_FP8 | category:image_topic | 133/140 = 95.00% | NATIVE |
+| qwen_qwen3.8_27B_FP8 | category:nature_relation | 147/179 = 82.12% | NATIVE |
+| qwen_qwen3.8_27B_FP8 | category:object_localization | 200/315 = 63.49% | NATIVE |
+| qwen_qwen3.8_27B_FP8 | category:ocr | 148/156 = 94.87% | NATIVE |
+| qwen_qwen3.8_27B_FP8 | category:physical_property_reasoning | 160/219 = 73.06% | NATIVE |
+| qwen_qwen3.8_27B_FP8 | category:physical_relation | 64/94 = 68.09% | NATIVE |
+| qwen_qwen3.8_27B_FP8 | category:social_relation | 147/172 = 85.47% | NATIVE |
+| qwen_qwen3.8_27B_FP8 | category:spatial_relationship | 136/177 = 76.84% | NATIVE |
+| qwen_qwen3.8_27B_FP8 | category:structuralized_imagetext_understanding | 251/282 = 89.01% | NATIVE |
+| qwen_qwen3.8_27b | category:action_recognition | 209/215 = 97.21% | NATIVE |
+| qwen_qwen3.8_27b | category:attribute_comparison | 104/141 = 73.76% | NATIVE |
+| qwen_qwen3.8_27b | category:attribute_recognition | 226/264 = 85.61% | NATIVE |
+| qwen_qwen3.8_27b | category:celebrity_recognition | 372/396 = 93.94% | NATIVE |
+| qwen_qwen3.8_27b | category:function_reasoning | 284/304 = 93.42% | NATIVE |
+| qwen_qwen3.8_27b | category:future_prediction | 74/130 = 56.92% | NATIVE |
+| qwen_qwen3.8_27b | category:identity_reasoning | 172/176 = 97.73% | NATIVE |
+| qwen_qwen3.8_27b | category:image_emotion | 166/200 = 83.00% | NATIVE |
+| qwen_qwen3.8_27b | category:image_quality | 77/150 = 51.33% | NATIVE |
+| qwen_qwen3.8_27b | category:image_scene | 389/407 = 95.58% | NATIVE |
+| qwen_qwen3.8_27b | category:image_style | 198/212 = 93.40% | NATIVE |
+| qwen_qwen3.8_27b | category:image_topic | 134/140 = 95.71% | NATIVE |
+| qwen_qwen3.8_27b | category:nature_relation | 146/179 = 81.56% | NATIVE |
+| qwen_qwen3.8_27b | category:object_localization | 201/315 = 63.81% | NATIVE |
+| qwen_qwen3.8_27b | category:ocr | 148/156 = 94.87% | NATIVE |
+| qwen_qwen3.8_27b | category:physical_property_reasoning | 162/219 = 73.97% | NATIVE |
+| qwen_qwen3.8_27b | category:physical_relation | 63/94 = 67.02% | NATIVE |
+| qwen_qwen3.8_27b | category:social_relation | 148/172 = 86.05% | NATIVE |
+| qwen_qwen3.8_27b | category:spatial_relationship | 133/177 = 75.14% | NATIVE |
+| qwen_qwen3.8_27b | category:structuralized_imagetext_understanding | 254/282 = 90.07% | NATIVE |
 
 </details>
 
@@ -691,9 +1061,9 @@
 | Qwen3.5_122B_A10B_GPTQ_Int4 | category:chart | 52/80 = 65.00% | LEGACY_REVALIDATED |
 | Qwen3.5_122B_A10B_GPTQ_Int4 | category:document | 73/80 = 91.25% | LEGACY_REVALIDATED |
 | Qwen3.5_122B_A10B_GPTQ_Int4 | category:table | 60/80 = 75.00% | LEGACY_REVALIDATED |
-| gemma_4_26b_a4b_it | category:chart | 57/80 = 71.25% | NATIVE |
+| gemma_4_26b_a4b_it | category:chart | 58/80 = 72.50% | NATIVE |
 | gemma_4_26b_a4b_it | category:document | 77/80 = 96.25% | NATIVE |
-| gemma_4_26b_a4b_it | category:table | 72/80 = 90.00% | NATIVE |
+| gemma_4_26b_a4b_it | category:table | 69/80 = 86.25% | NATIVE |
 | qwen3.5_27b | category:chart | 53/80 = 66.25% | LEGACY_REVALIDATED |
 | qwen3.5_27b | category:document | 73/80 = 91.25% | LEGACY_REVALIDATED |
 | qwen3.5_27b | category:table | 70/80 = 87.50% | LEGACY_REVALIDATED |
@@ -715,6 +1085,25 @@
 | qwen_qwen3.6_35b_a3b_fp8 | category:chart | 55/80 = 68.75% | LEGACY_REVALIDATED |
 | qwen_qwen3.6_35b_a3b_fp8 | category:document | 73/80 = 91.25% | LEGACY_REVALIDATED |
 | qwen_qwen3.6_35b_a3b_fp8 | category:table | 68/80 = 85.00% | LEGACY_REVALIDATED |
+| qwen_qwen3.8_27B_FP8 | category:chart | 42/80 = 52.50% | NATIVE |
+| qwen_qwen3.8_27B_FP8 | category:document | 70/80 = 87.50% | NATIVE |
+| qwen_qwen3.8_27B_FP8 | category:table | 68/80 = 85.00% | NATIVE |
+| qwen_qwen3.8_27b | category:chart | 41/80 = 51.25% | NATIVE |
+| qwen_qwen3.8_27b | category:document | 70/80 = 87.50% | NATIVE |
+| qwen_qwen3.8_27b | category:table | 67/80 = 83.75% | NATIVE |
+
+</details>
+
+<details>
+<summary>K-DTCBench — full — protocol `a8e50b0990bb`</summary>
+
+전체 protocol fingerprint: `sha256:a8e50b0990bb322cad1ca860efd99f48293c3d86f215dd77258108a563f0ebc9`
+
+| 모델 | 축 | 결과 | 상태 |
+|---|---|---|---|
+| google_diffusiongemma_26B_A4B_it | category:chart | 48/80 = 60.00% | NATIVE |
+| google_diffusiongemma_26B_A4B_it | category:document | 74/80 = 92.50% | NATIVE |
+| google_diffusiongemma_26B_A4B_it | category:table | 68/80 = 85.00% | NATIVE |
 
 </details>
 
@@ -723,7 +1112,7 @@
 
 - `results/gemma_4_26b_a4b_it/20260503_120309/vision/multimodal/k_dtcbench`: `{"split": {"basis": "k_dtcbench.py fixed load_dataset split", "value": "test"}}`
 - `results/Qwen3.5_122B_A10B_GPTQ_Int4/20260720_235721/vision/multimodal/k_dtcbench`: `{"split": {"basis": "k_dtcbench.py fixed load_dataset split", "value": "test"}}`
-- `results/google_gemma_4_26B_A4B_it/v2b_20260824/vision/multimodal/k_dtcbench`: `{"split": {"basis": "k_dtcbench.py fixed load_dataset split", "value": "test"}}`
+- `results/google_gemma_4_26B_A4B_it/20260927_230250_r3/vision/multimodal/k_dtcbench`: `{"split": {"basis": "k_dtcbench.py fixed load_dataset split", "value": "test"}}`
 - `results/qwen3.5_27b/20260525_145725/vision/multimodal/k_dtcbench`: `{"split": {"basis": "k_dtcbench.py fixed load_dataset split", "value": "test"}}`
 - `results/Qwen_Qwen3.6_35B_A3B/20260524_120652/vision/multimodal/k_dtcbench`: `{"split": {"basis": "k_dtcbench.py fixed load_dataset split", "value": "test"}}`
 - `results/qwen_qwen3.5_27b_fp8/20260705_082256/vision/multimodal/k_dtcbench`: `{"split": {"basis": "k_dtcbench.py fixed load_dataset split", "value": "test"}}`
@@ -731,9 +1120,13 @@
 - `results/qwen_qwen3.5_35b_a3b_fp8/20260711_003523/vision/multimodal/k_dtcbench`: `{"split": {"basis": "k_dtcbench.py fixed load_dataset split", "value": "test"}}`
 - `results/qwen_qwen3.6_27b/20260622_153150/vision/multimodal/k_dtcbench`: `{"split": {"basis": "k_dtcbench.py fixed load_dataset split", "value": "test"}}`
 - `results/qwen_qwen3.6_35b_a3b_fp8/20260702_133909/vision/multimodal/k_dtcbench`: `{"split": {"basis": "k_dtcbench.py fixed load_dataset split", "value": "test"}}`
+- `results/qwen_qwen3.8_27B_FP8/20261003_171917_r3/vision/multimodal/k_dtcbench`: `{"split": {"basis": "k_dtcbench.py fixed load_dataset split", "value": "test"}}`
+- `results/qwen_qwen3.8_27b/20260927_232851_r3/vision/multimodal/k_dtcbench`: `{"split": {"basis": "k_dtcbench.py fixed load_dataset split", "value": "test"}}`
+- `results/google_diffusiongemma_26B_A4B_it/20260907_001502_r3/vision/multimodal/k_dtcbench`: `{"split": {"basis": "k_dtcbench.py fixed load_dataset split", "value": "test"}}`
 - `results/gemma_4_26b_a4b_it/20260503_122218/vision/multimodal/k_mmbench`: `{"split": {"basis": "k_mmbench.py fixed load_dataset split", "value": "dev"}}`
+- `results/google_diffusiongemma_26B_A4B_it/20260907_001502_r3/vision/multimodal/k_mmbench`: `{"split": {"basis": "k_mmbench.py fixed load_dataset split", "value": "dev"}}`
 - `results/Qwen3.5_122B_A10B_GPTQ_Int4/20260720_235721/vision/multimodal/k_mmbench`: `{"split": {"basis": "k_mmbench.py fixed load_dataset split", "value": "dev"}}`
-- `results/gemma_4_26b_a4b_it/20260505_124246/vision/multimodal/k_mmbench`: `{"split": {"basis": "k_mmbench.py fixed load_dataset split", "value": "dev"}}`
+- `results/google_gemma_4_26B_A4B_it/20260927_230250_r3/vision/multimodal/k_mmbench`: `{"split": {"basis": "k_mmbench.py fixed load_dataset split", "value": "dev"}}`
 - `results/qwen3.5_27b/20260525_145725/vision/multimodal/k_mmbench`: `{"split": {"basis": "k_mmbench.py fixed load_dataset split", "value": "dev"}}`
 - `results/Qwen_Qwen3.6_35B_A3B/20260524_120652/vision/multimodal/k_mmbench`: `{"split": {"basis": "k_mmbench.py fixed load_dataset split", "value": "dev"}}`
 - `results/qwen_qwen3.5_27b_fp8/20260705_082256/vision/multimodal/k_mmbench`: `{"split": {"basis": "k_mmbench.py fixed load_dataset split", "value": "dev"}}`
@@ -742,6 +1135,8 @@
 - `results/qwen_qwen3.6_27b/20260622_153150/vision/multimodal/k_mmbench`: `{"split": {"basis": "k_mmbench.py fixed load_dataset split", "value": "dev"}}`
 - `results/qwen_qwen3.6_27b_fp8/20260704_081047/vision/multimodal/k_mmbench`: `{"split": {"basis": "k_mmbench.py fixed load_dataset split", "value": "dev"}}`
 - `results/qwen_qwen3.6_35b_a3b_fp8/20260702_133909/vision/multimodal/k_mmbench`: `{"split": {"basis": "k_mmbench.py fixed load_dataset split", "value": "dev"}}`
+- `results/qwen_qwen3.8_27B_FP8/20261003_171917_r3/vision/multimodal/k_mmbench`: `{"split": {"basis": "k_mmbench.py fixed load_dataset split", "value": "dev"}}`
+- `results/qwen_qwen3.8_27b/20260927_232851_r3/vision/multimodal/k_mmbench`: `{"split": {"basis": "k_mmbench.py fixed load_dataset split", "value": "dev"}}`
 - `results/qwen_qwen3.5_35b_a3b_fp8/20260711_003523/vision/multimodal/kreta/qwen_qwen3.5_35b_a3b_fp8_default.jsonl`: `{"max_tokens": {"basis": "legacy run_kreta.sh: default mode default KRETA_MAX_TOKENS", "value": 4096}}`
 - `results/qwen_qwen3.6_35b_a3b_fp8/20260702_133909/vision/multimodal/kreta/qwen_qwen3.6_35b_a3b_fp8_default.jsonl`: `{"max_tokens": {"basis": "legacy run_kreta.sh: default mode default KRETA_MAX_TOKENS", "value": 4096}}`
 - `results/Qwen3.5_122B_A10B_GPTQ_Int4/20260720_235721/vision/multimodal/kreta/Qwen3.5_122B_A10B_GPTQ_Int4_direct.jsonl`: `{"max_tokens": {"basis": "legacy run_kreta.sh: direct mode default KRETA_MAX_TOKENS", "value": 32}}`
@@ -806,6 +1201,12 @@
   - 오류 응답 548건 포함
 - **KRETA / gemma_4_31b_it / 20260505_130752** — `REJECTED`
   - 오류 응답 2577건 포함
+- **KOFFVQA / google_diffusiongemma_26B_A4B_it / 20260830_222550_r1** — `UNSCORED`
+  - 채점 산출물 없음
+- **KOFFVQA / google_diffusiongemma_26B_A4B_it / 20260830_222550_r2** — `UNSCORED`
+  - 채점 산출물 없음
+- **KOFFVQA / google_diffusiongemma_26B_A4B_it / 20260907_001502_r3** — `UNSCORED`
+  - 채점 산출물 없음
 - **B3-structured-output / gemma_4_26b_a4b_it / 20260505_124246.bad** — `REJECTED`
   - total=0
   - manifest 전 항목을 시도하지 않음
@@ -820,6 +1221,12 @@
   - 채점 산출물 없음
 - **KRETA / gemma_4_26b_a4b_it / 20260505_124246** — `REJECTED`
   - 오류 응답 548건 포함
+- **KOFFVQA / google_gemma_4_26b_a4b_it / 20260830_095733_r1** — `UNSCORED`
+  - 채점 산출물 없음
+- **KOFFVQA / google_gemma_4_26b_a4b_it / 20260830_095733_r2** — `UNSCORED`
+  - 채점 산출물 없음
+- **KOFFVQA / google_gemma_4_26b_a4b_it / 20260927_230250_r3** — `UNSCORED`
+  - 채점 산출물 없음
 - **KOFFVQA / google_gemma_4_26b_a4b_it / v2b_20260824** — `UNSCORED`
   - 채점 산출물 없음
 - **B3-structured-output / gemma_4_31b_it / 20260505_130752** — `REJECTED`
@@ -841,6 +1248,18 @@
   - 오류 응답 5건 포함
 - **KOFFVQA / google_gemma_4_31B_it / 20260525_152204** — `UNSCORED`
   - 채점 산출물 없음
+- **B4-latency-profile / nvidia_nvidia_nemotron_3.5_lightning_30b_a3b_bf16 / 20260830_095747_r1** — `REJECTED`
+  - latency 호출 실패 또는 미해결 값이 포함됨
+- **K-DTCBench / nvidia_nvidia_nemotron_3.5_lightning_30b_a3b_bf16 / 20260830_095747_r1** — `REJECTED`
+  - 오류 응답 240건 포함
+- **K-MMBench / nvidia_nvidia_nemotron_3.5_lightning_30b_a3b_bf16 / 20260830_095747_r1** — `REJECTED`
+  - 오류 응답 4329건 포함
+- **KOFFVQA / nvidia_nvidia_nemotron_3.5_lightning_30b_a3b_bf16 / 20260830_095747_r1** — `REJECTED`
+  - 오류 응답이 포함됨
+- **KRETA / nvidia_nvidia_nemotron_3.5_lightning_30b_a3b_bf16 / 20260830_095747_r1** — `REJECTED`
+  - 오류 응답 2577건 포함
+- **MTVQA-KR / nvidia_nvidia_nemotron_3.5_lightning_30b_a3b_bf16 / 20260830_095747_r1** — `REJECTED`
+  - 오류 응답 558건 포함
 - **KOFFVQA / qwen3.5_27b / 20260525_145725** — `REJECTED`
   - 오류 응답이 포함됨
 - **KOFFVQA / qwen_qwen3.5_27b_fp8 / 20260705_082256** — `UNSCORED`
@@ -858,6 +1277,18 @@
 - **KOFFVQA / qwen_qwen3.6_27b_fp8 / 20260704_081047** — `UNSCORED`
   - 채점 산출물 없음
 - **KOFFVQA / qwen_qwen3.6_35b_a3b_fp8 / 20260702_133909** — `UNSCORED`
+  - 채점 산출물 없음
+- **KOFFVQA / qwen_qwen3.8_27B_FP8 / 20261003_171917_r1** — `UNSCORED`
+  - 채점 산출물 없음
+- **KOFFVQA / qwen_qwen3.8_27B_FP8 / 20261003_171917_r2** — `UNSCORED`
+  - 채점 산출물 없음
+- **KOFFVQA / qwen_qwen3.8_27B_FP8 / 20261003_171917_r3** — `UNSCORED`
+  - 채점 산출물 없음
+- **KOFFVQA / qwen_qwen3.8_27b / 20260927_232851_r1** — `UNSCORED`
+  - 채점 산출물 없음
+- **KOFFVQA / qwen_qwen3.8_27b / 20260927_232851_r2** — `UNSCORED`
+  - 채점 산출물 없음
+- **KOFFVQA / qwen_qwen3.8_27b / 20260927_232851_r3** — `UNSCORED`
   - 채점 산출물 없음
 
 ## B4 지연시간 — 운영 지표
@@ -914,10 +1345,10 @@
 | Qwen3.5_122B_A10B_GPTQ_Int4 | image_256px | 0.316s | 2.205s | 13.15 tokens/s | LEGACY_REVALIDATED |
 | Qwen3.5_122B_A10B_GPTQ_Int4 | multi_image_3x512px | 0.566s | 2.523s | 11.89 tokens/s | LEGACY_REVALIDATED |
 | Qwen3.5_122B_A10B_GPTQ_Int4 | text_only | 0.267s | 2.413s | 13.66 tokens/s | LEGACY_REVALIDATED |
-| gemma_4_26b_a4b_it | image_1024px | 0.142s | 1.404s | 22.78 tokens/s | LEGACY_REVALIDATED |
-| gemma_4_26b_a4b_it | image_256px | 0.138s | 1.431s | 22.36 tokens/s | LEGACY_REVALIDATED |
-| gemma_4_26b_a4b_it | multi_image_3x512px | 0.148s | 1.257s | 22.28 tokens/s | LEGACY_REVALIDATED |
-| gemma_4_26b_a4b_it | text_only | 0.140s | 1.211s | 22.29 tokens/s | LEGACY_REVALIDATED |
+| gemma_4_26b_a4b_it | image_1024px | 0.152s | 1.402s | 22.83 tokens/s | NATIVE |
+| gemma_4_26b_a4b_it | image_256px | 0.143s | 1.392s | 22.99 tokens/s | NATIVE |
+| gemma_4_26b_a4b_it | multi_image_3x512px | 0.172s | 1.273s | 21.99 tokens/s | NATIVE |
+| gemma_4_26b_a4b_it | text_only | 0.147s | 1.183s | 22.83 tokens/s | NATIVE |
 | gemma_4_31b_it | image_1024px | 0.536s | 8.227s | 3.65 tokens/s | LEGACY_REVALIDATED |
 | gemma_4_31b_it | image_256px | 0.519s | 7.957s | 3.77 tokens/s | LEGACY_REVALIDATED |
 | gemma_4_31b_it | multi_image_3x512px | 0.558s | 9.171s | 3.71 tokens/s | LEGACY_REVALIDATED |
@@ -950,6 +1381,14 @@
 | qwen_qwen3.6_35b_a3b_fp8 | image_256px | 0.143s | 0.623s | 43.34 tokens/s | LEGACY_REVALIDATED |
 | qwen_qwen3.6_35b_a3b_fp8 | multi_image_3x512px | 0.253s | 0.806s | 38.46 tokens/s | LEGACY_REVALIDATED |
 | qwen_qwen3.6_35b_a3b_fp8 | text_only | 0.114s | 0.665s | 46.61 tokens/s | LEGACY_REVALIDATED |
+| qwen_qwen3.8_27B_FP8 | image_1024px | 0.799s | 2.333s | 13.29 tokens/s | NATIVE |
+| qwen_qwen3.8_27B_FP8 | image_256px | 0.391s | 2.076s | 14.45 tokens/s | NATIVE |
+| qwen_qwen3.8_27B_FP8 | multi_image_3x512px | 0.675s | 2.370s | 13.08 tokens/s | NATIVE |
+| qwen_qwen3.8_27B_FP8 | text_only | 0.378s | 2.229s | 14.36 tokens/s | NATIVE |
+| qwen_qwen3.8_27b | image_1024px | 1.248s | 3.739s | 8.29 tokens/s | NATIVE |
+| qwen_qwen3.8_27b | image_256px | 0.621s | 3.371s | 8.90 tokens/s | NATIVE |
+| qwen_qwen3.8_27b | multi_image_3x512px | 1.081s | 3.297s | 9.40 tokens/s | NATIVE |
+| qwen_qwen3.8_27b | text_only | 0.598s | 3.350s | 8.96 tokens/s | NATIVE |
 
 <details>
 <summary>p95 / p99 보기</summary>
@@ -962,10 +1401,10 @@
 | Qwen3.5_122B_A10B_GPTQ_Int4 | image_256px | 0.319s | 2.212s | 13.20 tokens/s | LEGACY_REVALIDATED |
 | Qwen3.5_122B_A10B_GPTQ_Int4 | multi_image_3x512px | 0.578s | 2.575s | 11.94 tokens/s | LEGACY_REVALIDATED |
 | Qwen3.5_122B_A10B_GPTQ_Int4 | text_only | 0.294s | 2.444s | 13.74 tokens/s | LEGACY_REVALIDATED |
-| gemma_4_26b_a4b_it | image_1024px | 0.155s | 1.443s | 22.98 tokens/s | LEGACY_REVALIDATED |
-| gemma_4_26b_a4b_it | image_256px | 0.147s | 1.441s | 22.45 tokens/s | LEGACY_REVALIDATED |
-| gemma_4_26b_a4b_it | multi_image_3x512px | 0.159s | 1.268s | 22.41 tokens/s | LEGACY_REVALIDATED |
-| gemma_4_26b_a4b_it | text_only | 0.155s | 1.223s | 23.00 tokens/s | LEGACY_REVALIDATED |
+| gemma_4_26b_a4b_it | image_1024px | 0.183s | 1.461s | 23.00 tokens/s | NATIVE |
+| gemma_4_26b_a4b_it | image_256px | 0.161s | 1.453s | 23.13 tokens/s | NATIVE |
+| gemma_4_26b_a4b_it | multi_image_3x512px | 0.211s | 1.328s | 22.18 tokens/s | NATIVE |
+| gemma_4_26b_a4b_it | text_only | 0.175s | 1.255s | 22.94 tokens/s | NATIVE |
 | gemma_4_31b_it | image_1024px | 0.558s | 8.398s | 3.75 tokens/s | LEGACY_REVALIDATED |
 | gemma_4_31b_it | image_256px | 0.571s | 8.541s | 3.82 tokens/s | LEGACY_REVALIDATED |
 | gemma_4_31b_it | multi_image_3x512px | 0.581s | 9.658s | 3.72 tokens/s | LEGACY_REVALIDATED |
@@ -998,6 +1437,14 @@
 | qwen_qwen3.6_35b_a3b_fp8 | image_256px | 0.166s | 0.648s | 43.78 tokens/s | LEGACY_REVALIDATED |
 | qwen_qwen3.6_35b_a3b_fp8 | multi_image_3x512px | 0.286s | 0.843s | 38.76 tokens/s | LEGACY_REVALIDATED |
 | qwen_qwen3.6_35b_a3b_fp8 | text_only | 0.154s | 0.708s | 47.11 tokens/s | LEGACY_REVALIDATED |
+| qwen_qwen3.8_27B_FP8 | image_1024px | 0.815s | 2.370s | 13.42 tokens/s | NATIVE |
+| qwen_qwen3.8_27B_FP8 | image_256px | 0.405s | 2.100s | 14.54 tokens/s | NATIVE |
+| qwen_qwen3.8_27B_FP8 | multi_image_3x512px | 0.744s | 2.435s | 13.19 tokens/s | NATIVE |
+| qwen_qwen3.8_27B_FP8 | text_only | 0.452s | 2.244s | 14.44 tokens/s | NATIVE |
+| qwen_qwen3.8_27b | image_1024px | 1.336s | 3.837s | 8.50 tokens/s | NATIVE |
+| qwen_qwen3.8_27b | image_256px | 0.646s | 3.452s | 9.12 tokens/s | NATIVE |
+| qwen_qwen3.8_27b | multi_image_3x512px | 1.258s | 3.427s | 9.60 tokens/s | NATIVE |
+| qwen_qwen3.8_27b | text_only | 0.622s | 3.437s | 9.18 tokens/s | NATIVE |
 
 #### p99
 
@@ -1007,10 +1454,10 @@
 | Qwen3.5_122B_A10B_GPTQ_Int4 | image_256px | 0.323s | 2.214s | 13.21 tokens/s | LEGACY_REVALIDATED |
 | Qwen3.5_122B_A10B_GPTQ_Int4 | multi_image_3x512px | 0.624s | 2.605s | 11.96 tokens/s | LEGACY_REVALIDATED |
 | Qwen3.5_122B_A10B_GPTQ_Int4 | text_only | 0.339s | 2.477s | 13.76 tokens/s | LEGACY_REVALIDATED |
-| gemma_4_26b_a4b_it | image_1024px | 0.321s | 1.726s | 23.00 tokens/s | LEGACY_REVALIDATED |
-| gemma_4_26b_a4b_it | image_256px | 0.580s | 1.875s | 22.47 tokens/s | LEGACY_REVALIDATED |
-| gemma_4_26b_a4b_it | multi_image_3x512px | 0.911s | 2.021s | 22.45 tokens/s | LEGACY_REVALIDATED |
-| gemma_4_26b_a4b_it | text_only | 0.242s | 1.301s | 23.05 tokens/s | LEGACY_REVALIDATED |
+| gemma_4_26b_a4b_it | image_1024px | 0.334s | 1.628s | 23.02 tokens/s | NATIVE |
+| gemma_4_26b_a4b_it | image_256px | 0.326s | 1.580s | 23.14 tokens/s | NATIVE |
+| gemma_4_26b_a4b_it | multi_image_3x512px | 0.907s | 2.027s | 22.21 tokens/s | NATIVE |
+| gemma_4_26b_a4b_it | text_only | 0.283s | 1.322s | 22.97 tokens/s | NATIVE |
 | gemma_4_31b_it | image_1024px | 0.768s | 8.777s | 3.75 tokens/s | LEGACY_REVALIDATED |
 | gemma_4_31b_it | image_256px | 0.762s | 8.747s | 3.82 tokens/s | LEGACY_REVALIDATED |
 | gemma_4_31b_it | multi_image_3x512px | 2.098s | 10.740s | 3.72 tokens/s | LEGACY_REVALIDATED |
@@ -1043,6 +1490,14 @@
 | qwen_qwen3.6_35b_a3b_fp8 | image_256px | 0.173s | 0.654s | 43.86 tokens/s | LEGACY_REVALIDATED |
 | qwen_qwen3.6_35b_a3b_fp8 | multi_image_3x512px | 0.347s | 0.894s | 38.79 tokens/s | LEGACY_REVALIDATED |
 | qwen_qwen3.6_35b_a3b_fp8 | text_only | 0.194s | 0.744s | 47.17 tokens/s | LEGACY_REVALIDATED |
+| qwen_qwen3.8_27B_FP8 | image_1024px | 0.882s | 2.424s | 13.59 tokens/s | NATIVE |
+| qwen_qwen3.8_27B_FP8 | image_256px | 0.496s | 2.191s | 14.70 tokens/s | NATIVE |
+| qwen_qwen3.8_27B_FP8 | multi_image_3x512px | 0.811s | 2.564s | 13.61 tokens/s | NATIVE |
+| qwen_qwen3.8_27B_FP8 | text_only | 0.478s | 2.300s | 14.46 tokens/s | NATIVE |
+| qwen_qwen3.8_27b | image_1024px | 1.357s | 3.876s | 8.55 tokens/s | NATIVE |
+| qwen_qwen3.8_27b | image_256px | 0.692s | 3.493s | 9.23 tokens/s | NATIVE |
+| qwen_qwen3.8_27b | multi_image_3x512px | 1.373s | 3.585s | 9.84 tokens/s | NATIVE |
+| qwen_qwen3.8_27b | text_only | 0.668s | 3.490s | 9.29 tokens/s | NATIVE |
 
 </details>
 
