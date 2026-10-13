@@ -28,7 +28,8 @@ def chat_bytes(body: dict) -> bytes:
 
 
 def send_chat(base_url: str, body: dict, timeout=600,
-              post=http.post) -> tuple[str, AttemptResult]:
+              post=http.post, headers: dict[str, str] | None = None) -> tuple[str, AttemptResult]:
     payload = chat_bytes(body)
     url = base_url.rstrip("/") + "/v1/chat/completions"
-    return hashlib.sha256(payload).hexdigest(), post(url, payload, timeout)
+    options = {} if headers is None else {"headers": headers}
+    return hashlib.sha256(payload).hexdigest(), post(url, payload, timeout, **options)

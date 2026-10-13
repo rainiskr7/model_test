@@ -70,7 +70,8 @@ def test_missing_masks_keep_low_confidence():
             valid=valid, s=min(q['confidence'] for q in success) if valid else None,
             mask_empty=not mask,
             wrong=any(q['answer'] != q['gold'] for q in mask) if valid and mask else None,
-            n_missing=sum(q['gold'] is None for q in questions) if valid else 0)
+            n_missing=sum(q['gold'] is None for q in questions) if valid else 0,
+            roles={q['id']: q['role'] for q in questions})
     assert fixture['expected'] == {'n_empty_mask':empty, 'n_denom':len(fixture['requests'])-empty}
 
 

@@ -1,6 +1,6 @@
-# jeveval — P1 작업 ④ 기능 지도
+# jeveval — P1 작업 ⑤a 기능 지도
 
-P1_CONTRACT.md 판 3 보정 9b까지의 단일 시도 client·응답 읽기·기록 입출력을 구현했다.
+P1_CONTRACT.md 판 3 보정 10의 공유 실행 타입·모델 설정·해시·JSON 입출력·인증 머리글을 구현했다.
 테스트는 합성 fixture·tmp_path와 동결 task 설정, 127.0.0.1 서버를 사용한다. 실행기는 후속 작업이다.
 
 ## 코드
@@ -12,7 +12,12 @@ P1_CONTRACT.md 판 3 보정 9b까지의 단일 시도 client·응답 읽기·기
 - `types/results.py`: Rendered, ParsedAnswer, 호출별 LengthInfo.
 - `types/scores.py`: Threshold, ThresholdFile, RiskCell, QStats, Population, Cost, ScoreTable.
 - `types/records.py`: Request, 메모리 전용 AttemptResult, session_id를 포함한 AttemptRecord, CallRecord, FinalRecord.
-- `types/outcomes.py`: 메모리 전용 RequestOutcome, 테스트용 JSON 왕복 지원.
+- `types/outcomes.py`: 필수 roles를 포함한 메모리 전용 RequestOutcome, JSON 왕복 지원.
+- `types/run.py`: ModelConfig·Decision·RunSummary JSON 왕복, bytes를 담는 메모리 전용 CallPlan.
+- `contract/model_config.py`: 닫힌 모델 스키마·파일 해시·토큰 ID 검사, 실행 필수 값·B1 라벨 집합 대조.
+- `io/models.py`: 중복 키 거부 YAML 로더와 ModelConfigError.errors.
+- `io/hashes.py`: 스트리밍 SHA-256·SHA256SUMS 파싱·목록 파일 대조.
+- `io/run_files.py`: 정규 JSON 바이트·fsync/원자 교체·중복 키/비유한 수 거부·파일 해시 재수출.
 - `types/contract.py`: Validated·B1Config·B1Call·B1Response의 frozen JsonRecord 자료형.
 - `types/scoring.py`: AnswerParse·F1Result·CalibResult·SlotJudgement 자료형.
 - `contract/__init__.py`: 계약 검사 네임스페이스.
@@ -84,12 +89,19 @@ usage 없음/null은 usage_input_tokens_invalid 경고를 내지 않는다. 추�
 응답 검증 실패 시 answers는 None이며, 그때까지 수집한 경고는 중복 없이 보존한다.
 B1 allowed_token_ids는 client가 채운다. calibrate의 모집단 구성은 호출자 책임이다.
 client는 재시도·terminal·상태 결합을 결정하지 않는다. 본문 수신 오류는 HTTP 코드와 함께 남긴다.
+headers는 전송에만 사용하고 Content-Type 덮어쓰기·머리글 값의 예외 메시지 노출을 막는다.
+missing_for_run의 B1 라벨 인자는 b1.yaml에서 읽어 전달한다. 생략하면 incomplete로 판정한다.
 timeout은 소켓 단위이며 총 소요 시간 상한이 아니다. clock.utc_now()는 aware datetime을 돌려준다.
 resume은 append 전에 repair_tail을 호출해야 한다. read_attempts/read_finals는 파일을 바꾸지 않는다.
 재시도 5회는 기록된 시도 기준이다. 전송 뒤 fsync 전에 중단되면 실제 전송이 더 일어날 수 있다.
 
 ## 테스트
 
+- `tests/types/test_run.py`: 실행 공유 타입 왕복·frozen·CallPlan 메모리 경계.
+- `tests/contract/test_model_config.py`: 모델 키·타입·enum·URL·해시·토큰·실행 누락 검사.
+- `tests/io/test_models.py`: 모델 YAML 6개·실제 B1 라벨 설정·중복 키·오류 목록.
+- `tests/io/test_hashes.py`: 합성 파일 해시·누락·변경·목록 밖 파일·중복 형식.
+- `tests/io/test_run_files.py`: 정규 바이트·교체 전 fsync·실패 복구·중복 키·비유한 수.
 - `tests/client/test_http.py`: 가짜 연결/opener의 감싸진·직접 예외, 부분 본문, HTTPError, 시계, 빈 proxy 표.
 - `tests/client/test_http_live.py`: loopback 바이트·상태·리디렉트·부분 본문·timeout·실제 가짜 proxy 무접촉.
 - `tests/client/test_systemone.py`: request_bytes·경로·해시·한 번 전송.
@@ -176,6 +188,7 @@ CLI의 상대 `--rules`와 source/선정 경로는 `--root` 기준, 상대 `--ou
 label_conflicts.expected.notes의 옛 키를 label_conflict_groups_total/pool (각 1)로 대체.
 deterministic.json은 변경하지 않았으며 중간 순서와 최종 정렬을 따로 검증한다.
 §10의 서버 인코더·문자→토큰 변환·길이 거부 응답 확인은 P0 후속 작업이다.
+⑤a SPEC_AMBIGUOUS: threshold_cases의 232개 축약 outcome에는 질문 ID가 없어 roles={}로 추가했다.
 현재 길이 fixture는 이미 측정된 합성 LengthInfo를 입력으로 삼는다.
 
 작업 ③b: 반박 반영 R1–R6 구현. extra 의미 검사는 셋 이름으로 사용 여부를 추정하지 않고 구성원 소속을 검사한다.

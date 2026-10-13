@@ -55,3 +55,16 @@ def test_reserved_params_stop(key):
     source.params[key] = None
     with pytest.raises(ValueError):
         chat_body(source, "m", {"X": 1, "Y": 2, "Z": 3})
+
+
+def test_headers_forwarded_without_changing_request_hash():
+    body = chat_body(call(), "served", {"X": 1, "Y": 2, "Z": 3})
+    result = AttemptResult("start", "end", 0.0, 200, None, None, "{}")
+
+    def post(url, payload, timeout, headers):
+        assert headers == {"Authorization": "Bearer synthetic-secret"}
+        return result
+
+    digest, received = send_chat("http://127.0.0.1:9", body, post=post,
+                                headers={"Authorization": "Bearer synthetic-secret"})
+    assert digest == hashlib.sha256(chat_bytes(body)).hexdigest() and received is result

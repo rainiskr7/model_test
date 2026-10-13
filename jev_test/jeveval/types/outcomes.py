@@ -19,3 +19,14 @@ class RequestOutcome(JsonRecord):
     answer: dict[str, str] | None
     length_max: int | None
     meta: dict
+    roles: dict[str, str]
+
+    def __post_init__(self):
+        """모든 질문의 역할을 보존한다. gold는 MISSING도 키를 가진다 (§8-6 D)."""
+        if not isinstance(self.roles, dict):
+            raise TypeError("roles: expected object")
+        if self.roles.keys() != self.gold.keys():
+            raise ValueError("roles: expected all question IDs")
+        if any(not isinstance(key, str) or role not in ("success", "diagnostic")
+               for key, role in self.roles.items()):
+            raise ValueError("roles: expected success or diagnostic")

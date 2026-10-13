@@ -61,7 +61,8 @@ def cost():
 
 def outcome():
     return RequestOutcome(logical_id='s:g:i',group_id='g',stage='test',status='ok',valid=True,
-        mask_empty=False,s=.8,wrong=False,gold={'ready':'true'},answer={'ready':'true'},length_max=12,meta={})
+        mask_empty=False,s=.8,wrong=False,gold={'ready':'true'},answer={'ready':'true'},length_max=12,meta={},
+        roles={'ready':'success'})
 
 
 def records():

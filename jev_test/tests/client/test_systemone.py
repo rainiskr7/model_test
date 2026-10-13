@@ -20,3 +20,16 @@ def test_request_bytes_url_hash_and_single_post():
     assert calls == [("http://127.0.0.1:9/v1/systemone", request_bytes(request), 600)]
     assert digest == hashlib.sha256(calls[0][1]).hexdigest() and received is result
     assert systemone_url("http://127.0.0.1:9") == calls[0][0]
+
+
+def test_headers_forwarded_without_changing_request_hash():
+    request = Request("model", "state", {})
+    headers = {"Authorization": "Bearer synthetic-secret"}
+    result = AttemptResult("start", "end", 0.0, 200, None, None, "{}")
+
+    def post(url, body, timeout, headers):
+        assert headers == {"Authorization": "Bearer synthetic-secret"}
+        return result
+
+    digest, received = send_systemone("http://127.0.0.1:9", request, post=post, headers=headers)
+    assert digest == hashlib.sha256(request_bytes(request)).hexdigest() and received is result

@@ -12,6 +12,7 @@ def systemone_url(base_url: str) -> str:
 
 
 def send_systemone(base_url: str, request: Request, timeout=600,
-                   post=http.post) -> tuple[str, AttemptResult]:
+                   post=http.post, headers: dict[str, str] | None = None) -> tuple[str, AttemptResult]:
     body = request_bytes(request)
-    return hashlib.sha256(body).hexdigest(), post(systemone_url(base_url), body, timeout)
+    options = {} if headers is None else {"headers": headers}
+    return hashlib.sha256(body).hexdigest(), post(systemone_url(base_url), body, timeout, **options)

@@ -3,6 +3,7 @@
 import base64
 from datetime import datetime, timezone
 from http.client import HTTPException, IncompleteRead
+import re
 import time
 from urllib.error import HTTPError, URLError
 from urllib.request import HTTPRedirectHandler, ProxyHandler, Request, build_opener
@@ -65,12 +66,27 @@ def _stamp(clock):
     return clock.utc_now().astimezone(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
 
 
-def post(url: str, body: bytes, timeout: float, clock=None, opener=None) -> AttemptResult:
+def _headers(headers):
+    """머리글 값이 예외에 노출되기 전에 검사한다. Content-Type은 고정한다."""
+    result = {"Content-Type": "application/json; charset=utf-8"}
+    for key, value in (headers or {}).items():
+        if not isinstance(key, str) or not re.fullmatch(r"[!#$%&'*+.^_`|~0-9A-Za-z-]+", key):
+            raise ValueError("invalid HTTP header name")
+        if key.lower() == "content-type":
+            raise ValueError("Content-Type cannot be overridden")
+        if not isinstance(value, str) or any(ord(c) > 255 or ord(c) < 32 or ord(c) == 127 for c in value):
+            raise ValueError("invalid HTTP header value")
+        result[key] = value
+    return result
+
+
+def post(url: str, body: bytes, timeout: float, clock=None, opener=None,
+         headers: dict[str, str] | None = None) -> AttemptResult:
     """재시도 없이 보낸다. timeout은 소켓 단위이며 총 소요 시간 상한은 아니다."""
     clock = clock if clock is not None else _Clock()
     opener = opener if opener is not None else build_opener(ProxyHandler({}), _NoRedirect())
     request = Request(url, data=body, method="POST",
-                      headers={"Content-Type": "application/json; charset=utf-8"})
+                      headers=_headers(headers))
     started_at, start = _stamp(clock), clock.monotonic()
     status, retry_after, error, raw = None, None, None, ""
     try:
@@ -84,5 +100,7 @@ def post(url: str, body: bytes, timeout: float, clock=None, opener=None) -> Atte
             raw, error = _read_body(response)
     except (OSError, HTTPException) as exc:
         error = _error(exc)
+    except (ValueError, UnicodeError):
+        raise ValueError("invalid HTTP request") from None
     elapsed = float((clock.monotonic() - start) * 1000)
     return AttemptResult(started_at, _stamp(clock), elapsed, status, retry_after, error, raw)

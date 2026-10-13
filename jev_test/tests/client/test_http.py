@@ -13,6 +13,35 @@ from jeveval.client import http
 from jeveval.types import AttemptResult
 
 
+@pytest.mark.parametrize("key", ["Content-Type", "content-type", "CONTENT-TYPE"])
+def test_content_type_cannot_be_overridden(key):
+    with pytest.raises(ValueError, match="Content-Type") as caught:
+        http.post("http://127.0.0.1/", b"{}", 1, headers={key: "synthetic-secret"})
+    assert "synthetic-secret" not in str(caught.value)
+
+
+@pytest.mark.parametrize("value", ["synthetic-secret\r\nx: y", "synthetic-secret한글"])
+def test_invalid_header_values_are_not_exposed(value):
+    with pytest.raises(ValueError) as caught:
+        http.post("http://127.0.0.1/", b"{}", 1, headers={"Authorization": value})
+    assert "synthetic-secret" not in str(caught.value)
+
+
+def test_authorization_reaches_request_without_entering_result():
+    secret = "Bearer synthetic-secret"
+
+    def open_response(request, timeout):
+        assert request.get_header("Authorization") == secret
+        assert request.get_header("Content-type") == "application/json; charset=utf-8"
+        return Response(b"ok")
+
+    headers = {"Authorization": secret}
+    result = http.post("http://127.0.0.1/", b"{}", 1,
+                       opener=SimpleNamespace(open=open_response), headers=headers)
+    assert result.http_status == 200 and secret not in repr(result.to_dict())
+    assert headers == {"Authorization": secret}
+
+
 class Response(BytesIO):
     status = 200
     headers = {"Retry-After": " 1 "}

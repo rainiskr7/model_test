@@ -18,6 +18,7 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         body = self.rfile.read(int(self.headers["Content-Length"]))
         self.server.calls.append((self.path, body, self.headers["Content-Type"]))
+        self.server.authorizations.append(self.headers.get("Authorization"))
         if self.path == "/disconnect":
             self.connection.shutdown(socket.SHUT_RDWR)
             self.close_connection = True
@@ -62,6 +63,7 @@ def servers():
                 pytest.skip("loopback bind blocked")
             raise
         server.calls = []
+        server.authorizations = []
         thread = Thread(target=server.serve_forever, kwargs={"poll_interval": .01}, daemon=True)
         thread.start()
         running.append((server, thread))
@@ -111,3 +113,12 @@ def test_environment_proxy_is_never_contacted(servers, monkeypatch):
     result = post(url + "/echo", b"{}", 1)
     assert result.http_status == 200 and len(target.calls) == 1
     assert proxy.calls == []
+
+
+def test_authorization_sent_but_not_recorded(servers):
+    server, url = servers()
+    secret = "Bearer synthetic-secret"
+    result = post(url + "/echo", b"{}", 1, headers={"Authorization": secret})
+    assert result.http_status == 200
+    assert server.authorizations == [secret]
+    assert secret not in repr(result) and secret not in repr(result.to_dict())

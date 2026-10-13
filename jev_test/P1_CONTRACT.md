@@ -522,7 +522,7 @@ CallRecord(call_id, attempts, status, reason, warnings: list[str], request_sha25
            label_map: dict[str, str] | None = None, top_logprobs_raw: Any = None)     # §5-3
 
 # types/outcomes.py (메모리 전용)
-RequestOutcome(logical_id: str, group_id: str, stage: str,          # dev | test | extra
+RequestOutcome(logical_id: str, group_id: str, stage: str,          # dev | test | extra  (+ roles: {question_id: role}, 보정 10)
                status: str, valid: bool, mask_empty: bool,
                s: float | None,                                     # valid 일 때 min confidence (J_i 전체)
                wrong: bool | None,                                  # valid 이고 mask_empty 가 아닐 때 ℓ_i
@@ -547,6 +547,33 @@ PoolResult(group_ids: list[str], allocation: dict[str, int])          # data/poo
 ```
 
 ---
+
+### 8-6. 남은 부분 설계 (판 3 보정 10 — Claude 초안 → Codex 아키텍처 검토 14건 반영, 10-13)
+설계 초안·검토 원문은 세션 기록에 있다. 아래가 확정본이다.
+
+**작업 순서** (각 = 명세 반박 → Codex 구현 → Claude 검증 → 커밋):
+1. **⑤a 공유 타입·설정·계약 보정**: `types/` 에 `ModelConfig`·`CallPlan`·`Decision`·`RunSummary`, `configs/models/<id>.yaml` 스키마 + `io/models.py`, `io/hashes.py` (파일 sha256·SHA256SUMS 대조), `io/run_files.py` (fingerprint·threshold·seal·risk·scores·compare 정규 바이트 읽기/쓰기), `client/http.post` 의 `headers` 인자 (인증).
+2. **⑤b 호출 준비·결과 변환 (순수)**: `run/plan_calls.py` · `run/length.py` · `run/policy.py` · `run/outcome.py`.
+3. **⑥a-1 요청 채점·임계값**: `score/tasks.py` · `score/threshold.py` (봉인 재계산이 같은 경로를 쓴다).
+4. **⑤c 단계 입력·진입 검사·봉인**: `run/stage_inputs.py` (동결 설정 + 같은 해시의 원본으로 Item 복원, 단계별 경로만 연다) · `run/gate.py` (실행 전 검사) · `run/seal.py` 의 봉인 쓰기·resume 검사.
+5. **⑤d 실행기·resume·파생 판**: `run/executor.py` · `run/derive.py`.
+6. **⑥a-2 위험·모집단·비용·비교**: `score/risk.py` · `score/population.py` · `score/cost.py` · `score/compare.py` · `score/bootstrap.py`.
+7. **⑥b 산출물·인증·보존·CLI**: `run/summary.py` · `run/seal.certify` · `io/archive.py` · `run/cli.py` · `reference/` · canary 누출 검사.
+
+**확정 규칙**:
+- (A) **진입 순서는 하나**: `gate` 가 fingerprint 비교 → (시험) threshold·seal 검사 → (dev 뒤 단계) 앞 단계 완료 검사를 **파일을 바꾸기 전에** 끝내고, 통과해야 `repair_tail` → 실행. 시험 단계 첫 호출 전 `seal.json` 을 쓴다. `certify` 의 사후 재계산만 ⑥b.
+- (B) **resume 연결 검사**: 기록의 모든 `call_id` 는 지금 만든 `CallPlan` 에 있고 `logical_id`·`request_sha256` 이 같아야 한다 (다르면 거부 — 입력이 바뀐 것). 한 호출의 기록 시도가 `max_attempts` 에 이르렀는데 terminal 이 없으면 **다시 보내지 않고** 마지막 시도를 소진된 terminal 로 보고 판정한다 (`error/<그 시도의 사유>`); `max_attempts` 초과는 거부. non-terminal 뒤 재개는 대기 없이 다음 번호로 보낸다.
+- (C) `CallPlan` = `{call_id, logical_id, kind, question_ids, question_types, body, request_sha256, request: Request | None, b1_call: B1Call | None, rendered, local_errors}` — 결과 변환은 `CallPlan` 만으로 한다 (정답·`Item` 을 받지 않는다).
+- (D) `RequestOutcome` 에 `roles: {question_id: success|diagnostic}` 를 더한다 (§8-5). 위험 표의 by_class·by_n_questions·diagnostic_error_in_accepted 는 이것으로 나눈다. `meta` 의 닫힌 키는 그대로.
+- (E) threshold·certify 는 `stage_inputs` 로 Item(정답) 을 복원하고, **dev final 의 logical_id 집합 == 분할의 dev 대표 집합**일 때만 계산한다 (아니면 거부). 단계 로더는 그 단계 경로만 연다.
+- (F) **fingerprint 는 불변 실행 입력만** (`started_at` 제외 비교). 보존 아카이브 sha 는 따로 `archive.json` (커밋) — §5-6 의 "fingerprint 에 기록" 을 이것으로 고친다. 아카이브는 run 하나(`run_id`)의 모든 셋·판이 끝난 뒤 `cli archive` 가 한 번 만든다.
+- (G) 모델 yaml 재현 필드 (값은 P0, 자리·검증·fingerprint 수집은 P1): `serving: {engine, engine_version, image, image_digest, command}`, `tokenizer: {path, files_sha256: {이름: sha}}` (fingerprint 는 실제 파일을 다시 해시해 대조), `repo: {id, sha}`, `t0: {status: not_run|partial|passed, record}`. summary·compare 는 `t0.status` 를 결과에 옮겨 적는다 (`passed` 가 아니면 표시).
+- (H·I) 참조 구현 층은 세 API 를 명시적으로 감싼다: Clef·Clef-Flash `systemone` 전체 요청, pplx v1 `Decider.predict` 질문 하나씩, pplx v1.1 서버 `predict` (8개 묶음). 로딩(로컬 경로 필수, 다운로드 금지)과 결과 변환을 나누고, 잘림·반올림·choice 선택을 다시 구현하지 않는다. temperature 는 새 softmax 를 만들지 않는다 — **실제 경로에 고정 logit 을 주입하는 검사**는 참조 저장소(`autojev` 패키지 — 받은 사본에 모델 코드가 없다)를 받아야 하므로 **P0 진입 항목**으로 옮기고, P1 은 주입 지점(seam)과 그 지점을 쓰는 시험(가짜 참조 모듈)까지만 한다 — 이 한계를 결과에 적는다.
+- (J) `cli run --check-config`: 설정·분할·task 구조만 검사 (보내지 않고 길이도 재지 않는다). 요청 생성·길이 측정·전송은 완전한 설정에서만. 가짜 Measurer 는 시험 전용.
+- (K) 파생 판: `question_scoring == separate` 인 모델의 `actions_only` 는 실행하지 않고 `cli run --variant actions_only` 가 같은 단계의 전체판 final(그 단계가 끝난 것)에서 만든다. systemone(pplx) 은 한 호출의 `answers_parsed` 를 행동 질문 10개로 거르고, B1 은 행동 질문 10개의 호출만 남긴다 (`ongoing_1·2` 호출 제외). 남긴 호출의 `call_id`·`request_sha256`·`length`·`warnings` 는 그대로. 파생 판도 자기 dev final 로 threshold, 시험 전 seal.
+- (L) compare: 모델마다 `{test finals, threshold, Item}` 을 받고 분할 sha·task sha·시험 logical_id 집합이 모두 같아야 한다 (C4, 다르면 거부). **처리율 bootstrap 은 시험 대표 전체**(실패 = 수락 안 됨, 각 모델 고정 t\*), **F1 bootstrap 은 공통 `ok` 코호트**, FunctionChat 606 행 F1 은 107 묶음째 재표집.
+- (M) 파일 입출력은 `io/` (hashes·run_files·archive), 계산은 `score/`·`run/` 의 순수 함수. `run/summary.py` 는 저장소의 `reranker_test/evalcommon` 을 고정 상대 경로로 import 한다.
+- (N) 검증: 중단 위치별 — terminal 시도 fsync 뒤·final 전 중단 → resume 재호출 0; 전송 뒤 fsync 전 중단 → 기록 기준 예산 한계(추가 전송 1회까지 허용)로 따로. fixture 시험은 **실제 구현 함수**를 통과시킨다. canary 누출 검사는 ⑥b.
 
 ## 9. 최소 fixture (`tests/fixtures/`, 코드보다 먼저)
 
@@ -595,3 +622,4 @@ PoolResult(group_ids: list[str], allocation: dict[str, int])          # data/poo
 - 판 3 보정 7 (10-13): KOTE 정답을 평가자 과반수(3/5, raw.json)로 — dichotomized 가 사실상 '1명 이상' 이라 (Claude 집계: 2명 이상은 전부 1, 1명만 고른 것도 81.5% 가 1). 사용자 결정.
 - 판 3 보정 8 (10-13, ③b 명세 전 Claude): 항목 범위·순서 · 정답 등록표 모양(`options` 인자) · 펼치기 치환 규칙 · 셋별 state·정답·meta (KoSGD 발화·services 를 reader 에 · FunctionChat 정규화 문장·도구 선택지 · K-MHaS 이름 라벨 · KOTE 강등 · KorFin binding · KLUE 층) · `B1Config.user_template`. 실제 데이터 확인: FunctionChat 중복 문장 406 행 모두 slot · KorFin SRC 안 ASPECT 중복 0 · 카탈로그 두 목록 순서 일치.
 - 판 3 보정 9 (10-13, 작업 ④ 명세 전 Claude): client 는 한 번의 시도만 (재시도·terminal 은 ⑤) · AttemptResult · 전송 규칙(proxy 없음·리디렉트 안 따름·소켓 단위 600초) · B1 chat 본문·sha · B1 응답 읽기 · 기록 파일 줄·fsync·깨진 줄 규칙 (§5-5b).
+- 판 3 보정 10 (10-13, 남은 부분 설계 — Claude 초안 → Codex 아키텍처 검토 14건): 작업 순서 7단계(봉인 재계산을 위해 채점·임계값을 실행기 앞으로) · 진입 검사 순서 · resume 의 현재 요청 대조·예산 소진 · CallPlan 에 B1 대응표 · RequestOutcome.roles · Item 복원·dev 완료 검사 · fingerprint 와 archive 분리(archive.json) · 모델 yaml 재현 필드·t0 · 참조 구현 세 API·temperature 실경로 검사는 P0 · check-config · 파생 판 흐름 · compare 의 C4·두 bootstrap 모집단 · 입출력 소유 · 중단 위치별 검증.
