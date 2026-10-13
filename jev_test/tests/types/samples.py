@@ -4,6 +4,7 @@ from jeveval.types import (
     AttemptRecord, BoundQuestion, CallRecord, Cost, FinalRecord, Item, LengthInfo,
     ParsedAnswer, Population, QStats, QuestionSpec, Rendered, Request, RequestOutcome, RiskCell,
     ScoreTable, SourceRow, SplitPlan, TaskSpec, Threshold, ThresholdFile,
+    AnswerParse, B1Call, B1Config, CalibResult, F1Result, SlotJudgement, Validated,
 )
 
 
@@ -69,7 +70,7 @@ def records():
                             label='ready',criteria={'true':'예','false':'아니오'})
     task = TaskSpec(set='s',variant='full',state={'kind':'plain_text'},questions=[question],
                     per_item_questions=None,group_key='source')
-    return [task,question,item(),bound(),SourceRow(set='s',row_id='i',fields={'text':'등을 켰다.'}),
+    return [*function_results(),task,question,item(),bound(),SourceRow(set='s',row_id='i',fields={'text':'등을 켰다.'}),
         SplitPlan(set='s',seed=20261012,pool_rule='all',allocation={},groups={'g':['i']},
                   representative={'g':'s:g:i'},dev=[],test=['g'],diagnostic_demotions=[],extra=[],notes={}),
         Rendered(state='등',target_end_char=1),c.length,*c.answers_parsed.values(),c,attempt(),
@@ -78,3 +79,17 @@ def records():
         t,*t.by_tau.values(),s,*s.populations.values(),s.populations['test'].pooled['aspect'],cost(),outcome(),
         RiskCell(tau='0.02',status='NO_THRESHOLD',insufficient_by_design=True,unit='group_representative',
                  t_star=None,dev={},test={},by_status={},accepted_mix={},by_length_bucket={},diagnostic_error_in_accepted={})]
+
+
+def function_results():
+    parsed = ParsedAnswer('noul', 'true', {'true': .5, 'false': .5}, .5)
+    return [Validated(None, [], {'q': {'type': 'noul', 'noul': .5}}),
+        AnswerParse(parsed, None, [], {'A': .5, 'B': .5}),
+        B1Config('시스템', ['A', 'B'], {'chat_template_kwargs': {'enable_thinking': False}}),
+        B1Call('s:g:i/q', [{'role': 'user', 'content': '합성'}], ['A', 'B'],
+               {'A': 'true', 'B': 'false'}, {'top_logprobs': 2}),
+        F1Result(['true'], {'true': 1.0}, 1.0, {'true': {'support': 1, 'predicted': 1,
+                 'tp': 1, 'recall': {'num': 1, 'den': 1}, 'precision': {'num': 1, 'den': 1}}}),
+        CalibResult(None, [dict(index=i, lo=i/15, hi=(i+1)/15, n=0, acc=None, conf=None)
+                           for i in range(15)], None, None),
+        SlotJudgement(['a', 'NONE'], True, False, False)]

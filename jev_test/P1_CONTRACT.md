@@ -90,7 +90,7 @@ fingerprint 에는 **파일별** sha256 을 넣는다: 쓰인 task yaml 들 · �
 ### 2-3. 질문
 - 질문 ID·순서·instructions: task yaml 그대로 (펼친 질문은 §1-1). instructions 는 비우지 않는다.
 - **noul 은 `criteria` 를 항상 명시**한다 (task yaml 의 한국어 `true`/`false` 설명). 모델 기본값은 모델마다 다르거나(Clef 영어) 알 수 없어(pplx) 같은 입력을 보장하지 못한다.
-- choice `criteria` = `{선택지 ID: 설명}` — `Item.questions[].options` 그대로. 1–255 개, ID 중복 금지, `NONE` 은 다른 ID 와 겹치지 않아야 한다.
+- choice `criteria` = `{선택지 ID: 설명}` — `Item.questions[].options` 그대로. 1–255 개, 선택지 ID 는 비지 않은 문자열(snake_case 규칙은 **질문 ID 에만** — `NONE`·`서비스/의도` 도 선택지 ID 다), 중복 금지, **`casefold()` 한 값도 서로 달라야 한다** (`NONE`·`none` 이 함께 있으면 오류). systemone 요청의 선택지는 **`options` 순서 그대로** 보낸다 (정렬하지 않는다 — Clef 는 자기가 정렬한다). 정렬은 B1 라벨 배정(§2-5)에서만, 파이썬 `sorted()` (코드포인트 순 — `NONE` 이 소문자 ID 앞) (판 3 보정 3·4).
 
 ### 2-4. 로컬 검증 (보내기 전)
 봉투 키 · 타입 · 개수 · 빈 문자열 · ID 규칙 · 모델 이름이 모델 yaml 과 같은지. 실패하면 보내지 않고 `error/request_contract` (우리 버그).
@@ -119,7 +119,7 @@ JSON 파싱은 **중복 키 거부**(`object_pairs_hook`), `bool` 은 숫자로 
 | 6 | choice: 값 유한·0–1, \|합 − 1\| ≤ 선택지 수 × 5e-5 + 1e-9 | `choice_values` |
 | 7 | choice: `choice` ∈ 선택지, \|`confidence` − `probabilities[choice]`\| ≤ 1e-9 | `choice_pick` |
 
-- 최상위·답 객체의 **추가 키는 허용**하고 `extra_keys` 경고로만 남긴다 (`model`·`id`·`usage`·`provider` 등). `usage` 가 있으면 `input_tokens` 는 정수여야 하고 아니면 경고.
+- 최상위·답 객체의 **추가 키는 허용**하고 `extra_keys` 경고로만 남긴다 (`model`·`id`·`usage`·`provider` 등). `usage` 가 있고 null 이 아니면 객체여야 하고 `input_tokens` 는 정수(bool 제외)여야 한다 — 아니면 경고 `usage_input_tokens_invalid` (`usage` 가 없거나 null 이면 경고 없음). 경고는 중복을 빼고 처음 나온 순서로, 검증 실패(사유 코드)여도 그때까지 모은 경고를 함께 돌려준다 (판 3 보정 4).
 - 검증은 요청 단위로 전부 아니면 전무다 — 질문 하나라도 실패하면 그 요청은 `error`, 나머지 질문 값도 채점에 쓰지 않는다 (§7-3).
 
 ### 3-2. 답과 확신 → `ParsedAnswer` (계획 §4-1·§4-2, 판 3)
@@ -134,6 +134,7 @@ JSON 파싱은 **중복 키 거부**(`object_pairs_hook`), `bool` 은 숫자로 
 
 - **질문 확신은 `confidence`** 다 (계획 §4-1 출력 계약 — 사용자 결정). choice 에서 `probs[answer] < max(probs) − 1e-9` 이면 경고 `choice_not_argmax` 를 그 호출에 남기고 상태는 바꾸지 않는다 (Clef 는 반올림 전 argmax 라 반올림 후 동률은 걸리지 않는다).
 - B1 검사: 모든 라벨 토큰이 `top_logprobs` 안에 유한값으로 있어야 한다 (≤ −9999 는 빠진 것). 하나라도 빠지면 그 호출은 `error/b1_missing_label`.
+- B1 토큰 대조 (판 3 보정 3): `top_logprobs` 원소 `{token, logprob}` 의 `token.strip()` 이 라벨 문자열과 **정확히 같으면** 그 라벨이다. 라벨이 아닌 토큰은 무시한다 (`allowed_token_ids` 가 막으므로 원래 없다 — 있으면 경고 `b1_extra_token`). 같은 라벨이 둘 이상이면 logprob 가 큰 것 하나를 쓰고 경고 `b1_duplicate_label`. 재정규화 = 라벨 logprob 의 softmax (최댓값을 빼고 exp).
 - 재정규화는 **B1 후보 분포에만** 한다.
 
 ---
@@ -426,8 +427,8 @@ jev_test/jeveval/
 ### 8-4. 작업 순서 (각 작업 = 파일 몇 개 + 그 테스트, 따로 리뷰·실행)
 1. ~~`types/` + `io/config.py` + task yaml 스키마 검사 + §9 fixture~~ — **끝** (10-13, 커밋 `dafe4b2`)
 2. **②-0** (작업 ① 고침): `types/` 를 §8-5 로 갱신 (`SourceRow`·`BoundQuestion`·`Item`·`Rendered`·`ParsedAnswer`·`LengthInfo`·`CallRecord.length`·`answers_parsed` 타입·`Threshold`·`ThresholdFile`·`RiskCell`·`ScoreTable` 계열·`RequestOutcome`) · `contract/taskspec.py` 의 `per_item_questions` 검사·성공 질문 규칙 (§1-1) · §9 의 판 3 fixture.
-   **②**: `contract/` (render·request·response·b1_prompt) + `score/answers·labels·f1·calibration·kosgd_slots`
-3. `data/` (펼치기·묶음·풀·분할·items) + `io/sources` + `io/splits` → 분할 파일 생성
+   **②**: `contract/` (render·request·response·b1_prompt) + `score/answers·f1·calibration·kosgd_slots` (판 3 보정 3: `labels` 는 ③ 으로 — 정답 규칙은 `io/sources` 가 정하는 원본 필드 구조를 알아야 한다)
+3. `data/` (펼치기·묶음·풀·분할·items) + `io/sources` + `io/splits` + `score/labels` → 분할 파일 생성
 4. `client/` (한 번의 시도) + `io/records`
 5. `run/executor` (상태기계·resume) + `run/length` + `run/seal`
 6. `score/tasks·threshold·risk·population·cost·bootstrap` + `run/cli` + `io/archive` + `reference/`
@@ -476,6 +477,18 @@ RequestOutcome(logical_id: str, group_id: str, stage: str,          # dev | test
                wrong: bool | None,                                  # valid 이고 mask_empty 가 아닐 때 ℓ_i
                gold: dict[str, str | None], answer: dict[str, str] | None,
                length_max: int | None, meta: dict)
+
+# 작업 ② 함수 결과 (판 3 보정 3, 메모리 전용 — 모두 JsonRecord)
+Validated(reason: str | None, warnings: list[str], answers: dict[str, dict] | None)   # contract/response.validate — reason 이 None 일 때만 answers (원 답 객체, 질문 ID 키)
+AnswerParse(parsed: ParsedAnswer | None, reason: str | None, warnings: list[str],
+            label_probs: dict[str, float] | None)                                     # score/answers — systemone 은 label_probs None, B1 은 재정규화 라벨 분포
+B1Config(system: str, labels: list[str], params: dict)                                  # configs/tasks/b1.yaml 을 읽은 것 — labels 62개 순서, params 는 §2-5 고정 매개변수
+B1Call(call_qid: str, messages: list[dict], label_order: list[str],
+       label_map: dict[str, str], params: dict)                                         # contract/b1_prompt — params = config params + top_logprobs(=선택지 수); allowed_token_ids 는 client 가 모델 yaml 의 라벨 토큰으로 채운다 (④)
+F1Result(classes: list[str], per_class_f1: dict[str, float], macro_f1: float | None,
+         class_stats: dict)                                                             # score/f1 — class_stats 는 QStats.classes 모양 그대로
+CalibResult(ece: float | None, bins: list[dict], brier: float | None, log_loss: float | None)   # score/calibration — §7-1
+SlotJudgement(fixed_gold: list[str], group_correct: bool, duplicate_non_none: bool, order_only: bool)  # score/kosgd_slots — §7-2
 ```
 
 ---
@@ -520,3 +533,5 @@ RequestOutcome(logical_id: str, group_id: str, stage: str,          # dev | test
 - 판 2 (10-13): Codex 반박 반영 — 잘림 판정 경계 오류(ℓ = L_m 오판, 발화 시작이 아니라 끝 위치) · state 키 이름을 datasets.yaml 로 · 감사 v4 필요 · noul criteria 명시 · 422 원인 분리 · 상태와 사유 분리 · 비공개 보존 · FunctionChat 도구 macro-F1 제외(정답 도구 25/100, 모든 행 6선택지) · KoSGD 칸 보정은 고정 칸 정답 · B1 선택지에 ID · 세 단계 식별자 · terminal 응답 복구 · 판 파생 · 설정 스키마 · 평가 풀 추출 · 코호트 · 검증기 문법 · score 범위 밖 · 원리적 부족은 플래그 · evalcommon 호환 · 상태기계 소유 · 작업 순서. yaml `label_source` 중복 키 수정.
 - 판 3 (10-13): 작업 ① 의 SPEC_AMBIGUOUS 6곳(Item·ParsedAnswer·LengthInfo·threshold.json·ScoreTable·answers_parsed)을 채움. Claude 안 → Codex 반박(6분 34초) · grok 반박(1–4 는 1차 13KB 가 8분에 끊겨 절반, 5–6 은 8.6KB 로 다시 3분 30초) → Claude 가 근거를 계획·코드에서 재확인. 받아들인 것 — 질문을 펼치고 정답을 붙인 Item(KorFin 정답 연결·KoSGD `서비스/의도`·직전 정답·FunctionChat 선택지 단일 출처·묶음 뒤 Item) · 클래스 ID 문자열 · one-hot Brier · 호출별 LengthInfo·대상 끝 문자 위치·길이만 보는 classify · 인코더 규칙은 fingerprint(grok) · `answers_parsed` 타입·null 규칙 · 개발/시험 기록 분리·봉인·certify 의 t\* 재계산(grok)·mtime 은 보조 · NO_THRESHOLD null · τ 문자열 키 · 묶음 단위 분모 · 모집단 분리(FunctionChat 606 기술 통계)·공통 코호트는 compare.json · 클래스별 재현율·빈 bin 포함 ECE 15·`{num,den}`(grok) · KorFin pooled · 수락 클래스별 위험·길이 구간·사람 이관률 · 논리 요청 단위 비용 · summary 는 RiskCell 에서 · bootstrap 의 FunctionChat 107 묶음(계획과 어긋났던 판 2 고침) · 작업 ① 검사기의 KorFin 거부 결함 · MISSING 구분. 사용자 결정(10-13, 네 가지 모두 권고대로): B1 noul 동률 p ≥ 0.5 → true(grok 안, Codex 는 라벨 순서) · choice 확신은 API `confidence` + `choice_not_argmax` 경고 · 빈 마스크는 분모에서도 뺌 · 잘린 정상 응답의 답은 남김(Codex 안, grok 은 null). 데이터 확인(10-13): 6셋 정답 빠짐 0 · 8,192 초과 0 · K-MHaS 라벨 충돌 묶음 1 · KorFin aspect 미포함 71. 빼고 넣지 않은 것: KorSTS 등급 필드(첫 실행 범위 밖).
 - 판 3 보정 (10-13, 작업 ②-0 명세에 대한 Codex 반박 10건 중 9 수용): 펼친 ID 충돌은 k 상한 없이 정규식 · `by_tau` 값에도 `tau` · 시도 기록 `session_id` · `Cost.derived_from`·백분위 보간·n=0 null · 채점 0 인 질문의 null 규칙 · seal fixture 문구 오류(mtime 만 바꾸면 재계산은 통과) 정정 · canary 누출 검사는 작업 ⑥ · score 질문은 task 검사기에서는 오류 목록(문구 분명히 — 반박 1건은 기각, 작업 ① 결정 유지). C3 재계산에서 나온 두 해석 차이 — `n_missing` 은 채점 코호트 안 · `n_calls_missing_usage` 는 응답 코드와 무관하게 usage 를 못 얻은 호출 전부. B(새 세션 중재) 지적으로 결정적 검사(합성 호출 3개: 422+usage · terminal 없음 · bool usage)에서 A 검사기 2 ≠ Codex 시험 1 → 판 3 보정 2: 마지막 terminal 응답의 정수 usage 는 코드와 무관하게 합에, 아니면 누락 (분할 불변식) + `n_missing_on_200`. 결정 기록 — 가정: 실패 응답이 usage 를 주면 그 토큰은 실제로 쓰였다 · 이유: 합이 하한임을 분명히 하고 모든 호출을 한쪽에 넣는다 · 다시 볼 조건: P0 에서 서버가 실패 응답에 usage 를 주지 않거나 오해를 주는 값을 준다고 확인되면.
+- 판 3 보정 3 (10-13, 작업 ② 명세 전 Claude): 작업 ② 함수 결과 자료형 7개(§8-5 끝) · `labels` 를 ③ 으로 · B1 토큰 대조 규칙(strip 정확 일치, 중복은 큰 값+경고) · 선택지 ID casefold 충돌 금지·정렬은 코드포인트.
+- 판 3 보정 4 (10-13, 작업 ② 명세에 대한 Codex 반박 10건 — 9 수용·1 해당 없음): 선택지 정렬은 B1 에서만(보정 3 의 §2-3 문장이 systemone 요청까지 정렬하는 것으로 읽혀 기존 render fixture 와 충돌 — Claude 실수) · snake_case 는 질문 ID 만 · usage 경고 이름 `usage_input_tokens_invalid` 와 경고 순서·보존 · 경계 입력 `ValueError` 규칙은 작업 ② 명세에.

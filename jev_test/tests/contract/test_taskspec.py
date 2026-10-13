@@ -176,3 +176,8 @@ def test_pattern_prefix_suffix_and_unbounded_collision(document, dynamic, qid, c
     document['questions'][0]['id'] = qid
     result = validate_taskspec(document)
     assert isinstance(result,list) == collision
+
+
+def test_duplicate_state_keys(document):
+    document["state"] = dict(kind="json_string", keys=["a", "a"], target_key="a")
+    assert "task.state.keys: duplicate keys" in validate_taskspec(document)

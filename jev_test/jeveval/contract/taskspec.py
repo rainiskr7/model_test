@@ -50,6 +50,8 @@ def _state_errors(state):
         keys = state.get("keys")
         if not isinstance(keys, list) or not keys or not all(map(_text, keys)):
             errors.append("task.state.keys: expected nonempty list of strings")
+        elif len(set(keys)) != len(keys):
+            errors.append("task.state.keys: duplicate keys")
         target = state.get("target_key")
         if not _text(target) or not isinstance(keys, list) or target not in keys:
             errors.append("task.state.target_key: required member of keys")

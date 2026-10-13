@@ -8,14 +8,26 @@ from typing import Any, get_args, get_type_hints
 import pytest
 
 from samples import records
+from jeveval.types import AnswerParse, JsonRecord, ParsedAnswer
 
 
 @pytest.mark.parametrize('record', records(), ids=lambda x:type(x).__name__)
 def test_roundtrip_and_frozen(record):
+    assert isinstance(record, JsonRecord)
     restored = type(record).from_dict(json.loads(json.dumps(record.to_dict())))
     assert restored == record
     with pytest.raises(FrozenInstanceError):
         record.guessed_field = 1
+
+
+def test_answer_parse_restores_nested_dataclass():
+    record = next(r for r in records() if isinstance(r, AnswerParse))
+    source = record.to_dict()
+    restored = AnswerParse.from_dict(source)
+    assert isinstance(restored.parsed, ParsedAnswer)
+    source['parsed']['probs'].clear()
+    source['label_probs'].clear()
+    assert restored == record
 
 
 @pytest.mark.parametrize('record', records(), ids=lambda x:type(x).__name__)

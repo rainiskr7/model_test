@@ -1,0 +1,46 @@
+{
+  "config": {
+    "system": "합성 시스템: 라벨 하나만 답하세요.",
+    "labels": ["X", "Y", "Z"],
+    "params": {"max_tokens": 1, "logprobs": true, "temperature": 1, "top_logprobs": 99,
+      "top_p": 1, "top_k": -1, "min_p": 0, "repetition_penalty": 1,
+      "frequency_penalty": 0, "presence_penalty": 0,
+      "chat_template_kwargs": {"enable_thinking": false}}
+  },
+  "rendered": {"state": " 합성 원문\n둘째 줄 ", "target_end_char": 12},
+  "cases": [
+    {
+      "call_qid": "synthetic:g:i/pick",
+      "question": {"id": "pick", "role": "success", "type": "choice", "instructions": "하나를 골라요.",
+        "options": {"z": "마지막", "a": "처음", "NONE": "없음"}, "criteria": null,
+        "label": "synthetic", "gold": null},
+      "expected": {
+        "messages": [
+          {"role": "system", "content": "합성 시스템: 라벨 하나만 답하세요."},
+          {"role": "user", "content": " 합성 원문\n둘째 줄 \n\n질문: 하나를 골라요.\nX. [NONE] 없음\nY. [a] 처음\nZ. [z] 마지막\n답:"}
+        ],
+        "label_order": ["X", "Y", "Z"], "label_map": {"X": "NONE", "Y": "a", "Z": "z"},
+        "params": {"max_tokens": 1, "logprobs": true, "temperature": 1, "top_logprobs": 3,
+          "top_p": 1, "top_k": -1, "min_p": 0, "repetition_penalty": 1,
+          "frequency_penalty": 0, "presence_penalty": 0,
+          "chat_template_kwargs": {"enable_thinking": false}}
+      }
+    },
+    {
+      "call_qid": "synthetic:g:i/ready",
+      "question": {"id": "ready", "role": "success", "type": "noul", "instructions": "준비됐나요?",
+        "options": null, "criteria": {"false": "아니오", "true": "예"}, "label": "synthetic", "gold": null},
+      "expected": {
+        "messages": [
+          {"role": "system", "content": "합성 시스템: 라벨 하나만 답하세요."},
+          {"role": "user", "content": " 합성 원문\n둘째 줄 \n\n질문: 준비됐나요?\nX. [true] 예\nY. [false] 아니오\n답:"}
+        ],
+        "label_order": ["X", "Y"], "label_map": {"X": "true", "Y": "false"},
+        "params": {"max_tokens": 1, "logprobs": true, "temperature": 1, "top_logprobs": 2,
+          "top_p": 1, "top_k": -1, "min_p": 0, "repetition_penalty": 1,
+          "frequency_penalty": 0, "presence_penalty": 0,
+          "chat_template_kwargs": {"enable_thinking": false}}
+      }
+    }
+  ]
+}
