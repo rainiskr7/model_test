@@ -20,6 +20,10 @@ EXPECTED = {
     "b1_qwen3_8_27b": ("b1", "separate", None, None),
     "b1_qwen3_8_27b_fp8": ("b1", "separate", None, None),
 }
+B1_SERVING = {
+    "b1_qwen3_8_27b": ("qwen_qwen3.8_27b", "OPENAI_API_KEY"),
+    "b1_qwen3_8_27b_fp8": ("qwen_qwen3.8_27B_FP8", "OPENAI_API_KEY_7"),
+}
 
 
 def test_six_registered_models_and_pending_run_fields():
@@ -35,16 +39,14 @@ def test_six_registered_models_and_pending_run_fields():
         assert cfg.notes
         assert cfg.input_limit_response == (
             {"status": 400, "body_regex": "maximum context length is"}
-            if cfg.id == "b1_qwen3_8_27b" else None)
+            if cfg.id in B1_SERVING else None)
         assert ModelConfig.from_dict(cfg.to_dict()) == cfg
         expected = ["served_name", "base_url", "limit.tokens", "limit.overflow", "encoder.rule",
                     "tokenizer.path", "tokenizer.files_sha256"]
         if cfg.kind == "b1":
-            expected += ["b1.label_token_ids", "b1.label_token_ids: incomplete"]
-            assert cfg.serving["engine"] == "vllm" and cfg.auth_env == "OPENAI_API_KEY"
-        if cfg.id == "b1_qwen3_8_27b":
             expected = ["base_url"]
-            assert cfg.served_name == "qwen_qwen3.8_27b"
+            assert cfg.serving["engine"] == "vllm"
+            assert (cfg.served_name, cfg.auth_env) == B1_SERVING[cfg.id]
         else:
             assert cfg.served_name is None
         assert missing_for_run(cfg, labels) == expected

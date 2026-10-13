@@ -1,17 +1,31 @@
 # P0 에서 채울 값은 null — null 이 남으면 run 이 시작하지 않는다
+# 10-13 P0 실서버 확인 (aitopatom-337f GPUStack, B1 스모크 129/129 정상 — jev_test/.work/p0_b1, 커밋 안 함):
+#   vLLM 0.28.0 (system_fingerprint vllm-0.28.0-5f14e26e) · --max-logprobs 64 --logprobs-mode processed_logprobs 이미 켜져 있음
+#   길이: BF16 과 같은 로컬 토크나이저 chat 템플릿(생각 끔) 길이 == usage.prompt_tokens 129/129 → encoder.rule hf_chat_template_no_think
+#   상한: "maximum context length is 65536" (입력+출력) — 입력 상한 65535, 넘치면 HTTP 400 거부
+#   served 이름은 /v1/models 목록 그대로 qwen_qwen3.8_27B_FP8 (응답의 model 필드는 소문자로 온다)
+#   base_url 은 네트워크마다 IP 가 바뀌어(192.168.0.7 ↔ 192.168.219.114) 실행할 때 넘긴다
 id: b1_qwen3_8_27b_fp8
 kind: b1
-served_name: null
+served_name: qwen_qwen3.8_27B_FP8
 base_url: null
-auth_env: OPENAI_API_KEY
+auth_env: OPENAI_API_KEY_7
 question_scoring: separate
-limit: {tokens: null, overflow: null}
-input_limit_response: null
-encoder: {rule: null}
-tokenizer: {path: null, files_sha256: null}
+limit: {tokens: 65535, overflow: reject}
+input_limit_response: {status: 400, body_regex: "maximum context length is"}   # 길이 거부는 HTTP 400
+encoder: {rule: hf_chat_template_no_think}
+tokenizer:
+  path: /Users/rainis/Desktop/workplace/models/Qwen_Qwen3.8_27B
+  files_sha256:
+    chat_template.jinja: c3cf9e34abf4f9e36c2d72165aa9c132d3e2a725b6c2586aaa3a8af9d7a81041
+    tokenizer_config.json: b11349aafa7cdc6a320767cf7ceb29ed82f7eda5d65e8e0819e76f0ce947bf27
+    tokenizer.json: 0997f410c57a1f4e53b09e4be8f4a172d90edd9564368fb0847030937229b9f3
+    vocab.json: ce99b4cb2983d118806ce0a8b777a35b093e2000a503ebde25853284c9dfa003
+    merges.txt: a9d356d7bdf1ef4949e3e748e95b8e10ad9d4e2e838eddc38a0a7b6b94d1db8d
 concurrency: 1
-b1: {label_token_ids: null}
-serving: {engine: vllm, engine_version: null, image: null, image_digest: null, command: null}
+b1:
+  label_token_ids: {A: 32, B: 33, C: 34, D: 35, E: 36, F: 37, G: 38, H: 39, I: 40, J: 41, K: 42, L: 43, M: 44, N: 45, O: 46, P: 47, Q: 48, R: 49, S: 50, T: 51, U: 52, V: 53, W: 54, X: 55, Y: 56, Z: 57, a: 64, b: 65, c: 66, d: 67, e: 68, f: 69, g: 70, h: 71, i: 72, j: 73, k: 74, l: 75, m: 76, n: 77, o: 78, p: 79, q: 80, r: 81, s: 82, t: 83, u: 84, v: 85, w: 86, x: 87, y: 88, z: 89, "0": 15, "1": 16, "2": 17, "3": 18, "4": 19, "5": 20, "6": 21, "7": 22, "8": 23, "9": 24}
+serving: {engine: vllm, engine_version: 0.28.0, image: null, image_digest: null, command: "GPUStack 관리 vLLM, 추가 옵션 --max-logprobs 64 --logprobs-mode processed_logprobs (나머지 실행 인자는 P0 에서 GPUStack 화면으로 기록)"}
 repo: {id: null, sha: null}
 t0: {status: not_run, record: null}
-notes: "B1 FP8은 BF16과 별도 열. chat 생각 끔·라벨 62개 단일 토큰·processed_logprobs 실효 설정은 P0 확인."
+notes: "B1 FP8 운영 대안 (별도 열). 10-13 스모크에서 BF16 과 답 98/99 일치·p50 0.55s(BF16 0.84s). 10-13 실서버 확인은 위 머리 주석. 라벨 62개 단일 토큰·allowed_token_ids 로 뽑힌 토큰 129/129 라벨."
