@@ -13,7 +13,7 @@ import types
 from collections import Counter
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Mapping, Optional, Tuple
+from typing import Any, Dict, Iterable, List, Mapping, MutableMapping, Optional, Tuple
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from jsonwrite.atomic_json import write_json_atomic
@@ -418,160 +418,218 @@ def _validate_args(args: argparse.Namespace) -> None:
         raise ValueError("limit must be at least 1")
 
 
+def _prepare_input_dir(environ: MutableMapping[str, str]) -> Tuple[Path, Path]:
+    """환경 기본값을 설정하고 입력 디렉토리의 존재를 확인한다."""
+    base_dir = Path(
+        environ.get("MODEL_TEST_BASE") or Path(__file__).resolve().parents[3]
+    ).resolve()
+    environ.setdefault("MODEL_TEST_BASE", str(base_dir))
+    bench_dir = base_dir / "data" / "FunctionChat-Bench"
+    data_dir = bench_dir / "data"
+    if not data_dir.is_dir():
+        raise FileNotFoundError(f"FunctionChat-Bench data not found: {data_dir}")
+    return base_dir, data_dir
+
+
+def _create_adapter(args: argparse.Namespace, base_dir: Path) -> Any:
+    """기존 요청 설정으로 shared adapter를 생성한다."""
+    adapter_class = load_shared_adapter(base_dir)
+    adapter = adapter_class(
+        args.model,
+        base_url=args.base_url,
+        timeout=args.request_timeout,
+        max_tokens=args.max_tokens,
+        temperature=0.0,
+        native_tool_calling=args.native_tool_calling,
+    )
+    return adapter
+
+
+def _load_datasets(data_dir: Path) -> Dict[str, List[Dict[str, Any]]]:
+    """입력 파일을 읽어 원래 데이터셋 및 항목 순서로 펼친다."""
+    system_prompt = (data_dir / "system_prompt.txt").read_text(encoding="utf-8").strip()
+    datasets = {
+        "singlecall": expand_singlecall(
+            data_dir / "FunctionChat-Singlecall.jsonl", system_prompt
+        ),
+        "call_decision": expand_call_decision(
+            data_dir / "FunctionChat-CallDecision.jsonl"
+        ),
+        "dialog": expand_dialog(
+            data_dir / "FunctionChat-Dialog.jsonl", system_prompt
+        ),
+    }
+    return datasets
+
+
+def _select_datasets(
+    datasets: Mapping[str, List[Dict[str, Any]]], limit: Optional[int]
+) -> Tuple[Mapping[str, List[Dict[str, Any]]], bool]:
+    """데이터셋별 앞 N개와 실제 절단 여부를 반환한다."""
+    # 실제로 잘렸을 때만 부분 실행이다. ``items[:1000]`` 은 500개짜리
+    # 데이터셋을 그대로 돌려주므로, 요청한 숫자만 보고 판단하면 전량 런이
+    # 발행 불가로 거부된다.
+    truncated = limit is not None and any(
+        len(items) > limit for items in datasets.values()
+    )
+    if limit is not None:
+        # 무작위 표본이 아니라 앞에서 N 개다. 두 런이 같은 항목을 덮어야
+        # 항목 단위로 대조할 수 있다 — 표본이 다르면 재현성이 아니라 다른
+        # 측정을 비교하는 것이 된다.
+        datasets = {
+            name: items[: limit] for name, items in datasets.items()
+        }
+    return datasets, truncated
+
+
+def _report_limit(limit: Optional[int], truncated: bool) -> None:
+    """부분 실행 여부를 기존 stderr 문구로 알린다."""
+    if limit is None:
+        return
+    if truncated:
+        print(
+            f"[functionchat] --limit {limit}: 데이터셋마다 앞 {limit}항목만 "
+            "실행한다. 이 산출물은 발행 대상이 아니다.",
+            file=sys.stderr,
+        )
+    else:
+        print(
+            f"[functionchat] --limit {limit} 이 모든 데이터셋보다 크다 — "
+            "실제로는 전량 실행이며 부분 실행으로 표시하지 않는다.",
+            file=sys.stderr,
+        )
+
+
+def _prepare_results_dir(base_dir: Path, args: argparse.Namespace) -> Path:
+    """기존 결과 폴더 표기와 실행 timestamp로 저장 경로를 정한다."""
+    timestamp = _timestamp(base_dir)
+    results_dir = (
+        base_dir
+        / "results"
+        / _results_model_dir_name(base_dir, args.model)
+        / timestamp
+        / "language"
+        / args.track_name
+    )
+    return results_dir
+
+
+def _run_datasets(
+    args: argparse.Namespace, adapter: Any, datasets: Mapping[str, list], truncated: bool
+) -> Dict[str, Dict[str, Any]]:
+    """모든 항목을 호출하고 진행 로그와 데이터셋별 응답을 만든다."""
+    raw_outputs: Dict[str, Dict[str, Any]] = {}
+    for dataset, items in datasets.items():
+        before_unparsed = adapter.unparsed_tool_call_candidates
+        results = []
+        for index, item in enumerate(items, start=1):
+            # call 이든 아니든 **호출은 한다.** type_of_output 은 exact-match
+            # 채점 대상인지만 가른다 — 판정 계층이 쓸 응답은 어느 쪽이든 남긴다.
+            result = run_item(
+                adapter,
+                item,
+                args.task_timeout,
+                args.max_retries,
+                evaluation_status=(
+                    "measured" if item["type_of_output"] == CALL else "not_measured"
+                ),
+            )
+            results.append(result)
+            if index % 25 == 0 or index == len(items):
+                print(f"[functionchat] {dataset}: {index}/{len(items)}")
+
+        metadata = _metadata(args, adapter, dataset, truncated)
+        measured = sum(item["type_of_output"] == CALL for item in items)
+        metadata.update(
+            {
+                "total_items": len(items),
+                "measured_items": measured,
+                "not_measured_items": len(items) - measured,
+                "unparsed_tool_call_candidates": (
+                    adapter.unparsed_tool_call_candidates - before_unparsed
+                ),
+            }
+        )
+        raw_outputs[dataset] = {"metadata": metadata, "results": results}
+    return raw_outputs
+
+
+def _write_raw_outputs(results_dir: Path, raw_outputs: Mapping[str, Any]) -> None:
+    """전 데이터셋 실행 후 원래 순서와 writer로 raw 파일을 기록한다."""
+    # 모든 dataset이 끝난 뒤 기록해 interrupt 시 partial run을 완전 run처럼 보이지 않게 한다.
+    for dataset, raw in raw_outputs.items():
+        write_json_atomic(results_dir / f"{dataset}.json", raw)
+
+
+def _build_coverage(datasets: Mapping[str, list], dialog_scenarios: int) -> Dict[str, Any]:
+    """실행 항목과 원본 dialog 개수에서 coverage 내용을 만든다."""
+    decision_types = Counter(
+        item["type_of_output"] for item in datasets["call_decision"]
+    )
+    # dialog 은 **턴 단위**로 평가한다 (상류 payload_creator.py 도 turns 를 순회).
+    # 시나리오 수(45)로 세면 판정 필요 항목이 130 대신 45 로 집계돼 커버리지가
+    # 어긋난다 — 2026-08-23 에 total_items 가 551 로 찍혔고 실제는 636 이었다.
+    dialog_types = Counter(item["type_of_output"] for item in datasets["dialog"])
+    coverage = {
+        "source": {
+            "repository": "kakao/FunctionChat-Bench",
+            "commit": SOURCE_COMMIT,
+        },
+        "datasets": {
+            "singlecall": {
+                "source_lines": 25,
+                "expanded_items": len(datasets["singlecall"]),
+                "measured_items": len(datasets["singlecall"]),
+            },
+            "call_decision": {
+                "source_lines": len(datasets["call_decision"]),
+                "measured_items": decision_types[CALL],
+            },
+            "dialog": {
+                "source_records": dialog_scenarios,
+                "expanded_items": len(datasets["dialog"]),
+                "measured_items": dialog_types[CALL],
+            },
+        },
+        "not_measured": {
+            "call_decision": {
+                "relevance": decision_types["relevance"],
+                "slot": decision_types["slot"],
+            },
+            # 판정이 필요한 턴을 유형별로 적는다. multi_turn 이라는 뭉뚱그린 이름으로
+            # 시나리오 수를 적던 것을 바로잡았다.
+            "dialog": {
+                key: dialog_types[key]
+                for key in sorted(dialog_types)
+                if key != CALL
+            },
+        },
+    }
+    return coverage
+
+
+def _write_coverage(results_dir: Path, data_dir: Path, datasets: Mapping[str, list]) -> None:
+    """raw 저장 뒤 원본 dialog 개수를 읽어 coverage 파일을 기록한다."""
+    dialog_scenarios = len(_load_jsonl(data_dir / "FunctionChat-Dialog.jsonl"))
+    coverage = _build_coverage(datasets, dialog_scenarios)
+    write_json_atomic(results_dir / "coverage.json", coverage)
+
+
 def main(argv: Optional[List[str]] = None) -> int:
+    """설정, preflight, 실행, 저장을 조정하고 기존 종료 코드를 반환한다."""
     try:
         args = parse_args(argv)
         _validate_args(args)
-        base_dir = Path(
-            os.environ.get("MODEL_TEST_BASE") or Path(__file__).resolve().parents[3]
-        ).resolve()
-        os.environ.setdefault("MODEL_TEST_BASE", str(base_dir))
-        bench_dir = base_dir / "data" / "FunctionChat-Bench"
-        data_dir = bench_dir / "data"
-        if not data_dir.is_dir():
-            raise FileNotFoundError(f"FunctionChat-Bench data not found: {data_dir}")
-
-        adapter_class = load_shared_adapter(base_dir)
-        adapter = adapter_class(
-            args.model,
-            base_url=args.base_url,
-            timeout=args.request_timeout,
-            max_tokens=args.max_tokens,
-            temperature=0.0,
-            native_tool_calling=args.native_tool_calling,
-        )
+        base_dir, data_dir = _prepare_input_dir(os.environ)
+        adapter = _create_adapter(args, base_dir)
         _preflight_model(adapter, args.model, args.request_timeout)
-
-        system_prompt = (data_dir / "system_prompt.txt").read_text(encoding="utf-8").strip()
-        datasets = {
-            "singlecall": expand_singlecall(
-                data_dir / "FunctionChat-Singlecall.jsonl", system_prompt
-            ),
-            "call_decision": expand_call_decision(
-                data_dir / "FunctionChat-CallDecision.jsonl"
-            ),
-            "dialog": expand_dialog(
-                data_dir / "FunctionChat-Dialog.jsonl", system_prompt
-            ),
-        }
-        # 실제로 잘렸을 때만 부분 실행이다. ``items[:1000]`` 은 500개짜리
-        # 데이터셋을 그대로 돌려주므로, 요청한 숫자만 보고 판단하면 전량 런이
-        # 발행 불가로 거부된다.
-        truncated = args.limit is not None and any(
-            len(items) > args.limit for items in datasets.values()
-        )
-        if args.limit is not None:
-            # 무작위 표본이 아니라 앞에서 N 개다. 두 런이 같은 항목을 덮어야
-            # 항목 단위로 대조할 수 있다 — 표본이 다르면 재현성이 아니라 다른
-            # 측정을 비교하는 것이 된다.
-            datasets = {
-                name: items[: args.limit] for name, items in datasets.items()
-            }
-            if truncated:
-                print(
-                    f"[functionchat] --limit {args.limit}: 데이터셋마다 앞 {args.limit}항목만 "
-                    "실행한다. 이 산출물은 발행 대상이 아니다.",
-                    file=sys.stderr,
-                )
-            else:
-                print(
-                    f"[functionchat] --limit {args.limit} 이 모든 데이터셋보다 크다 — "
-                    "실제로는 전량 실행이며 부분 실행으로 표시하지 않는다.",
-                    file=sys.stderr,
-                )
-
-        timestamp = _timestamp(base_dir)
-        results_dir = (
-            base_dir
-            / "results"
-            / _results_model_dir_name(base_dir, args.model)
-            / timestamp
-            / "language"
-            / args.track_name
-        )
-
-        raw_outputs: Dict[str, Dict[str, Any]] = {}
-        for dataset, items in datasets.items():
-            before_unparsed = adapter.unparsed_tool_call_candidates
-            results = []
-            for index, item in enumerate(items, start=1):
-                # call 이든 아니든 **호출은 한다.** type_of_output 은 exact-match
-                # 채점 대상인지만 가른다 — 판정 계층이 쓸 응답은 어느 쪽이든 남긴다.
-                result = run_item(
-                    adapter,
-                    item,
-                    args.task_timeout,
-                    args.max_retries,
-                    evaluation_status=(
-                        "measured" if item["type_of_output"] == CALL else "not_measured"
-                    ),
-                )
-                results.append(result)
-                if index % 25 == 0 or index == len(items):
-                    print(f"[functionchat] {dataset}: {index}/{len(items)}")
-
-            metadata = _metadata(args, adapter, dataset, truncated)
-            measured = sum(item["type_of_output"] == CALL for item in items)
-            metadata.update(
-                {
-                    "total_items": len(items),
-                    "measured_items": measured,
-                    "not_measured_items": len(items) - measured,
-                    "unparsed_tool_call_candidates": (
-                        adapter.unparsed_tool_call_candidates - before_unparsed
-                    ),
-                }
-            )
-            raw_outputs[dataset] = {"metadata": metadata, "results": results}
-
-        # 모든 dataset이 끝난 뒤 기록해 interrupt 시 partial run을 완전 run처럼 보이지 않게 한다.
-        for dataset, raw in raw_outputs.items():
-            write_json_atomic(results_dir / f"{dataset}.json", raw)
-
-        decision_types = Counter(
-            item["type_of_output"] for item in datasets["call_decision"]
-        )
-        # dialog 은 **턴 단위**로 평가한다 (상류 payload_creator.py 도 turns 를 순회).
-        # 시나리오 수(45)로 세면 판정 필요 항목이 130 대신 45 로 집계돼 커버리지가
-        # 어긋난다 — 2026-08-23 에 total_items 가 551 로 찍혔고 실제는 636 이었다.
-        dialog_scenarios = len(_load_jsonl(data_dir / "FunctionChat-Dialog.jsonl"))
-        dialog_types = Counter(item["type_of_output"] for item in datasets["dialog"])
-        coverage = {
-            "source": {
-                "repository": "kakao/FunctionChat-Bench",
-                "commit": SOURCE_COMMIT,
-            },
-            "datasets": {
-                "singlecall": {
-                    "source_lines": 25,
-                    "expanded_items": len(datasets["singlecall"]),
-                    "measured_items": len(datasets["singlecall"]),
-                },
-                "call_decision": {
-                    "source_lines": len(datasets["call_decision"]),
-                    "measured_items": decision_types[CALL],
-                },
-                "dialog": {
-                    "source_records": dialog_scenarios,
-                    "expanded_items": len(datasets["dialog"]),
-                    "measured_items": dialog_types[CALL],
-                },
-            },
-            "not_measured": {
-                "call_decision": {
-                    "relevance": decision_types["relevance"],
-                    "slot": decision_types["slot"],
-                },
-                # 판정이 필요한 턴을 유형별로 적는다. multi_turn 이라는 뭉뚱그린 이름으로
-                # 시나리오 수를 적던 것을 바로잡았다.
-                "dialog": {
-                    key: dialog_types[key]
-                    for key in sorted(dialog_types)
-                    if key != CALL
-                },
-            },
-        }
-        write_json_atomic(results_dir / "coverage.json", coverage)
+        datasets = _load_datasets(data_dir)
+        datasets, truncated = _select_datasets(datasets, args.limit)
+        _report_limit(args.limit, truncated)
+        results_dir = _prepare_results_dir(base_dir, args)
+        raw_outputs = _run_datasets(args, adapter, datasets, truncated)
+        _write_raw_outputs(results_dir, raw_outputs)
+        _write_coverage(results_dir, data_dir, datasets)
         print(f"[functionchat] raw artifacts written to {results_dir}")
         return 0
     except Exception as exc:
