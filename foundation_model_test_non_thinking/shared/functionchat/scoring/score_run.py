@@ -10,6 +10,7 @@ from typing import Any, Dict, Iterable, List, Mapping, Tuple
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from jsonwrite.atomic_json import write_json_atomic
+from resultspath.run_dir import scoring_results_dir
 
 if __package__:
     from .exact_match import CALL, exact_match
@@ -244,16 +245,7 @@ def _load(path: Path) -> Dict[str, Any]:
 
 
 def _results_dir(args: argparse.Namespace) -> Path:
-    if args.results_dir:
-        return args.results_dir.resolve()
-    base = Path(os.environ.get("MODEL_TEST_BASE") or Path(__file__).resolve().parents[3])
-    timestamp = args.timestamp or os.environ.get("EVAL_TIMESTAMP")
-    if not args.model or not timestamp:
-        raise ValueError("--model and --timestamp (or EVAL_TIMESTAMP) are required")
-    return (
-        base / "results" / results_model_dir_name(base, args.model)
-        / timestamp / "language" / args.track
-    )
+    return scoring_results_dir(args, Path(__file__).resolve().parents[3])
 
 
 def parse_args(argv: List[str] = None) -> argparse.Namespace:

@@ -13,6 +13,7 @@ from typing import Any, Iterable, Mapping, Optional
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from jsonwrite.atomic_json import write_json_atomic
+from resultspath.run_dir import run_timestamp as _timestamp
 
 
 SOURCE_COMMIT = "c3398666e6559e3a063da3fc04b5acf7f941464e"
@@ -365,16 +366,6 @@ def _package_version(name: str) -> Optional[str]:
         return importlib.metadata.version(name)
     except importlib.metadata.PackageNotFoundError:
         return None
-
-
-def _timestamp(base_dir: Path) -> str:
-    value = os.environ.get("EVAL_TIMESTAMP")
-    if value:
-        return value
-    session_file = base_dir / ".eval_session"
-    if session_file.is_file():
-        value = session_file.read_text(encoding="utf-8").strip()
-    return value or datetime.now().strftime("%Y%m%d_%H%M%S")
 
 
 def parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:

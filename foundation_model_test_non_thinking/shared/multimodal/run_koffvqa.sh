@@ -46,13 +46,7 @@ fi
 # Linux에서도 기존 git 경로의 실제 casing을 재사용한다. 문자열 치환으로 따로
 # 계산하면 macOS(대소문자 무시)에서는 같은 디렉토리를 가리키지만 리눅스에서는
 # Python 러너가 쓰는 경로와 갈라져 산출물이 두 디렉토리로 흩어진다.
-SAFE_MODEL="$("$PY" - "$SCRIPT_DIR/benches" "$BASE_DIR" "$MODEL" <<'PYEOF'
-import sys
-sys.path.insert(0, sys.argv[1])
-from paths import results_model_dir_name
-print(results_model_dir_name(sys.argv[2], sys.argv[3]))
-PYEOF
-)" || { echo "[koffvqa] results 모델 경로 해석 실패 — 중단"; exit 1; }
+SAFE_MODEL="$("$PY" -c 'import sys; sys.path.insert(0, sys.argv[1]); from paths import results_model_dir_name; print(results_model_dir_name(sys.argv[2], sys.argv[3]))' "$SCRIPT_DIR/benches" "$BASE_DIR" "$MODEL")" || { echo "[koffvqa] results 모델 경로 해석 실패 — 중단"; exit 1; }
 
 # Timestamp 결정: EVAL_TIMESTAMP env > .eval_session 파일 > 새로 생성 + 저장
 if [ -n "${EVAL_TIMESTAMP:-}" ]; then

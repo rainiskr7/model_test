@@ -21,6 +21,8 @@ from typing import Any, Iterable, Mapping, Optional
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from jsonwrite.atomic_json import write_json_atomic
+from resultspath.run_dir import scoring_results_dir
+from resultspath.model_dir import results_model_dir_name
 
 
 SCORING_VERSION = "taubench_state_v2"  # v2: 후보 프로토콜 실패(도구 미호출)를 측정된 실패로 센다
@@ -44,17 +46,6 @@ DECLARED_INVENTORY = {
 
 def safe_model_name(model: str) -> str:
     return model.replace("/", "_").replace("-", "_").replace(":", "_")
-
-
-def results_model_dir_name(base_dir: Path, model: str) -> str:
-    """Reuse the sole casefold-matching directory; reject ambiguous spellings."""
-    requested = safe_model_name(model)
-    root = Path(base_dir) / "results"
-    matches = sorted(p.name for p in root.iterdir()
-                     if p.is_dir() and p.name.casefold() == requested.casefold()) if root.is_dir() else []
-    if len(matches) > 1:
-        raise ValueError(f"case-fold ambiguous results model directory for {requested!r}: {matches}")
-    return matches[0] if matches else requested
 
 
 def classify_task(task: Mapping[str, Any]) -> tuple[str, Optional[str]]:
@@ -510,13 +501,7 @@ def _load(path: Path) -> dict[str, Any]:
 
 
 def _results_dir(args: argparse.Namespace) -> Path:
-    if args.results_dir:
-        return args.results_dir.resolve()
-    base = Path(os.environ.get("MODEL_TEST_BASE") or Path(__file__).resolve().parents[3])
-    timestamp = args.timestamp or os.environ.get("EVAL_TIMESTAMP")
-    if not args.model or not timestamp:
-        raise ValueError("--model and --timestamp (or EVAL_TIMESTAMP) are required")
-    return base / "results" / results_model_dir_name(base, args.model) / timestamp / "language" / args.track
+    return scoring_results_dir(args, Path(__file__).resolve().parents[3])
 
 
 def parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:

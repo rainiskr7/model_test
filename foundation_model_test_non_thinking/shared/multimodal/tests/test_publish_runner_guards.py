@@ -44,6 +44,8 @@ def test_run_all_accumulates_runner_failure_and_exits_nonzero(tmp_path):
     (script_dir / "benches").mkdir()
     for name in ("paths.py", "_schema.py", "b3_preflight.py", "session_sanity.py"):
         shutil.copy2(REPO / "shared/multimodal/benches" / name, script_dir / "benches" / name)
+    shutil.copytree(REPO / "shared/resultspath", tmp_path / "shared/resultspath",
+                    ignore=shutil.ignore_patterns("__pycache__", "tests"))
     wrappers = [
         "run_k_dtcbench.sh", "run_koffvqa.sh", "run_mtvqa_kr.sh",
         "run_k_mmbench.sh", "run_kreta.sh", "run_b4_latency_profile.sh",

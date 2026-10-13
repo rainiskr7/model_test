@@ -7,7 +7,7 @@ Source: https://huggingface.co/datasets/NCSOFT/K-MMBench
 plan #2의 "선별" 운영을 위해 --categories 옵션 제공.
 """
 
-import re
+from choice import extract_choice
 import sys
 
 try:
@@ -35,29 +35,6 @@ Options: A: {A}, B: {B}, C: {C}, D: {D}
 
 주어진 선택지 중 해당 옵션의 문자로 바로 답하세요."""
 EXPECTED_COUNT = 4329
-
-
-def extract_choice(response: str) -> str:
-    """Extract A/B/C/D from response (한국어 답변 패턴 포함). Returns '' if not found."""
-    if not response:
-        return ""
-    s = response.strip()
-    s_up = s.upper()
-    if s_up and s_up[0] in "ABCD":
-        return s_up[0]
-    patterns = [
-        r'정답[은:]?\s*[\(\[]?\s*([ABCD])',
-        r'답[은:]?\s*[\(\[]?\s*([ABCD])',
-        r'[\(\[]([ABCD])[\)\]]',
-        r'\b([ABCD])\s*번',
-        r'\b([ABCD])\s*[\)\]\.]',
-        r'\b([ABCD])\b',
-    ]
-    for pat in patterns:
-        m = re.search(pat, s_up)
-        if m:
-            return m.group(1)
-    return ""
 
 
 def main():

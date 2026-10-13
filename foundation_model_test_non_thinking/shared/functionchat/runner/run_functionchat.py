@@ -17,6 +17,7 @@ from typing import Any, Dict, Iterable, List, Mapping, Optional, Tuple
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from jsonwrite.atomic_json import write_json_atomic
+from resultspath.run_dir import run_timestamp as _timestamp
 
 
 SOURCE_COMMIT = "5ddb0b5bb37d6423e1f3381ef693cda811a7847e"
@@ -373,16 +374,6 @@ def _results_model_dir_name(base_dir: Path, model: str) -> str:
             f"case-fold ambiguous results model directory for {requested!r}: {matches}"
         )
     return requested
-
-
-def _timestamp(base_dir: Path) -> str:
-    value = os.environ.get("EVAL_TIMESTAMP")
-    if value:
-        return value
-    session_file = base_dir / ".eval_session"
-    if session_file.is_file():
-        value = session_file.read_text(encoding="utf-8").strip()
-    return value or datetime.now().strftime("%Y%m%d_%H%M%S")
 
 
 def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:

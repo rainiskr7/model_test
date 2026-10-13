@@ -29,13 +29,7 @@ if [ -z "$PY" ]; then
 fi
 [ -n "$PY" ] || { echo "[kreta] python 인터프리터를 찾지 못함 — 중단"; exit 1; }
 
-SAFE_MODEL="$("$PY" - "$SCRIPT_DIR/benches" "$BASE_DIR" "$MODEL" <<'PY'
-import sys
-sys.path.insert(0, sys.argv[1])
-from paths import results_model_dir_name
-print(results_model_dir_name(sys.argv[2], sys.argv[3]))
-PY
-)" || { echo "[kreta] results 모델 경로 해석 실패 — 중단"; exit 1; }
+SAFE_MODEL="$("$PY" -c 'import sys; sys.path.insert(0, sys.argv[1]); from paths import results_model_dir_name; print(results_model_dir_name(sys.argv[2], sys.argv[3]))' "$SCRIPT_DIR/benches" "$BASE_DIR" "$MODEL")" || { echo "[kreta] results 모델 경로 해석 실패 — 중단"; exit 1; }
 
 # Timestamp 결정: EVAL_TIMESTAMP env > .eval_session 파일 > 새로 생성 + 저장
 if [ -n "${EVAL_TIMESTAMP:-}" ]; then
@@ -102,22 +96,7 @@ if [ ! -f "$CHECKPOINT" ] || [ ! -f "$OUT/.resume_context.json" ]; then
   echo "[multimodal/kreta] ERROR: 검증 가능한 checkpoint/context 없음 — 새 run_kreta.sh 실행 필요"
   exit 1
 fi
-if ! python - "$SCRIPT_DIR/benches" "$DEST/run_config.json" "$OUT/.resume_context.json" "$SETTING" "$TIMESTAMP" <<'PY'
-import json, sys
-from pathlib import Path
-sys.path.insert(0, sys.argv[1])
-from metadata import build_resume_context
-
-config = json.loads(Path(sys.argv[2]).read_text(encoding="utf-8"))
-path = Path(sys.argv[3])
-expected = build_resume_context(config, setting=sys.argv[4], session=sys.argv[5])
-try:
-    actual = json.loads(path.read_text(encoding="utf-8"))
-except Exception as exc:
-    raise SystemExit(f"resume context 읽기 실패: {exc}")
-if actual != expected:
-    raise SystemExit(f"stale resume context 거부: expected={expected!r}, actual={actual!r}")
-PY
+if ! python "$SCRIPT_DIR/benches/kreta_resume_context_check.py" "$SCRIPT_DIR/benches" "$DEST/run_config.json" "$OUT/.resume_context.json" "$SETTING" "$TIMESTAMP"
 then
   echo "[multimodal/kreta] ERROR: 현재 실행 문맥과 checkpoint가 다름 — resume 중단"
   exit 1
@@ -152,12 +131,7 @@ if [ "$INFER_RC" -ne 0 ]; then
 fi
 
 # upstream evaluate.py 의 __main__ 은 ./output 고정이라 check_files(폴더) 를 직접 부른다.
-python - "$OUT" <<'PY' || {
-import sys
-sys.path.insert(0, ".")
-import evaluate
-evaluate.check_files(sys.argv[1])
-PY
+python "$SCRIPT_DIR/benches/kreta_output_check.py" "$OUT" || {
   python "$PUBLISH_CLI" --base "$BASE_DIR" --source "$DEST_JSONL" \
     --reject-reason "evaluate.py 실패" --write || true
   echo "[multimodal/kreta] ERROR: evaluate 실패 — REJECTED sidecar 기록 후 중단"
