@@ -36,3 +36,14 @@ class SlotJudgement(JsonRecord):
     group_correct: bool
     duplicate_non_none: bool
     order_only: bool
+
+
+@dataclass(frozen=True)
+class Observation(JsonRecord):
+    """정답 있는 ok 관측. pooled.aspect는 요청 하나에 여러 관측을 유지한다 (⑥a-2b R2)."""
+
+    logical_id: str
+    group_id: str
+    question_id: str
+    answer: str
+    gold: str

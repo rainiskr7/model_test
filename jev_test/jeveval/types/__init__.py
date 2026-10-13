@@ -7,7 +7,7 @@ from .scores import Cost, Population, QStats, RiskCell, ScoreTable, Threshold, T
 from .records import AttemptRecord, AttemptResult, CallRecord, FinalRecord, Request
 from .outcomes import RequestOutcome
 from .contract import B1Call, B1Config, B1Response, Validated
-from .scoring import AnswerParse, CalibResult, F1Result, SlotJudgement
+from .scoring import AnswerParse, CalibResult, F1Result, Observation, SlotJudgement
 from .run import CallPlan, Decision, ModelConfig, RunSummary
 
 __all__ = [
@@ -16,5 +16,5 @@ __all__ = [
     "RiskCell", "QStats", "Population", "Cost", "ScoreTable", "Request", "AttemptRecord",
     "AttemptResult", "B1Response", "CallRecord", "FinalRecord", "RequestOutcome",
     "Validated", "B1Config", "B1Call", "AnswerParse", "F1Result", "CalibResult", "SlotJudgement",
-    "ModelConfig", "CallPlan", "Decision", "RunSummary",
+    "ModelConfig", "CallPlan", "Decision", "RunSummary", "Observation",
 ]

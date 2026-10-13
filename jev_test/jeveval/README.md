@@ -1,7 +1,7 @@
-# jeveval — P1 작업 ⑥a-2a·보정 12 기능 지도
+# jeveval — P1 작업 ⑥a-2b·보정 12 기능 지도
 
-P1_CONTRACT.md 판 3 보정 12와 ⑥a-2a R1 기준으로 위험 인증·세부 분포·논리 요청 비용 집계를 구현했다.
-테스트는 합성 fixture·tmp_path와 동결 task 설정, 127.0.0.1 서버를 사용한다. population·compare·bootstrap·CLI·certify·summary는 후속 작업이다.
+P1_CONTRACT.md 판 3 보정 12와 ⑥a-2b R1–R3 기준으로 점수·공통 코호트 비교·묶음 paired bootstrap을 구현했다.
+테스트는 합성 fixture·tmp_path와 동결 task 설정, 127.0.0.1 서버를 사용한다. CLI·certify·summary는 후속 작업이다.
 
 ## 코드
 
@@ -19,7 +19,7 @@ P1_CONTRACT.md 판 3 보정 12와 ⑥a-2a R1 기준으로 위험 인증·세부 
 - `io/hashes.py`: 스트리밍 SHA-256·SHA256SUMS 대조·정렬된 Python 소스 해시·토크나이저 재검증.
 - `io/run_files.py`: 정규 JSON·fsync/원자 교체·파생 단계 final/빈 attempts/derived.json 기록과 재개.
 - `types/contract.py`: Validated·B1Config·B1Call·B1Response의 frozen JsonRecord 자료형.
-- `types/scoring.py`: AnswerParse·F1Result·CalibResult·SlotJudgement 자료형.
+- `types/scoring.py`: AnswerParse·F1Result·CalibResult·SlotJudgement·메모리 전용 Observation 자료형.
 - `contract/__init__.py`: 계약 검사 네임스페이스.
 - `contract/taskspec.py`: target_key·state 키 중복·정적/동적 질문·성공 질문·ID 충돌 검사.
 - `contract/render.py`: 설정 키 순서의 state 문자열과 대상 끝 문자 위치 계산.
@@ -31,6 +31,9 @@ P1_CONTRACT.md 판 3 보정 12와 ⑥a-2a R1 기준으로 위험 인증·세부 
 - `score/answers.py`: systemone 원 확률 보존, B1 토큰 대조·softmax·동률·경고 처리.
 - `score/f1.py`: 출현 클래스 macro-F1과 support·예측 수·tp·재현율·정밀도.
 - `score/calibration.py`: 15 bin top-label ECE·one-hot Brier·clip log loss.
+- `score/population.py`: 질문·pooled·셋별 ok 코호트 점수, 질문별 경고 재계산과 scores/1 조립.
+- `score/compare.py`: C4 일치 검사, test/all_rows 공통 코호트와 compare/1 조립.
+- `score/bootstrap.py`: 시험 대표 처리율·공통 ok F1의 묶음 paired bootstrap, 고정 임계값과 95% CI.
 - `score/kosgd_slots.py`: 카탈로그 순서의 고정 정답 칸·중복·묶음 정답·순서 진단.
 - `score/tasks.py`: 호출별 답 병합·역할 보존, 성공 질문 전체 확신·정답 마스크·KoSGD 묶음 오류·최대 길이.
 - `score/threshold.py`: 정확한 위험 경계·동점 묶음 임계값, dev 대표 완료 대조·ThresholdFile 조립.
@@ -84,7 +87,7 @@ P1_CONTRACT.md 판 3 보정 12와 ⑥a-2a R1 기준으로 위험 인증·세부 
 
 의존 방향은 `run → io/data → score/types`, `io → contract → types`, `score → types`다. 전체 예정 방향은 `run → client/io → score/data/contract → types`다.
 data/items는 io·contract·run을 import하지 않는다. expand·items·labels는 파일·난수를 사용하지 않는다. types는 jeveval의 다른 패키지를 import하지 않는다.
-contract·score는 서로 import하지 않으며 파일·네트워크·시계·난수 접근이 없는 순수 함수다. data도 파일·네트워크·시계에 접근하지 않고, 난수는 계약의 문자열 seed로 만든 random.Random만 쓴다.
+contract·score는 서로 import하지 않으며 파일·네트워크·시계에 접근하지 않는다. score/bootstrap의 난수는 지역 random.Random(f"{seed}:boot:{set_name}")만 쓴다. data도 파일·네트워크·시계에 접근하지 않고, 난수는 계약의 문자열 seed로 만든 random.Random만 쓴다.
 run/encoders의 의존은 types·io.hashes·run.length·표준 라이브러리·transformers/tokenizers로 제한한다. 로드는 HF_HUB_OFFLINE=1·TRANSFORMERS_OFFLINE=1, local_files_only=True·trust_remote_code=False다.
 
 모든 dataclass는 frozen이다. 내부 list/dict까지 불변인 것은 아니다. from_dict는 중첩 타입을 복원하고 별칭 없는 사본을 만들며 알 수 없는 필드·필수 필드 누락·비선택 필드의 null·잘못된 타입·NaN/Infinity를 거부한다.
@@ -109,6 +112,12 @@ n_min은 (1-tau)**n <= 0.05를 Fraction으로 비교한다. b_flip은 MEETS에�
 risk_file은 세 tau의 RiskCell을 일반 JSON dict로 복사한다. cost_by_stage는 Cost 객체를 유지하며 ScoreTable.to_dict()/io.run_files.json_bytes가 중첩 값을 직렬화한다.
 cost 호출자는 완료 final과 연결된 시도, 명시적 kind(b1/systemone), 단계 derived.json의 출처를 전달한다. 토큰은 CallRecord.usage가 아닌 마지막 terminal의 원문에서 읽고 미측정 호출도 missing에 센다.
 
+⑥a-2b population 호출자는 test 대표 또는 FunctionChat dev+test+extra를 골라 outcomes/finals를 넘긴다. 두 ID 집합은 같아야 하며 Item은 빈 공통 코호트에도 질문 틀을 남기도록 상위 집합을 허용한다. outcome을 final/Item에서 재계산해 대조한다. 요청 오류와 KoSGD 묶음 정답은 칸별 고정 정답 점수와 분리한다. 칸 없는 행동판 set_specific은 {}다. 질문 경고는 ok ParsedAnswer의 answer/probs에서 다시 세며 정답 MISSING도 경고 집계에는 남는다.
+qstats의 tool은 동결 FunctionChat 도구 질문 ID다. population은 fc:tool 라벨로도 이를 식별한다. KorFin은 관측을 먼저 합쳐 pooled.aspect를 계산하고 aspect_not_in_text.wrong도 {num,den}으로 남긴다.
+compare 호출자는 check_comparable로 분할/task sha와 시험 ID 집합을 확인한 뒤 common_cohort(..., "test")를 사용한다. FunctionChat 전체 행 F1에는 common_cohort(..., "all_rows")를 별도로 쓴다. compare_file의 공통 Population은 test 기준이며 bootstrap 결과는 별도 전달한다. ID 해시는 정렬 ID를 LF로 연결한 UTF-8 바이트(끝 LF 없음)의 SHA-256이다.
+F1 입력은 gold 있는 ok Observation만 만든다. KoSGD gold는 고정 칸 정답, KorFin pooled 관측은 question_id="aspect"로 바꾸되 요청당 여러 관측을 유지한다. f1_diff는 전달된 코호트·질문의 관측을 묶음 단위로 재표집하며 모델별 정답/관측 다중집합이 다르면 거부한다. coverage_diff는 같은 시험 대표 ID·묶음·마스크를 요구하고 빈 마스크만 제거한다. 실패는 수락 0, NO_THRESHOLD도 수락 0이다.
+bootstrap 반환은 {models, n_groups, reps, pairs}; F1은 question_id도 포함한다. pairs의 각 셀은 {models: [a,b], estimate: a-b, ci95: [lo,hi], n_defined}이며 모델·묶음은 정렬한다. 95% 백분위는 비용 백분위와 같은 (n-1)p 선형 보간이다. 정의되지 않는 빈 모집단의 estimate/CI는 null이며, 정의되지 않은 반복을 버려 조건부 CI로 만들지 않는다.
+
 `run_stage` 전에는 반드시 `gate.prepare_stage`를 호출한다. 실행기는 tail 복구·fingerprint·seal을 하지 않는다. 모든 항목(완료 항목 포함)의 계획과 기존 시도를 먼저 대조하고, 통과 후 빈 기록 파일 생성→측정→post→attempt fsync→대기/다음 호출→final fsync 순서다. 부모 폴더는 gate가 만든다.
 반환은 **RunSummary만**이다. records 읽기 경고는 재반환하지 않으며 gate의 경고를 호출자가 보존한다. `n_calls`는 이번에 처리한 호출 수(로컬 오류·복구 포함, 완료 final skip 제외), `by_status`는 이번에 쓴 final만 센다. `session_id`는 호출자가 프로세스별 UUID4를 한 번 만들어 전달하고 재개 프로세스에서는 새 값으로 바꾼다.
 non-terminal 재개는 잠 없이 다음 기록 번호로 전송한다. 기록 k 다음 전송(k+1)이 fsync 전에 중단되면 재개는 **같은 k+1**을 사용한다. 실제 전송 1회 추가가 가능한 기록 예산의 한계이며 cost는 미기록 전송을 관측할 수 없다. 5회째 non-terminal 복구는 과거 attempts를 고치지 않는다.
@@ -117,6 +126,12 @@ non-terminal 재개는 잠 없이 다음 기록 번호로 전송한다. 기록 k
 ⑥a-2a cost는 `<stage>/derived.json`에서 전달받은 `derived_from`으로 파생을 판별하고 **모든 수치 0·p50/p95 null**을 적용한다. 남긴 CallRecord의 attempts/usage를 비용으로 합산하지 않는다. population/risk는 보존된 final 상태와 파생 Item을 사용한다.
 
 ## 테스트
+
+- `tests/score/population_support.py`: 원본 데이터 없는 Item/final/outcome 합성 도우미.
+- `tests/score/test_population.py`: 기존 F1·보정·MISSING fixture, 경고 재계산·B1·빈 코호트·입력 대조·scores/1 왕복.
+- `tests/score/test_population_sets.py`: FunctionChat test/all_rows·도구 분모, KorFin pooled, KoSGD 칸 Brier·묶음·베끼기·전체 결측.
+- `tests/score/test_compare.py`: 기존 코호트 fixture의 정확한 교집합·C4 거부·정렬 ID 해시·compare/1 사본.
+- `tests/score/test_bootstrap.py`: 결정성·실패 포함 처리율·고정 임계값·공유 묶음 재표집·복수 aspect·FunctionChat 전체 행·빈 코호트.
 
 - `tests/score/test_risk.py`: 기존 CP·위험 상태·임계값 fixture를 실제 함수에 통과, risk/1 직렬화·입력 대조.
 - `tests/score/test_risk_mix.py`: missing_mask의 실제 채점→위험 경계, 고정 칸·서비스 중복·KLUE 층·KorFin 1–8 질문·진단·길이 경계·unmeasured 분모 불변식.
@@ -190,6 +205,8 @@ fixture 폴더: render, responses, answers, scoring, splits, expand, records, re
 CLI의 상대 `--rules`와 source/선정 경로는 `--root` 기준, 상대 `--out`은 실행 cwd 기준이다.
 
 ## SPEC_AMBIGUOUS
+
+⑥a-2b: R1–R3 반영. 추가 SPEC_AMBIGUOUS / FIXTURE_CONFLICT 없음. missing_mask fixture의 present는 사례마다 noul과 NONE choice를 나타내므로 통합 시험에서는 NONE 사례만 별도 질문 ID로 연결한다. fixture 파일과 각 사례의 정답·예측·상태는 변경하지 않는다.
 
 ⑥a-2a: R1 반영으로 미측정 길이의 모호성은 해소했다. risk_cases.json은 질문/길이 입력 없는 집계 예이므로 인증 필드(상태·dev/test·by_status·플래그)를 대조하고 빈 세부 분포 자리는 별도 합성 Item 시험으로 검증한다. fixture는 수정하지 않았다. 추가 SPEC_AMBIGUOUS / FIXTURE_CONFLICT 없음.
 
