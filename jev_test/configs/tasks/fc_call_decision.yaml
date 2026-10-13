@@ -1,0 +1,25 @@
+# 초안 (10-13, Claude) — 사용자 결정 전. 동결 대상 (계획 §4-6). 형식: P1_CONTRACT.md §1-1.
+# 근거: datasets.yaml fc_call_decision.map (행동 3 + 도구 5 + NONE), 계획 §3 FunctionChat 세부
+set: fc_call_decision
+variant: default
+state:
+  kind: json_string
+  keys:
+  - input_messages
+  - input_tools
+  target_key: input_messages
+questions:
+- id: action
+  role: success
+  type: choice
+  instructions: 대화의 마지막 사용자 요청에 대해, 어시스턴트가 다음 응답에서 해야 할 일은?
+  options: fc_actions
+  label: fc:type_of_output
+- id: tool
+  role: success
+  type: choice
+  instructions: 어시스턴트가 다음 응답에서 바로 호출할 도구는? 지금 호출하지 않는다면(필요한 정보를 되묻거나 맞는 도구가 없으면) NONE.
+  options: per_item
+  label: fc:tool
+per_item_questions: null
+group_key: fc_components

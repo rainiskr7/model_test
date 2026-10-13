@@ -1,0 +1,86 @@
+# 초안 (10-13, Claude) — 사용자 결정 전. P1_CONTRACT.md §2-5 · 계획 §2-3. user_template 은 계약 §2-5 와 같아야 한다 ({options} = 선택지 줄을 줄바꿈으로 이은 것).
+# top_logprobs 는 호출마다 선택지 수 (b1_prompt), allowed_token_ids 는 모델 yaml 의 라벨 토큰 (P0).
+system: 주어진 상황과 질문을 읽고 가장 알맞은 선택지 하나를 고른다. 선택지 앞에 표시된 글자 하나만 답한다. 선택지 ID 나 설명은 쓰지 않는다.
+user_template: '{state}
+
+
+  질문: {instructions}
+
+  {options}
+
+  답:'
+labels:
+- A
+- B
+- C
+- D
+- E
+- F
+- G
+- H
+- I
+- J
+- K
+- L
+- M
+- N
+- O
+- P
+- Q
+- R
+- S
+- T
+- U
+- V
+- W
+- X
+- Y
+- Z
+- a
+- b
+- c
+- d
+- e
+- f
+- g
+- h
+- i
+- j
+- k
+- l
+- m
+- n
+- o
+- p
+- q
+- r
+- s
+- t
+- u
+- v
+- w
+- x
+- y
+- z
+- '0'
+- '1'
+- '2'
+- '3'
+- '4'
+- '5'
+- '6'
+- '7'
+- '8'
+- '9'
+params:
+  max_tokens: 1
+  logprobs: true
+  temperature: 1
+  top_p: 1
+  top_k: -1
+  min_p: 0
+  repetition_penalty: 1
+  frequency_penalty: 0
+  presence_penalty: 0
+  chat_template_kwargs:
+    enable_thinking: false

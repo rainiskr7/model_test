@@ -1,0 +1,81 @@
+# 초안 (10-13, Claude) — 사용자 결정 전. 동결 대상 (계획 §4-6). 형식: P1_CONTRACT.md §1-1.
+# 근거: K-MHaS 데이터 카드의 라벨 정의 (huggingface.co/datasets/jeanlee/kmhas_korean_hate_speech README, Data Fields)
+set: kmhas
+variant: default
+state:
+  kind: plain_text
+questions:
+- id: hate_origin
+  role: success
+  type: noul
+  instructions: 이 문장에 출신 지역이나 정체성을 이유로 한 혐오 표현이 있는가?
+  criteria:
+    'true': 그런 혐오 표현이 있다
+    'false': 그런 혐오 표현이 없다
+  label: kmhas:origin
+- id: hate_physical
+  role: success
+  type: noul
+  instructions: 이 문장에 외모(몸·얼굴 등)나 장애를 이유로 한 혐오 표현이 있는가?
+  criteria:
+    'true': 그런 혐오 표현이 있다
+    'false': 그런 혐오 표현이 없다
+  label: kmhas:physical
+- id: hate_politics
+  role: success
+  type: noul
+  instructions: 이 문장에 정치 성향을 이유로 한 혐오 표현이 있는가?
+  criteria:
+    'true': 그런 혐오 표현이 있다
+    'false': 그런 혐오 표현이 없다
+  label: kmhas:politics
+- id: hate_profanity
+  role: success
+  type: noul
+  instructions: 이 문장에 욕설·저주·음란한 말·비속어 형태의 혐오 표현이 있는가? 다른 유형으로 특정되지 않는 혐오 표현도 여기에 든다. 혐오 유형 질문은 여럿이 함께 예일 수 있다.
+  criteria:
+    'true': 그런 혐오 표현이 있다
+    'false': 그런 혐오 표현이 없다
+  label: kmhas:profanity
+- id: hate_age
+  role: success
+  type: noul
+  instructions: 이 문장에 나이를 이유로 한 혐오 표현이 있는가?
+  criteria:
+    'true': 그런 혐오 표현이 있다
+    'false': 그런 혐오 표현이 없다
+  label: kmhas:age
+- id: hate_gender
+  role: success
+  type: noul
+  instructions: '이 문장에 성별이나 성적 지향(예: 여성, 동성애자)을 이유로 한 혐오 표현이 있는가?'
+  criteria:
+    'true': 그런 혐오 표현이 있다
+    'false': 그런 혐오 표현이 없다
+  label: kmhas:gender
+- id: hate_race
+  role: success
+  type: noul
+  instructions: 이 문장에 인종이나 민족을 이유로 한 혐오 표현이 있는가?
+  criteria:
+    'true': 그런 혐오 표현이 있다
+    'false': 그런 혐오 표현이 없다
+  label: kmhas:race
+- id: hate_religion
+  role: success
+  type: noul
+  instructions: 이 문장에 종교를 이유로 한 혐오 표현이 있는가?
+  criteria:
+    'true': 그런 혐오 표현이 있다
+    'false': 그런 혐오 표현이 없다
+  label: kmhas:religion
+- id: not_hate
+  role: success
+  type: noul
+  instructions: 이 문장은 혐오 표현이 아닌가?
+  criteria:
+    'true': 혐오 표현이 아니다
+    'false': 혐오 표현이다
+  label: kmhas:not_hate_speech
+per_item_questions: null
+group_key: text

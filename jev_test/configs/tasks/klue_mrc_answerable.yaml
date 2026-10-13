@@ -1,0 +1,21 @@
+# 초안 (10-13, Claude) — 사용자 결정 전. 동결 대상 (계획 §4-6). 형식: P1_CONTRACT.md §1-1.
+# 근거: datasets.yaml klue_mrc_answerable.map, KLUE-MRC is_impossible (답이 없도록 만든 질문)
+set: klue_mrc_answerable
+variant: default
+state:
+  kind: json_string
+  keys:
+  - context
+  - question
+  target_key: question
+questions:
+- id: answerable
+  role: success
+  type: noul
+  instructions: '''question'' 의 물음에 ''context'' 의 내용만으로 답할 수 있는가?'
+  criteria:
+    'true': context 안에 물음의 답이 있다
+    'false': context 에 물음의 답이 없다 (관련된 내용이 있어 보여도 답 자체는 없다)
+  label: klue:answerable
+per_item_questions: null
+group_key: context

@@ -1,0 +1,15 @@
+# 초안 (10-13, Claude) — 사용자 결정 전. 동결 대상 (계획 §4-6). 형식: P1_CONTRACT.md §1-1.
+# 근거: KorFin-ASC 논문 §3.2·표 2 (arXiv 2301.03136): 실제 투자자 입장에서 그 문장이 기업의 시장 가치에 기여하는 방향, 판단할 정보가 부족하면 중립
+set: korfin_asc
+variant: default
+state:
+  kind: plain_text
+questions: []
+per_item_questions:
+  id_pattern: aspect_{k}
+  role: success
+  type: choice
+  instructions_template: 실제 투자자의 입장에서 볼 때, 이 문장에 제시된 정보는 '{ASPECT}'의 시장 가치에 어떤 방향으로 작용하는가? 문장 밖의 지식으로 추측하지 않는다.
+  options: korfin_sentiment
+  label: korfin:sentiment
+group_key: SRC

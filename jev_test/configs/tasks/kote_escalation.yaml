@@ -1,0 +1,73 @@
+# 초안 (10-13, Claude) — 사용자 결정 전. 동결 대상 (계획 §4-6). 형식: P1_CONTRACT.md §1-1.
+# 근거: KOTE 논문 §4.2 (arXiv 2205.05300): 평가자 5명이 '글쓴이가 드러내려는 감정'을 모두 고르고, 감정이 없으면 NO EMOTION(없음). dichotomized 의 0/1 기준은 미확인 (로딩 스크립트에 없음). 감정 8개는 datasets.yaml 동결 목록
+set: kote_escalation
+variant: default
+state:
+  kind: plain_text
+questions:
+- id: emo_complaint
+  role: success
+  type: noul
+  instructions: 글쓴이가 이 글에서 '불평/불만' 감정을 표현하려 한다고 볼 수 있는가? 여러 감정이 함께 예일 수 있다.
+  criteria:
+    'true': '''불평/불만'' 감정을 표현하려 한다'
+    'false': '''불평/불만'' 감정을 표현하려 하지 않는다'
+  label: kote:불평/불만
+- id: emo_anger
+  role: success
+  type: noul
+  instructions: 글쓴이가 이 글에서 '화남/분노' 감정을 표현하려 한다고 볼 수 있는가? 여러 감정이 함께 예일 수 있다.
+  criteria:
+    'true': '''화남/분노'' 감정을 표현하려 한다'
+    'false': '''화남/분노'' 감정을 표현하려 하지 않는다'
+  label: kote:화남/분노
+- id: emo_annoyance
+  role: success
+  type: noul
+  instructions: 글쓴이가 이 글에서 '짜증' 감정을 표현하려 한다고 볼 수 있는가? 여러 감정이 함께 예일 수 있다.
+  criteria:
+    'true': '''짜증'' 감정을 표현하려 한다'
+    'false': '''짜증'' 감정을 표현하려 하지 않는다'
+  label: kote:짜증
+- id: emo_disappointment
+  role: success
+  type: noul
+  instructions: 글쓴이가 이 글에서 '안타까움/실망' 감정을 표현하려 한다고 볼 수 있는가? 여러 감정이 함께 예일 수 있다.
+  criteria:
+    'true': '''안타까움/실망'' 감정을 표현하려 한다'
+    'false': '''안타까움/실망'' 감정을 표현하려 하지 않는다'
+  label: kote:안타까움/실망
+- id: emo_distrust
+  role: success
+  type: noul
+  instructions: 글쓴이가 이 글에서 '의심/불신' 감정을 표현하려 한다고 볼 수 있는가? 여러 감정이 함께 예일 수 있다.
+  criteria:
+    'true': '''의심/불신'' 감정을 표현하려 한다'
+    'false': '''의심/불신'' 감정을 표현하려 하지 않는다'
+  label: kote:의심/불신
+- id: emo_anxiety
+  role: success
+  type: noul
+  instructions: 글쓴이가 이 글에서 '불안/걱정' 감정을 표현하려 한다고 볼 수 있는가? 여러 감정이 함께 예일 수 있다.
+  criteria:
+    'true': '''불안/걱정'' 감정을 표현하려 한다'
+    'false': '''불안/걱정'' 감정을 표현하려 하지 않는다'
+  label: kote:불안/걱정
+- id: emo_gratitude
+  role: success
+  type: noul
+  instructions: 글쓴이가 이 글에서 '고마움' 감정을 표현하려 한다고 볼 수 있는가? 여러 감정이 함께 예일 수 있다.
+  criteria:
+    'true': '''고마움'' 감정을 표현하려 한다'
+    'false': '''고마움'' 감정을 표현하려 하지 않는다'
+  label: kote:고마움
+- id: emo_none
+  role: success
+  type: noul
+  instructions: 글쓴이가 이 글에서 드러내는 감정이 없다고 볼 수 있는가?
+  criteria:
+    'true': 뚜렷한 감정 없이 쓴 글로 볼 수 있다
+    'false': 어떤 감정이든 드러난다
+  label: kote:없음
+per_item_questions: null
+group_key: text
