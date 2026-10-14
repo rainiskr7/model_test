@@ -4,7 +4,7 @@ import json
 from types import SimpleNamespace
 
 from shared.functionchat.runner import run_functionchat as runner
-from jsonwrite.atomic_json import write_json_atomic
+from shared.jsonwrite.atomic_json import write_json_atomic
 
 
 def test_main_writes_all_datasets_and_coverage(monkeypatch, tmp_path):

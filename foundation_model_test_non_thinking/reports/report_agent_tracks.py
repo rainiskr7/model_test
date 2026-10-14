@@ -18,7 +18,6 @@ gemma telecom 0.4615 를 요약 파일만 보고 최종 수치로 여러 번 인
 from __future__ import annotations
 
 import argparse
-import importlib.util
 import json
 import sys
 from pathlib import Path
@@ -148,34 +147,18 @@ def collect_claims(base: Path) -> Dict[str, Any]:
     항목 10개가 뒤집혔다. 건수만 보면 완벽한 재현으로 읽힌다.
     """
 
-    scoring_dir = base / "shared" / "functionchat" / "scoring"
-    module_path = scoring_dir / "repro.py"
-    if not module_path.exists():
+    from shared.functionchat.scoring import repro
+    from shared.publish.claims import comparable, credential
+
+    run_dirs = sorted(base.glob("results/*/*/language/functionchat"))
+    if not run_dirs:
         return {}
-    spec = importlib.util.spec_from_file_location("functionchat_repro_claims", module_path)
-    if spec is None or spec.loader is None:
-        return {}
-    module = importlib.util.module_from_spec(spec)
-    sys.path.insert(0, str(scoring_dir))
-    sys.path.insert(0, str(base / "shared"))
-    try:
-        spec.loader.exec_module(module)
-        from publish.claims import comparable, credential
-    except Exception as exc:
-        print(f"[report] 클레임 계층을 읽지 못했다: {type(exc).__name__}: {exc}", file=sys.stderr)
-        return {}
-    finally:
-        for path in (str(scoring_dir), str(base / "shared")):
-            try:
-                sys.path.remove(path)
-            except ValueError:
-                pass
 
     grouped: Dict[Any, List[Dict[str, Any]]] = {}
-    for run_dir in sorted(base.glob("results/*/*/language/functionchat")):
-        loaded = module.load_run(run_dir)
+    for run_dir in run_dirs:
+        loaded = repro.load_run(run_dir)
         if loaded:
-            grouped.setdefault(module.cohort_key(loaded), []).append(loaded)
+            grouped.setdefault(repro.cohort_key(loaded), []).append(loaded)
 
     # 코호트 키에는 None(디코딩 기록이 없는 옛 산출물)과 튜플(새 산출물)이 같은
     # 자리에 올 수 있어 튜플끼리 직접 비교하면 TypeError 로 보고 전체가 죽는다.
@@ -183,14 +166,14 @@ def collect_claims(base: Path) -> Dict[str, Any]:
     # repr 정렬은 결정적이고 타입에 무관하다.
     creds, verdicts = _exact_claims(grouped, credential, comparable)
     judge_credentials = []
-    for run_dir in sorted(base.glob("results/*/*/language/functionchat")):
+    for run_dir in run_dirs:
         judge = load(run_dir / "judge.json")
         if not judge:
             continue
         judge_credentials.append({
             "model": run_dir.parents[2].name,
             "run": run_dir.parents[1].name,
-            "credential": module.judge_credential(judge.get("records") or []),
+            "credential": repro.judge_credential(judge.get("records") or []),
             "provisional": (judge.get("judge") or {}).get("human_validation") == UNVALIDATED,
         })
     # judge 축의 우열도 낸다. 내지 않으면 독자는 exact 축의 승자만 보고 "이 모델이
@@ -325,39 +308,14 @@ def collect_functionchat_reproducibility(base: Path) -> List[Dict[str, Any]]:
     가장 넓은 런 하나이고, 반복은 다른 scoring_version 에 있다.
     """
 
-    scoring_dir = base / "shared" / "functionchat" / "scoring"
-    module_path = scoring_dir / "repro.py"
-    if not module_path.exists():
-        return []
-    spec = importlib.util.spec_from_file_location("functionchat_repro", module_path)
-    if spec is None or spec.loader is None:
-        return []
-    module = importlib.util.module_from_spec(spec)
-    sys.path.insert(0, str(scoring_dir))
-    try:
-        spec.loader.exec_module(module)
-    except Exception as exc:
-        # 재현성은 부가 정보다. 그것을 못 읽는다고 발행 가능한 수치 보고 전체를
-        # 막으면, 도구를 쓰지 않고 summary.json 을 직접 읽는 경로로 되돌아간다 —
-        # 이 스크립트가 존재하는 이유가 바로 그 경로를 막는 것이다.
-        print(f"[report] 재현성 계층을 읽지 못했다: {type(exc).__name__}: {exc}", file=sys.stderr)
-        return []
-    finally:
-        try:
-            sys.path.remove(str(scoring_dir))
-        except ValueError:
-            pass
-        # 임시로 올린 경로에서 끌어온 모듈을 남기면 나중의 평범한 import 를 가린다.
-        for name in ("exact_match", "score_run"):
-            loaded = sys.modules.get(name)
-            if loaded is not None and getattr(loaded, "__file__", "").startswith(str(scoring_dir)):
-                del sys.modules[name]
+    from shared.functionchat.scoring import repro
+
     runs = []
     for run_dir in sorted(base.glob("results/*/*/language/functionchat")):
-        loaded = module.load_run(run_dir)
+        loaded = repro.load_run(run_dir)
         if loaded:
             runs.append(loaded)
-    return module.reproducibility_report(runs)
+    return repro.reproducibility_report(runs)
 
 
 def _select_axis_runs(published: List[Dict[str, Any]]) -> tuple[dict, dict]:
@@ -537,7 +495,10 @@ def render_markdown(
 
 def main(argv: Optional[List[str]] = None) -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--base", type=Path, default=BASE)
+    ap.add_argument(
+        "--base", type=Path, default=BASE,
+        help="산출물을 읽을 기준 디렉터리(<PATH>/results, 기본값: 이 저장소); 채점 코드는 실행 중인 저장소의 패키지를 쓴다",
+    )
     ap.add_argument("--strict", action="store_true", help="거부된 런이 있으면 exit 1")
     ap.add_argument("--show-rejected", action="store_true", default=True)
     ap.add_argument(

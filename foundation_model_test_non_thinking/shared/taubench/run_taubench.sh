@@ -4,6 +4,7 @@
 
 set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CODE_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 BASE_DIR="${MODEL_TEST_BASE:-$(cd "$SCRIPT_DIR/../.." && pwd)}"
 export MODEL_TEST_BASE="$BASE_DIR"
 
@@ -86,8 +87,8 @@ if [ -n "${TAUBENCH_USER_BASE_URL:-}" ]; then
   RUN_ARGS+=(--user-base-url "$TAUBENCH_USER_BASE_URL")
 fi
 
-"$TAU_PY" "$SCRIPT_DIR/runner/run_taubench.py" "${RUN_ARGS[@]}"
-"$TAU_PY" "$SCRIPT_DIR/scoring/score_run.py" \
+PYTHONPATH="$CODE_ROOT${PYTHONPATH:+:$PYTHONPATH}" "$TAU_PY" -m shared.taubench.runner.run_taubench "${RUN_ARGS[@]}"
+PYTHONPATH="$CODE_ROOT${PYTHONPATH:+:$PYTHONPATH}" "$TAU_PY" -m shared.taubench.scoring.score_run \
   --model "$MODEL" \
   --timestamp "$RUN_TIMESTAMP" \
   --track "$TRACK_NAME"

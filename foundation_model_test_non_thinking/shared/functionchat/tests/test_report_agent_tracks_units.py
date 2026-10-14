@@ -40,3 +40,43 @@ def test_report_bytes_include_ties_rejection_and_reproducibility():
 # Captured from the unmodified A2 input using the synthetic cases above.
 EXPECTED_REPORT_HASH = '005306f5bdf34f174e4c2dc5bf5c411c65ed1ae86a2d96dc03e016c1462f83a2'
 EXPECTED_EMPTY_HASH = '722a1528cc9838874c67e9e4e236c1b90d555dd6c2c354efaa82998bd73457c6'
+
+
+def test_collectors_ignore_external_base_code(tmp_path, monkeypatch):
+    from shared.functionchat.scoring import repro
+
+    for relative in ("shared/functionchat/scoring/repro.py", "shared/publish/claims.py"):
+        path = tmp_path / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("this is not python(", encoding="utf-8")
+    assert report.collect_claims(tmp_path) == {}
+    assert report.collect_functionchat_reproducibility(tmp_path) == []
+
+    run_dir = tmp_path / "results/model/session/language/functionchat"
+    run_dir.mkdir(parents=True)
+    seen = []
+    monkeypatch.setattr(repro, "load_run", lambda path: seen.append(path))
+    assert report.collect_claims(tmp_path) == {
+        "credentials": {}, "verdicts": [], "judge_credentials": [], "judge_verdicts": [],
+    }
+    assert report.collect_functionchat_reproducibility(tmp_path) == []
+    assert seen == [run_dir, run_dir]
+
+
+def test_collectors_propagate_running_package_import_failure(tmp_path, monkeypatch):
+    import builtins
+    import pytest
+
+    original = builtins.__import__
+    failure = ImportError("synthetic broken running package")
+
+    def fail_repro(name, *args, **kwargs):
+        if name == "shared.functionchat.scoring":
+            raise failure
+        return original(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", fail_repro)
+    for collect in (report.collect_claims, report.collect_functionchat_reproducibility):
+        with pytest.raises(ImportError) as caught:
+            collect(tmp_path)
+        assert caught.value is failure

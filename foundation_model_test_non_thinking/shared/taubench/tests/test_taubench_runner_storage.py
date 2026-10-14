@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from shared.taubench.runner import run_taubench as runner
-from jsonwrite.atomic_json import write_json_atomic
+from shared.jsonwrite.atomic_json import write_json_atomic
 
 
 def assert_json_bytes(path):

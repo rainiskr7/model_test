@@ -4,6 +4,7 @@
 
 set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CODE_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 BASE_DIR="${MODEL_TEST_BASE:-$(cd "$SCRIPT_DIR/../.." && pwd)}"
 export MODEL_TEST_BASE="$BASE_DIR"
 
@@ -58,9 +59,9 @@ if [ -z "$RUN_TIMESTAMP" ]; then
 fi
 export EVAL_TIMESTAMP="$RUN_TIMESTAMP"
 
-"$PY" "$SCRIPT_DIR/runner/run_functionchat.py" "${RUN_ARGS[@]}"
+PYTHONPATH="$CODE_ROOT${PYTHONPATH:+:$PYTHONPATH}" "$PY" -m shared.functionchat.runner.run_functionchat "${RUN_ARGS[@]}"
 
-"$PY" "$SCRIPT_DIR/scoring/score_run.py" \
+PYTHONPATH="$CODE_ROOT${PYTHONPATH:+:$PYTHONPATH}" "$PY" -m shared.functionchat.scoring.score_run \
   --model "$MODEL" \
   --timestamp "$RUN_TIMESTAMP" \
   --track "$TRACK_NAME"

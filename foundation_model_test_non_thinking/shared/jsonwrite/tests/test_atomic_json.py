@@ -9,8 +9,7 @@ import pytest
 
 
 SHARED = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(SHARED))
-from jsonwrite.atomic_json import write_json_atomic
+from shared.jsonwrite.atomic_json import write_json_atomic
 
 
 def test_written_bytes_match_json_dumps_with_final_lf(tmp_path):
@@ -35,7 +34,7 @@ def test_serialization_failure_leaves_no_target_or_temporary_file(tmp_path):
 
 
 def test_replace_failure_preserves_existing_bytes_and_removes_temporary_file(monkeypatch, tmp_path):
-    from jsonwrite import atomic_json
+    from shared.jsonwrite import atomic_json
 
     path = tmp_path / "summary.json"
     original = b'{"existing": "bytes stay unchanged"}\n'
@@ -59,9 +58,12 @@ def test_replace_failure_preserves_existing_bytes_and_removes_temporary_file(mon
 
 
 def test_all_four_consumers_import_the_same_writer():
+    from shared.functionchat.runner import run_functionchat
+    from shared.functionchat.scoring import score_run
+
+    for module in (run_functionchat, score_run):
+        assert module.write_json_atomic is write_json_atomic, module.__name__
     paths = (
-        "functionchat/runner/run_functionchat.py",
-        "functionchat/scoring/score_run.py",
         "taubench/runner/run_taubench.py",
         "taubench/scoring/score_run.py",
     )

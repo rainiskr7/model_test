@@ -15,9 +15,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Mapping, MutableMapping, Optional, Tuple
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-from jsonwrite.atomic_json import write_json_atomic
-from resultspath.run_dir import run_timestamp as _timestamp
+from shared.jsonwrite.atomic_json import write_json_atomic
+from shared.resultspath.run_dir import run_timestamp as _timestamp
 
 
 SOURCE_COMMIT = "5ddb0b5bb37d6423e1f3381ef693cda811a7847e"
@@ -138,6 +137,7 @@ def _load_module(name: str, path: Path):
 
 def load_shared_adapter(base_dir: Path):
     """shared adapter를 Ko-AgentBench의 최소 interface package 위에서 직접 로드한다."""
+    # 외부 저장소의 bench.* 인터페이스에 어댑터를 연결하므로 파일 로더를 유지한다.
     koa_dir = base_dir / "data" / "Ko-AgentBench"
     shared_custom = base_dir / "shared" / "agent" / "gpustack_custom"
     required = (
@@ -275,15 +275,8 @@ def _preflight_model(adapter: Any, model: str, request_timeout: float) -> None:
 def _load_effective_decoding():
     """shared/serving/constraints.effective_decoding 로드 (없으면 no-op)."""
 
-    shared_dir = Path(__file__).resolve().parents[2]
-    module_path = shared_dir / "serving" / "constraints.py"
-    if not module_path.is_file():
-        return None
-    added = str(shared_dir) not in sys.path
-    if added:
-        sys.path.insert(0, str(shared_dir))
     try:
-        from serving.constraints import effective_decoding  # noqa: PLC0415
+        from shared.serving.constraints import effective_decoding  # noqa: PLC0415
 
         return effective_decoding
     except Exception:

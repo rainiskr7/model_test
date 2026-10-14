@@ -12,8 +12,8 @@ from pathlib import Path
 from typing import Any, Iterable, Mapping, MutableMapping, Optional
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-from jsonwrite.atomic_json import write_json_atomic
-from resultspath.run_dir import run_timestamp as _timestamp
+from shared.jsonwrite.atomic_json import write_json_atomic
+from shared.resultspath.run_dir import run_timestamp as _timestamp
 
 
 SOURCE_COMMIT = "c3398666e6559e3a063da3fc04b5acf7f941464e"

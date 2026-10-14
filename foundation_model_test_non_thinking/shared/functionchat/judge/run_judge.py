@@ -28,8 +28,7 @@ from functools import partial
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-from judge_pilot import (  # noqa: E402
+from shared.functionchat.judge.judge_pilot import (
     JUDGE_ENDPOINT,
     reset_served_identity,
     VERDICT_SCHEMA,

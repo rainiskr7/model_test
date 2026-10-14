@@ -20,9 +20,9 @@ from pathlib import Path
 from typing import Any, Iterable, Mapping, NamedTuple, Optional
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-from jsonwrite.atomic_json import write_json_atomic
-from resultspath.run_dir import scoring_results_dir
-from resultspath.model_dir import results_model_dir_name
+from shared.jsonwrite.atomic_json import write_json_atomic
+from shared.resultspath.run_dir import scoring_results_dir
+from shared.resultspath.model_dir import results_model_dir_name
 
 
 SCORING_VERSION = "taubench_state_v2"  # v2: 후보 프로토콜 실패(도구 미호출)를 측정된 실패로 센다

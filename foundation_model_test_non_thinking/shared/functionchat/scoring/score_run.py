@@ -8,15 +8,10 @@ import sys
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Mapping, Tuple
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-from jsonwrite.atomic_json import write_json_atomic
-from resultspath.run_dir import scoring_results_dir
+from shared.jsonwrite.atomic_json import write_json_atomic
+from shared.resultspath.run_dir import scoring_results_dir
 
-if __package__:
-    from .exact_match import CALL, exact_match
-else:
-    sys.path.insert(0, str(Path(__file__).resolve().parent))
-    from exact_match import CALL, exact_match
+from shared.functionchat.scoring.exact_match import CALL, exact_match
 
 
 SCORING_VERSION = "functionchat_exact_v2"  # v1=600항목, v2=670항목(dialog call 70턴 추가)

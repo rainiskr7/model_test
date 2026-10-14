@@ -4231,7 +4231,7 @@ def test_agent_tracks_report_flags_judged_axes_without_provenance():
 
 
 def test_agent_tracks_report_survives_a_broken_reproducibility_layer(tmp_path=None):
-    """재현성은 부가 정보다 — 못 읽는다고 발행 수치 보고 전체를 막으면 안 된다."""
+    """외부 base의 깨진 코드는 실행하지 않으며, 결과 폴더가 없으면 빈 목록이다."""
 
     import tempfile
 
@@ -4241,8 +4241,9 @@ def test_agent_tracks_report_survives_a_broken_reproducibility_layer(tmp_path=No
         scoring = base / "shared" / "functionchat" / "scoring"
         scoring.mkdir(parents=True)
         (scoring / "repro.py").write_text("this is not python(", encoding="utf-8")
-        with contextlib.redirect_stderr(io.StringIO()):
+        with contextlib.redirect_stderr(io.StringIO()) as stderr:
             assert module.collect_functionchat_reproducibility(base) == []
+        assert stderr.getvalue() == ""
 
 
 def test_agent_repro_uses_level_qualified_task_vectors_and_protocol_cohorts():

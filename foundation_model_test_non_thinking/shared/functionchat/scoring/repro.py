@@ -22,15 +22,8 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Any, Iterable, Mapping
 
-try:  # 패키지로 임포트될 때
-    from .exact_match import exact_match
-    from .score_run import scorable_status
-except ImportError:  # 파일 하나만 단독 로드할 때
-    import sys as _sys
-
-    _sys.path.insert(0, str(Path(__file__).resolve().parent))
-    from exact_match import exact_match
-    from score_run import scorable_status
+from shared.functionchat.scoring.exact_match import exact_match
+from shared.functionchat.scoring.score_run import scorable_status
 
 __all__ = [
     "load_run", "cohort_key", "passed_item_ids", "reproducibility_report",

@@ -1,10 +1,8 @@
 """FunctionChat exact-match port와 dataset expansion 회귀 테스트."""
 
-import importlib.util
 import json
 import os
 import sys
-import sys as _sys
 from pathlib import Path
 
 
@@ -20,20 +18,9 @@ BENCH_DIR = Path(
 DATA_DIR = BENCH_DIR / "data"
 
 
-def _load(name, path):
-    spec = importlib.util.spec_from_file_location(name, path)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
-
-
-exact = _load("functionchat_exact_under_test", EXACT_PATH)
-sys.path.insert(0, str(EXACT_PATH.parent))
-try:
-    score = _load("functionchat_score_under_test", SCORE_PATH)
-finally:
-    sys.path.remove(str(EXACT_PATH.parent))
-runner = _load("functionchat_runner_under_test", RUNNER_PATH)
+from shared.functionchat.scoring import exact_match as exact, score_run as score, repro
+from shared.functionchat.runner import run_functionchat as runner
+from shared.functionchat.judge import judge_pilot
 
 
 def _assert(condition, message):
@@ -339,13 +326,9 @@ def test_not_measured_items_still_carry_a_response():
 
 
 def _load_judge_mod():
-    import importlib.util, sys as _s
-    base = Path(__file__).resolve().parents[1] / "judge"
-    _s.path.insert(0, str(base))
-    spec = importlib.util.spec_from_file_location("run_judge_under_test", base / "run_judge.py")
-    m = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(m)
-    return m
+    from shared.functionchat.judge import run_judge
+
+    return run_judge
 
 
 def test_lost_vote_cannot_produce_a_single_vote_verdict():
@@ -435,12 +418,7 @@ def test_non_retryable_http_errors_are_not_retried():
     """400 을 3회 재시도해도 성공할 수 없다. 429/408 만 재시도한다."""
     import inspect
     src = inspect.getsource(exact.__class__) if False else None
-    import importlib.util, sys as _s
-    base = Path(__file__).resolve().parents[1] / "judge"
-    _s.path.insert(0, str(base))
-    spec = importlib.util.spec_from_file_location("judge_pilot_under_test", base / "judge_pilot.py")
-    jp = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(jp)
+    from shared.functionchat.judge import judge_pilot as jp
     body = inspect.getsource(jp.call_judge)
     _assert("408, 429" in body, "재시도 예외 목록(408/429)이 없다")
     _assert("Retry-After" in body, "429 의 Retry-After 를 존중하지 않는다")
@@ -484,19 +462,10 @@ def test_generation_errors_block_publish():
 def test_judge_rejects_non_enum_verdict():
     """{"verdict": "error"} 같은 값이 judged 로 확정되면서 pass/fail 어디에도
     안 세어져 조용히 사라지던 경로."""
-    import importlib.util, sys as _s, inspect
-    base = Path(__file__).resolve().parents[1] / "judge"
-    _s.path.insert(0, str(base))
-    spec = importlib.util.spec_from_file_location("jp_verdict_test", base / "judge_pilot.py")
-    jp = importlib.util.module_from_spec(spec); spec.loader.exec_module(jp)
+    import inspect
+    from shared.functionchat.judge import judge_pilot as jp
     src = inspect.getsource(jp.call_judge)
     _assert('("pass", "fail")' in src, "verdict 값을 검증하지 않는다")
-
-
-judge_pilot = _load(
-    "functionchat_judge_pilot_under_test",
-    EXACT_PATH.parent.parent / "judge" / "judge_pilot.py",
-)
 
 
 def test_judge_records_what_the_endpoint_actually_served():
@@ -539,11 +508,6 @@ def test_judge_endpoint_is_recorded_not_hardcoded_at_the_call_site():
         "호출부에 URL 을 박으면 산출물에 어디로 보냈는지 남지 않는다",
     )
     _assert("JUDGE_ENDPOINT" in call_site, "상수를 써야 judge 블록에 기록할 수 있다")
-
-
-repro = _load(
-    "functionchat_repro_under_test", EXACT_PATH.parent / "repro.py"
-)
 
 
 def _run(session, model, version, items):
@@ -732,10 +696,7 @@ def test_decoding_provenance_records_what_was_sent_not_what_was_asked():
     import argparse
     import os
 
-    runner_mod = _load(
-        "functionchat_runner_under_test",
-        EXACT_PATH.parent.parent / "runner" / "run_functionchat.py",
-    )
+    from shared.functionchat.runner import run_functionchat as runner_mod
     saved = {k: os.environ.get(k) for k in (
         "SERVING_UNSUPPORTED_SAMPLING_PARAMS", "SERVING_MAX_OUTPUT_TOKENS")}
     os.environ["SERVING_UNSUPPORTED_SAMPLING_PARAMS"] = "temperature,seed"
@@ -761,10 +722,7 @@ def test_decoding_provenance_says_controlled_when_nothing_is_removed():
     import argparse
     import os
 
-    runner_mod = _load(
-        "functionchat_runner_under_test2",
-        EXACT_PATH.parent.parent / "runner" / "run_functionchat.py",
-    )
+    from shared.functionchat.runner import run_functionchat as runner_mod
     saved = os.environ.pop("SERVING_UNSUPPORTED_SAMPLING_PARAMS", None)
     try:
         got = runner_mod._decoding_provenance(argparse.Namespace(max_tokens=16384))
@@ -909,10 +867,7 @@ def test_a_limit_larger_than_every_dataset_is_not_a_subset_run():
 
     import argparse
 
-    runner_mod = _load(
-        "functionchat_runner_limit_test",
-        EXACT_PATH.parent.parent / "runner" / "run_functionchat.py",
-    )
+    from shared.functionchat.runner import run_functionchat as runner_mod
     args = argparse.Namespace(
         max_tokens=16384, limit=1000, model="m/x", request_timeout=60.0,
         task_timeout=120.0, max_retries=2, native_tool_calling=True,
@@ -968,16 +923,7 @@ def test_reproducibility_does_not_stop_at_the_first_dataset():
 def test_the_report_refuses_to_rank_a_single_run_model():
     """1회 실행 숫자가 순위표에 오르던 것이 이 저장소의 결함이었다."""
 
-    import importlib.util as _il
-
-    root = TREE_ROOT
-    spec = _il.spec_from_file_location("report_agent_claims_test", root / "reports" / "report_agent_tracks.py")
-    module = _il.module_from_spec(spec)
-    _sys.path.insert(0, str(root))
-    try:
-        spec.loader.exec_module(module)
-    finally:
-        _sys.path.remove(str(root))
+    from reports import report_agent_tracks as module
 
     snapshot = {"claim_class": "snapshot", "k": 1, "reason": "반복 1회"}
     observed = {
@@ -995,16 +941,7 @@ def test_the_report_refuses_to_rank_a_single_run_model():
 
 
 def test_the_report_states_the_rule_is_not_a_significance_test():
-    import importlib.util as _il
-
-    root = TREE_ROOT
-    spec = _il.spec_from_file_location("report_agent_claims_test2", root / "reports" / "report_agent_tracks.py")
-    module = _il.module_from_spec(spec)
-    _sys.path.insert(0, str(root))
-    try:
-        spec.loader.exec_module(module)
-    finally:
-        _sys.path.remove(str(root))
+    from reports import report_agent_tracks as module
     text = "\n".join(module.render_claims({"credentials": {}, "verdicts": []}))
     _assert("가설검정이 아니다" in text, "면책 문구가 없으면 독자가 유의성으로 읽는다")
     _assert("같다" in text and "뜻도 아니다" in text, "거절이 동등을 뜻하지 않음을 밝혀야 한다")
@@ -1064,16 +1001,7 @@ def test_the_report_publishes_verdicts_for_both_axes_and_flags_disagreement():
     읽는다.
     """
 
-    import importlib.util as _il
-
-    root = TREE_ROOT
-    spec = _il.spec_from_file_location("report_agent_axes_test", root / "reports" / "report_agent_tracks.py")
-    module = _il.module_from_spec(spec)
-    _sys.path.insert(0, str(root))
-    try:
-        spec.loader.exec_module(module)
-    finally:
-        _sys.path.remove(str(root))
+    from reports import report_agent_tracks as module
 
     def cred(lo, hi):
         return {
@@ -1094,16 +1022,7 @@ def test_the_report_publishes_verdicts_for_both_axes_and_flags_disagreement():
 
 
 def test_the_report_stays_quiet_when_both_axes_agree():
-    import importlib.util as _il
-
-    root = TREE_ROOT
-    spec = _il.spec_from_file_location("report_agent_axes_test2", root / "reports" / "report_agent_tracks.py")
-    module = _il.module_from_spec(spec)
-    _sys.path.insert(0, str(root))
-    try:
-        spec.loader.exec_module(module)
-    finally:
-        _sys.path.remove(str(root))
+    from reports import report_agent_tracks as module
     text = "\n".join(module.render_claims({
         "credentials": {},
         "verdicts": [("gemma", "qwen", {"comparable": True, "winner": "right", "reason": "r1"})],
