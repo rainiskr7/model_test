@@ -231,8 +231,8 @@ def simplify_result(result: Dict[str, Any]) -> Dict[str, Any]:
     return simplified
 
 
-def _decoding_provenance(max_tokens, temperature=0.0):
-    """Record requested and effective decoding settings, retaining temperature 0.0 by default."""
+def _decoding_provenance(max_tokens, temperature):
+    """Record explicit requested decoding settings and their effective values."""
 
     try:
         from serving.constraints import effective_decoding
@@ -288,6 +288,7 @@ def save_detailed_results(
     request_timeout: float,
     task_timeout: float,
     max_tokens: int,
+    temperature: float,
     max_retries: int,
     openai_sdk_version: str,
     sdk_max_retries: int,
@@ -322,7 +323,7 @@ def save_detailed_results(
         # 요청값이다. 실제로 보낸 값은 decoding.effective 를 봐야 한다 —
         # 서빙 제약이 이 값을 잘라낼 수 있다.
         "max_tokens": max_tokens,
-        "decoding": _decoding_provenance(max_tokens),
+        "decoding": _decoding_provenance(max_tokens, temperature),
         "max_retries": max_retries,
         "openai_sdk_version": openai_sdk_version,
         "sdk_max_retries": sdk_max_retries,
@@ -614,6 +615,7 @@ def run_benchmark_on_dataset(
                 request_timeout=adapter.timeout,
                 task_timeout=runner.timeout,
                 max_tokens=adapter.max_tokens,
+                temperature=adapter.temperature,
                 max_retries=runner.max_retries,
                 openai_sdk_version=adapter.openai_sdk_version,
                 sdk_max_retries=adapter.sdk_max_retries,

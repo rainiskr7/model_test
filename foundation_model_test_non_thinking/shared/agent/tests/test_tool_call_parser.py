@@ -234,6 +234,7 @@ def test_unparsed_candidate_counter_is_persisted_in_level_metadata():
             request_timeout=60,
             task_timeout=120,
             max_tokens=1024,
+            temperature=0.0,
             max_retries=2,
             openai_sdk_version="test",
             sdk_max_retries=0,
@@ -243,6 +244,17 @@ def test_unparsed_candidate_counter_is_persisted_in_level_metadata():
         artifact["metadata"]["unparsed_tool_call_candidates"] == 3,
         "unparsed candidate counter missing from level metadata",
     )
+
+
+def test_save_detailed_results_requires_temperature(tmp_path):
+    import pytest
+
+    with pytest.raises(TypeError, match="required keyword-only argument: 'temperature'"):
+        save_detailed_results(
+            [{}], "test/model", "L1", str(tmp_path), "test_timestamp",
+            request_timeout=60, task_timeout=120, max_tokens=1024,
+            max_retries=2, openai_sdk_version="test", sdk_max_retries=0,
+        )
 
 
 def test_artifact_records_what_was_sent_not_only_what_was_asked():
@@ -264,6 +276,7 @@ def test_artifact_records_what_was_sent_not_only_what_was_asked():
                 [{}], "test/model", "L1", tmpdir, "test_timestamp",
                 unparsed_tool_call_candidates=0, request_timeout=60,
                 task_timeout=120, max_tokens=16384, max_retries=2,
+                temperature=0.7,
                 openai_sdk_version="test", sdk_max_retries=0,
             )
             metadata = json.loads(Path(path).read_text(encoding="utf-8"))["metadata"]
@@ -278,6 +291,9 @@ def test_artifact_records_what_was_sent_not_only_what_was_asked():
     _assert(decoding.get("available"), "디코딩 프로비넌스가 없다")
     _assert(decoding["requested"]["max_tokens"] == 16384, decoding)
     _assert(decoding["effective"]["max_tokens"] == 4096, "실제로 보낸 값이 기록돼야 한다")
+    _assert(decoding["requested"]["temperature"] == 0.7, decoding)
+    _assert(decoding["effective"]["temperature"] is None, decoding)
+    _assert("temperature" in decoding["constraints"]["removed_parameters"], decoding)
     # 이 한 줄이 결론이다 — 이 런의 단일 숫자는 재현되지 않는다.
     # 이름이 "제거됐는가" 여야 한다. temperature=0 을 보냈다고 결정론이 보장되지
     # 않으므로(배치 구성·MoE 라우팅·부동소수점) 그 방향의 주장은 하지 않는다.
@@ -320,6 +336,7 @@ def test_unparsed_candidate_counter_is_wired_from_adapter_to_artifact():
         if isinstance(node, ast.FunctionDef) and node.name == "run_benchmark_on_dataset"
     )
     wired = False
+    temperature_wired = False
     for call in (node for node in ast.walk(run_function) if isinstance(node, ast.Call)):
         if not isinstance(call.func, ast.Name) or call.func.id != "save_detailed_results":
             continue
@@ -334,7 +351,19 @@ def test_unparsed_candidate_counter_is_wired_from_adapter_to_artifact():
             and isinstance(value.value, ast.Name)
             and value.value.id == "adapter"
         )
+        keyword = next(
+            (item for item in call.keywords if item.arg == "temperature"),
+            None,
+        )
+        value = keyword.value if keyword is not None else None
+        temperature_wired = (
+            isinstance(value, ast.Attribute)
+            and value.attr == "temperature"
+            and isinstance(value.value, ast.Name)
+            and value.value.id == "adapter"
+        )
     _assert(wired, "adapter counter is not passed to level artifact persistence")
+    _assert(temperature_wired, "adapter temperature is not passed to level artifact persistence")
 
 
 def test_broken_json_warns_without_raising():

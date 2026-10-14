@@ -24,6 +24,7 @@ def load_runner(monkeypatch, base):
             self.unparsed_tool_call_candidates = 0
             self.timeout = 1
             self.max_tokens = 16
+            self.temperature = kwargs.get('temperature', 0.0)
             self.openai_sdk_version = 'fixture'
             self.sdk_max_retries = 0
 

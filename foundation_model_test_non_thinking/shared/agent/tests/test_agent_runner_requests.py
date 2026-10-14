@@ -217,12 +217,13 @@ def test_main_requests_repetitions_storage_stdout_and_rc(runner, monkeypatch, tm
     saved = read_json(output)
     stamp = saved['metadata'].pop('timestamp')
     assert isinstance(datetime.fromisoformat(stamp), datetime)
-    decoding = dict(temperature=0.0, max_tokens=16384, seed=None)
+    assert saved['metadata']['decoding']['requested']['temperature'] == temperature
+    assert saved['metadata']['decoding']['effective']['temperature'] == temperature
+    decoding = dict(temperature=temperature, max_tokens=16384, seed=None)
     assert saved == {
         'metadata': {
             'model': MODEL, 'level': 'L1', 'native_tool_calling': True, 'unparsed_tool_call_candidates': 3,
             'request_timeout': 4, 'task_timeout': 20, 'max_tokens': 16384,
-            # Current provenance always defaults temperature to 0, even when request is 0.7.
             'decoding': dict(available=True, requested=decoding, effective=decoding,
                              constraints=CONSTRAINTS, sampling_controls_removed=False),
             'max_retries': 3, 'openai_sdk_version': 'fixture', 'sdk_max_retries': 0,
