@@ -162,7 +162,8 @@ def run_condition(client, model, name: str, messages, reps: int, max_tokens: int
     return summary, runs
 
 
-def main():
+def _parse_args():
+    """Parse latency profiling arguments."""
     parser = argparse.ArgumentParser()
     parser.add_argument("--model", required=True)
     parser.add_argument("--base-url", default="http://172.16.1.81:18090/v1")
@@ -174,8 +175,11 @@ def main():
     parser.add_argument("--skip-multi-image", action="store_true")
     parser.add_argument("--seed", type=int, default=None)
     parser.add_argument("--timeout", type=float, default=60.0)
-    args = parser.parse_args()
+    return parser.parse_args()
 
+
+def _prepare_output(args, *, print=print):
+    """Resolve output paths and print the run header."""
     base_dir = get_base_dir(__file__)
     ts = get_timestamp(base_dir)
     out_dir = get_results_dir(
@@ -186,8 +190,11 @@ def main():
     print(f"[b4] base={base_dir}")
     print(f"[b4] out={out_dir}")
 
-    client = make_client(args.base_url, args.api_key)
+    return base_dir, out_dir
 
+
+def _build_conditions(args):
+    """Build the ordered text and synthetic image conditions."""
     img_256 = make_solid_image(256)
     img_1024 = make_solid_image(1024)
     img_512_a = make_solid_image(512, (200, 100, 100))
@@ -205,6 +212,11 @@ def main():
             make_messages(args.prompt, [img_512_a, img_512_b, img_512_c]),
         ))
 
+    return conditions
+
+
+def _run_conditions(args, client, conditions):
+    """Execute each condition through the runner module hooks."""
     summaries = []
     runs_by_condition = {}
     for name, messages in conditions:
@@ -216,8 +228,13 @@ def main():
         summaries.append(s)
         runs_by_condition[name] = r
 
+    return summaries, runs_by_condition
+
+
+def _condition_failures(reps, conditions, summaries, runs_by_condition):
+    """Validate condition coverage without changing failure order."""
     failures = []
-    if args.reps <= 0:
+    if reps <= 0:
         failures.append("condition rep 기대 건수가 0 이하")
     expected_names = {name for name, _ in conditions}
     if set(runs_by_condition) != expected_names:
@@ -225,10 +242,15 @@ def main():
     for name in expected_names:
         runs = runs_by_condition.get(name)
         summary = next((entry for entry in summaries if entry["condition"] == name), None)
-        if not isinstance(runs, list) or len(runs) != args.reps:
+        if not isinstance(runs, list) or len(runs) != reps:
             failures.append(f"{name}: rep 미완주")
-        elif summary is None or summary["successful"] != args.reps or summary["failed"] != 0:
+        elif summary is None or summary["successful"] != reps or summary["failed"] != 0:
             failures.append(f"{name}: 실패 호출 포함")
+    return failures
+
+
+def _save_profile(args, base_dir, out_dir, summaries, runs_by_condition, failures):
+    """Write the profile, run config and publish sidecar to out_dir."""
     final = {
         "benchmark": "B-4 Latency Profile",
         "model": args.model,
@@ -256,6 +278,11 @@ def main():
     sidecar_path, sidecar = native_sidecar_from_source(out_dir, base_dir)
     write_sidecar(sidecar_path, sidecar)
 
+    return final, sidecar
+
+
+def _print_summary(summaries, *, print=print):
+    """Print the latency summary in condition order."""
     print(f"\n[b4] FINAL")
     for s in summaries:
         ttft = s["ttft"]
@@ -269,6 +296,18 @@ def main():
         print(f"    Total P50={total['p50']:.3f}s P95={total['p95']:.3f}s P99={total['p99']:.3f}s")
         if tps.get('p50'):
             print(f"    Tok/s P50={tps['p50']:.1f} P95={tps['p95']:.1f}")
+
+
+def main():
+    """Coordinate latency profiling and return its publish status."""
+    args = _parse_args()
+    base_dir, out_dir = _prepare_output(args)
+    client = make_client(args.base_url, args.api_key)
+    conditions = _build_conditions(args)
+    summaries, runs_by_condition = _run_conditions(args, client, conditions)
+    failures = _condition_failures(args.reps, conditions, summaries, runs_by_condition)
+    final, sidecar = _save_profile(args, base_dir, out_dir, summaries, runs_by_condition, failures)
+    _print_summary(summaries)
     return 0 if final["publish_status"]["publishable"] and sidecar["publishable"] else 1
 
 
