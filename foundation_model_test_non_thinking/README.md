@@ -151,6 +151,8 @@ bash vsm/multimodal/run_all.sh \
   http://127.0.0.1:18090/v1
 ```
 
+발행 보고서: N 루트에서 `python3 -m reports.report_multimodal_tracks --base .`. 저장소 밖 cwd에서는 `PYTHONPATH="$N${PYTHONPATH:+:$PYTHONPATH}"`를 명령 앞에 붙인다.
+
 개별 벤치마크 실행은 `vsm/multimodal/run_<benchmark>.sh` 직접 호출.
 
 KRETA가 중단된 경우 `vsm/multimodal/run_kreta_resume.sh`로 이어서 진행한다. 최초 실행이 기록한 checkpoint context(세션·모델·모드·endpoint·max tokens)가 현재 실행과 정확히 같을 때만 기존 jsonl을 허용하며, 다른 모델의 jsonl은 evaluate 전에 제거한다. context가 없거나 다르면 stale checkpoint 재발행을 막기 위해 중단하고 `run_kreta.sh`로 새로 시작해야 한다. 일치할 때는 이미 처리된 `id`를 skip하고 남은 샘플만 추론한다.

@@ -33,7 +33,7 @@ def prepare_local(monkeypatch, tmp_path, responses):
     for key in tuple(os.environ):
         if key.startswith("SERVING_"):
             monkeypatch.delenv(key)
-    import common
+    from shared.multimodal.benches import common
     metadata = sys.modules[common.build_run_config.__module__]
     client = sys.modules[common.make_client.__module__]
     monkeypatch.setattr(metadata, "get_hf_dataset_revision", lambda name: "synthetic-revision")

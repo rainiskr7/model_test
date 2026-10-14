@@ -2,6 +2,7 @@
 
 import hashlib
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -15,8 +16,8 @@ CLI = Path(__file__).resolve().parents[3] / "reports/report_multimodal_tracks.py
 
 def run_cli(base, *args):
     return subprocess.run(
-        [sys.executable, str(CLI), "--base", str(base), *map(str, args)],
-        text=True, capture_output=True, check=False,
+        [sys.executable, "-m", "reports.report_multimodal_tracks", "--base", str(base), *map(str, args)],
+        text=True, env=dict(os.environ, PYTHONPATH=str(CLI.parent.parent)), capture_output=True, check=False,
     )
 
 

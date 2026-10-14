@@ -6,9 +6,7 @@ and artifact hashes. Environment probes are fixed in _runner_fakes.
 
 import pytest
 
-pytest.register_assert_rewrite("_runner_fakes")
-
-from _runner_fakes import assert_requests, assert_storage, load_runner, offline_guard, png, prepare
+from shared.multimodal.tests._runner_fakes import assert_requests, assert_storage, load_runner, offline_guard, png, prepare
 
 PROMPTS = [
     "도시는?\n\n이미지를 보고 위 질문에 한 단어 또는 짧은 구로 정확히 답하세요. 설명·머리말 없이 답만 출력하세요.",
@@ -17,9 +15,9 @@ PROMPTS = [
 
 
 @pytest.mark.parametrize("error,pairs_as_list", [(False, False), (False, True), (True, False)])
-def test_main_requests_and_files(monkeypatch, tmp_path, capsys, error, pairs_as_list):
+def test_main_requests_and_files(monkeypatch, tmp_path, capsys, error, pairs_as_list, fresh_import):
     offline_guard(monkeypatch)
-    runner = load_runner(monkeypatch, "mtvqa_kr")
+    runner = load_runner(fresh_import, "mtvqa_kr")
     rows = [
         {"id": "skip-en", "language": "English", "image": png("green"), "qa_pairs": [{"Q": "skip", "A": "skip"}]},
         {"id": "ko-0", "language": " Korean ", "image": png("red"),

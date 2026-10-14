@@ -4,15 +4,13 @@ import json
 
 import pytest
 
-pytest.register_assert_rewrite("_runner_fakes")
-
-from _runner_fakes import assert_requests, load_runner, png, read_json
-from _r3_runner_fakes import arguments, assert_capture, capture, cli, prepare_local
+from shared.multimodal.tests._runner_fakes import assert_requests, load_runner, png, read_json
+from shared.multimodal.tests._r3_runner_fakes import arguments, assert_capture, capture, cli, prepare_local
 
 
 @pytest.mark.parametrize("mode", ["valid", "invalid", "error", "missing"])
-def test_main_requests_storage_rc(monkeypatch, tmp_path, capsys, mode):
-    runner = load_runner(monkeypatch, "b3_structured_output")
+def test_main_requests_storage_rc(monkeypatch, tmp_path, capsys, mode, fresh_import):
+    runner = load_runner(fresh_import, "b3_structured_output")
     png("red").save(tmp_path / "tiny.png")
     manifest = tmp_path / "manifest.json"
     expected = {"type": "object", "required_fields": ["합계"],

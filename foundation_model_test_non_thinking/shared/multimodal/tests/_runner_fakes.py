@@ -7,7 +7,6 @@ Variable values excluded: summary.run_config.timestamp_utc and sidecar completio
 
 import base64
 import copy
-import importlib.util
 import io
 import json
 import os
@@ -96,12 +95,8 @@ def choice_rows(*, kmm=False):
     ]
 
 
-def load_runner(monkeypatch, name):
-    monkeypatch.syspath_prepend(str(BENCHES))
-    spec = importlib.util.spec_from_file_location("r2_" + name, BENCHES / (name + ".py"))
-    runner = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(runner)
-    return runner
+def load_runner(fresh_import, name):
+    return fresh_import("shared.multimodal.benches." + name)
 
 
 def prepare(monkeypatch, tmp_path, runner, rows, responses, *, extra=(), defaults=False):

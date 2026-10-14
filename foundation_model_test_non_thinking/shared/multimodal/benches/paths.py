@@ -1,18 +1,16 @@
 """파일시스템/세션/JSON IO 헬퍼 — 단일 책임 모듈.
 
 결과 경로 명명(safe_model_name), base/timestamp 세션 해석, results 디렉토리,
-JSON 저장. common.py 가 re-export 하므로 기존 `from common import ...` 도 그대로 동작.
+JSON 저장. common.py 가 re-export 하므로 `from shared.multimodal.benches.common import ...` 도 그대로 동작.
 """
 
 import os
-import sys
 import json
 from datetime import datetime
 from pathlib import Path
 from typing import Optional, Any
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-from resultspath.model_dir import results_model_dir_name
+from shared.resultspath.model_dir import results_model_dir_name
 
 
 def safe_model_name(model: str) -> str:

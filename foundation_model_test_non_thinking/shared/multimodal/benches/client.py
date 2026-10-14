@@ -1,15 +1,13 @@
 """OpenAI-compatible API 클라이언트 + 이미지 처리 — 단일 책임 모듈.
 
 make_client / image_to_data_url / chat_with_image (non-thinking: 응답 content 그대로 반환).
-common.py 가 re-export 하므로 기존 `from common import ...` 도 그대로 동작.
+common.py 가 re-export 하므로 `from shared.multimodal.benches.common import ...` 도 그대로 동작.
 """
 
 import io
 import os
-import sys
 import time
 import base64
-from pathlib import Path
 from typing import Optional, Any
 
 try:
@@ -17,9 +15,7 @@ try:
 except ImportError as e:
     raise SystemExit("openai 패키지 미설치 — `uv pip install openai pillow datasets`") from e
 
-# shared/ 를 import path 에 추가 (<class>/multimodal 는 shared/multimodal 로의 symlink)
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
-from serving.constraints import apply as apply_serving_constraints  # noqa: E402
+from shared.serving.constraints import apply as apply_serving_constraints
 
 
 def make_client(base_url: str, api_key: Optional[str] = None) -> OpenAI:

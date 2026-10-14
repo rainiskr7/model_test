@@ -40,7 +40,7 @@ try:
 except ImportError as e:
     raise SystemExit("pillow 패키지 미설치 — `uv pip install pillow`") from e
 
-from common import (
+from shared.multimodal.benches.common import (
     standard_argparser, make_client, chat_with_image,
     get_base_dir, get_timestamp, get_results_dir, save_json,
     safe_model_name, build_run_config, normalize_text, normalize_number,

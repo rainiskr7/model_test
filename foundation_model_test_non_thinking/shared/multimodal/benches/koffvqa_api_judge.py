@@ -10,7 +10,7 @@ KOFFVQA 기본 judge (google/gemma-2-9b-it 로컬) 의 단일 모델 편향 완�
 prompt 변경 시 버전 문자열 갱신 → run_config 에 기록되어 추적 가능.
 
 Usage:
-  python koffvqa_api_judge.py \\
+  python -m shared.multimodal.benches.koffvqa_api_judge \\
     --predfile /path/to/KOFFVQA/result/<dir>/*_gen.xlsx \\
     --target-model "Qwen/Qwen3.5-35B-A3B" \\
     --judge-model openai/gpt-4o-mini \\
@@ -22,7 +22,6 @@ import argparse
 import hashlib
 import json
 import re
-import sys
 from pathlib import Path
 from typing import Optional
 
@@ -294,12 +293,8 @@ def _save_results(out_dir, results, summary, save_json):
 
 def main():
     """Coordinate delayed imports, workbook loading, judging and storage."""
-    # Runner helpers use direct-script imports internally.  Delay loading so
-    # pure column/score validation remains importable without runner deps.
-    benches_dir = str(Path(__file__).resolve().parent)
-    if benches_dir not in sys.path:
-        sys.path.insert(0, benches_dir)
-    from common import (  # pylint: disable=import-outside-toplevel
+    # Delay runner dependencies so pure column/score validation stays importable.
+    from shared.multimodal.benches.common import (  # pylint: disable=import-outside-toplevel
         get_base_dir, get_timestamp, get_results_dir,
         save_json, build_run_config, make_client,
     )

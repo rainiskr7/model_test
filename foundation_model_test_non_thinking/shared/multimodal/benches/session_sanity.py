@@ -64,6 +64,7 @@ def main(argv=None):
     benches_dir = Path(argv[2])
 
     # schema-aware validation (Pydantic 기반 — _schema.py 가 있으면 활용)
+    # 예외: 지정 폴더에 _schema가 없으면 legacy 검사로 돌아가는 계약을 유지한다.
     sys.path.insert(0, str(benches_dir))
     try:
         from _schema import detect_and_validate, diagnostic_warnings, publish_status_error

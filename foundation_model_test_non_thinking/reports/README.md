@@ -10,7 +10,7 @@
 `<N>`은 `foundation_model_test_non_thinking`, `<R>`은 그 상위 디렉터리다.
 `report_agent_levels.{py,sh}`는 두 저장소 공용이라 `<R>`에 있다.
 `--write-markdown`의 상대 경로는 호출 cwd 기준이며, NLU는 stdout만 지원한다.
-NLU·agent·taubench 보고서의 `--base`는 산출물 위치만 지정하며, 채점 코드는 실행 중인 저장소의 패키지를 쓴다.
+NLU·agent·taubench·multimodal 보고서의 `--base`는 산출물 위치만 지정하며, 채점 코드는 실행 중인 저장소의 패키지를 쓴다.
 
 세 cwd 실행 예(먼저 실제 `<N>` 절대 경로를 지정):
 
@@ -19,7 +19,7 @@ N=/absolute/path/to/foundation_model_test_non_thinking
 R="$(dirname "$N")"
 
 (cd / && PYTHONPATH="$N${PYTHONPATH:+:$PYTHONPATH}" python3 -m reports.report_agent_tracks --write-markdown /tmp/agent-from-root.md)
-(cd "$R" && env -u PYTHONPATH "$N/.venv/bin/python" "$N/reports/report_multimodal_tracks.py" --write-markdown /tmp/multimodal-from-parent.md)
+(cd "$R" && PYTHONPATH="$N${PYTHONPATH:+:$PYTHONPATH}" "$N/.venv/bin/python" -m reports.report_multimodal_tracks --write-markdown /tmp/multimodal-from-parent.md)
 (cd "$N" && env -u PYTHONPATH python3 -m reports.report_taubench_tracks --write-markdown /tmp/taubench-from-n.md)
 (cd "$N" && env -u PYTHONPATH "$N/.venv/bin/python" -m reports.report_nlu_tracks)
 (cd / && PYTHONPATH="$N${PYTHONPATH:+:$PYTHONPATH}" "$N/.venv/bin/python" -m reports.report_nlu_tracks)

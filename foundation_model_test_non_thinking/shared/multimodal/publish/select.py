@@ -6,7 +6,7 @@ from datetime import datetime
 from pathlib import PurePosixPath
 from typing import Any, Iterable
 
-from .schema import PublishStatus, canonical_json, canonical_model_id
+from shared.multimodal.publish.schema import PublishStatus, canonical_json, canonical_model_id
 
 
 def cohort_key(sidecar: dict[str, Any]) -> tuple[str, str, str, str]:

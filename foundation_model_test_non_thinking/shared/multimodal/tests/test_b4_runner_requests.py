@@ -15,7 +15,7 @@ from types import SimpleNamespace
 from PIL import Image
 import pytest
 
-from _runner_fakes import (
+from shared.multimodal.tests._runner_fakes import (
     BASE_URL, CONSTRAINTS, MODEL, load_runner, offline_guard, read_json,
 )
 
@@ -64,7 +64,7 @@ def chunk(content=None, *, tokens=None, usage_only=False, role=None):
 
 
 @pytest.fixture
-def b4(monkeypatch, tmp_path):
+def b4(monkeypatch, tmp_path, fresh_import):
     offline_guard(monkeypatch)
     monkeypatch.setenv('MODEL_TEST_BASE', str(tmp_path))
     monkeypatch.setenv('EVAL_TIMESTAMP', 's1-session')
@@ -72,7 +72,7 @@ def b4(monkeypatch, tmp_path):
     for key in tuple(os.environ):
         if key.startswith('SERVING_'):
             monkeypatch.delenv(key)
-    return load_runner(monkeypatch, 'b4_latency_profile')
+    return load_runner(fresh_import, 'b4_latency_profile')
 
 
 def request(messages, *, optional=True):
@@ -113,8 +113,8 @@ def test_chunk_timing_and_usage(b4, monkeypatch, kind, stream, record, effective
 
 
 def test_optional_fields_absent_and_serving_noop(b4, monkeypatch):
-    from client import apply_serving_constraints
-    from serving.constraints import apply
+    from shared.multimodal.benches.client import apply_serving_constraints
+    from shared.serving.constraints import apply
     assert b4.apply_serving_constraints is apply_serving_constraints is apply
     clock = ScriptClock([10, 11, 12])
     monkeypatch.setattr(b4.time, 'perf_counter', clock)

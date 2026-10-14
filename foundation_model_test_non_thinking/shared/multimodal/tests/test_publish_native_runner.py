@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import importlib.util
 import json
 import sys
 import types
@@ -184,20 +183,15 @@ class _TinyDataset:
         return _TinyDataset(self.rows[index] for index in indexes)
 
 
-def _load_kdt_runner(monkeypatch):
+def _load_kdt_runner(monkeypatch, fresh_import):
     fake_datasets = types.ModuleType("datasets")
     fake_datasets.load_dataset = lambda *args, **kwargs: None
     monkeypatch.setitem(sys.modules, "datasets", fake_datasets)
-    monkeypatch.syspath_prepend(str(BENCHES))
-    spec = importlib.util.spec_from_file_location("test_k_dtcbench_runner", BENCHES / "k_dtcbench.py")
-    module = importlib.util.module_from_spec(spec)
-    assert spec.loader is not None
-    spec.loader.exec_module(module)
-    return module
+    return fresh_import("shared.multimodal.benches.k_dtcbench")
 
 
-def test_kdt_runner_writes_rejected_native_gate_and_adapter_reaggregates(monkeypatch, tmp_path):
-    runner = _load_kdt_runner(monkeypatch)
+def test_kdt_runner_writes_rejected_native_gate_and_adapter_reaggregates(monkeypatch, tmp_path, fresh_import):
+    runner = _load_kdt_runner(monkeypatch, fresh_import)
     rows = [
         {
             "index": "document_0",

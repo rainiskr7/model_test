@@ -8,14 +8,16 @@ import sys
 from pathlib import Path
 
 BASE = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(BASE))
 
 from shared.multimodal.publish.report import collect, render_markdown, strict_failed
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--base", type=Path, default=BASE)
+    parser.add_argument(
+        "--base", type=Path, default=BASE,
+        help="산출물을 읽을 기준 디렉터리(<PATH>/results, 기본값: 이 저장소); 채점 코드는 실행 중인 저장소의 패키지를 쓴다",
+    )
     parser.add_argument("--run", help="scope report/strict validation to one session")
     parser.add_argument("--strict", action="store_true")
     parser.add_argument("--write-markdown", type=Path)

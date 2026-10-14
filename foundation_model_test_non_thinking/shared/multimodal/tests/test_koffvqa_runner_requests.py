@@ -4,12 +4,12 @@ import base64
 import csv
 import io
 
-from _runner_fakes import assert_requests, forbidden, load_runner, png, read_json
-from _r3_runner_fakes import arguments, assert_capture, capture, cli, prepare_local
+from shared.multimodal.tests._runner_fakes import assert_requests, forbidden, load_runner, png, read_json
+from shared.multimodal.tests._r3_runner_fakes import arguments, assert_capture, capture, cli, prepare_local
 
 
-def test_main_resume_merge_and_no_resume(monkeypatch, tmp_path, capsys):
-    runner = load_runner(monkeypatch, "koffvqa_run")
+def test_main_resume_merge_and_no_resume(monkeypatch, tmp_path, capsys, fresh_import):
+    runner = load_runner(fresh_import, "koffvqa_run")
     buf = io.BytesIO()
     png("red").save(buf, format="PNG")
     tsv = tmp_path / "synthetic.tsv"

@@ -2,7 +2,7 @@
 
 import pytest
 
-from ._r3_offline import (
+from shared.multimodal.tests._r3_offline import (
     pytest_collection_modifyitems as _exclude_corpus_tests,
     pytest_sessionstart,
     synthetic_legacy_nlu_key,

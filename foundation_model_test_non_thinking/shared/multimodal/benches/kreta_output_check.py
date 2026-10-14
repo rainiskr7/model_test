@@ -9,6 +9,7 @@ import sys
 
 
 def main(argv: list[str]) -> int:
+    # 예외: KRETA/eval cwd의 upstream evaluate를 가져온다.
     sys.path.insert(0, ".")
     import evaluate  # noqa: PLC0415 — upstream module, resolvable only from the KRETA cwd
 

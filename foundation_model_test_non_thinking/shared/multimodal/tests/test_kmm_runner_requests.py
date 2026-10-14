@@ -6,18 +6,16 @@ and artifact hashes. Environment probes are fixed in _runner_fakes.
 
 import pytest
 
-pytest.register_assert_rewrite("_runner_fakes")
-
-from _runner_fakes import (
+from shared.multimodal.tests._runner_fakes import (
     MC_PROMPTS, assert_requests, assert_storage, choice_rows, expected_choices,
     load_runner, offline_guard, prepare,
 )
 
 
 @pytest.mark.parametrize("selected,error", [(False, False), (True, False), (True, True)])
-def test_main_requests_and_files(monkeypatch, tmp_path, capsys, selected, error):
+def test_main_requests_and_files(monkeypatch, tmp_path, capsys, selected, error, fresh_import):
     offline_guard(monkeypatch)
-    runner = load_runner(monkeypatch, "k_mmbench")
+    runner = load_runner(fresh_import, "k_mmbench")
     rows = choice_rows(kmm=True)
     extra = []
     if selected:

@@ -12,8 +12,8 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any, Callable, Iterable
 
-from .adapters import ADAPTERS, adapt_source
-from .schema import (
+from shared.multimodal.publish.adapters import ADAPTERS, adapt_source
+from shared.multimodal.publish.schema import (
     PublishStatus,
     SCHEMA_VERSION,
     STALE_FINGERPRINT_PREFIX,
@@ -191,7 +191,7 @@ def native_sidecar_from_records(
 ) -> tuple[Path, dict[str, Any]]:
     """Build a NATIVE sidecar and assert it used the same raw record aggregation."""
 
-    from .adapters import summarize_records
+    from shared.multimodal.publish.adapters import summarize_records
 
     aggregate = summarize_records(
         benchmark_id,
@@ -209,7 +209,7 @@ def native_sidecar_from_records(
 def preflight_kreta_source(source: Path, base: Path) -> tuple[bool, list[str]]:
     """Validate a KRETA checkpoint before upstream evaluate.py can see it."""
 
-    from .adapters import EXPECTED_COUNTS, summarize_records
+    from shared.multimodal.publish.adapters import EXPECTED_COUNTS, summarize_records
 
     source = Path(source)
     rows: list[dict[str, Any]] = []

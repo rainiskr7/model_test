@@ -1,7 +1,7 @@
 """재현성 메타데이터 + run_config 빌더 — 단일 책임 모듈.
 
 HF revision / git commit / 패키지 버전 / 스크립트 해시 캡처 + build_run_config.
-common.py 가 re-export 하므로 기존 `from common import ...` 도 그대로 동작.
+common.py 가 re-export 하므로 `from shared.multimodal.benches.common import ...` 도 그대로 동작.
 """
 
 import os
@@ -13,15 +13,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
-try:
-    from .paths import safe_model_name
-except ImportError:  # direct script/facade import from benches/
-    from paths import safe_model_name
-
-SHARED_ROOT = Path(__file__).resolve().parents[2]
-if str(SHARED_ROOT) not in sys.path:
-    sys.path.insert(0, str(SHARED_ROOT))
-from serving.constraints import effective_decoding  # noqa: E402
+from shared.multimodal.benches.paths import safe_model_name
+from shared.serving.constraints import effective_decoding
 
 
 def get_hf_dataset_revision(dataset_id: str) -> Optional[str]:

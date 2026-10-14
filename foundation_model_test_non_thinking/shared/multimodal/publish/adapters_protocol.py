@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Mapping
 
-from .schema import KRETA_ANSWER_PARSER_HASH, KRETA_ANSWER_PARSER_VERSION, make_protocol
+from shared.multimodal.publish.schema import KRETA_ANSWER_PARSER_HASH, KRETA_ANSWER_PARSER_VERSION, make_protocol
 
 
 def _add_decoding(config: Mapping[str, Any], recorded: dict[str, Any], unknown: list[str]) -> None:

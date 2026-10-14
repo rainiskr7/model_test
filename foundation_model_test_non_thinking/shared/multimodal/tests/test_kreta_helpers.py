@@ -5,6 +5,7 @@ message). Traceback frames differ by construction once the code lives in a file
 instead of stdin, and pinning them would only force wrapper hacks into the helpers.
 """
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -44,7 +45,7 @@ def head_heredocs():
 
 
 def run_python(args, *, source=None, cwd=REPO):
-    result = subprocess.run([sys.executable, *map(str, args)],
+    result = subprocess.run([sys.executable, *map(str, args)], env=dict(os.environ, PYTHONPATH=str(REPO)),
                             input=source.encode() if source is not None else None,
                             cwd=cwd, capture_output=True, check=False)
     return result.returncode, result.stdout, result.stderr
@@ -61,17 +62,20 @@ def parity(result):
 @pytest.mark.parametrize('error', [False, True], ids=['normal', 'error'])
 def test_safe_model(tmp_path, head_heredocs, shell, error):
     (tmp_path / 'results/Model_A').mkdir(parents=True)
-    # A bad benches argument tests an uncaught import error on every filesystem.
+    # The first argument remains in argv, but package imports no longer use it.
     benches = tmp_path / 'missing-benches' if error else BENCHES
     args = [benches, tmp_path, 'model/a']
     line = next(line for line in (REPO / f'shared/multimodal/{shell}.sh').read_text().splitlines()
                 if line.startswith('SAFE_MODEL='))
     source = line.split("-c '", 1)[1].split("'", 1)[0]
+    assert line.split("'", 2)[2].startswith(' "$SCRIPT_DIR/benches" "$BASE_DIR" "$MODEL")"')
     actual = run_python(['-c', source, *args])
-    assert parity(actual) == parity(run_python(['-', *args], source=head_heredocs[shell, 'paths']))
-    assert actual[0] == (1 if error else 0)
-    if not error:
-        assert actual == (0, b'Model_A\n', b'')
+    expected = run_python(['-', *args], source=head_heredocs[shell, 'paths'])
+    if error:
+        assert expected[0] == 1  # Legacy lookup required the now-unused benches path.
+    else:
+        assert parity(actual) == parity(expected)
+    assert actual == (0, b'Model_A\n', b'')
 
 
 @pytest.mark.parametrize('shell,helper', [
@@ -88,7 +92,7 @@ def test_context(tmp_path, head_heredocs, shell, helper, case):
     context_path.write_text('{' if case == 'invalid-context' else json.dumps({} if case == 'stale-context' else context))
     before = context_path.read_bytes()
     args = [BENCHES, config_path, context_path, 'direct', 'session']
-    actual = run_python([BENCHES / f'{helper}.py', *args])
+    actual = run_python(['-m', f'shared.multimodal.benches.{helper}', *args])
     actual_file = context_path.read_bytes()
     context_path.write_bytes(before)
     expected = run_python(['-', *args], source=head_heredocs[shell, 'context'])
@@ -109,6 +113,6 @@ def test_output_check(tmp_path, head_heredocs, shell, error):
         'def check_files(folder):\n    print("검사:", folder)\n'
         + ('    raise ValueError("평가 오류")\n' if error else ''))
     args = [tmp_path / 'output']
-    actual = run_python([BENCHES / 'kreta_output_check.py', *args], cwd=tmp_path)
+    actual = run_python(["-m", "shared.multimodal.benches.kreta_output_check", *args], cwd=tmp_path)
     assert parity(actual) == parity(run_python(['-', *args], source=head_heredocs[shell, 'output'], cwd=tmp_path))
     assert actual[0] == (1 if error else 0)

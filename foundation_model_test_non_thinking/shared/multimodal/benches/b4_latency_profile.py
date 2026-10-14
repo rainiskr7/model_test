@@ -26,13 +26,13 @@ try:
 except ImportError as e:
     raise SystemExit("pillow 패키지 미설치 — `uv pip install pillow`") from e
 
-from common import (
+from shared.multimodal.benches.common import (
     safe_model_name, get_base_dir, get_timestamp, get_results_dir,
     save_json, image_to_data_url, make_client, build_run_config,
     native_sidecar_from_source, write_sidecar,
 )
 # client.py 를 우회해 SDK 를 직접 호출하므로 여기서도 서빙 제약을 적용해야 한다.
-from client import apply_serving_constraints
+from shared.multimodal.benches.client import apply_serving_constraints
 
 
 DEFAULT_PROMPT = """다음 한국어 문단을 한 문장으로 요약해 주세요.

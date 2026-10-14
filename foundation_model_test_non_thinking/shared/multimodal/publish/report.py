@@ -9,8 +9,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from .derive import discover_sources
-from .schema import (
+from shared.multimodal.publish.derive import discover_sources
+from shared.multimodal.publish.schema import (
     PublishStatus,
     apply_model_identity,
     canonical_model_id,
@@ -19,8 +19,8 @@ from .schema import (
     validate_artifact_integrity,
     validate_sidecar,
 )
-from .select import cohort_key, select_representatives
-from ...publish.claims import aggregate_credential, comparable
+from shared.multimodal.publish.select import cohort_key, select_representatives
+from shared.publish.claims import aggregate_credential, comparable
 
 
 def _expected_sidecar(source: Path) -> Path:

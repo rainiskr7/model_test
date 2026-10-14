@@ -7,7 +7,7 @@ Source: https://huggingface.co/datasets/NCSOFT/K-MMBench
 plan #2의 "선별" 운영을 위해 --categories 옵션 제공.
 """
 
-from choice import extract_choice
+from shared.multimodal.benches.choice import extract_choice
 import sys
 
 try:
@@ -15,7 +15,7 @@ try:
 except ImportError as e:
     raise SystemExit("datasets 패키지 미설치 — `uv pip install datasets`") from e
 
-from common import (
+from shared.multimodal.benches.common import (
     standard_argparser, make_client, chat_with_image,
     get_base_dir, get_timestamp, get_results_dir, save_json,
     build_run_config, resolve_dataset_revision,

@@ -9,6 +9,7 @@
 #   results/<safe_model>/<timestamp>/vision/customB/{b3_structured_output,b4_latency_profile}/
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CODE_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 # benches/paths.py 가 MODEL_TEST_BASE 를 우선하므로 여기서도 같은 뿌리를 쓴다.
 BASE_DIR="${MODEL_TEST_BASE:-$(cd "$SCRIPT_DIR/../.." && pwd)}"
 MODEL="${1:?'MODEL required: ./run_all.sh MODEL [BASE_URL]'}"
@@ -136,7 +137,7 @@ B3_MANIFEST="$SCRIPT_DIR/data/structured_output/manifest.json"
 if [ ! -f "$B3_MANIFEST" ]; then
   echo "[run_all] B-3 manifest 없음 — 스킵 (data/structured_output/ 채우면 활성화)"
 else
-  B3_PREFLIGHT_OK=$(python "$SCRIPT_DIR/benches/b3_preflight.py" "$B3_MANIFEST" "$SCRIPT_DIR/data/structured_output")
+  B3_PREFLIGHT_OK=$(PYTHONPATH="$CODE_ROOT${PYTHONPATH:+:$PYTHONPATH}" python -m shared.multimodal.benches.b3_preflight "$B3_MANIFEST" "$SCRIPT_DIR/data/structured_output")
   if [ "$B3_PREFLIGHT_OK" = "OK" ]; then
     run_checked "B-3" bash "$SCRIPT_DIR/run_b3_structured_output.sh" "$MODEL" "$BASE_URL"
   else
@@ -166,9 +167,9 @@ fi
 # Linux에서도 기존 git 경로의 실제 casing을 재사용한다. 문자열 치환으로 따로
 # 계산하면 macOS(대소문자 무시)에서는 같은 디렉토리를 가리키지만 리눅스에서는
 # Python 러너가 쓰는 경로와 갈라져 산출물이 두 디렉토리로 흩어진다.
-SAFE_MODEL="$("$PY" -c 'import sys; sys.path.insert(0, sys.argv[1]); from paths import results_model_dir_name; print(results_model_dir_name(sys.argv[2], sys.argv[3]))' "$SCRIPT_DIR/benches" "$BASE_DIR" "$MODEL")" || { echo "[run_all] results 모델 경로 해석 실패 — 중단"; exit 1; }
+SAFE_MODEL="$(PYTHONPATH="$CODE_ROOT${PYTHONPATH:+:$PYTHONPATH}" "$PY" -c 'import sys; from shared.resultspath.model_dir import results_model_dir_name; print(results_model_dir_name(sys.argv[2], sys.argv[3]))' "$SCRIPT_DIR/benches" "$BASE_DIR" "$MODEL")" || { echo "[run_all] results 모델 경로 해석 실패 — 중단"; exit 1; }
 SESSION_DIR="$RESULTS_ROOT/$SAFE_MODEL/$EVAL_TIMESTAMP"
-if ! "$PY" "$SCRIPT_DIR/benches/session_sanity.py" "$SESSION_DIR" "$MODEL" "$SCRIPT_DIR/benches"
+if ! PYTHONPATH="$CODE_ROOT${PYTHONPATH:+:$PYTHONPATH}" "$PY" -m shared.multimodal.benches.session_sanity "$SESSION_DIR" "$MODEL" "$SCRIPT_DIR/benches"
 then
   echo "[run_all] sanity check 실패 감지됨"
   FAILURES=$((FAILURES + 1))

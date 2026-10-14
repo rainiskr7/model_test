@@ -2,12 +2,12 @@
 
 from openpyxl import Workbook
 
-from _runner_fakes import load_runner, read_json
-from _r3_runner_fakes import assert_capture, capture, cli, prepare_local
+from shared.multimodal.tests._runner_fakes import load_runner, read_json
+from shared.multimodal.tests._r3_runner_fakes import assert_capture, capture, cli, prepare_local
 
 
-def test_main_requests_storage_identity(monkeypatch, tmp_path, capsys):
-    runner = load_runner(monkeypatch, "koffvqa_api_judge")
+def test_main_requests_storage_identity(monkeypatch, tmp_path, capsys, fresh_import):
+    runner = load_runner(fresh_import, "koffvqa_api_judge")
     predfile = tmp_path / "synthetic.xlsx"
     book = Workbook()
     sheet = book.active

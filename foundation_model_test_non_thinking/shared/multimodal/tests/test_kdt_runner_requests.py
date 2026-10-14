@@ -8,18 +8,16 @@ import sys
 
 import pytest
 
-pytest.register_assert_rewrite("_runner_fakes")
-
-from test_publish_native_runner import _load_kdt_runner
-from _runner_fakes import (
+from shared.multimodal.tests.test_publish_native_runner import _load_kdt_runner
+from shared.multimodal.tests._runner_fakes import (
     MC_PROMPTS, assert_requests, assert_storage, choice_rows, expected_choices,
     prepare,
 )
 
 
 @pytest.mark.parametrize("error,defaults", [(False, True), (False, False), (True, False)])
-def test_main_requests_and_files(monkeypatch, tmp_path, capsys, error, defaults):
-    runner = _load_kdt_runner(monkeypatch)  # existing loader kept unchanged
+def test_main_requests_and_files(monkeypatch, tmp_path, capsys, error, defaults, fresh_import):
+    runner = _load_kdt_runner(monkeypatch, fresh_import)
     responses = ["A", TimeoutError("synthetic timeout"), TimeoutError("synthetic timeout")] if error else ["A", "B"]
     state = prepare(monkeypatch, tmp_path, runner, choice_rows(), responses, defaults=defaults)
     assert runner.main() == 1  # two rows cannot satisfy the real 240-row full-run gate.
@@ -35,8 +33,8 @@ def test_main_requests_and_files(monkeypatch, tmp_path, capsys, error, defaults)
 
 
 @pytest.mark.parametrize("missing_fake", ["revision", "dataset", "transport"])
-def test_main_fails_closed_if_external_fake_is_missing(monkeypatch, tmp_path, missing_fake):
-    runner = _load_kdt_runner(monkeypatch)
+def test_main_fails_closed_if_external_fake_is_missing(monkeypatch, tmp_path, missing_fake, fresh_import):
+    runner = _load_kdt_runner(monkeypatch, fresh_import)
     metadata = sys.modules[runner.build_run_config.__module__]
     client_module = sys.modules[runner.make_client.__module__]
     real_revision, real_openai = metadata.get_hf_dataset_revision, client_module.OpenAI

@@ -11,6 +11,7 @@ from pathlib import Path
 
 
 def write_resume_context(benches_dir: str, config_path: Path, out_path: Path, setting: str, session: str) -> None:
+    # 예외: 호출자가 지정한 benches_dir/metadata 인자 계약을 유지한다.
     sys.path.insert(0, benches_dir)
     from metadata import build_resume_context  # noqa: PLC0415 — benches_dir is only known at call time
 

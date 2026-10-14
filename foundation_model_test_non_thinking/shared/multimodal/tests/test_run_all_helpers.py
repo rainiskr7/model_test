@@ -6,6 +6,7 @@ tests skip instead of failing — the functional tests below still run.
 """
 
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -49,7 +50,7 @@ def head_heredocs():
 
 def run_python(args, *, source=None):
     result = subprocess.run(
-        [sys.executable, *map(str, args)], input=source,
+        [sys.executable, *map(str, args)], env=dict(os.environ, PYTHONPATH=str(REPO)), input=source,
         cwd=REPO, capture_output=True, text=True, check=False,
     )
     return result.returncode, result.stdout, result.stderr
@@ -63,7 +64,7 @@ def test_b3_preflight_matches_head(tmp_path, head_heredocs, missing):
     if not missing:
         image.touch()
     args = [manifest, tmp_path]
-    actual = run_python([BENCHES / "b3_preflight.py", *args])
+    actual = run_python(["-m", "shared.multimodal.benches.b3_preflight", *args])
     assert actual == run_python(["-", *args], source=head_heredocs["b3_preflight"])
     rc, stdout, stderr = actual
     assert rc == 0
@@ -89,7 +90,7 @@ def test_session_sanity_matches_head(tmp_path, head_heredocs, case):
             summary["publish_status"] = {"publishable": False, "failures": ["합성 실패"]}
         summary_path.write_text(json.dumps(summary, ensure_ascii=False), encoding="utf-8")
     args = [session, "model", BENCHES]
-    actual = run_python([BENCHES / "session_sanity.py", *args])
+    actual = run_python(["-m", "shared.multimodal.benches.session_sanity", *args])
     assert actual == run_python(["-", *args], source=head_heredocs["session_sanity"])
     rc, stdout, stderr = actual
     assert stderr == ""
@@ -113,6 +114,7 @@ def test_paths_inline_call_matches_head(tmp_path, head_heredocs):
     script = (REPO / "shared/multimodal/run_all.sh").read_text(encoding="utf-8")
     line = next(line for line in script.splitlines() if line.startswith("SAFE_MODEL="))
     source = line.split("-c '", 1)[1].split("'", 1)[0]
+    assert line.split("'", 2)[2].startswith(' "$SCRIPT_DIR/benches" "$BASE_DIR" "$MODEL")"')
     args = [BENCHES, tmp_path, "model/a"]
     actual = run_python(["-c", source, *args])
     assert actual == run_python(["-", *args], source=head_heredocs["paths"])
@@ -126,7 +128,7 @@ def test_session_sanity_legacy_fallback_matches_head(tmp_path, head_heredocs):
     source.write_text(json.dumps({"other_model": {}, "total": 0}), encoding="utf-8")
     # No _schema in the supplied directory: preserve python-stdin import semantics.
     args = [session, "model", tmp_path / "missing-benches"]
-    actual = run_python([BENCHES / "session_sanity.py", *args])
+    actual = run_python(["-m", "shared.multimodal.benches.session_sanity", *args])
     assert actual == run_python(["-", *args], source=head_heredocs["session_sanity"])
     rc, stdout, stderr = actual
     assert rc == 1 and stderr == ""

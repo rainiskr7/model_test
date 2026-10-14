@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
-from .schema import RecordClass
+from shared.multimodal.publish.schema import RecordClass
 
 _MISSING = object()
 

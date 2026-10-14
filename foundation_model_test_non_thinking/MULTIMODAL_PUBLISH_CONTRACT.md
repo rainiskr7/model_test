@@ -9,8 +9,8 @@ agent 트랙(`../AGENT_TRACK_CLOSEOUT.md`)과 같은 교훈에서 출발한다: 
 
 ```
 python3 derive_multimodal_publish.py --base . --write   # 산출물 -> sidecar
-python3 reports/report_multimodal_tracks.py  --base .           # 발행 가능한 수치만 출력
-python3 reports/report_multimodal_tracks.py  --base . --run <session> --strict  # CI
+python3 -m reports.report_multimodal_tracks  --base .           # 발행 가능한 수치만 출력
+python3 -m reports.report_multimodal_tracks  --base . --run <session> --strict  # CI
 ```
 
 ---
@@ -447,3 +447,5 @@ v1 에서 고쳤다: fuzzy substring 감지를 제거하고 `question` / `answer
   `SERVING_FORCE_SKIP_SPECIAL_TOKENS=false run_kreta.sh`를 실행한다. serving constraint가
   달라진 checkpoint resume은 거부된다. 이 규칙 도입 전 context 없는 checkpoint도
   resume하지 않고 새 `run_kreta.sh`로 시작한다.
+
+저장소 밖 cwd에서 보고서나 루트 CLI(`python3 "$N/derive_multimodal_publish.py"`)를 실행할 때는 `PYTHONPATH="$N${PYTHONPATH:+:$PYTHONPATH}"`를 명령 앞에 지정한다. `--base`는 산출물 위치이며 코드 루트를 바꾸지 않는다.

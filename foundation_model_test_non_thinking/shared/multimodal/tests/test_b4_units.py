@@ -3,13 +3,13 @@ from types import SimpleNamespace
 
 import pytest
 
-from _runner_fakes import load_runner, offline_guard
+from shared.multimodal.tests._runner_fakes import load_runner, offline_guard
 
 
 @pytest.fixture
-def b4(monkeypatch):
+def b4(monkeypatch, fresh_import):
     offline_guard(monkeypatch)
-    return load_runner(monkeypatch, 'b4_latency_profile')
+    return load_runner(fresh_import, 'b4_latency_profile')
 
 
 @pytest.mark.parametrize('skip', [False, True])

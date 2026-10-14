@@ -69,14 +69,13 @@ def test_repeated_main_saves_separate_identity_and_preserves_summary_order(monke
     clients = iter([_client("first"), _client("second")])
     saved = []
     # Isolate runtime IO and network at the helper boundary, without changing argv.
-    monkeypatch.setitem(sys.modules, "common", SimpleNamespace(
+    monkeypatch.setitem(sys.modules, "shared.multimodal.benches.common", SimpleNamespace(
         get_base_dir=lambda path: tmp_path, get_timestamp=lambda: "session",
         get_results_dir=lambda *args, **kwargs: tmp_path,
         save_json=lambda path, payload: saved.append((path.name, payload)),
         build_run_config=lambda **kwargs: {"synthetic": True},
         make_client=lambda *args: next(clients),
     ))
-    monkeypatch.setattr(sys, "path", list(sys.path))
     judge.main()
     judge.main()
     first, second = [payload for name, payload in saved if name == "summary.json"]

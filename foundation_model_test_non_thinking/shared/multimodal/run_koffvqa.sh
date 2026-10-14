@@ -27,6 +27,7 @@
 
 set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CODE_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 BASE_DIR="${MODEL_TEST_BASE:-$(cd "$SCRIPT_DIR/../.." && pwd)}"
 
 MODEL="${1:?'MODEL required: ./run_koffvqa.sh MODEL [BASE_URL]'}"
@@ -46,7 +47,7 @@ fi
 # Linux에서도 기존 git 경로의 실제 casing을 재사용한다. 문자열 치환으로 따로
 # 계산하면 macOS(대소문자 무시)에서는 같은 디렉토리를 가리키지만 리눅스에서는
 # Python 러너가 쓰는 경로와 갈라져 산출물이 두 디렉토리로 흩어진다.
-SAFE_MODEL="$("$PY" -c 'import sys; sys.path.insert(0, sys.argv[1]); from paths import results_model_dir_name; print(results_model_dir_name(sys.argv[2], sys.argv[3]))' "$SCRIPT_DIR/benches" "$BASE_DIR" "$MODEL")" || { echo "[koffvqa] results 모델 경로 해석 실패 — 중단"; exit 1; }
+SAFE_MODEL="$(PYTHONPATH="$CODE_ROOT${PYTHONPATH:+:$PYTHONPATH}" "$PY" -c 'import sys; from shared.resultspath.model_dir import results_model_dir_name; print(results_model_dir_name(sys.argv[2], sys.argv[3]))' "$SCRIPT_DIR/benches" "$BASE_DIR" "$MODEL")" || { echo "[koffvqa] results 모델 경로 해석 실패 — 중단"; exit 1; }
 
 # Timestamp 결정: EVAL_TIMESTAMP env > .eval_session 파일 > 새로 생성 + 저장
 if [ -n "${EVAL_TIMESTAMP:-}" ]; then
@@ -66,7 +67,7 @@ echo "[koffvqa] DEST=$DEST"
 echo "[koffvqa] MODEL=$MODEL"
 
 # 재현용 메타데이터
-"$PY" "$SCRIPT_DIR/benches/common.py" \
+PYTHONPATH="$CODE_ROOT${PYTHONPATH:+:$PYTHONPATH}" "$PY" -m shared.multimodal.benches.common \
   --out "$DEST/run_config.json" \
   --benchmark "KOFFVQA" \
   --model "$MODEL" \
@@ -77,7 +78,7 @@ echo "[koffvqa] MODEL=$MODEL"
 # KOFFVQA_TIMEOUT env 로 요청 timeout 조정 (default 600 — free-form 생성이라 길 수 있고,
 # 느린 HW(DGX Spark 등)에서 기본 60초로는 타임아웃 빈발. kreta KRETA_TIMEOUT 과 일관).
 # 재실행 시 koffvqa_run.py 가 idempotent resume → 에러/타임아웃 항목만 재시도.
-"$PY" "$SCRIPT_DIR/benches/koffvqa_run.py" \
+PYTHONPATH="$CODE_ROOT${PYTHONPATH:+:$PYTHONPATH}" "$PY" -m shared.multimodal.benches.koffvqa_run \
   --model "$MODEL" \
   --base-url "$BASE_URL" \
   --timeout "${KOFFVQA_TIMEOUT:-600}"
@@ -107,7 +108,7 @@ elif [ "${API_JUDGE:-0}" = "1" ]; then
   cd "$SCRIPT_DIR/benches"
   JUDGE_KEY_ARG=""
   if [ -n "$JUDGE_API_KEY" ]; then JUDGE_KEY_ARG="--judge-api-key $JUDGE_API_KEY"; fi
-  "$PY" koffvqa_api_judge.py \
+  PYTHONPATH="$CODE_ROOT${PYTHONPATH:+:$PYTHONPATH}" "$PY" -m shared.multimodal.benches.koffvqa_api_judge \
     --predfile "$PRED_XLSX" \
     --target-model "$MODEL" \
     --judge-model "$JUDGE_MODEL" \

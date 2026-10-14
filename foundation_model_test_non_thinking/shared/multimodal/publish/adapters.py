@@ -10,12 +10,12 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Any, Callable, Iterable, Mapping
 
-from .classify import classify_record
-from .adapters_protocol import (
+from shared.multimodal.publish.classify import classify_record
+from shared.multimodal.publish.adapters_protocol import (
     _add_decoding, _dataset_revision, _add_dataset_provenance,
     _kreta_protocol, _judge_protocol,
 )
-from .schema import (
+from shared.multimodal.publish.schema import (
     COMPARISON_CRITICAL_UNKNOWN,
     KRETA_ANSWER_PARSER_HASH,
     KRETA_ANSWER_PARSER_SPEC,

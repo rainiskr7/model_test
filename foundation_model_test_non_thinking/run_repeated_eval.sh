@@ -70,6 +70,7 @@ echo "         묶였는지, 항목이 뒤집혔는지는 보고에만 나온다
 echo "  python3 -m reports.report_nlu_tracks"
 echo "  python3 -m reports.report_agent_tracks"
 echo "  python3 -m reports.report_taubench_tracks"
+echo "  python3 -m reports.report_multimodal_tracks"
 echo "  python3 reports/report_harness_tracks.py"
 echo "=============================================================="
 [ ${#FAILED[@]} -eq 0 ] || exit 1
