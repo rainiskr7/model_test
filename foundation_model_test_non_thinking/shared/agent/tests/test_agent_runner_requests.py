@@ -17,7 +17,7 @@ from types import ModuleType, SimpleNamespace
 
 import pytest
 
-from _agent_fakes import CUSTOM, load_runner
+from shared.agent.tests._agent_fakes import CUSTOM, load_runner
 from shared.multimodal.tests._runner_fakes import CONSTRAINTS, offline_guard, read_json
 
 MODEL = 'test/model-a:1'

@@ -8,7 +8,6 @@
 from __future__ import annotations
 
 import argparse
-import importlib.util
 import sys
 from pathlib import Path
 from typing import Any
@@ -17,17 +16,10 @@ BASE = Path(__file__).resolve().parents[1]
 
 
 def _load_scorer(base: Path):
-    path = base / "shared" / "harness" / "scoring" / "score_run.py"
-    spec = importlib.util.spec_from_file_location("harness_score_report", path)
-    if spec is None or spec.loader is None:
-        raise SystemExit(f"채점기를 찾을 수 없다: {path}")
-    module = importlib.util.module_from_spec(spec)
-    sys.path.insert(0, str(path.parent))
-    try:
-        spec.loader.exec_module(module)
-    finally:
-        sys.path.remove(str(path.parent))
-    return module
+    """실행 중인 패키지의 채점기를 반환한다. base는 코드 선택에 쓰지 않는다."""
+    from shared.harness.scoring import score_run
+
+    return score_run
 
 
 def collect(base: Path, scorer=None) -> tuple[list[dict[str, Any]], Any]:
@@ -78,21 +70,8 @@ def _pm(value: float | None, stderr: float | None) -> str:
 def _claims(base: Path, published: list[dict[str, Any]], scorer):
     """집계값만 남은 런에 claims의 snapshot 비교 규칙을 적용한다."""
 
-    shared = base / "shared"
-    sys.path.insert(0, str(shared))
-    try:
-        from publish.claims import aggregate_credential, comparable
-    except Exception as exc:
-        # 클레임 등급은 부가 정보다. 그것을 못 읽는다고 수치 보고 전체를 죽이면,
-        # 이 스크립트를 쓰지 않고 산출물을 직접 읽는 경로로 되돌아간다 — 이 스크립트가
-        # 존재하는 이유가 바로 그 경로를 막는 것이다. 다른 트랙에서 같은 결함을 고쳤다.
-        print(f"[report] 클레임 계층을 읽지 못했다: {type(exc).__name__}: {exc}", file=sys.stderr)
-        return {}, []
-    finally:
-        try:
-            sys.path.remove(str(shared))
-        except ValueError:
-            pass
+    from shared.publish.claims import aggregate_credential, comparable
+
     by_model: dict[str, list[dict[str, Any]]] = {}
     for summary in published:
         by_model.setdefault(summary["model"], []).append(summary)
@@ -288,7 +267,10 @@ def render_markdown(summaries: list[dict[str, Any]], folded: list[dict[str, Any]
 
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--base", type=Path, default=BASE)
+    parser.add_argument(
+        "--base", type=Path, default=BASE,
+        help="산출물을 읽을 기준 디렉터리(<PATH>/results, 기본값: 이 저장소); 채점 코드는 실행 중인 저장소의 패키지를 쓴다",
+    )
     parser.add_argument("--write-markdown", type=Path)
     parser.add_argument("--strict", action="store_true", help="발행 불가 런이 있으면 exit 1")
     args = parser.parse_args(argv)

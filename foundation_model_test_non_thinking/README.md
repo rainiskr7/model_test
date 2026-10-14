@@ -326,7 +326,7 @@ foundation_model_test_non_thinking/
 │   └── results_dir.sh             # 위 철자 재사용의 bash 판 (run_harness.sh 가 source)
 ├── llm/  slm/  vlm/  vsm/         # 클래스별 진입점 = shared/ 로의 symlink + recommended_models.md + 평가계획
 ├── orchestration/                 # 레인 실행·감시: run_lane.sh + lanes/<이름>.conf · lane_guard.sh · tests/ · README
-├── reports/                       # 트랙별 보고 스크립트 report_<track>_tracks.py (--base 기본 = 이 저장소)
+├── reports/                       # 보고서 패키지: python3 -m reports.report_<track>_tracks
 ├── configs/                       # 모델별 YAML (models/), 로더, model_identity.json, serving_profiles/
 ├── data/                          # 외부 repo 중앙 clone (.gitignore)
 ├── results/                       # 평가 결과 (git 추적 — results/INDEX.md 가 본·보조·실험·구판 분류)
@@ -338,6 +338,8 @@ foundation_model_test_non_thinking/
 ```
 
 KMMLU·taubench std4 같은 단일 트랙 재측정은 `orchestration/lanes/<이름>.sh` 로, 절차는 `orchestration/README.md`.
+
+모든 트랙 보고서는 N 루트에서 `python3 -m reports.report_<track>_tracks`로 실행한다(예: `python3 -m reports.report_harness_tracks`). `--base`는 결과 위치만 지정하며 기본값은 이 저장소다. 채점 코드는 실행 중인 저장소의 패키지를 쓴다. 저장소 밖 cwd에서는 N의 절대 경로를 `PYTHONPATH="$N${PYTHONPATH:+:$PYTHONPATH}"`로 명령 앞에 붙인다. 자세한 예는 [`reports/README.md`](reports/README.md)를 따른다.
 
 ---
 

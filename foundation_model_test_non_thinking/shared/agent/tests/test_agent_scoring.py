@@ -60,7 +60,7 @@ _result_spec.loader.exec_module(result_observability)
 def _load_runner_helpers():
     """Import the complete runner so extracted helpers remain covered."""
     import pytest
-    from _agent_fakes import load_runner
+    from shared.agent.tests._agent_fakes import load_runner
 
     with pytest.MonkeyPatch.context() as monkeypatch:
         module = load_runner(monkeypatch, Path(tempfile.gettempdir()))

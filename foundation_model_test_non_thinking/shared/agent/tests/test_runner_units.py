@@ -8,7 +8,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from _agent_fakes import load_runner
+from shared.agent.tests._agent_fakes import load_runner
 from shared.multimodal.tests._runner_fakes import offline_guard
 
 

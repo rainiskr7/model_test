@@ -4,12 +4,10 @@
 발행하지 않는다.** 그 이상(유의성, 신뢰구간)을 주장하기 시작하면 테스트가 깨진다.
 """
 
-import sys
 import unittest
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-from publish.claims import (  # noqa: E402
+from shared.publish.claims import (
     MIN_REPEATS,
     NOT_MEASURED,
     aggregate_credential,

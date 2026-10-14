@@ -11,8 +11,9 @@
 파일만 보고 여러 차례 인용했다. 그래서 규칙을 코드로 옮겼다:
 
 ```
-python3 foundation_model_test_non_thinking/reports/report_agent_tracks.py            # functionchat — 발행 가능한 수치만 출력
-python3 foundation_model_test_non_thinking/reports/report_agent_tracks.py --strict   # 거부된 런이 있으면 exit 1 (CI)
+N=foundation_model_test_non_thinking   # 10-14 패키지화: 보고서는 `python -m`, 저장소 밖 cwd 면 PYTHONPATH 에 N
+PYTHONPATH="$N" python3 -m reports.report_agent_tracks            # functionchat — 발행 가능한 수치만 출력
+PYTHONPATH="$N" python3 -m reports.report_agent_tracks --strict   # 거부된 런이 있으면 exit 1 (CI)
 
 cd foundation_model_test_non_thinking
 python3 reports/report_taubench_tracks.py --strict   # taubench — 같은 역할 (CI)

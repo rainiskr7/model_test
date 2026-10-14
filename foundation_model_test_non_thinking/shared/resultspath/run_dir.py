@@ -4,7 +4,7 @@ import os
 from datetime import datetime
 from pathlib import Path
 
-from .model_dir import results_model_dir_name
+from shared.resultspath.model_dir import results_model_dir_name
 
 
 def scoring_results_dir(args, base_default: Path) -> Path:

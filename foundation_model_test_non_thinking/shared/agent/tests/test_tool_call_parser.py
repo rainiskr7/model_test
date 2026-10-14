@@ -71,7 +71,7 @@ def _load_adapter_parse_class():
 def _load_save_detailed_results():
     """Import the complete runner, including its real persistence helpers."""
     import pytest
-    from _agent_fakes import load_runner
+    from shared.agent.tests._agent_fakes import load_runner
 
     with pytest.MonkeyPatch.context() as monkeypatch:
         module = load_runner(monkeypatch, Path(tempfile.gettempdir()))

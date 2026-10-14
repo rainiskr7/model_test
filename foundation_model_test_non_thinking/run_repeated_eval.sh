@@ -71,6 +71,6 @@ echo "  python3 -m reports.report_nlu_tracks"
 echo "  python3 -m reports.report_agent_tracks"
 echo "  python3 -m reports.report_taubench_tracks"
 echo "  python3 -m reports.report_multimodal_tracks"
-echo "  python3 reports/report_harness_tracks.py"
+echo "  python3 -m reports.report_harness_tracks"
 echo "=============================================================="
 [ ${#FAILED[@]} -eq 0 ] || exit 1
