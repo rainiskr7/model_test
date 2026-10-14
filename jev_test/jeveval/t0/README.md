@@ -1,6 +1,6 @@
 # T0 순수 층 — 작업 ⑦a, P1_CONTRACT.md §8-7
 
-파일·네트워크·모델 접근은 없다. 실제 요청 확정·참조/서버 호출·CLI는 ⑦b다.
+이 디렉터리는 순수 계산만 담당한다. 실제 요청 확정·참조/서버 호출·CLI는 아래 ⑦b 층이다.
 본시험 request/response의 score 거부는 그대로 유지한다.
 
 - `request.py`: contract/render 사용, T0 세 종류 요청과 model 별칭, 봉투 바이트·동일성 해시.
@@ -57,3 +57,65 @@ run은 passed일 때만 증거를 강제하며 not_run/partial은 기존 표시 
 외부 코드는 fingerprint.external, 패키지는 env에 기록하며 archive에서 외부 코드를
 `_external/reranker_test/evalcommon/schema.py`로 보존한다. 저장소 내부 경로 검사와
 외부 파일의 명시적 허용 목록을 별도로 적용한다.
+
+## 단계 실행 (⑦b)
+
+의존 방향은 run → client/io/reference → t0/data → types다. 파일 입출력은 io,
+HTTP는 client, 모델 로딩·호출은 reference 경계에만 둔다.
+
+- `../types/t0_io.py`: 확정 입력 묶음·공개 원본 묶음·참조 런타임 dataclass.
+- `../data/t0_fixture.py`: 풀 밖 행의 seed 순위·원문 선택·합성 케이스/대상 배치 구성.
+- `../io/t0_sources.py`: 공개 5개 셋만 읽고 grouping/분할 groups를 복원.
+- `../io/t0_files.py`: 질문/선택지 삽입 순서를 보존하는 원자 JSONL·fixture 쓰기.
+- `../io/t0_inputs.py`: 풀 밖 재검사·원문 해시 대조·입력 확정/해시 검증·경계 주입.
+- `../io/t0_fingerprint.py`: 코드·실제 로드 모듈·패키지·dtype·장치·checkpoint 파일 해시.
+- `../io/t0_chain.py`: 관측·변형·fingerprint의 inputs/요청/참조 파일 연결 검사.
+- `../reference/t0_runner.py`: 세 로컬 로더와 공개 응답 어댑터 조립.
+- `../reference/variants.py`: Clef/v1 하위 배치 조합과 v1.1 대상 질문 배치.
+- `samples.py`: 대상 질문 동일성 해시와 관측 봉투.
+- `rounding.py`: 실행 인자의 경로별 반올림 자리수/반단위.
+- `../run/make_t0_fixture.py`: 공개 fixture 생성 CLI, 원문은 결과 파일에 쓰지 않음.
+- `../run/t0_reference.py`: 공개 참조·모델 전체 batch_1 동일성·5회 변형 실행.
+- `../run/t0_server.py`: concurrency 1·재시도 없는 서버 관측·전체 길이 상태.
+- `../run/t0_evaluate.py`: 허용폭과 최종 판정 순수 함수 조립·공개 결과 기록.
+- `../run/cmd_t0.py`: t0 하위 명령 인자와 단계 연결, 시험/P0 주입 seam.
+- `../client/systemone.py`: send_t0로 확정된 봉투 바이트 그대로 전송.
+
+```sh
+python -m jeveval.run.make_t0_fixture
+python -m jeveval.run.cli t0 inputs --model configs/models/clef.yaml --run-id t0_1
+python -m jeveval.run.cli t0 reference --run-dir results/_t0/clef/t0_1 --checkpoint checkpoints/clef --device cuda
+python -m jeveval.run.cli t0 tolerance --run-dir results/_t0/clef/t0_1 --rounding reference=4
+python -m jeveval.run.cli t0 server --run-dir results/_t0/clef/t0_1 --base-url http://127.0.0.1:8000
+python -m jeveval.run.cli t0 judge --run-dir results/_t0/clef/t0_1 --rounding reference=4,server=4
+```
+
+명령의 모델 YAML은 served_name·인증 환경변수·길이 제한을 P0에서 채운 사본을 쓴다.
+기존 미확정 YAML을 자동으로 바꾸지 않는다. 반올림 4는 예시이며 확인한 자리수를 넣는다.
+참조 별칭이 필요하면 inputs에 `--reference-name jev-latest`를 지정한다.
+inputs는 기존 파일을 덮어쓰지 않는다. 새 입력은 새 run-id로 만든다.
+서버 단계는 YAML의 auth_env를 Bearer 머리글로 쓰고 그 값은 기록하지 않는다.
+
+inputs·reference·tolerance는 GPU 장비에서 준비한다. reference가 종료된 뒤 서버를 띄운다.
+같은 장비에서 참조와 서빙을 동시에 실행하지 않는다(계획 §6). inputs.jsonl·reference.jsonl·
+variants.jsonl·tolerance.json·fingerprint.json을 같은 run 경로로 옮기면 server와 judge는
+Mac 등에서 실행할 수 있다. fixture나 원본을 다시 읽어 요청을 만들지 않는다.
+
+원문 4파일(inputs/reference/server/variants JSONL)은 비공개이며 gitignore 대상이다.
+t0.json·tolerance.json·fingerprint.json에는 원문/원응답/인증 값을 넣지 않는다.
+fixture는 13개 정의(일반 12개+경계 규칙 1개), 확정 시 14개 요청이다.
+7개 공개 참조는 5개 고유 행을 재사용하며 FunctionChat과 AI-Hub는 포함하지 않는다.
+직렬화 합성 state는 json_string의 text 값으로 감싸 §2-2의 plain_text strip 규칙을
+바꾸지 않고 내부 앞뒤 공백까지 보존한다. 공개 원문과 합성 state를 섞지 않는다.
+
+P0는 `cmd_t0.run(stage="inputs", boundary_builder=..., measurer=...)`에 실제 인코더를 주입한다.
+builder(base_request, target_total_tokens)는 T0Request와 잘리기 전 전체 길이를 반환한다.
+measurer(request)는 전체 길이 목록을 반환한다(분리 모델은 질문별). 경계는 최대 길이가
+L 또는 L+1이어야 한다. 빌더 없으면 lengths=null인 경계 요청으로 남아 INCOMPLETE다.
+CLI에 시험용 길이 추정기를 노출하지 않는다. HTTP 200 길이 상태는 확정 시 길이와
+run/length.classify로 구하며 usage.input_tokens를 쓰지 않는다.
+
+반올림 미지정은 INCOMPLETE다. tolerance와 judge의 참조 반올림이 다르면 거부한다.
+`--no-reference`만 참조 없는 PARTIAL을 허용하며 설치 실패의 우회 수단으로 쓰지 않는다.
+C1은 real/NOT_RUN으로 기록한다. 실제 autojev temperature, 반올림, 경계 빌더,
+served_name/별칭의 실모델 확인은 P0에 남는다. 가짜 모듈 시험을 실모델 증거로 쓰지 않는다.

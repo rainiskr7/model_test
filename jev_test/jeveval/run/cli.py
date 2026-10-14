@@ -4,7 +4,7 @@ import argparse
 import json
 from pathlib import Path
 
-from jeveval.run import cmd_archive, cmd_certify, cmd_compare, cmd_run, cmd_score, cmd_threshold
+from jeveval.run import cmd_archive, cmd_certify, cmd_compare, cmd_run, cmd_score, cmd_threshold, cmd_t0
 
 
 def main(argv=None):
@@ -28,10 +28,11 @@ def main(argv=None):
     archive.add_argument("--run-id", required=True)
     archive.add_argument("--results", default="results")
     archive.add_argument("--archive-root", default="archive")
+    cmd_t0.configure(commands)
     args = vars(parser.parse_args(argv))
     command = args.pop("command")
     handler = {"run": cmd_run, "threshold": cmd_threshold, "score": cmd_score,
-               "certify": cmd_certify, "compare": cmd_compare, "archive": cmd_archive}[command]
+               "certify": cmd_certify, "compare": cmd_compare, "archive": cmd_archive, "t0": cmd_t0}[command]
     try:
         result = handler.run(root=Path.cwd(), **args)
     except Exception:
