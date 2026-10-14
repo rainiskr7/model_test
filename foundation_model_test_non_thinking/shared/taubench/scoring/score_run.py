@@ -7,22 +7,13 @@ import os
 import re
 import sys
 from collections import Counter
-
-try:  # 패키지로 임포트될 때
-    from .passk import pass_hat_k_table
-except ImportError:  # 파일 하나만 단독 로드할 때 (테스트 로더)
-    import sys as _sys
-    from pathlib import Path as _Path
-
-    _sys.path.insert(0, str(_Path(__file__).resolve().parent))
-    from passk import pass_hat_k_table
 from pathlib import Path
 from typing import Any, Iterable, Mapping, NamedTuple, Optional
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from shared.jsonwrite.atomic_json import write_json_atomic
 from shared.resultspath.run_dir import scoring_results_dir
 from shared.resultspath.model_dir import results_model_dir_name
+from shared.taubench.scoring.passk import pass_hat_k_table
 
 
 SCORING_VERSION = "taubench_state_v2"  # v2: 후보 프로토콜 실패(도구 미호출)를 측정된 실패로 센다

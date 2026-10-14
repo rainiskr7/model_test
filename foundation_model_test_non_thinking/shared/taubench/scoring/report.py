@@ -24,19 +24,10 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Any, Iterable, Mapping
 
-try:  # 패키지로 임포트될 때 (report_taubench_tracks.py)
-    from .cohort import (
-        comparison_fingerprint, is_multi_trial, replicate_key, reproducibility_report,
-    )
-    from ...publish.claims import comparable, credential
-except ImportError:  # 파일 하나만 단독 로드할 때 (테스트 로더)
-    import sys as _sys
-
-    _sys.path.insert(0, str(Path(__file__).resolve().parent))
-    _sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-    from cohort import comparison_fingerprint, reproducibility_report
-    from cohort import is_multi_trial, replicate_key
-    from publish.claims import comparable, credential
+from shared.publish.claims import comparable, credential
+from shared.taubench.scoring.cohort import (
+    comparison_fingerprint, is_multi_trial, replicate_key, reproducibility_report,
+)
 
 __all__ = ["collect", "render_markdown"]
 

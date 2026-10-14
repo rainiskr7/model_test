@@ -55,6 +55,7 @@ def test_upstream_env_copies_input_and_preserves_shim_contract(model, expected):
         "TAUBENCH_CONSTRAINED_API_BASE": "http://unused/v1",
         "TAUBENCH_CANDIDATE_MODEL": expected,
         "TAUBENCH_REMOVED_PARAMS_OUT": "/output/record.json",
+        "PYTHONPATH": str(Path(runner.__file__).resolve().parents[3]),
     }
     assert original == {"OPENAI_API_KEY": "synthetic", "TAU2_DATA_DIR": "old"}
 
@@ -159,23 +160,25 @@ def _main_contract(monkeypatch, tmp_path, scenario):
              "environ": dict(runner.os.environ)}
     serialized = json.dumps(value, ensure_ascii=False)
     for original, replacement in ((str(tmp_path), "<ROOT>"), (runner.sys.executable, "<PYTHON>"),
-                                  (str(Path(runner.__file__).resolve().parent), "<RUNNER>")):
+                                  (str(Path(runner.__file__).resolve().parent), "<RUNNER>"),
+                                  (str(Path(runner.__file__).resolve().parents[3]), "<CODE_ROOT>")):
         serialized = serialized.replace(original, replacement)
     return hashlib.sha256(serialized.encode()).hexdigest()
 
 
-# Captured from the original main, with subprocess and time replaced by fixed fixtures.
+# Captured with fixed subprocess/time fixtures; R6 adds only child PYTHONPATH.
+# Normalize its checkout root so the contract hash stays portable across machines.
 @pytest.mark.parametrize("scenario,expected", [
-    ("success", "f9a2b10055108fa63a70ceec3d1883756d50d5c13ca8ec255d981fa155860281"),
-    ("standard_local", "5975763b4a2df59d05f411a4f84804c99440cb2afa0688d99c07f0578a18e50f"),
-    ("standard_external", "b34bd1a9687be48e2affb6b3f60a72086530d311703add26fd0c2d8a4530deec"),
-    ("standard_explicit", "bc36561feda6578ec73e25ceeea0e96a418ce07470dc6a11f92ca3aeeb8e6b67"),
-    ("missing_shim", "fe04e3a02f6522ba580b8f14f76b6cdd0c13f387e2547c713ee88bf36a576afa"),
-    ("unmatched_shim", "67b14bb435aa3562eb2083a02baa6aaa8000369ebd20e21fdcaadeea1c2a49c8"),
-    ("upstream_failure", "4fdabcc54717ffa93d20ca88defd4a22c9c10894b2bde6722839e54fdd450aa6"),
-    ("redaction_failure", "c6b327210027d8dfe2c7fd79af425a98c0a45d01f13f9dcc878e31a57f827a36"),
+    ("success", "48fcd2e3532417776022341ac80ec7243178024bc21203c08dbaea7dea30b765"),
+    ("standard_local", "511c37a02fb0ac8fe8d68b589cbc46effd1022a26d9bc6db694e160fa011ce36"),
+    ("standard_external", "b64e7ebcfacc4336e4aec601d0673ecfff5a0fe25e544fd9cae53534e6c48c38"),
+    ("standard_explicit", "05827d612b65ae0a5abc7122fdecfaee2ab80ff462ab29f154cec04f728fb5cd"),
+    ("missing_shim", "2c1ae3e20739be7dbffbd891f0892abdf74bb80472db6fedfc66f82867523ac9"),
+    ("unmatched_shim", "3464656a4c50fce879d285b8af9a81af810a041289fe34e4b83e230a03c75c8b"),
+    ("upstream_failure", "21bbc4bf6d3c0b7a322a00c0a4d5dc054337e372b5cd64c924da987abe1ae77b"),
+    ("redaction_failure", "3cb01f23cce8675262d0be08230e99b45b50fe525729289c976ef5d1cf04d279"),
     ("commit_failure", "81f3256ad4904e036600dface889e3b31d4baad536ae0cf7519a959cacd2e76d"),
-    ("interrupt", "49a9ef7d0b38203a71869fe1a3a31eb06bdb400d1f617666d6f8c5a3d3c9a111"),
+    ("interrupt", "7105777c0936c28bdbf8cfd8238c6f2579c5b5ed5d9eaa3f66021e3b993884ed"),
 ])
 def test_main_subprocess_storage_stdout_and_rc_contract(monkeypatch, tmp_path, scenario, expected):
     assert _main_contract(monkeypatch, tmp_path, scenario) == expected

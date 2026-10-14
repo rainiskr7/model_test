@@ -11,7 +11,6 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Iterable, Mapping, MutableMapping, Optional
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from shared.jsonwrite.atomic_json import write_json_atomic
 from shared.resultspath.run_dir import run_timestamp as _timestamp
 
@@ -75,11 +74,8 @@ def litellm_model_name(model: str) -> str:
 def _unsupported_sampling_params() -> list[str]:
     """서빙 백엔드가 거부하는 sampling 파라미터. 미설정이면 빈 목록."""
 
-    shared_dir = Path(__file__).resolve().parents[2]
-    if str(shared_dir) not in sys.path:
-        sys.path.insert(0, str(shared_dir))
     try:
-        from serving.constraints import unsupported_sampling_params
+        from shared.serving.constraints import unsupported_sampling_params
 
         return sorted(unsupported_sampling_params())
     except Exception:
@@ -689,6 +685,9 @@ def _upstream_env(
     # 제거를 한 칸에 적으면 사용자 쪽 게이트를 우회한다.
     env["TAUBENCH_CANDIDATE_MODEL"] = litellm_model_name(model)
     env["TAUBENCH_REMOVED_PARAMS_OUT"] = str(shim_record_path)
+    root = str(Path(__file__).resolve().parents[3])
+    existing = env.get("PYTHONPATH")
+    env["PYTHONPATH"] = f"{root}{os.pathsep}{existing}" if existing else root
     return env
 
 

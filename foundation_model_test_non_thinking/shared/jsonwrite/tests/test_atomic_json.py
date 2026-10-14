@@ -1,14 +1,10 @@
 """Pin JSON bytes, cleanup, and the four standalone consumers' shared writer."""
 
-import importlib.util
 import json
-import sys
 from pathlib import Path
 
 import pytest
 
-
-SHARED = Path(__file__).resolve().parents[2]
 from shared.jsonwrite.atomic_json import write_json_atomic
 
 
@@ -60,19 +56,8 @@ def test_replace_failure_preserves_existing_bytes_and_removes_temporary_file(mon
 def test_all_four_consumers_import_the_same_writer():
     from shared.functionchat.runner import run_functionchat
     from shared.functionchat.scoring import score_run
+    from shared.taubench.runner import run_taubench
+    from shared.taubench.scoring import score_run as taubench_score_run
 
-    for module in (run_functionchat, score_run):
+    for module in (run_functionchat, score_run, run_taubench, taubench_score_run):
         assert module.write_json_atomic is write_json_atomic, module.__name__
-    paths = (
-        "taubench/runner/run_taubench.py",
-        "taubench/scoring/score_run.py",
-    )
-    previous_path = sys.path[:]
-    try:
-        for index, path in enumerate(paths):
-            spec = importlib.util.spec_from_file_location(f"atomic_consumer_{index}", SHARED / path)
-            module = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(module)
-            assert module.write_json_atomic is write_json_atomic, path
-    finally:
-        sys.path[:] = previous_path

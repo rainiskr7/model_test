@@ -1,30 +1,16 @@
 """tau2-bench 공식 split 선택과 upstream reward 변환 회귀 테스트."""
 
-import importlib.util
 import json
 import os
-import sys
 import tempfile
 import unittest
 from pathlib import Path
 from unittest import mock
 
-
-TAUBENCH_DIR = Path(__file__).resolve().parents[1]
-
-
-def load_module(name: str, path: Path):
-    spec = importlib.util.spec_from_file_location(name, path)
-    if spec is None or spec.loader is None:
-        raise ImportError(path)
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[name] = module
-    spec.loader.exec_module(module)
-    return module
-
-
-runner = load_module("taubench_runner_test", TAUBENCH_DIR / "runner" / "run_taubench.py")
-scorer = load_module("taubench_scorer_test", TAUBENCH_DIR / "scoring" / "score_run.py")
+from reports import report_taubench_tracks
+from shared.taubench.runner import run_taubench as runner
+from shared.taubench.scoring import cohort, passk
+from shared.taubench.scoring import report as reporter, score_run as scorer
 
 
 def task(task_id, basis, nl_assertions=None):
@@ -616,9 +602,6 @@ class TestOfficialCoverage(unittest.TestCase):
         self.assertNotIn("benchmark_eligible", summary["by_domain"]["retail"])
 
 
-cohort = load_module("taubench_cohort_test", TAUBENCH_DIR / "scoring" / "cohort.py")
-
-
 def _run(session, candidate, user_model, passed, *, user_timeout=None, user_max_tokens=None,
          domain="telecom", split_name="test", task_ids=("t1", "t2", "t3")):
     return {
@@ -755,9 +738,6 @@ class TestReviewFollowups(unittest.TestCase):
         self.assertTrue(any("모델 간 비교에 쓸 수 없다" in w for w in warnings))
 
 
-reporter = load_module("taubench_report_test", TAUBENCH_DIR / "scoring" / "report.py")
-
-
 class TestReportEnforcement(unittest.TestCase):
     """플래그를 읽는 코드가 없으면 플래그는 아무것도 막지 못한다."""
 
@@ -862,9 +842,6 @@ class TestResultsPathCasing(unittest.TestCase):
                 runner.results_model_dir_name(base, "model/a")
 
 
-passk = load_module("taubench_passk_test", TAUBENCH_DIR / "scoring" / "passk.py")
-
-
 class TestPassHatK(unittest.TestCase):
     """정의는 상류(agent_metrics.pass_hat_k)를 그대로 따른다."""
 
@@ -924,18 +901,8 @@ class TestReportStrict(unittest.TestCase):
             "publish_status": {"publishable": publishable,
                                "failures": [] if publishable else ["부분 실행이다"]},
         }, ensure_ascii=False), encoding="utf-8")
-        import importlib.util
-        spec = importlib.util.spec_from_file_location(
-            "report_taubench_cli", TAUBENCH_DIR.parents[1] / "reports" / "report_taubench_tracks.py"
-        )
-        module = importlib.util.module_from_spec(spec)
-        sys.path.insert(0, str(TAUBENCH_DIR.parent.parent))
-        try:
-            spec.loader.exec_module(module)
-            with mock.patch("sys.stdout"), mock.patch("sys.stderr"):
-                return module.main(["--base", str(tmp), "--strict"])
-        finally:
-            sys.path.remove(str(TAUBENCH_DIR.parent.parent))
+        with mock.patch("sys.stdout"), mock.patch("sys.stderr"):
+            return report_taubench_tracks.main(["--base", str(tmp), "--strict"])
 
     def test_a_rejected_run_fails_strict(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -957,19 +924,8 @@ class TestReportStrict(unittest.TestCase):
             run = base / "results" / "m" / "s" / "language" / "taubench"
             run.mkdir(parents=True)
             (run / "summary.json").write_text("{ 깨진 JSON", encoding="utf-8")
-            import importlib.util
-
-            spec = importlib.util.spec_from_file_location(
-                "report_taubench_cli_bad", TAUBENCH_DIR.parents[1] / "reports" / "report_taubench_tracks.py"
-            )
-            module = importlib.util.module_from_spec(spec)
-            sys.path.insert(0, str(TAUBENCH_DIR.parent.parent))
-            try:
-                spec.loader.exec_module(module)
-                with mock.patch("sys.stdout"), mock.patch("sys.stderr"):
-                    self.assertEqual(module.main(["--base", str(base), "--strict"]), 1)
-            finally:
-                sys.path.remove(str(TAUBENCH_DIR.parent.parent))
+            with mock.patch("sys.stdout"), mock.patch("sys.stderr"):
+                self.assertEqual(report_taubench_tracks.main(["--base", str(base), "--strict"]), 1)
 
     def test_collect_records_why_an_artifact_could_not_be_read(self):
         with tempfile.TemporaryDirectory() as tmp:

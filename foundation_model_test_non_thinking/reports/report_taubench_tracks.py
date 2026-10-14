@@ -8,7 +8,6 @@ import sys
 from pathlib import Path
 
 BASE = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(BASE))
 
 from shared.taubench.scoring.report import collect, render_markdown
 
@@ -16,7 +15,10 @@ from shared.taubench.scoring.report import collect, render_markdown
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser()
     # 호출 cwd와 관계없이 기본 산출물 기준은 <N>이다.
-    parser.add_argument("--base", type=Path, default=BASE)
+    parser.add_argument(
+        "--base", type=Path, default=BASE,
+        help="산출물을 읽을 기준 디렉터리(<PATH>/results, 기본값: 이 저장소); 채점 코드는 실행 중인 저장소의 패키지를 쓴다",
+    )
     parser.add_argument("--write-markdown", type=Path)
     parser.add_argument(
         "--strict",

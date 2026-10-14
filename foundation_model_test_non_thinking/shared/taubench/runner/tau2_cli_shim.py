@@ -62,15 +62,11 @@ from pathlib import Path
 def _load_apply():
     """shared/serving/constraints.apply 를 가져온다.
 
-    shim 은 tau2 전용 venv(.venv-taubench)에서 돈다. 이 저장소의 shared/ 는
-    그 venv 에 설치돼 있지 않으므로 경로를 직접 얹는다. run_taubench.py 의
-    _unsupported_sampling_params() 가 쓰는 것과 같은 방식이다.
+    shim 은 tau2 전용 venv(.venv-taubench)에서 파일로 실행된다.
+    run_taubench.py 가 자식 PYTHONPATH 에 이 저장소 루트를 공급한다.
     """
 
-    shared_dir = Path(__file__).resolve().parents[2]
-    if str(shared_dir) not in sys.path:
-        sys.path.insert(0, str(shared_dir))
-    from serving.constraints import apply
+    from shared.serving.constraints import apply
 
     return apply
 
