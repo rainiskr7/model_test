@@ -23,7 +23,7 @@
 | 트랙 | 측정 항목 | 사용 도구 |
 |---|---|---|
 | **harness** | 한국어 일반 지식 / 추론 (KMMLU 45 sub-task) | EleutherAI `lm-evaluation-harness` |
-| **nlu** | 짧은 NLU smoke test (도메인 프롬프트 YAML) | 자체 runner (`nlu-gpustack.py`) |
+| **nlu** | 짧은 NLU smoke test (도메인 프롬프트 YAML) | 자체 runner (`nlu_gpustack.py`) |
 | **functionchat** | 한국어 첫 호출 정확도 (exact 670 + 판정 636) | `FunctionChat-Bench` (kakao) |
 | **taubench** | 다단계 실행 (telecom/retail/airline test 분할) | `tau2-bench` (sierra-research) |
 | ~~agent~~ | ~~Tool calling · multi-step (L1~L7)~~ — **중단됨** | ~~`Ko-AgentBench`~~ |
@@ -312,7 +312,7 @@ GB10은 통합 메모리(LPDDR5X, 대역폭 ~273 GB/s)라 dense 대형 모델의
 foundation_model_test_non_thinking/
 ├── shared/                        # 트랙 구현의 단일 소스 — 각 트랙은 run_*.sh(진입) · runner/ · scoring/ · tests/
 │   ├── harness/                   # KMMLU (lm-evaluation-harness 래퍼, harness_lib.sh 가 정지·검증·잠금)
-│   ├── nlu/                       # NLU (nlu-gpustack.py + scoring/)
+│   ├── nlu/                       # NLU (nlu_gpustack.py + scoring/)
 │   ├── functionchat/              # FunctionChat (runner/ · scoring/ · judge/)
 │   ├── taubench/                  # tau2-bench (runner/ · scoring/)
 │   ├── agent/                     # Ko-AgentBench (gpustack_custom/ · scoring/; run_full_eval 에서는 비활성)

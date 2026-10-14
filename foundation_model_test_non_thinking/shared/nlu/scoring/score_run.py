@@ -16,13 +16,7 @@ import json
 from pathlib import Path
 from typing import Any, Iterable, Mapping
 
-try:  # 패키지로 임포트될 때
-    from .contract import items_for, load_answer_key, load_contract, parse_answers
-except ImportError:  # 파일 하나만 단독 로드할 때
-    import sys as _sys
-
-    _sys.path.insert(0, str(Path(__file__).resolve().parent))
-    from contract import items_for, load_answer_key, load_contract, parse_answers
+from shared.nlu.scoring.contract import items_for, load_answer_key, load_contract, parse_answers
 
 __all__ = [
     "score_item", "score_run", "load_run_records",

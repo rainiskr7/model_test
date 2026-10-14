@@ -55,7 +55,7 @@
 사용자 메모리 ("자급자족 분리") 와 정합 → **클래스 폴더 안에서는 자유로이 import**.
 
 **파일 영향**:
-- `vsm/nlu/nlu-gpustack.py` — `get_timestamp` 단일화
+- `vsm/nlu/nlu_gpustack.py` — `get_timestamp` 단일화
 - `vsm/agent/gpustack_custom/run_gpustack_benchmark_with_logging.py` — 동일
 - 4 클래스 sync
 

@@ -44,3 +44,23 @@ def test_empty_report_preserves_original_bytes():
 # Captured from the unmodified A2 input using the synthetic cases above.
 EXPECTED_REPORT_HASH = 'f6f0742cea17f943a69bb1f0ac308209a5e50c6bfe77ba5ff7b3bfd72d2abef9'
 EXPECTED_EMPTY_HASH = 'e30cb998a696bc636d7a71dcbd949f4dfb9022ae69d8e48c71740d31ea7ed17b'
+
+
+def test_collect_uses_running_package_when_results_base_is_absent(tmp_path):
+    from shared.nlu.scoring import score_run
+
+    runs, scorer = report.collect(tmp_path / "absent")
+    assert runs == []
+    assert scorer is score_run
+
+
+def test_results_base_cannot_select_scorer_or_claims_code(tmp_path):
+    from shared.nlu.scoring import score_run
+    from shared.publish.claims import comparable, credential
+
+    for relative in ("shared/nlu/scoring/score_run.py", "shared/publish/claims.py"):
+        foreign = tmp_path / relative
+        foreign.parent.mkdir(parents=True, exist_ok=True)
+        foreign.write_text('raise AssertionError("results base selected code")\n')
+    assert report.collect(tmp_path) == ([], score_run)
+    assert report._claims(tmp_path) == (credential, comparable)

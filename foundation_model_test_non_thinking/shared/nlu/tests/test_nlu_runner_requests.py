@@ -6,7 +6,6 @@ on failure it re-raises (no own stderr); the Python entry point exits with rc=1.
 """
 
 import hashlib
-import importlib.util
 import json
 import os
 from pathlib import Path
@@ -18,7 +17,8 @@ from types import SimpleNamespace
 import pytest
 import requests
 
-RUNNER = Path(__file__).resolve().parents[1] / "nlu-gpustack.py"
+CODE_ROOT = Path(__file__).resolve().parents[3]
+RUNNER = Path(__file__).resolve().parents[1] / "nlu_gpustack.py"
 MODEL = "test/model-a:1"
 ENDPOINT = "http://unused.invalid/v1/chat/completions"
 PROMPT = "합성 질문\n"
@@ -43,7 +43,7 @@ def deny_network(*args, **kwargs):
     pytest.fail("unexpected live network call")
 
 
-def prepare(monkeypatch, tmp_path, outcome="ok", *, constrained=False, contract=True, fail_at=2):
+def prepare(monkeypatch, tmp_path, runner, outcome="ok", *, constrained=False, contract=True, fail_at=2):
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("MODEL_TEST_BASE", str(tmp_path))
     monkeypatch.setenv("EVAL_TIMESTAMP", "r2-session")
@@ -60,10 +60,6 @@ def prepare(monkeypatch, tmp_path, outcome="ok", *, constrained=False, contract=
     monkeypatch.setattr(socket.socket, "connect", deny_network)
     monkeypatch.setattr(socket, "getaddrinfo", deny_network)
     monkeypatch.setattr(requests.sessions.Session, "request", deny_network)
-    monkeypatch.setattr(sys, "path", sys.path[:])
-    spec = importlib.util.spec_from_file_location("r2_nlu_runner", RUNNER)
-    runner = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(runner)
     prompts = tmp_path / "prompts"
     prompts.mkdir()
     (prompts / "carwash.yaml").write_text(PROMPT, encoding="utf-8")
@@ -156,8 +152,8 @@ def assert_storage(output, *, failure=None, constrained=False, contract=True, fi
 
 
 @pytest.mark.parametrize("constrained,contract", [(False, True), (False, False), (True, True)])
-def test_main_http_payload_and_storage(monkeypatch, tmp_path, capsys, constrained, contract):
-    runner, calls, output = prepare(monkeypatch, tmp_path, constrained=constrained, contract=contract)
+def test_main_http_payload_and_storage(monkeypatch, tmp_path, capsys, runner, constrained, contract):
+    runner, calls, output = prepare(monkeypatch, tmp_path, runner, constrained=constrained, contract=contract)
     assert runner.main() is None  # Python entry point rc=0, not a main() integer return.
     assert capsys.readouterr().err == ""
     request = assert_storage(output, constrained=constrained, contract=contract)
@@ -177,8 +173,8 @@ def test_main_http_payload_and_storage(monkeypatch, tmp_path, capsys, constraine
 
 @pytest.mark.parametrize("outcome", list(FAILURES))
 @pytest.mark.parametrize("fail_at", [1, 2])
-def test_main_http_failure_files(monkeypatch, tmp_path, capsys, outcome, fail_at):
-    runner, calls, output = prepare(monkeypatch, tmp_path, outcome, contract=False, fail_at=fail_at)
+def test_main_http_failure_files(monkeypatch, tmp_path, capsys, runner, outcome, fail_at):
+    runner, calls, output = prepare(monkeypatch, tmp_path, runner, outcome, contract=False, fail_at=fail_at)
     with pytest.raises((requests.HTTPError, requests.Timeout, requests.exceptions.JSONDecodeError)) as caught:
         runner.main()
     assert f"{type(caught.value).__name__}: {caught.value}" == FAILURES[outcome]
@@ -190,8 +186,9 @@ def test_main_http_failure_files(monkeypatch, tmp_path, capsys, outcome, fail_at
 @pytest.mark.parametrize("outcome", ["ok", *FAILURES])
 def test_entry_point_rc_and_stderr(tmp_path, outcome):
     result = subprocess.run(
-        [sys.executable, str(Path(__file__).resolve()), outcome, str(tmp_path)],
-        cwd=tmp_path, capture_output=True, text=True, timeout=5,
+        [sys.executable, "-m", "shared.nlu.tests.test_nlu_runner_requests", outcome, str(tmp_path)],
+        cwd=tmp_path, env=dict(os.environ, PYTHONPATH=str(CODE_ROOT)),
+        capture_output=True, text=True, timeout=5,
     )
     assert result.returncode == (0 if outcome == "ok" else 1)
     if outcome == "ok":
@@ -205,6 +202,8 @@ def test_entry_point_rc_and_stderr(tmp_path, outcome):
 
 if __name__ == "__main__":
     case, root = sys.argv[1:]
-    with pytest.MonkeyPatch.context() as patch:
-        module, _, _ = prepare(patch, Path(root), case, contract=False)
+    from shared.nlu.tests.conftest import fresh_runner
+
+    with fresh_runner() as runner, pytest.MonkeyPatch.context() as patch:
+        module, _, _ = prepare(patch, Path(root), runner, case, contract=False)
         module.main()

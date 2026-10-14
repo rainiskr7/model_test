@@ -44,12 +44,8 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 PROMPT_DIR = SCRIPT_DIR / "prompt"
 DEFAULT_ENDPOINT = "http://172.16.1.81:18090/v1/chat/completions"
 
-# shared/ 를 import path 에 추가 (vsm/nlu 는 shared/nlu 로의 symlink 라 resolve 필요)
-sys.path.insert(0, str(SCRIPT_DIR.parent))
-from serving.constraints import apply as apply_serving_constraints  # noqa: E402
-from serving.constraints import constraint_snapshot  # noqa: E402
-sys.path.insert(0, str(SCRIPT_DIR / "scoring"))
-from contract import digest as _digest, items_for, load_contract, render  # noqa: E402
+from shared.serving.constraints import apply as apply_serving_constraints, constraint_snapshot
+from shared.nlu.scoring.contract import digest as _digest, items_for, load_contract, render
 
 
 def get_base_dir() -> Path:

@@ -11,7 +11,6 @@
 from __future__ import annotations
 
 import argparse
-import importlib.util
 import sys
 from pathlib import Path
 from typing import Any
@@ -21,20 +20,10 @@ STATUS_MARK = {"pass": "O", "fail": "X", "invalid": "-"}
 
 
 def _load_scorer(base: Path):
-    scoring_dir = base / "shared" / "nlu" / "scoring"
-    spec = importlib.util.spec_from_file_location("nlu_score_run", scoring_dir / "score_run.py")
-    if spec is None or spec.loader is None:
-        raise SystemExit(f"채점기를 찾을 수 없다: {scoring_dir}")
-    module = importlib.util.module_from_spec(spec)
-    sys.path.insert(0, str(scoring_dir))
-    try:
-        spec.loader.exec_module(module)
-    finally:
-        try:
-            sys.path.remove(str(scoring_dir))
-        except ValueError:
-            pass
-    return module
+    """실행 중인 저장소의 채점 패키지를 반환한다. base는 코드 선택에 쓰지 않는다."""
+    from shared.nlu.scoring import score_run
+
+    return score_run
 
 
 def collect(base: Path) -> tuple[list[dict[str, Any]], Any]:
@@ -55,12 +44,8 @@ def _cohort_label(key: Any) -> str:
 
 
 def _claims(base: Path):
-    """shared/publish/claims 로드."""
-
-    shared = Path(base) / "shared"
-    if str(shared) not in sys.path:
-        sys.path.insert(0, str(shared))
-    from publish.claims import comparable, credential  # noqa: PLC0415
+    """실행 중인 저장소의 클레임 패키지를 로드한다. base는 코드 선택에 쓰지 않는다."""
+    from shared.publish.claims import comparable, credential
 
     return credential, comparable
 
@@ -321,7 +306,10 @@ def render_markdown(runs: list[dict[str, Any]], scorer, base: Path | None = None
 
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--base", type=Path, default=BASE)
+    parser.add_argument(
+        "--base", type=Path, default=BASE,
+        help="산출물을 읽을 기준 디렉터리(<PATH>/results, 기본값: 이 저장소); 채점 코드는 실행 중인 저장소의 패키지를 쓴다",
+    )
     parser.add_argument("--strict", action="store_true", help="채점 불가 런이 있으면 1 로 종료")
     args = parser.parse_args(argv)
 

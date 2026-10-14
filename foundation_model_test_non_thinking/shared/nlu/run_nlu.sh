@@ -12,6 +12,8 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+CODE_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+
 # 인터프리터 해석은 인자 검사 **뒤**에 한다 — 순서를 뒤집으면 인자 오류가
 # 환경 오류에 가려진다.
 resolve_python() {
@@ -56,7 +58,7 @@ while [[ $# -gt 0 ]]; do
     -h|--help)
       # help 조차 실패할 수 있다(인터프리터/임포트). 종료코드를 삼키지 않는다.
       PYTHON_BIN="$(resolve_python)" || exit 127
-      exec "$PYTHON_BIN" "$SCRIPT_DIR/nlu-gpustack.py" --help ;;
+      PYTHONPATH="$CODE_ROOT${PYTHONPATH:+:$PYTHONPATH}" exec "$PYTHON_BIN" -m shared.nlu.nlu_gpustack --help ;;
     *)
       # Backward-compatible positional args: [MODEL] [PROMPT_FILE] [ENDPOINT]
       if [[ -z "$MODEL" ]]; then
@@ -80,4 +82,4 @@ if [[ -n "$ENDPOINT" ]]; then ARGS+=(--endpoint "$ENDPOINT"); fi
 if [[ -n "$OVERWRITE" ]]; then ARGS+=(--overwrite); fi
 
 PYTHON_BIN="$(resolve_python)" || exit 127
-exec "$PYTHON_BIN" "$SCRIPT_DIR/nlu-gpustack.py" ${ARGS[@]+"${ARGS[@]}"}
+PYTHONPATH="$CODE_ROOT${PYTHONPATH:+:$PYTHONPATH}" exec "$PYTHON_BIN" -m shared.nlu.nlu_gpustack ${ARGS[@]+"${ARGS[@]}"}

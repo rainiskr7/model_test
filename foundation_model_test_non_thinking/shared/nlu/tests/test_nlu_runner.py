@@ -4,7 +4,6 @@
 스스로 말할 수 있어야 하고, 그것이 여기서 지키는 유일한 성질이다.
 """
 
-import importlib.util
 import json
 import os
 import subprocess
@@ -14,21 +13,10 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
+from shared.nlu import nlu_gpustack as runner
+
 
 NLU_DIR = Path(__file__).resolve().parents[1]
-
-
-def load_module(name: str, path: Path):
-    spec = importlib.util.spec_from_file_location(name, path)
-    if spec is None or spec.loader is None:
-        raise ImportError(path)
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[name] = module
-    spec.loader.exec_module(module)
-    return module
-
-
-runner = load_module("nlu_runner_under_test", NLU_DIR / "nlu-gpustack.py")
 
 
 class WrapperArgumentParsing(unittest.TestCase):
@@ -165,7 +153,7 @@ class ManifestLifecycle(unittest.TestCase):
     """부분 실행이 완결된 런과 구분되어야 한다."""
 
     def _main(self, base, responses, extra_argv=()):
-        argv = ["nlu-gpustack.py", "--model", "m/x", "--endpoint", "http://e/v1", *extra_argv]
+        argv = ["nlu_gpustack.py", "--model", "m/x", "--endpoint", "http://e/v1", *extra_argv]
         calls = iter(responses)
 
         def fake(prompt, model, endpoint, timeout=600.0, request_snapshot=None):
@@ -176,7 +164,8 @@ class ManifestLifecycle(unittest.TestCase):
                 raise outcome
             return outcome, {"model": "m/x@rev1", "id": "resp-1"}
 
-        with mock.patch.object(runner, "get_base_dir", return_value=base), \
+        with mock.patch.object(runner, "load_api_key", return_value="synthetic-key"), \
+             mock.patch.object(runner, "get_base_dir", return_value=base), \
              mock.patch.object(runner, "get_timestamp", return_value="20260101_000000"), \
              mock.patch.object(runner, "get_response", side_effect=fake), \
              mock.patch.object(sys, "argv", argv), \

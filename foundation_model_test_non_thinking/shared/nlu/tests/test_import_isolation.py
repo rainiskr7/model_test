@@ -1,6 +1,5 @@
 """Import purity and credential precedence, using synthetic .env files only."""
 
-import importlib.util
 import json
 import os
 from pathlib import Path
@@ -13,7 +12,8 @@ from unittest.mock import patch
 import pytest
 
 
-RUNNER = Path(__file__).resolve().parents[1] / "nlu-gpustack.py"
+CODE_ROOT = Path(__file__).resolve().parents[3]
+RUNNER = Path(__file__).resolve().parents[1] / "nlu_gpustack.py"
 
 
 @pytest.mark.parametrize("dotenv_available", [False, True])
@@ -23,15 +23,13 @@ def test_import_preserves_environment_and_path(tmp_path, dotenv_available, exist
         "OPENAI_API_KEY=fake-import-key\nR0_IMPORT_SENTINEL=must-not-appear\n",
         encoding="utf-8",
     )
-    env = dict(os.environ)
+    env = dict(os.environ, PYTHONPATH=str(CODE_ROOT))
     env.pop("OPENAI_API_KEY", None)
     env.pop("R0_IMPORT_SENTINEL", None)
     if existing_key is not None:
         env["OPENAI_API_KEY"] = existing_key
     source = f'''
-import importlib.util
 import os
-from pathlib import Path
 import sys
 from unittest.mock import Mock
 
@@ -44,15 +42,10 @@ else:
     sys.modules["dotenv"] = None
 before_env = dict(os.environ)
 before_path = list(sys.path)
-path = Path({str(RUNNER)!r})
-spec = importlib.util.spec_from_file_location("isolated_nlu_runner", path)
-module = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(module)
+import shared.nlu.nlu_gpustack as module
 assert set(os.environ) == set(before_env)
 assert dict(os.environ) == before_env
-allowed = [str(path.parent / "scoring"), str(path.parent.parent)]
-assert sys.path == allowed + before_path
-assert [p for p in sys.path if p not in allowed] == [p for p in before_path if p not in allowed]
+assert sys.path == before_path
 assert os.environ.get("OPENAI_API_KEY") == {existing_key!r}
 assert "R0_IMPORT_SENTINEL" not in os.environ
 assert module.api_key is None
@@ -60,20 +53,10 @@ if {dotenv_available!r}:
     dotenv.load_dotenv.assert_not_called()
 '''
     result = subprocess.run(
-        [sys.executable, "-I", "-c", source], cwd=tmp_path, env=env,
+        [sys.executable, "-c", source], cwd=tmp_path, env=env,
         capture_output=True, text=True, timeout=30,
     )
     assert result.returncode == 0, result.stderr
-
-
-@pytest.fixture
-def runner():
-    # The historical CLI path additions must not leak from these unit tests.
-    with patch.object(sys, "path", list(sys.path)):
-        spec = importlib.util.spec_from_file_location("credential_test_runner", RUNNER)
-        module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(module)
-        yield module
 
 
 @pytest.mark.parametrize("fallback", [False, True])
@@ -126,14 +109,17 @@ def test_cli_without_key_keeps_exit_contract(tmp_path, arguments, rc, expected):
     nlu = shared / "nlu"
     nlu.mkdir(parents=True)
     shutil.copy2(RUNNER, nlu / RUNNER.name)
+    shutil.copy2(CODE_ROOT / "shared/__init__.py", shared / "__init__.py")
+    shutil.copy2(RUNNER.parent / "__init__.py", nlu / "__init__.py")
     for source in (RUNNER.parent / "scoring", RUNNER.parent.parent / "serving"):
         destination = nlu / "scoring" if source.name == "scoring" else shared / "serving"
         shutil.copytree(source, destination, ignore=shutil.ignore_patterns("__pycache__", "tests"))
     (tmp_path / ".env").write_text("# deliberately no API key\n", encoding="utf-8")
-    env = dict(os.environ, MODEL_TEST_BASE=str(tmp_path), EVAL_TIMESTAMP="synthetic")
+    env = dict(os.environ, MODEL_TEST_BASE=str(tmp_path), EVAL_TIMESTAMP="synthetic",
+               PYTHONPATH=str(tmp_path))
     env.pop("OPENAI_API_KEY", None)
     result = subprocess.run(
-        [sys.executable, str(nlu / RUNNER.name), *arguments], cwd=tmp_path,
+        [sys.executable, "-m", "shared.nlu.nlu_gpustack", *arguments], cwd=tmp_path,
         env=env, capture_output=True, text=True, timeout=30,
     )
     assert result.returncode == rc

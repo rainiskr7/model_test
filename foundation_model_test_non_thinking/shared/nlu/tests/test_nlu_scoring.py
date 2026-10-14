@@ -5,28 +5,17 @@
 - 이 트랙은 점수를 만들지 않는다. 만들려는 시도가 들어오면 테스트가 깨진다.
 """
 
-import importlib.util
 import json
-import sys
 import tempfile
 import unittest
 from pathlib import Path
 
 
+from shared.nlu.scoring import contract as contract_mod
+from shared.nlu.scoring import score_run as scorer
+from reports import report_nlu_tracks
+
 NLU_DIR = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(NLU_DIR / "scoring"))
-
-
-def load_module(name: str, path: Path):
-    spec = importlib.util.spec_from_file_location(name, path)
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[name] = module
-    spec.loader.exec_module(module)
-    return module
-
-
-contract_mod = load_module("nlu_contract_under_test", NLU_DIR / "scoring" / "contract.py")
-scorer = load_module("nlu_score_run_under_test", NLU_DIR / "scoring" / "score_run.py")
 CONTRACT = contract_mod.load_contract()
 KEY = contract_mod.load_answer_key()
 
@@ -200,17 +189,7 @@ class TheReportDoesNotContradictItself(unittest.TestCase):
     """
 
     def _report(self):
-        import importlib.util as il
-
-        root = NLU_DIR.parents[1]
-        spec = il.spec_from_file_location("report_nlu_under_test", root / "reports" / "report_nlu_tracks.py")
-        module = il.module_from_spec(spec)
-        sys.path.insert(0, str(root))
-        try:
-            spec.loader.exec_module(module)
-        finally:
-            sys.path.remove(str(root))
-        return module
+        return report_nlu_tracks
 
     def test_a_cohort_tuple_is_not_printed_where_a_model_name_belongs(self):
         label = self._report()._cohort_label(("m/x", 1, ("temperature",)))
