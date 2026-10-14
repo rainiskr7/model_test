@@ -3,30 +3,18 @@
 from dataclasses import dataclass
 from typing import Callable, Iterable, List, Optional, Sequence
 
-try:
-    from .extra_metrics import (
-        arg_f1_det,
-        context_retention_det,
-        fsm_prefix,
-        redundant_call_rate_det,
-        refetch_avoidance_det,
-        result_field_coverage_det,
-        result_field_coverage_diagnostics,
-        seeded_field_recall_det,
-        seeded_field_recall_diagnostics,
-    )
-except ImportError:  # direct file loading in tests
-    from extra_metrics import (
-        arg_f1_det,
-        context_retention_det,
-        fsm_prefix,
-        redundant_call_rate_det,
-        refetch_avoidance_det,
-        result_field_coverage_det,
-        result_field_coverage_diagnostics,
-        seeded_field_recall_det,
-        seeded_field_recall_diagnostics,
-    )
+from shared.agent.scoring.context import load_metrics_module
+from shared.agent.scoring.extra_metrics import (
+    arg_f1_det,
+    context_retention_det,
+    fsm_prefix,
+    redundant_call_rate_det,
+    refetch_avoidance_det,
+    result_field_coverage_det,
+    result_field_coverage_diagnostics,
+    seeded_field_recall_det,
+    seeded_field_recall_diagnostics,
+)
 
 
 JUDGE_METRICS = ("SR", "ArgAcc", "EffScore", "ContextRetention", "RefRecall")
@@ -43,11 +31,6 @@ class MetricSpec:
 
 def vendored_metric(metric_name: str):
     def _evaluate(ctx):
-        try:
-            from .context import load_metrics_module
-        except ImportError:
-            from context import load_metrics_module
-
         metric = load_metrics_module().METRICS[metric_name]
         return metric.evaluate(ctx).score
 

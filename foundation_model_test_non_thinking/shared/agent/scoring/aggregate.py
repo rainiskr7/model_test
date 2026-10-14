@@ -2,54 +2,30 @@
 
 import math
 import re
-import sys
 from pathlib import Path
 from typing import Any, Dict, Iterable, List
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-from resultspath.model_dir import results_model_dir_name
+from shared.resultspath.model_dir import results_model_dir_name
 
-if __package__:
-    from .aggregate_coverage import _format_l7_coverage
-    from . import SCORING_VERSION, SCORING_VERSION_V3, SCORING_VERSION_V4
-    from .cache_diagnostics import CACHE_MISS_RE, build_cache_diagnostics
-    from .context import build_eval_context
-    from .extra_metrics import (
-        result_field_coverage_diagnostics,
-        result_field_coverage_entry_diagnostics,
-    )
-    from .level_spec import (
-        COMMON_RECORD_ONLY,
-        JUDGE_METRICS,
-        LEVEL_SPECS,
-        LEVEL_SPECS_V3,
-        MetricSpec,
-        level_score,
-        mean_or_none,
-        vendored_metric,
-    )
-    from .task_data import prepare_v3_loaded
-else:
-    sys.path.insert(0, str(Path(__file__).resolve().parent))
-    from aggregate_coverage import _format_l7_coverage
-    from __init__ import SCORING_VERSION, SCORING_VERSION_V3, SCORING_VERSION_V4
-    from cache_diagnostics import CACHE_MISS_RE, build_cache_diagnostics
-    from context import build_eval_context
-    from extra_metrics import (
-        result_field_coverage_diagnostics,
-        result_field_coverage_entry_diagnostics,
-    )
-    from level_spec import (
-        COMMON_RECORD_ONLY,
-        JUDGE_METRICS,
-        LEVEL_SPECS,
-        LEVEL_SPECS_V3,
-        MetricSpec,
-        level_score,
-        mean_or_none,
-        vendored_metric,
-    )
-    from task_data import prepare_v3_loaded
+from shared.agent.scoring.aggregate_coverage import _format_l7_coverage
+from shared.agent.scoring import SCORING_VERSION, SCORING_VERSION_V3, SCORING_VERSION_V4
+from shared.agent.scoring.cache_diagnostics import CACHE_MISS_RE, build_cache_diagnostics
+from shared.agent.scoring.context import build_eval_context
+from shared.agent.scoring.extra_metrics import (
+    result_field_coverage_diagnostics,
+    result_field_coverage_entry_diagnostics,
+)
+from shared.agent.scoring.level_spec import (
+    COMMON_RECORD_ONLY,
+    JUDGE_METRICS,
+    LEVEL_SPECS,
+    LEVEL_SPECS_V3,
+    MetricSpec,
+    level_score,
+    mean_or_none,
+    vendored_metric,
+)
+from shared.agent.scoring.task_data import prepare_v3_loaded
 
 
 ALL_LEVELS = tuple(f"L{i}" for i in range(1, 8))

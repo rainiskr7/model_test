@@ -10,7 +10,7 @@ import types
 
 import pytest
 
-from _agent_fakes import load_runner
+from shared.agent.tests._agent_fakes import load_runner
 
 BASE = Path(__file__).resolve().parents[3]
 CUSTOM = BASE / 'shared/agent/gpustack_custom'
@@ -38,7 +38,6 @@ def duplicate_listing(monkeypatch, root, names=('model_x', 'Model_X')):
     ('shared.agent.scoring.validate_run', '_results_dir_from_args', 'agent'),
 ])
 def test_scoring_cli_model_spelling(tmp_path, monkeypatch, module_name, function, track):
-    monkeypatch.syspath_prepend(str(BASE))
     module = importlib.import_module(module_name)
     monkeypatch.setenv('MODEL_TEST_BASE', str(tmp_path))
     args = module.parse_args(['--model', 'model-x', '--timestamp', 'session'])
@@ -100,9 +99,8 @@ def test_runner_cli_ambiguity_before_session_or_evaluation(tmp_path):
     code = '''import sys
 from pathlib import Path
 import pytest
-sys.path.insert(0, sys.argv[1])
-from test_results_dir import load_runner, duplicate_listing
-base = Path(sys.argv[2])
+from shared.agent.tests.test_results_dir import load_runner, duplicate_listing
+base = Path(sys.argv[1])
 with pytest.MonkeyPatch.context() as mp:
     mp.setenv('MODEL_TEST_BASE', str(base))
     mp.delenv('EVAL_TIMESTAMP', raising=False)
@@ -111,7 +109,7 @@ with pytest.MonkeyPatch.context() as mp:
     sys.argv = ['runner', '--model', 'model-x', '--timeout', '2', '--request-timeout', '1']
     sys.exit(module.main())
 '''
-    result = subprocess.run([sys.executable, '-c', code, str(Path(__file__).parent), str(tmp_path)],
+    result = subprocess.run([sys.executable, '-c', code, str(tmp_path)],
                             text=True, capture_output=True)
     assert result.returncode == 2, result.stdout + result.stderr
     assert 'case-fold ambiguous' in result.stderr

@@ -12,13 +12,7 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Any, Iterable, Mapping
 
-try:  # 패키지로 임포트될 때
-    from ...publish.claims import comparable, credential
-except ImportError:  # 점수 모듈을 파일 경로로 직접 로드하는 테스트일 때
-    import sys as _sys
-
-    _sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-    from publish.claims import comparable, credential
+from shared.publish.claims import comparable, credential
 
 __all__ = [
     "load_run",

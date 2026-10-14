@@ -15,55 +15,29 @@ import sys
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
 
-if __package__:
-    from . import SCORING_VERSION, SCORING_VERSION_V3, SCORING_VERSION_V4
-    from .aggregate import (
-        ALL_LEVELS,
-        SCORABLE_LEVELS,
-        V4_EXCLUDED_LEVELS,
-        V4_HEADLINE_LEVELS,
-        safe_model_name,
-        results_model_dir_name,
-    )
-    from .validate_rules import (
-        _check_scoring_version,
-        _check_by_level,
-        _check_cache_miss_warnings,
-        _check_l7_record_only,
-        _load_raw_levels,
-        _check_l2_single_candidate_warning,
-        _check_raw_metadata_consistency,
-        _check_headline_v2,
-        _check_scoring_v3,
-        _check_scoring_v4,
-        _load_json,
-    )
-    from .level_spec import JUDGE_METRICS, LEVEL_SPECS, LEVEL_SPECS_V3
-else:
-    sys.path.insert(0, str(Path(__file__).resolve().parent))
-    from __init__ import SCORING_VERSION, SCORING_VERSION_V3, SCORING_VERSION_V4
-    from aggregate import (
-        ALL_LEVELS,
-        SCORABLE_LEVELS,
-        V4_EXCLUDED_LEVELS,
-        V4_HEADLINE_LEVELS,
-        safe_model_name,
-        results_model_dir_name,
-    )
-    from validate_rules import (
-        _check_scoring_version,
-        _check_by_level,
-        _check_cache_miss_warnings,
-        _check_l7_record_only,
-        _load_raw_levels,
-        _check_l2_single_candidate_warning,
-        _check_raw_metadata_consistency,
-        _check_headline_v2,
-        _check_scoring_v3,
-        _check_scoring_v4,
-        _load_json,
-    )
-    from level_spec import JUDGE_METRICS, LEVEL_SPECS, LEVEL_SPECS_V3
+from shared.agent.scoring import SCORING_VERSION, SCORING_VERSION_V3, SCORING_VERSION_V4
+from shared.agent.scoring.aggregate import (
+    ALL_LEVELS,
+    SCORABLE_LEVELS,
+    V4_EXCLUDED_LEVELS,
+    V4_HEADLINE_LEVELS,
+    safe_model_name,
+    results_model_dir_name,
+)
+from shared.agent.scoring.validate_rules import (
+    _check_scoring_version,
+    _check_by_level,
+    _check_cache_miss_warnings,
+    _check_l7_record_only,
+    _load_raw_levels,
+    _check_l2_single_candidate_warning,
+    _check_raw_metadata_consistency,
+    _check_headline_v2,
+    _check_scoring_v3,
+    _check_scoring_v4,
+    _load_json,
+)
+from shared.agent.scoring.level_spec import JUDGE_METRICS, LEVEL_SPECS, LEVEL_SPECS_V3
 
 
 PREFIX = "[agent-validate]"

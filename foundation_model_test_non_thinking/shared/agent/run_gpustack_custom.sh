@@ -17,6 +17,7 @@
 
 set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CODE_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 # vsm/agent/<this> → vsm/agent → vsm → model_test
 BASE_DIR="${MODEL_TEST_BASE:-$(cd "$SCRIPT_DIR/../.." && pwd)}"
 # adapter 는 Ko-AgentBench 로 복사되어 실행되므로 __file__ 로는 shared/ 를 못 찾는다.
@@ -62,7 +63,7 @@ if [ -z "$SCORING_TS" ] && [ -f "$BASE_DIR/.eval_session" ]; then
 fi
 PY="${PY:-$BASE_DIR/.venv/bin/python}"
 
-if "$PY" "$SCRIPT_DIR/scoring/score_run.py" \
+if PYTHONPATH="$CODE_ROOT${PYTHONPATH:+:$PYTHONPATH}" "$PY" -m shared.agent.scoring.score_run \
   --model "$MODEL" \
   --timestamp "$SCORING_TS" \
   --track "$SCORING_TRACK"; then

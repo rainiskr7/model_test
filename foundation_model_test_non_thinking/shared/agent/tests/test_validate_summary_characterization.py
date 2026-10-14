@@ -7,18 +7,11 @@ No metric producers, benchmark checkout, or saved result artifacts are needed.
 
 import copy
 import json
-import sys
-from pathlib import Path
 
 import pytest
 
 
-# The pytest console script need not put the repository root on sys.path.
-sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
-try:
-    from shared.agent.scoring import validate_run
-finally:
-    sys.path.pop(0)
+from shared.agent.scoring import validate_run
 
 
 def _level_matrix(specs):

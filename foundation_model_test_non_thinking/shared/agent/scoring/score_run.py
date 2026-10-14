@@ -8,35 +8,19 @@ import tempfile
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-if __package__:
-    from .aggregate import (
-        ALL_LEVELS,
-        L4_FIXTURE_COVERAGE_NOTICE,
-        SCORABLE_LEVELS,
-        V4_HEADLINE_LEVELS,
-        build_summary_from_loaded,
-        safe_model_name,
-        results_model_dir_name,
-    )
-    from . import SCORING_VERSION, SCORING_VERSION_V3, SCORING_VERSION_V4
-    from .context import load_metrics_module
-    from .level_spec import LEVEL_SPECS, LEVEL_SPECS_V3
-    from .validate_run import validate_summary
-else:
-    sys.path.insert(0, str(Path(__file__).resolve().parent))
-    from aggregate import (
-        ALL_LEVELS,
-        L4_FIXTURE_COVERAGE_NOTICE,
-        SCORABLE_LEVELS,
-        V4_HEADLINE_LEVELS,
-        build_summary_from_loaded,
-        safe_model_name,
-        results_model_dir_name,
-    )
-    from __init__ import SCORING_VERSION, SCORING_VERSION_V3, SCORING_VERSION_V4
-    from context import load_metrics_module
-    from level_spec import LEVEL_SPECS, LEVEL_SPECS_V3
-    from validate_run import validate_summary
+from shared.agent.scoring.aggregate import (
+    ALL_LEVELS,
+    L4_FIXTURE_COVERAGE_NOTICE,
+    SCORABLE_LEVELS,
+    V4_HEADLINE_LEVELS,
+    build_summary_from_loaded,
+    safe_model_name,
+    results_model_dir_name,
+)
+from shared.agent.scoring import SCORING_VERSION, SCORING_VERSION_V3, SCORING_VERSION_V4
+from shared.agent.scoring.context import load_metrics_module
+from shared.agent.scoring.level_spec import LEVEL_SPECS, LEVEL_SPECS_V3
+from shared.agent.scoring.validate_run import validate_summary
 
 
 PREFIX = "[agent-scoring]"

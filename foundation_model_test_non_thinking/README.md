@@ -261,13 +261,13 @@ metric은 seed payload만 해석하고 normalization/value matcher를 적용하�
 기존 `L*.json`은 평가를 다시 실행하지 않고 재채점할 수 있다. `--results-dir`을 써도 vendored metric을 불러오려면 `MODEL_TEST_BASE`가 반드시 필요하다.
 
 ```bash
-MODEL_TEST_BASE="$PWD" .venv/bin/python shared/agent/scoring/score_run.py \
+MODEL_TEST_BASE="$PWD" .venv/bin/python -m shared.agent.scoring.score_run \
   --results-dir results/<model>/<timestamp>/language/<agent-track>
-MODEL_TEST_BASE="$PWD" .venv/bin/python shared/agent/scoring/validate_run.py \
+MODEL_TEST_BASE="$PWD" .venv/bin/python -m shared.agent.scoring.validate_run \
   --results-dir results/<model>/<timestamp>/language/<agent-track>
 ```
 
-validator는 scoring version·요약 구조·점수 범위, judge/L7의 기록 전용 계약, raw/summary의 native-tool 모드 일치, v2/v3의 6레벨 및 v4의 고정 5레벨 완전성·평균 불변식을 검사하고 포화/바닥·생존 신호 차이는 경고한다. v4의 level set은 정확히 `("L1","L2","L3","L5","L6")`이어야 하며 stated denominator에서 headline을 재구성한다. 채점된 레벨의 cache miss rate가 20%를 넘으면 실행 call 5개 중 1개보다 많은 도구 증거가 빠진 것으로 보고 임계값과 실측 분수를 명시한 경고를 내되 실패시키지 않는다. 종료 코드는 `0`=유효(경고 허용), `1`=검증 실패, `2`=호출·설정·입력 읽기·내부 오류다. `run_full_eval.sh` 의 agent 트랙과 validator 자동 실행은 현재 비활성이다(스크립트 주석 참조). validator 는 `shared/agent/scoring/validate_run.py` 로 직접 실행한다.
+validator는 scoring version·요약 구조·점수 범위, judge/L7의 기록 전용 계약, raw/summary의 native-tool 모드 일치, v2/v3의 6레벨 및 v4의 고정 5레벨 완전성·평균 불변식을 검사하고 포화/바닥·생존 신호 차이는 경고한다. v4의 level set은 정확히 `("L1","L2","L3","L5","L6")`이어야 하며 stated denominator에서 headline을 재구성한다. 채점된 레벨의 cache miss rate가 20%를 넘으면 실행 call 5개 중 1개보다 많은 도구 증거가 빠진 것으로 보고 임계값과 실측 분수를 명시한 경고를 내되 실패시키지 않는다. 종료 코드는 `0`=유효(경고 허용), `1`=검증 실패, `2`=호출·설정·입력 읽기·내부 오류다. `run_full_eval.sh` 의 agent 트랙과 validator 자동 실행은 현재 비활성이다(스크립트 주석 참조). validator 는 `.venv/bin/python -m shared.agent.scoring.validate_run` 으로 실행한다.
 
 변형 런은 `AGENT_TRACK_NAME=<variant>`로 별도 폴더에 기록한다. 변형 결과와 canonical `agent` 트랙 결과를 한 트랙에 섞지 않는다.
 

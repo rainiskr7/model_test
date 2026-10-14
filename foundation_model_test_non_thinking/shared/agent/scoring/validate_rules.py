@@ -2,29 +2,17 @@
 
 import json
 import math
-import sys
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
 
-if __package__:
-    from . import SCORING_VERSION, SCORING_VERSION_V3, SCORING_VERSION_V4
-    from .aggregate import (
-        ALL_LEVELS,
-        SCORABLE_LEVELS,
-        V4_EXCLUDED_LEVELS,
-        V4_HEADLINE_LEVELS,
-    )
-    from .level_spec import JUDGE_METRICS, LEVEL_SPECS, LEVEL_SPECS_V3
-else:
-    sys.path.insert(0, str(Path(__file__).resolve().parent))
-    from __init__ import SCORING_VERSION, SCORING_VERSION_V3, SCORING_VERSION_V4
-    from aggregate import (
-        ALL_LEVELS,
-        SCORABLE_LEVELS,
-        V4_EXCLUDED_LEVELS,
-        V4_HEADLINE_LEVELS,
-    )
-    from level_spec import JUDGE_METRICS, LEVEL_SPECS, LEVEL_SPECS_V3
+from shared.agent.scoring import SCORING_VERSION, SCORING_VERSION_V3, SCORING_VERSION_V4
+from shared.agent.scoring.aggregate import (
+    ALL_LEVELS,
+    SCORABLE_LEVELS,
+    V4_EXCLUDED_LEVELS,
+    V4_HEADLINE_LEVELS,
+)
+from shared.agent.scoring.level_spec import JUDGE_METRICS, LEVEL_SPECS, LEVEL_SPECS_V3
 
 
 NO_SCORE_STATUSES = {"not_applicable", "error", "contract_error", "judge_missing"}
