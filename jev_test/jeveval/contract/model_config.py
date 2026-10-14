@@ -1,6 +1,7 @@
 """무엇: 모델 설정 검사 · 입력: YAML 객체·stem · 출력: ModelConfig/오류 · 계약 §8-6 G·J."""
 
 import re
+from pathlib import PurePosixPath
 from urllib.parse import urlsplit
 
 from jeveval.types import ModelConfig
@@ -54,6 +55,19 @@ def _regex(value):
         return False
 
 
+def valid_t0_record(value):
+    """passed 증거는 저장소 상대 경로와 SHA-256만 갖는다 (§8-7 T-i)."""
+    if not isinstance(value, dict) or set(value) != {"path", "sha256"}:
+        return False
+    path, digest = value["path"], value["sha256"]
+    if not _text(path) or "\\" in path or "\x00" in path:
+        return False
+    relative = PurePosixPath(path)
+    return (not relative.is_absolute() and ".." not in relative.parts and path != "."
+            and relative.as_posix() == path and isinstance(digest, str)
+            and re.fullmatch(r"[0-9a-f]{64}", digest) is not None)
+
+
 def _object(data, schema, prefix, errors):
     """중첩 닫힌 키와 값의 오류를 경로별로 모은다."""
     if not isinstance(data, dict):
@@ -96,6 +110,9 @@ def validate_model_config(data: dict, file_stem: str) -> ModelConfig | list[str]
     errors = []
     _object(data, schema, "", errors)
     if isinstance(data, dict):
+        t0 = data.get("t0")
+        if isinstance(t0, dict) and t0.get("status") == "passed" and not valid_t0_record(t0.get("record")):
+            errors.append("t0.record: expected path and sha256")
         if isinstance(data.get("input_limit_response"), dict):
             _object(data["input_limit_response"], {"status": lambda v: type(v) is int and v in (400, 422),
                     "body_regex": _regex}, "input_limit_response.", errors)

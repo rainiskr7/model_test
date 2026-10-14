@@ -10,6 +10,7 @@ import yaml
 from jeveval.io.hashes import sha256_file
 from jeveval.io.models import load_model_config
 from jeveval.run.fingerprint import build_fingerprint, same_fingerprint
+from tests.run.t0_support import add_external
 
 
 REPO = Path(__file__).resolve().parents[2]
@@ -17,6 +18,7 @@ REPO = Path(__file__).resolve().parents[2]
 
 @pytest.fixture
 def inputs(tmp_path):
+    add_external(tmp_path)
     paths = ["configs/tasks/kmhas.yaml", "configs/tasks/b1.yaml", "configs/datasets.yaml",
              "configs/models/b1_qwen3_8_27b.yaml", "configs/splits/rules.yaml",
              "jeveval/run/encoders/hf_chat_template.py"]
@@ -61,6 +63,10 @@ def test_exact_hashes_and_only_started_at_ignored(inputs, fixture_json):
     assert result["encoder"] == dict(rule="hf_chat_template_no_think",
         sha256=sha256_file(root / "jeveval/run/encoders/hf_chat_template.py"))
     assert result["tokenizer"] == {"tokenizer.json": sha256_file(root / "tokenizer/tokenizer.json")}
+    assert result["external"] == {"reranker_test/evalcommon/schema.py":
+                                  sha256_file(root.parent / "reranker_test/evalcommon/schema.py")}
+    assert set(result["env"]) == {"python", "numpy", "scipy", "zstandard", "pyyaml"}
+    assert all(isinstance(v, str) and v for v in result["env"].values())
     payload = b"".join(p.relative_to(root).as_posix().encode() + b"\0" + p.read_bytes()
                        for p in sorted((root / "jeveval").rglob("*.py")) if "__pycache__" not in p.parts)
     assert result["code_sha256"] == hashlib.sha256(payload).hexdigest()
@@ -118,3 +124,14 @@ def test_task_identity_and_code_or_list_changes(inputs):
     rules = inputs["root"] / "configs/splits/rules.yaml"
     rules.write_text(rules.read_text() + "\n# changed\n")
     assert not same_fingerprint(before, build_fingerprint(**inputs))
+
+
+def test_external_and_environment_changes_invalidate_fingerprint(inputs, monkeypatch):
+    from jeveval.io import environment
+    original = build_fingerprint(**inputs)
+    path = inputs["root"].parent / "reranker_test/evalcommon/schema.py"
+    path.write_bytes(path.read_bytes() + b"\n# changed\n")
+    assert not same_fingerprint(original, build_fingerprint(**inputs))
+    original = build_fingerprint(**inputs)
+    monkeypatch.setattr(environment, "versions", lambda: {**original["env"], "scipy":"changed"})
+    assert not same_fingerprint(original, build_fingerprint(**inputs))

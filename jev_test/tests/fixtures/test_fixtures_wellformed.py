@@ -14,7 +14,7 @@ from jeveval.types import RiskCell
 ROOT = Path(__file__).parent
 JSON_FILES = sorted(ROOT.rglob("*.json"))
 FOLDERS = {"render", "responses", "scoring", "splits", "resume", "length", "temperature", "b1",
-           "answers", "expand", "records", "seal", "canary"}
+           "answers", "expand", "records", "seal", "canary", "t0"}
 
 
 def read(path):

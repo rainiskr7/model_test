@@ -7,7 +7,7 @@ from uuid import uuid4
 
 from jeveval.client import http
 from jeveval.contract.model_config import missing_for_run
-from jeveval.io import records, run_files, run_inputs
+from jeveval.io import records, run_files, run_inputs, t0
 from jeveval.run import executor, gate, stage_inputs
 from jeveval.run.derive import derive_stage
 from jeveval.run.encoders import measurer_for
@@ -19,7 +19,7 @@ from jeveval.run.resume_check import check_resume
 
 def _common(fp):
     result = {key: fp[key] for key in ("encoder", "tokenizer", "code_sha256",
-                                      "dataset_verified", "run_id", "model")}
+                                      "dataset_verified", "run_id", "model", "external", "env")}
     result["files"] = {path: digest for path, digest in fp["files"].items()
                        if path != fp["inputs"]["task_path"]}
     return result
@@ -64,6 +64,7 @@ def run(*, root, model, task, stage, run_id, base_url=None, results="results",
         return dict(ok=not missing, missing_for_run=missing)
     if missing:
         raise ValueError("incomplete run configuration")
+    t0.verify_for_run(ctx.root, ctx.model_path)
     derived = ctx.task.variant == "actions_only" and ctx.cfg.question_scoring == "separate"
     headers = {} if derived else _headers(ctx.cfg)
     if not derived and measurer is None:

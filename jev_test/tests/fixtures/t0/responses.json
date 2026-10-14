@@ -1,0 +1,34 @@
+{
+ "questions": {
+  "binary": {"type":"noul","instructions":"참인가","criteria":{"true":"참","false":"거짓"}},
+  "pick": {"type":"choice","instructions":"고르시오","criteria":{"B":"둘","A":"하나","C":"셋"}},
+  "grade": {"type":"score","instructions":"수준","criteria":["매우 낮음","낮음","중간","높음","매우 높음"]}
+ },
+ "valid": {"answers": {
+  "binary":{"type":"noul","noul":0.7},
+  "pick":{"type":"choice","choice":"A","confidence":0.5,"probabilities":{"A":0.5,"B":0.4999,"C":0.0001}},
+  "grade":{"type":"score","score":1.9997,"confidence":0.2,"probabilities":{"0":0.2,"1":0.2,"2":0.2,"3":0.2,"4":0.2},"legend":{"0":"매우 낮음","1":"낮음","2":"중간","3":"높음","4":"매우 높음"}}
+ }},
+ "rounding_original": [0.200049,0.200049,0.2,0.199951,0.199951],
+ "cases": [
+  {"id":"rounding_counterexample","changes":[],"reason":null},
+  {"id":"legend_swap","changes":[["grade","legend",{"0":"낮음","1":"매우 낮음","2":"중간","3":"높음","4":"매우 높음"}]],"reason":"score_legend"},
+  {"id":"bool_probability","changes":[["grade","probabilities",{"0":true,"1":0,"2":0,"3":0,"4":0}]],"reason":"score_values"},
+  {"id":"bool_score","changes":[["grade","score",true]],"reason":"score_value"},
+  {"id":"bool_confidence","changes":[["grade","confidence",true]],"reason":"score_confidence"},
+  {"id":"missing_score","changes":[],"remove":["grade","score"],"reason":"score_value"},
+  {"id":"missing_level","changes":[["grade","probabilities",{"0":0.2,"1":0.2,"2":0.2,"3":0.2}]],"reason":"score_keys"},
+  {"id":"bad_sum","changes":[["grade","probabilities",{"0":0.1,"1":0.2,"2":0.2,"3":0.2,"4":0.2}]],"reason":"score_values"},
+  {"id":"bad_score","changes":[["grade","score",1.9]],"reason":"score_value"},
+  {"id":"bad_confidence","changes":[["grade","confidence",0.2001]],"reason":"score_confidence"},
+  {"id":"mixed_type_first","changes":[["binary","noul",-1],["grade","type","choice"]],"reason":"type_mismatch"},
+  {"id":"mixed_noul_first","changes":[["binary","noul",-1],["grade","probabilities",{}]],"reason":"noul_value"},
+  {"id":"mixed_choice_keys_first","changes":[["pick","probabilities",{}],["grade","legend",{}]],"reason":"choice_keys"}
+ ],
+ "raw_cases": [
+  {"id":"duplicate_level","raw":"{\"answers\":{\"grade\":{\"type\":\"score\",\"probabilities\":{\"0\":0.2,\"0\":0.2}}}}","reason":"bad_body"},
+  {"id":"nonfinite_score","replace":"NaN","reason":"score_value"},
+  {"id":"infinite_score","replace":"Infinity","reason":"score_value"},
+  {"id":"overflow_score","replace":"1e999","reason":"score_value"}
+ ]
+}

@@ -5,6 +5,7 @@ from pathlib import Path, PurePosixPath
 import tarfile
 
 from jeveval.io.hashes import sha256_file
+from jeveval.io.environment import external_path
 from jeveval.io.run_inputs import inside
 from jeveval.run.layout import identifier
 
@@ -64,6 +65,11 @@ def run_directories(root, results, run_id):
 def entries_for(root, contexts):
     entries = {}
     for ctx in contexts:
+        for name, digest in ctx.fingerprint["external"].items():
+            source = external_path(root, name)
+            if sha256_file(source) != digest:
+                raise ValueError("external source hash mismatch")
+            entries["_external/" + name] = source
         paths = [inside(root, name) for name in ctx.fingerprint["files"]]
         paths.append(ctx.directory / "fingerprint.json")
         for stage in ("dev", "test", "extra"):

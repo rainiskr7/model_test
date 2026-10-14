@@ -12,6 +12,7 @@ from jeveval.io.hashes import sha256_file
 from jeveval.io.splits import write_split_plan
 from jeveval.run.layout import run_dir
 from tests.run.cli_support import Harness, put_yaml
+from tests.run.t0_support import passed_record
 
 
 class ModelHarness(Harness):
@@ -43,6 +44,7 @@ def pair(root, monkeypatch, set_name="klue_mrc_answerable", fail=False):
     second.model_name, second.fail, second.sent = "second", fail, []
     cfg = yaml.safe_load((root / "configs/models/synthetic.yaml").read_text())
     cfg["id"], cfg["t0"]["status"] = "second", "passed"
+    passed_record(root, cfg, name="t0_second.json")
     put_yaml(root / "configs/models/second.yaml", cfg)
     if fail:
         add_test_row(first)

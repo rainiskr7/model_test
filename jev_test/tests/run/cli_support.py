@@ -13,6 +13,7 @@ from jeveval.io.splits import write_split_plan
 from jeveval.run import cli, cmd_run
 from jeveval.run.layout import run_dir
 from jeveval.types import AttemptResult, LengthInfo, SplitPlan
+from tests.run.t0_support import add_external
 
 REPO = Path(__file__).resolve().parents[2]
 
@@ -26,6 +27,7 @@ class Harness:
     def __init__(self, root, set_name="klue_mrc_answerable", variant="default", kind="systemone"):
         self.root, self.set, self.variant, self.sent = root, set_name, variant, []
         root.mkdir(parents=True, exist_ok=True)
+        add_external(root)
         shutil.copytree(REPO / "configs/tasks", root / "configs/tasks")
         self.markers = json.loads((REPO / "tests/fixtures/canary/input.json").read_text())["markers"]
         rules = self._write_source(root, set_name)

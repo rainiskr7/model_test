@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from jeveval.io import hashes
+from jeveval.io import environment, hashes
 from jeveval.io.config import load_taskspec
 from jeveval.io.models import load_model_config
 from jeveval.run.encoders import ENCODERS
@@ -38,7 +38,8 @@ def build_fingerprint(*, root, run_id, model_cfg_path, task_path, set_name,
         root / path, cfg.tokenizer["files_sha256"])
     return dict(schema="fingerprint/1", run_id=run_id, model=cfg.id, set=set_name,
                 variant=variant, inputs=inputs, files=files, dataset_verified=True, encoder=encoder,
-                tokenizer=tokenizer, code_sha256=hashes.code_sha256(root), started_at=started_at)
+                tokenizer=tokenizer, code_sha256=hashes.code_sha256(root), started_at=started_at,
+                external=environment.external_hashes(root), env=environment.versions())
 
 
 def same_fingerprint(old: dict, new: dict) -> bool:

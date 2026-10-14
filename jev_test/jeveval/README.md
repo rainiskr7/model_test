@@ -188,3 +188,11 @@ archive.json에는 이 표식과 인증 키가 없어야 한다. 정답 원문 �
 
 REBUTTAL: R1–R8 반영. 이번 작업의 SPEC_AMBIGUOUS / FIXTURE_CONFLICT 없음.
 검사: `../foundation_model_test_non_thinking/.venv/bin/python -I -m pytest -q -p no:cacheprovider -rs tests`
+
+## T0 순수 층 (⑦a·보정 13)
+
+`t0/`는 세 종류 요청·응답 검증·질문별 허용폭·분포/답/경계 판정·원문 없는 기록을 담당한다.
+파일별 지도와 dataclass 인터페이스·고정 배치 목록은 [t0/README.md](t0/README.md)에 있다.
+`io/t0.py`·`t0/gate.py`는 passed 기록을 run의 첫 쓰기 전에 확인한다. YAML은 사람이 동결한다.
+`io/environment.py`는 fingerprint의 external/env를 수집하며 archive는 `_external/`로 보존한다.
+실제 inputs 생성·참조/서버 실행·T0 CLI는 ⑦b에서 이어 구현한다. 새 fixture는 `tests/fixtures/t0/`다.
