@@ -12,7 +12,7 @@ from jeveval.data.t0_fixture import make_fixture
 from jeveval.io.t0_files import write_fixture
 from jeveval.io.t0_inputs import load
 from jeveval.types import SourceRow
-from .conftest import ROOT, inputs
+from tests.t0_io.conftest import ROOT, inputs, setup
 
 
 def test_fixture_coverage_and_determinism(setup, t0_policy):

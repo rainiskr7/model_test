@@ -77,6 +77,7 @@ HTTP는 client, 모델 로딩·호출은 reference 경계에만 둔다.
 - `samples.py`: 대상 질문 동일성 해시와 관측 봉투.
 - `rounding.py`: 실행 인자의 경로별 반올림 자리수/반단위.
 - `../run/make_t0_fixture.py`: 공개 fixture 생성 CLI, 원문은 결과 파일에 쓰지 않음.
+- `../run/t0_measure.py`: 본시험 인코더(Measurer)를 T0 의 measurer(request)·boundary_builder(base, target) 로 감싸는 어댑터 — 채움 문자를 두 배씩·이분 탐색으로 붙여 정확히 target 길이의 경계 요청을 만든다; cmd_t0 inputs 가 모델 yaml 의 encoder.rule 로 자동 연결.
 - `../run/t0_reference.py`: 공개 참조·모델 전체 batch_1 동일성·5회 변형 실행.
 - `../run/t0_server.py`: concurrency 1·재시도 없는 서버 관측·전체 길이 상태.
 - `../run/t0_evaluate.py`: 허용폭과 최종 판정 순수 함수 조립·공개 결과 기록.

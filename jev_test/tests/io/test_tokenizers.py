@@ -77,6 +77,6 @@ def test_load_offline_returns_loader_handle(tmp_path, monkeypatch):
     monkeypatch.setattr(AutoTokenizer, "from_pretrained", loader)
     for key in ("HF_HUB_OFFLINE", "TRANSFORMERS_OFFLINE"):
         monkeypatch.setenv(key, "0")
-    # 정확한 인자/호출 시점 환경은 test_encoders.test_verified_load_and_manual_length에서 검증한다.
+    # 정확한 인자/호출 시점 환경은 encoders/test_hf_chat_template.py::test_verified_load_and_manual_length에서 검증한다.
     assert load_offline(tmp_path) is handle
     loader.assert_called_once()

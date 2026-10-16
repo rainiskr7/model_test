@@ -454,7 +454,7 @@ QStats = {role, type, n_scored, n_missing, accuracy: {num, den}, macro_f1 | null
 ### 8-1. 규칙
 - **파일 하나 = 기능 하나.** 첫머리 docstring 에 "무엇 · 입력 · 출력 · 이 계약의 몇 절". 그 파일만 열어도 고칠 수 있게.
 - **작게**: 파일 ≤ 200 줄, 함수 ≤ 50 줄 정도.
-- **입출력은 정해진 곳에만**: 파일 읽기 `io/` (설정·데이터·분할·레코드·경로 제한 `paths.py`), 네트워크 `client/`. 나머지(`contract/`·`data/`·`score/`·`types/`·`t0/`)는 순수 함수 — 이미 읽은 객체를 받는다. `run/` 은 `io/`·`client/` 를 부르되 직접 파일을 열지 않는다. **명시 특례** (보정 10-17): `run/summary.py` 의 `reranker_test/evalcommon` 소스 로딩(§8-6 M), `run/cmd_run._headers`·`run/t0_server` 의 인증 환경변수 조회(값은 설정 밖), `run/layout.py` 의 경로 resolve(경로 제한 검사). 그 밖의 `run/` 직접 파일 조회(glob·stat·환경 설정)는 `io/` 로 옮긴다 (`run/item_summary.py` glob·`run/encoders` 토크나이저 로딩은 미이행 과제).
+- **입출력은 정해진 곳에만**: 파일 읽기 `io/` (설정·데이터·분할·레코드·경로 제한 `paths.py`), 네트워크 `client/`. 나머지(`contract/`·`data/`·`score/`·`types/`·`t0/`)는 순수 함수 — 이미 읽은 객체를 받는다. `run/` 은 `io/`·`client/` 를 부르되 직접 파일을 열지 않는다. **명시 특례** (보정 10-17): `run/summary.py` 의 `reranker_test/evalcommon` 소스 로딩(§8-6 M), `run/cmd_run._headers`·`run/t0_server` 의 인증 환경변수 조회(값은 설정 밖), `run/layout.py` 의 경로 resolve(경로 제한 검사). 그 밖의 `run/` 직접 파일 조회(glob·stat·환경 설정)는 `io/` 로 옮긴다 (10-17 이행: `run/item_summary.py` glob → `io.hashes.glob_files`, `run/encoders` 토크나이저 로딩 → `io/tokenizers`).
 - **모듈 사이는 `types/` 의 dataclass 만** (§8-5 필드). 명령 공유 문맥은 `RunContext`·`StageData`(`types/context.py`). **명명된 직렬화 예외** (보정 10-17): 파일 스키마 객체 `risk/1`·`scores/1`·`compare/1`·`fingerprint/1` 은 조립 함수 → 명령 → 쓰기(또는 `summary`) 사이에서 dict 로 오간다; `cli` 의 명령 결과 JSON 도 dict. 그 밖의 dict·SimpleNamespace 경계는 위반.
 - **상태기계는 `run/` 의 모듈군 한 곳** (보정 10-17 — §8-6 이 이미 나눈 소유를 그대로 적음): `executor.py` 전송·대기·기록 순서, `policy.py` 순수 terminal 결정, `outcome.py` 순수 결과 변환·상태 결합(§4-3), `resume_check.py` 기록과 현재 계획 대조, `gate.py` 쓰기 전 진입 검사. `client/` 는 **한 번의 시도**만 (재시도 안 함). `io/records.py` 는 줄 추가·읽기·끝 줄 복구(`repair_tail`, §8-6 A)·기록의 **구조 불변식**(연속 번호·terminal 뒤 시도 없음·같은 call_id 의 logical_id·request_sha256 불변)만 — 예산·실행 상태 전이는 `run/`.
 - **기능마다 짝 테스트** `tests/<폴더>/test_<파일>.py` + 경계마다 통합 테스트 하나. GPU·서버 없이 fixture 로 돈다. 한 기능을 고치면 그 단위 테스트와 해당 경계 통합 테스트를 같이 돌린다. 명령 모듈(`run/cmd_*.py`)도 짝 테스트를 둔다 — 검증·분기·쓰기 순서가 있으므로 통합 테스트로 갈음하지 않는다; 순수 조립만 하는 `run/cli.py` 는 통합 테스트(`tests/run/test_cli_*.py`)로 갈음한다. 같은 패키지 안 상대 import 는 허용하며 의존 방향은 모듈 그래프(`io/score/data/contract/types/t0/client` 에서 `run` import 0)로 검사한다.
@@ -627,6 +627,7 @@ PoolResult(group_ids: list[str], allocation: dict[str, int])          # data/poo
 
 - pplx: 길이 초과 응답 형태(422 메시지) · 반올림 · 문자열 state 처리 · `choice` 가 확률표 argmax 인지. Clef(SGLang): `usage.input_tokens` · 길이 초과 동작. 각 서버의 `served_name`.
 - 모델별 인코더 규칙(래퍼 포함)·$L_m$·`fixed_tokens` 계산법·문자 위치 → 토큰 위치 변환.
+  - 10-17: Clef·Clef-Flash 는 규칙 `clef_encode_record` 구현 — 체크포인트 사본의 `joint_schema_model.encode_record` 를 그대로 불러 ℓ(max_length 무제한)·`fixed_tokens`(max_state_tokens=0)·대상 끝(`render(state)` 의 offsets) 을 잰다 (H·I: 틀·잘림을 다시 구현하지 않음; 카드 코드가 `state_ids[:max_length-fixed_length]` 로 꼬리를 자르므로 §4-3 classify 와 일치). 모델 yaml `tokenizer.files_sha256` 에 `joint_schema_model.py` 를 넣어 fingerprint 에 묶는다. 남은 P0: 실제 체크포인트에서 ℓ == `usage.input_tokens` 확인, pplx v1/v1.1 규칙(체크포인트 `source/src/autojev/model.py` 의 prepare 가 필요 — 받은 사본에 없음), 경계 빌더.
 - B1 진입 조건 (계획 §2-3) · 서버별 안전 동시성.
 - 감사 v4 (§2-2) — 동결 때.
 

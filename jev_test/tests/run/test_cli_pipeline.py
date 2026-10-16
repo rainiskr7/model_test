@@ -10,12 +10,6 @@ from jeveval.run import cli, cmd_run
 from tests.run.cli_support import Harness, output_files, put_yaml
 
 
-@pytest.fixture
-def h(tmp_path, monkeypatch):
-    result = Harness(tmp_path)
-    monkeypatch.chdir(tmp_path)
-    monkeypatch.setenv("JEV_TEST_KEY", "private-test-key")
-    return result
 
 
 def test_canary_cli_pipeline_and_certify_mutations(h, monkeypatch, capsys):
@@ -59,32 +53,6 @@ def test_canary_cli_pipeline_and_certify_mutations(h, monkeypatch, capsys):
     assert "threshold_mtime_after_seal" in capsys.readouterr().out
 
 
-@pytest.mark.parametrize("failure", ["auth", "missing", "measurer", "items"])
-@pytest.mark.parametrize("stage", ["dev", "test"])
-def test_run_failure_before_any_write(h, monkeypatch, failure, stage):
-    if stage == "test":
-        h.run("dev")
-        assert h.command("threshold") == 0
-    sent = len(h.sent)
-    if failure == "auth":
-        monkeypatch.delenv("JEV_TEST_KEY")
-    elif failure == "missing":
-        path = h.root / h.args["model"]
-        import yaml
-        cfg = yaml.safe_load(path.read_text())
-        cfg["served_name"] = None
-        put_yaml(path, cfg)
-    elif failure == "measurer":
-        monkeypatch.setattr(cmd_run, "measurer_for", lambda cfg: (_ for _ in ()).throw(ValueError("secret")))
-    else:
-        monkeypatch.setattr(cmd_run.stage_inputs, "load_items", lambda **kw: (_ for _ in ()).throw(ValueError("secret")))
-    before = output_files(h.root)
-    with pytest.raises(ValueError):
-        if failure == "measurer":
-            cmd_run.run(**h.args, stage=stage, post=h.post)
-        else:
-            h.run(stage)
-    assert output_files(h.root) == before and len(h.sent) == sent
 
 
 def test_check_config_base_url_and_sanitized_errors(h, monkeypatch, capsys):
@@ -101,25 +69,6 @@ def test_check_config_base_url_and_sanitized_errors(h, monkeypatch, capsys):
     assert "SECRET_INVALID_URL" not in capsys.readouterr().out
 
 
-@pytest.mark.parametrize("failure", ["no_seal", "test_incomplete", "extra_missing", "extra_partial"])
-def test_score_requires_seal_and_all_stage_ids(tmp_path, monkeypatch, failure):
-    h = Harness(tmp_path, "fc_call_decision")
-    monkeypatch.chdir(tmp_path)
-    monkeypatch.setenv("JEV_TEST_KEY", "key")
-    h.run("dev")
-    assert h.command("threshold") == 0
-    h.run("test")
-    if failure != "extra_missing":
-        h.run("extra")
-    if failure == "no_seal":
-        (h.directory / "test/seal.json").unlink()
-    elif failure == "test_incomplete":
-        (h.directory / "test/final.jsonl").write_text("")
-    elif failure == "extra_partial":
-        (h.directory / "extra/final.jsonl").write_text("")
-    before = output_files(h.directory)
-    assert h.command("score") == 1
-    assert output_files(h.directory) == before
 
 
 def test_functionchat_all_rows_and_threshold_stage_isolation(tmp_path, monkeypatch):
@@ -148,30 +97,8 @@ def test_frozen_input_changes_reject_all_consumers(h, command, changed):
     assert output_files(h.directory) == before
 
 
-def test_late_score_failure_preserves_existing_outputs(h, monkeypatch):
-    h.finish()
-    from jeveval.run import cmd_score
-    monkeypatch.setattr(cmd_score, "summary_from_risk", lambda **kw: (_ for _ in ()).throw(ValueError()))
-    before = output_files(h.directory)
-    assert h.command("score") == 1
-    assert output_files(h.directory) == before
 
 
-def test_threshold_never_opens_other_stage_and_incomplete_dev_rejected(h, monkeypatch):
-    from pathlib import Path
-    h.run("dev")
-    original = Path.open
-    forbidden = [h.directory / "test", h.directory / "extra"]
-    def guarded(path, *args, **kwargs):
-        assert not any(p == path or p in path.parents for p in forbidden)
-        return original(path, *args, **kwargs)
-    with monkeypatch.context() as patch:
-        patch.setattr(Path, "open", guarded)
-        assert h.command("threshold") == 0
-    (h.directory / "dev/final.jsonl").write_text("")
-    before = output_files(h.directory)
-    assert h.command("threshold") == h.command("certify") == 1
-    assert output_files(h.directory) == before
 
 
 def test_test_without_threshold_and_missing_check_config(h, capsys):

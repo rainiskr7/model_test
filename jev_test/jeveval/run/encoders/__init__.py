@@ -5,10 +5,12 @@ from typing import Callable
 from jeveval.run.length import Measurer
 from jeveval.types import ModelConfig
 
+from .clef_encode_record import ClefEncodeRecord
 from .hf_chat_template import HfChatTemplateNoThink
 
 ENCODERS: dict[str, Callable[[ModelConfig], Measurer]] = {
     "hf_chat_template_no_think": HfChatTemplateNoThink,
+    "clef_encode_record": ClefEncodeRecord,
 }
 
 

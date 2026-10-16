@@ -8,7 +8,8 @@ from jeveval.io.reference import local_checkpoint
 from jeveval.io.t0_policy import read_t0_policy
 from jeveval.io.paths import inside
 from jeveval.reference import t0_runner
-from jeveval.run import t0_evaluate, t0_reference, t0_server
+from jeveval.run import t0_evaluate, t0_measure, t0_reference, t0_server
+from jeveval.run.encoders import measurer_for
 
 
 def configure(commands):
@@ -46,6 +47,11 @@ def run(*, root, stage, model=None, run_id=None, fixture="configs/t0/fixture_v1.
     policy = read_t0_policy(inside(root, tolerance_policy))
     if stage == "inputs":
         cfg = load_model_config(inside(root, model))
+        if measurer is None and cfg.encoder["rule"] is not None:
+            # 모델 yaml 에 인코더 규칙이 있으면 본시험과 같은 인코더로 길이·경계 요청을 만든다 (주입 seam 은 시험용).
+            encoder = measurer_for(cfg)
+            measurer = t0_measure.measure_with(encoder)
+            boundary_builder = boundary_builder or t0_measure.boundary_builder_with(encoder)
         directory = inside(root, f"{results}/_t0/{t0_inputs.identifier(cfg.id)}/{t0_inputs.identifier(run_id)}")
         bundle = t0_inputs.freeze(directory / "inputs.jsonl", inside(root, fixture), cfg, root, run_id, policy=policy,
             sources=sources, reference_name=reference_name, boundary_builder=boundary_builder, measurer=measurer)

@@ -63,3 +63,14 @@ def b1_raw():
         """-Infinity를 포함한 원응답 문자열을 합성한다."""
         return json.dumps({"choices": [{"logprobs": {"content": [{"top_logprobs": rows}]}}], **extra})
     return wrap
+
+
+from tests.run.cli_support import Harness
+
+
+@pytest.fixture
+def h(tmp_path, monkeypatch):
+    result = Harness(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("JEV_TEST_KEY", "private-test-key")
+    return result

@@ -80,6 +80,7 @@ P1_CONTRACT.md 보정 12와 ⑥b-2 R1–R8 기준으로 compare·archive·참조
 - `run/length.py`: 호출별 잘림·문자 끝→토큰 끝·길이 구간, P0 측정 구현용 Measurer Protocol.
 - `run/encoders/__init__.py`: ENCODERS 등록표·measurer_for, 미확정·미등록 규칙 거부.
 - `run/encoders/hf_chat_template.py`: 오프라인 no-think 템플릿·ID 재인코딩 일치·state offsets 기반 LengthInfo (파일 대조·로딩은 io/tokenizers).
+- `run/encoders/clef_encode_record.py`: Clef·Clef-Flash 규칙 `clef_encode_record` — 체크포인트 사본의 joint_schema_model.encode_record 를 그대로 불러 ℓ(무제한)·고정부(max_state_tokens=0)·state offsets 로 LengthInfo (pplx 는 체크포인트의 autojev/model.py 가 있어야 같은 방식으로 추가 가능).
 - `io/tokenizers.py`: 모델 yaml tokenizer 폴더·파일 해시 대조, HF 오프라인 환경에서 local_files_only 로딩.
 - `run/policy.py`: RetryPolicy(configs/policy.yaml) 로 전송 오류 우선·정수 Retry-After·누적 번호에 따른 Decision (코드 상수 없음).
 - `contract/policy.py`: configs/policy.yaml 닫힌 스키마 검사 → RetryPolicy 또는 오류 목록.
@@ -112,7 +113,7 @@ P1_CONTRACT.md 보정 12와 ⑥b-2 R1–R8 기준으로 compare·archive·참조
 의존 방향은 `run → io/data → score/types`, `io → contract → types`, `score → types`다. 전체 예정 방향은 `run → client/io → score/data/contract → types`다.
 data/items는 io·contract·run을 import하지 않는다. expand·items·labels는 파일·난수를 사용하지 않는다. types는 jeveval의 다른 패키지를 import하지 않는다.
 contract·score는 서로 import하지 않으며 파일·네트워크·시계에 접근하지 않는다. score/bootstrap의 난수는 지역 random.Random(f"{seed}:boot:{set_name}")만 쓴다. data도 파일·네트워크·시계에 접근하지 않고, 난수는 계약의 문자열 seed로 만든 random.Random만 쓴다.
-run/encoders의 의존은 types·io.tokenizers·run.length·표준 라이브러리로 제한한다(transformers 는 io/tokenizers 안에서만 import). 로드는 HF_HUB_OFFLINE=1·TRANSFORMERS_OFFLINE=1, local_files_only=True·trust_remote_code=False다.
+run/encoders의 의존은 types·io.tokenizers·io.reference·run.length·표준 라이브러리로 제한한다(transformers 는 io/tokenizers 안에서만 import; Clef 규칙은 체크포인트 사본의 참조 모듈을 io.reference.source_module 로 읽는다). 로드는 HF_HUB_OFFLINE=1·TRANSFORMERS_OFFLINE=1, local_files_only=True·trust_remote_code=False다.
 
 세부 규칙·기존 시험 지도·이전 구현 결정은 [NOTES.md](NOTES.md)에 보존한다.
 

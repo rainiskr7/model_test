@@ -4,8 +4,7 @@ import pytest
 
 from jeveval.io.run_files import read_json, write_json
 from jeveval.io.t0_files import read_lines, write_lines
-from jeveval.t0.rounding import parse
-from .conftest import fake_post, inputs, stage
+from tests.t0_io.conftest import fake_post, inputs, stage, setup
 
 
 def complete(ctx):
@@ -71,8 +70,3 @@ def test_missing_variant_is_unmeasured_and_rounding_cannot_change(setup):
     assert stage(ctx, "judge", rounding="reference=4,server=4", no_reference=True)["status"] == "PARTIAL"
 
 
-@pytest.mark.parametrize("policy", ["reference=-1", "reference=17", "other=4", "reference=4,reference=4",
-                                   "server=True", "server=４"])
-def test_rounding_invalid(policy):
-    with pytest.raises(ValueError):
-        parse(policy)
