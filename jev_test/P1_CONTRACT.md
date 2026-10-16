@@ -475,7 +475,7 @@ jev_test/jeveval/
 ```
 
 ### 8-3. 결과 규약
-새 결과(`scores.json`·`risk.json`·`threshold.json`·`compare.json`)는 이 계약이 정하고, 최상위 집계와 맞추기 위해 `summary.json` 을 `reranker_test/evalcommon` 의 `make_score_summary` 로 추가로 쓴다: **`risk.json` 의 주 지표 판·τ `"0.02"` `RiskCell` 에서만** 만든다 — `metric = "coverage_at_risk_2pct"`, `score` = `test.coverage.num / test.coverage.den` (NO_THRESHOLD·UNDERPOWERED 면 0), `extra = {status, insufficient_by_design}`. `scores.json` 의 정답률로 만들지 않는다.
+새 결과(`scores.json`·`risk.json`·`threshold.json`·`compare.json`)는 이 계약이 정하고, 최상위 집계와 맞추기 위해 `summary.json` 을 `reranker_test/evalcommon` 의 `make_score_summary` 로 추가로 쓴다: **`risk.json` 의 주 지표 판·τ `"0.02"` `RiskCell` 에서만** 만든다 — `metric = "coverage_at_risk_2pct"`, `score` = **인증된 처리율** — `status == MEETS` 일 때만 `test.coverage.num / test.coverage.den`, 그 외(FAILS·UNDERPOWERED·NO_THRESHOLD)와 `den == 0` 은 0 (`score_rule = "meets_only"`; 개정 10-16 — 그 전에는 FAILS 가 관측 처리율을 그대로 내서 UNDERPOWERED 의 0 과 한 지표에 두 뜻이 섞였다). 계획 §4-2 의 (상태, 처리율, k, n, U) 는 최상위 필드로 함께 적는다: `status`, `coverage_observed = test.coverage` (상태와 무관한 관측 수락 `{num, den}`), `n_accepted`, `k_errors`, `U` (NO_THRESHOLD 는 셋 다 null, 수락 0 인 UNDERPOWERED 는 n=k=0·U null — RiskCell 값을 바꾸지 않고 옮긴다), `insufficient_by_design`, `t0_status`. `make_score_summary` 의 `extra` 는 중첩 객체가 아니라 최상위로 펼쳐진다. `scores.json` 의 정답률로 만들지 않는다. 10-16 이전 코드로 쓴 summary(`score_rule` 없음)는 그대로 두고 다시 쓰지 않는다 — fingerprint 의 `code_sha256` 가 그 판을 가리킨다.
 
 ### 8-4. 작업 순서 (각 작업 = 파일 몇 개 + 그 테스트, 따로 리뷰·실행)
 1. ~~`types/` + `io/config.py` + task yaml 스키마 검사 + §9 fixture~~ — **끝** (10-13, 커밋 `dafe4b2`)

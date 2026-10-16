@@ -26,6 +26,17 @@ def test_canary_cli_pipeline_and_certify_mutations(h, monkeypatch, capsys):
     assert h.command("threshold") == 0
     assert cli.main(["run", *args, "--stage", "test"]) == 0
     assert h.command("score") == h.command("certify") == 0
+    cell = run_files.read_json(h.directory / "risk.json")["cells"]["0.02"]
+    summary = run_files.read_json(h.directory / "summary.json")
+    for key in ("status", "insufficient_by_design"):
+        assert summary[key] == cell[key]
+    for key in ("n_accepted", "k_errors", "U"):
+        assert summary[key] == cell["test"][key]
+    coverage = cell["test"]["coverage"]
+    assert summary["coverage_observed"] == coverage
+    assert summary["score_rule"] == "meets_only"
+    assert summary["score"] == (coverage["num"] / coverage["den"]
+        if cell["status"] == "MEETS" and coverage["den"] > 0 else 0.0)
     committed = ["fingerprint.json", "threshold.json", "test/seal.json", "scores.json", "risk.json", "summary.json"]
     for name in committed:
         raw = (h.directory / name).read_text()
