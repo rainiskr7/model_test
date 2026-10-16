@@ -159,7 +159,7 @@ JSON 파싱은 **중복 키 거부**(`object_pairs_hook`), `bool` 은 숫자로 
 | 200 + 검증 통과 | 끝 → §4-3 판정 |
 | 200 + 검증 실패 | 재시도 없음 → `error/<사유 코드>` (모델 출력을 서버가 변환하는 과정 어딘가의 형식 위반 — 원인을 단정하지 않는다) |
 | 422 | 재시도 없음 → §4-1 |
-| 529 · 503 · 연결 오류 · 시간 초과(600초) | `Retry-After` 를 따르거나 1·2·4·8·16초 뒤, **논리 요청(B1 은 호출)당 총 5회** — resume 을 넘어 누적 |
+| 529 · 503 · 연결 오류 · 시간 초과(600초) | `Retry-After` 를 따르거나 1·2·4·8초 뒤 (마지막 시도 뒤에는 기다리지 않는다 — 보정 10-17, 코드·시험과 같게), **논리 요청(B1 은 호출)당 총 5회** — resume 을 넘어 누적. 값은 `configs/policy.yaml` (`RetryPolicy`, fingerprint 포함 — 바꾸면 진행 중 run 재개가 거부되는 것이 의도된 동작) |
 | 그 밖의 4xx/5xx | 재시도 없음 → `error/http_<code>` |
 
 - 동시성: 서버당 기본 1. P0 실측 후 모델 yaml 에 (최대 8, 계획 §6).
@@ -458,7 +458,7 @@ QStats = {role, type, n_scored, n_missing, accuracy: {num, den}, macro_f1 | null
 - **모듈 사이는 `types/` 의 dataclass 만** (§8-5 필드). 명령 공유 문맥은 `RunContext`·`StageData`(`types/context.py`). **명명된 직렬화 예외** (보정 10-17): 파일 스키마 객체 `risk/1`·`scores/1`·`compare/1`·`fingerprint/1` 은 조립 함수 → 명령 → 쓰기(또는 `summary`) 사이에서 dict 로 오간다; `cli` 의 명령 결과 JSON 도 dict. 그 밖의 dict·SimpleNamespace 경계는 위반.
 - **상태기계는 `run/` 의 모듈군 한 곳** (보정 10-17 — §8-6 이 이미 나눈 소유를 그대로 적음): `executor.py` 전송·대기·기록 순서, `policy.py` 순수 terminal 결정, `outcome.py` 순수 결과 변환·상태 결합(§4-3), `resume_check.py` 기록과 현재 계획 대조, `gate.py` 쓰기 전 진입 검사. `client/` 는 **한 번의 시도**만 (재시도 안 함). `io/records.py` 는 줄 추가·읽기·끝 줄 복구(`repair_tail`, §8-6 A)·기록의 **구조 불변식**(연속 번호·terminal 뒤 시도 없음·같은 call_id 의 logical_id·request_sha256 불변)만 — 예산·실행 상태 전이는 `run/`.
 - **기능마다 짝 테스트** `tests/<폴더>/test_<파일>.py` + 경계마다 통합 테스트 하나. GPU·서버 없이 fixture 로 돈다. 한 기능을 고치면 그 단위 테스트와 해당 경계 통합 테스트를 같이 돌린다. 명령 모듈(`run/cmd_*.py`)도 짝 테스트를 둔다 — 검증·분기·쓰기 순서가 있으므로 통합 테스트로 갈음하지 않는다; 순수 조립만 하는 `run/cli.py` 는 통합 테스트(`tests/run/test_cli_*.py`)로 갈음한다. 같은 패키지 안 상대 import 는 허용하며 의존 방향은 모듈 그래프(`io/score/data/contract/types/t0/client` 에서 `run` import 0)로 검사한다.
-- **설정은 코드 밖**: 문구·선택지·라벨·재시도·cap 은 yaml. 코드에 박지 않는다. 라벨 **어휘**(KoSGD act·K-MHaS·KOTE 목록)도 yaml 이 단일 출처이고 코드의 정답 규칙 등록표는 그 어휘로 만든다 (미이행 과제: `score/labels.py`·`run/policy.py`·`t0/tolerance.py` 상수). yaml 로 옮긴 값은 fingerprint(`run/fingerprint.py` 파일 목록 또는 T0 chain) 에 넣는다.
+- **설정은 코드 밖**: 문구·선택지·라벨·재시도·cap 은 yaml. 코드에 박지 않는다. 라벨 **어휘**(KoSGD act·K-MHaS·KOTE 목록)도 yaml 이 단일 출처이고 코드의 정답 규칙 등록표는 그 어휘로 만든다 (미이행 과제: `score/labels.py`·`t0/tolerance.py` 상수; 재시도는 `configs/policy.yaml` 로 옮김 10-17). yaml 로 옮긴 값은 fingerprint(`run/fingerprint.py` 파일 목록 또는 T0 chain) 에 넣는다.
 - **`jeveval/README.md` 기능 지도**: 파일마다 한 줄 + 의존 방향 `run → client/io → score/data/contract/t0 → types` (거꾸로 금지; `t0/` 는 §8-7 T-b 의 순수 층). 기능을 옮기거나 나누는 커밋은 지도를 같이 고친다.
 
 ### 8-2. 구성

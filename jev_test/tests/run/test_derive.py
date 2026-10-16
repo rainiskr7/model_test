@@ -18,7 +18,7 @@ def full_record(env, make_attempt, b1_raw, kind):
     plans = plan_calls(item, env.task, cfg, env.b1)
     raw = (json.dumps({"answers": {q: {"type": "noul", "noul": .8} for q in qids}})
            if kind == "systemone" else b1_raw([{"token": "A", "logprob": -1}, {"token": "B", "logprob": -2}]))
-    calls = [call_record(p, [make_attempt(p, response_raw=raw)], env.length, cfg) for p in plans]
+    calls = [call_record(p, [make_attempt(p, response_raw=raw)], env.length, cfg, env.policy.max_attempts) for p in plans]
     return item, final_record(env.plan.logical_id, plans, calls)
 
 

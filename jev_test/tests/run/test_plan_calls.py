@@ -67,7 +67,7 @@ def test_item_errors_cover_all_unique_calls(env, kind, failure):
     for plan in plans:
         assert plan.local_errors == plans[0].local_errors
         assert plan.body == b"" and plan.request_sha256 == hashlib.sha256(b"").hexdigest()
-        assert call_record(plan, [], None, cfg).reason == "request_contract"
+        assert call_record(plan, [], None, cfg, env.policy.max_attempts).reason == "request_contract"
         if failure == "render":
             assert plan.rendered == Rendered("", 0)
 
@@ -82,7 +82,7 @@ def test_b1_call_error_is_local_and_keeps_available_call(env):
     cfg = replace(env.bcfg, b1={"label_token_ids": {"A": 0}})
     plan, = plan_calls(env.item, env.task, cfg, env.b1)
     assert plan.local_errors and plan.b1_call.label_map == {"A": "true", "B": "false"}
-    record = call_record(plan, [], env.length, cfg)
+    record = call_record(plan, [], env.length, cfg, env.policy.max_attempts)
     assert record.label_map == plan.b1_call.label_map and record.length is None
     assert record.attempts == 0 and record.usage is record.answers_parsed is None
 
@@ -110,7 +110,7 @@ def test_mapping_fixture_through_call_record(env, fixture_json, make_attempt, b1
     for line in source["expected"]["option_lines"]:
         assert line in plan.b1_call.messages[1]["content"]
     raw = b1_raw([{"token": label, "logprob": -1.0} for label in source["labels"]])
-    result = call_record(plan, [make_attempt(plan, response_raw=raw)], env.length, env.bcfg)
+    result = call_record(plan, [make_attempt(plan, response_raw=raw)], env.length, env.bcfg, env.policy.max_attempts)
     answer = result.answers_parsed[q.id]
     assert result.status == "ok" and answer.answer == "NONE"
     assert answer.probs == pytest.approx({"NONE": 1 / 3, "a": 1 / 3, "z": 1 / 3})

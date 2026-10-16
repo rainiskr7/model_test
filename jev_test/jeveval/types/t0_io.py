@@ -34,7 +34,7 @@ class T0Reference:
     processor: Any = None
     answer_module: Any = None
     server: Any = None
-    max_length: int = 16384
+    max_length: int | None = None
 
 
 @dataclass(frozen=True)

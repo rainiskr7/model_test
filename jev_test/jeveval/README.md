@@ -78,7 +78,9 @@ P1_CONTRACT.md 보정 12와 ⑥b-2 R1–R8 기준으로 compare·archive·참조
 - `run/encoders/__init__.py`: ENCODERS 등록표·measurer_for, 미확정·미등록 규칙 거부.
 - `run/encoders/hf_chat_template.py`: 오프라인 no-think 템플릿·ID 재인코딩 일치·state offsets 기반 LengthInfo (파일 대조·로딩은 io/tokenizers).
 - `io/tokenizers.py`: 모델 yaml tokenizer 폴더·파일 해시 대조, HF 오프라인 환경에서 local_files_only 로딩.
-- `run/policy.py`: MAX_ATTEMPTS=5·전송 오류 우선·정수 Retry-After·누적 번호에 따른 Decision.
+- `run/policy.py`: RetryPolicy(configs/policy.yaml) 로 전송 오류 우선·정수 Retry-After·누적 번호에 따른 Decision (코드 상수 없음).
+- `contract/policy.py`: configs/policy.yaml 닫힌 스키마 검사 → RetryPolicy 또는 오류 목록.
+- `io/policy.py`: policy.yaml 읽기·검사 위임.
 - `run/outcome.py`: 기록 연결·예산·길이 필수 검사, 독립 usage·답 변환·거부 우선·논리 상태 합성.
 - `run/resume_check.py`: 전체 계획·attempts·final ID·누적 예산을 첫 전송/쓰기 전에 대조하는 순수 검사.
 - `run/executor.py`: 주입 post/measurer/sleep으로 순차 실행·재시도·복구·attempts 뒤 final 기록·RunSummary.
@@ -88,7 +90,7 @@ P1_CONTRACT.md 보정 12와 ⑥b-2 R1–R8 기준으로 compare·archive·참조
 - `run/gate.py`: 모든 검사 뒤 fingerprint 쓰기·현재 단계 tail 복구·첫 시험 봉인; 호출은 보내지 않는다.
 - `run/seal.py`: threshold/dev final 바이트 해시 봉인·덮어쓰기 거부·resume 해시 대조 (certify는 ⑥b).
 - `io/paths.py`: 저장소 안 경로 제한(inside)·결과 식별자(identifier)·파일 크기/mtime(file_info).
-- `run/context.py`: 설정 복원 RunContext·fingerprint 재생성·단계 완료 StageData·identity와 compare/archive 공통 봉인 검사.
+- `run/context.py`: 설정·재시도 정책 복원 RunContext·fingerprint 재생성·단계 완료 StageData·identity와 compare/archive 공통 봉인 검사.
 - `io/archive.py`: 전체 run 폴더/보존 입력 열거·결정적 tar.zst·sha/이름/길이 검증.
 - `io/reference.py`: 로컬 체크포인트·오프라인 환경(offline_environment, 토크나이저 로딩과 공용)·참조 소스의 읽기 전용 import.
 - `score/observations.py`: 성공 질문의 F1 관측·KoSGD 고정 칸·KorFin pooled 관측.

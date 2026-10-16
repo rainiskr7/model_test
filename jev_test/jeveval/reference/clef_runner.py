@@ -12,6 +12,8 @@ def load(checkpoint, *, device="cuda", reference=None):
     return reference, model, processor
 
 
-def respond(reference, model, processor, request, *, max_length=16384):
-    """전체 요청을 그대로 전달한다. 잘림·반올림·choice 선택은 참조 구현 소유다."""
+def respond(reference, model, processor, request, *, max_length):
+    """전체 요청을 그대로 전달한다. max_length 는 모델 yaml limit.tokens (기본값 없음). 잘림·반올림·choice 선택은 참조 구현 소유다."""
+    if type(max_length) is not int or max_length <= 0:
+        raise ValueError("max_length must be a positive integer")
     return reference.systemone(model, processor, request, max_length=max_length)

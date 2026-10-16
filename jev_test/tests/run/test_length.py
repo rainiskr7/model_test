@@ -26,7 +26,7 @@ def test_boundaries_through_outcome(env, fixture_json, make_attempt, b1_raw):
         rejected = value["matches_confirmed_input_limit_response"]
         attempt = make_attempt(plan, http_status=422 if rejected else 200,
                                response_raw="too long" if rejected else raw)
-        call = call_record(plan, [attempt], length, env.bcfg)
+        call = call_record(plan, [attempt], length, env.bcfg, env.policy.max_attempts)
         final = final_record(plan.logical_id, [plan], [call])
         assert (final.status, final.reason, final.answered_over_limit, final.warnings) == (
             expected["status"], expected["reason"], expected["answered_over_limit"], expected["warnings"])
@@ -40,7 +40,7 @@ def test_b1_per_call_length_fixture(env, fixture_json, make_attempt, b1_raw):
     item = replace(env.item, questions=[env.q, replace(env.q, id="other")])
     plans = plan_calls(item, env.task, env.bcfg, env.b1)
     raw = b1_raw([{"token": "A", "logprob": -1}, {"token": "B", "logprob": -1}])
-    calls = [call_record(p, [make_attempt(p, response_raw=raw)], length, env.bcfg)
+    calls = [call_record(p, [make_attempt(p, response_raw=raw)], length, env.bcfg, env.policy.max_attempts)
              for p, length in zip(plans, lengths)]
     assert [c.reason for c in calls] == source["expected"]["classifications"]
     maximum = max(c.length.length_tokens for c in calls)
@@ -93,4 +93,4 @@ def test_invalid_offsets(offsets, end):
 def test_length_required_on_every_sent_response(env, make_attempt, code, raw):
     """검증 실패·거부·HTTP 오류도 length=None이면 기록할 수 없다."""
     with pytest.raises(ValueError, match="length"):
-        call_record(env.plan, [make_attempt(env.plan, http_status=code, response_raw=raw)], None, env.cfg)
+        call_record(env.plan, [make_attempt(env.plan, http_status=code, response_raw=raw)], None, env.cfg, env.policy.max_attempts)

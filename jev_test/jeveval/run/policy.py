@@ -1,11 +1,9 @@
-"""무엇: 순수 재시도 정책 · 입력: 한 시도·누적 번호/상한 · 출력: Decision · 계약 §4-2·§5-5b."""
+"""무엇: 순수 재시도 정책 · 입력: 한 시도·누적 번호·RetryPolicy · 출력: Decision · 계약 §4-2·§5-5b."""
 
 import math
 import re
 
-from jeveval.types import AttemptRecord, AttemptResult, Decision
-
-MAX_ATTEMPTS = 5
+from jeveval.types import AttemptRecord, AttemptResult, Decision, RetryPolicy
 
 
 def _retry_seconds(value):
@@ -19,14 +17,13 @@ def _retry_seconds(value):
     return None
 
 
-def decide(result: AttemptRecord | AttemptResult, attempt: int,
-           max_attempts: int = MAX_ATTEMPTS) -> Decision:
-    """부분 HTTP 응답의 전송 오류도 우선 재시도하며 마지막 시도에는 대기하지 않는다."""
-    if (type(max_attempts) is not int or max_attempts < 1
-            or type(attempt) is not int or not 1 <= attempt <= max_attempts):
+def decide(result: AttemptRecord | AttemptResult, attempt: int, policy: RetryPolicy) -> Decision:
+    """부분 HTTP 응답의 전송 오류도 우선 재시도하며 마지막 시도에는 대기하지 않는다. 대기는 정책의 backoff_seconds."""
+    if (type(policy.max_attempts) is not int or policy.max_attempts < 1
+            or type(attempt) is not int or not 1 <= attempt <= policy.max_attempts):
         raise ValueError("attempt must be within 1..max_attempts")
-    retry = result.transport_error is not None or result.http_status in (503, 529)
-    if not retry or attempt == max_attempts:
+    retry = result.transport_error is not None or result.http_status in policy.http_statuses
+    if not retry or attempt == policy.max_attempts:
         return Decision(True, None)
     seconds = _retry_seconds(result.retry_after)
-    return Decision(False, seconds if seconds is not None else 2 ** (attempt - 1))
+    return Decision(False, seconds if seconds is not None else policy.backoff_seconds[attempt - 1])

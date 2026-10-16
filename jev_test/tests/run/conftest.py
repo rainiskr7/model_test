@@ -8,13 +8,17 @@ from types import SimpleNamespace
 
 import pytest
 
+from jeveval.io.policy import read_retry_policy
 from jeveval.run.plan_calls import plan_calls
 from jeveval.types import AttemptRecord, B1Config, BoundQuestion, Item, LengthInfo, ModelConfig, TaskSpec
+
+REPO = Path(__file__).resolve().parents[2]
 
 
 @pytest.fixture
 def env():
     """파일이나 실제 모델 없이 systemone/B1에 공통으로 쓸 항목을 만든다."""
+    policy = read_retry_policy(REPO / "configs/policy.yaml")
     cfg = ModelConfig(id="synthetic", kind="systemone", served_name="model", base_url=None,
         auth_env=None, question_scoring="separate", limit={"tokens": 100, "overflow": "reject"},
         input_limit_response={"status": 422, "body_regex": "too long"}, encoder={}, tokenizer={},
@@ -26,7 +30,7 @@ def env():
     labels = list(ascii_uppercase + ascii_lowercase + digits)
     b1 = B1Config("합성 시스템", "{state}\n{instructions}\n{options}", labels, {"max_tokens": 1})
     bcfg = replace(cfg, kind="b1", b1={"label_token_ids": dict(zip(labels, range(62)))})
-    return SimpleNamespace(cfg=cfg, bcfg=bcfg, b1=b1, q=q, item=item, task=task,
+    return SimpleNamespace(cfg=cfg, bcfg=bcfg, b1=b1, q=q, item=item, task=task, policy=policy,
         plan=plan_calls(item, task, cfg, None)[0], length=LengthInfo(12, 7, 100, 5))
 
 

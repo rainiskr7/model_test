@@ -1,9 +1,11 @@
 """무엇: 문맥 타입 불변성 · 입력: 기존 합성 표본 · 출력: frozen/replace 문맥 · 계약 §8-1·§8-6."""
 
 from dataclasses import FrozenInstanceError, replace
+from pathlib import Path
 
 import pytest
 
+from jeveval.io.policy import read_retry_policy
 from jeveval.types import B1Config, FinalRecord, ModelConfig, RunContext, SplitPlan, StageData, TaskSpec
 from tests.types import samples
 
@@ -16,7 +18,8 @@ def ctx(tmp_path):
         input_limit_response=None, encoder={}, tokenizer={}, concurrency=1, b1=None,
         serving={}, repo={}, t0={}, notes="")
     return RunContext(tmp_path, tmp_path / "model.yaml", tmp_path / "task.yaml", cfg,
-                      values[TaskSpec], values[SplitPlan], values[B1Config])
+                      values[TaskSpec], values[SplitPlan], values[B1Config],
+                      read_retry_policy(Path(__file__).resolve().parents[2] / "configs/policy.yaml"))
 
 
 @pytest.mark.parametrize("field,value", [("directory", "changed"), ("fingerprint", {})])

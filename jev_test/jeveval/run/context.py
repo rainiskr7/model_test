@@ -10,6 +10,7 @@ from jeveval.io.config import load_taskspec, read_yaml
 from jeveval.io.hashes import glob_files
 from jeveval.io.models import load_model_config
 from jeveval.io.paths import identifier, inside
+from jeveval.io.policy import read_retry_policy
 from jeveval.io.splits import read_split_plan
 from jeveval.io.tasks import read_b1_config
 from jeveval.run.fingerprint import build_fingerprint, same_fingerprint
@@ -34,8 +35,9 @@ def configuration(root, model, task, base_url=None) -> RunContext:
     if plan.set != task.set or check_split_plan(plan):
         raise ValueError("invalid split plan")
     b1 = read_b1_config(root / "configs/tasks/b1.yaml")
+    policy = read_retry_policy(root / "configs/policy.yaml")
     return RunContext(root=root, model_path=model, task_path=task_path,
-                      cfg=cfg, task=task, plan=plan, b1=b1)
+                      cfg=cfg, task=task, plan=plan, b1=b1, policy=policy)
 
 
 def fingerprint(ctx, run_id, started_at):

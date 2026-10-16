@@ -3,10 +3,26 @@
 from copy import deepcopy
 import os
 from types import SimpleNamespace
+from unittest.mock import Mock
 
 import pytest
 
 from jeveval.reference import clef_runner
+
+
+def test_respond_requires_max_length():
+    reference = SimpleNamespace(systemone=Mock())
+    with pytest.raises(TypeError, match="max_length"):
+        clef_runner.respond(reference, "m", "p", {})
+    reference.systemone.assert_not_called()
+
+
+@pytest.mark.parametrize("limit", [None, 0, -1, True, 1.5])
+def test_respond_rejects_invalid_max_length(limit):
+    reference = SimpleNamespace(systemone=Mock())
+    with pytest.raises(ValueError, match="^max_length must be a positive integer$"):
+        clef_runner.respond(reference, "m", "p", {}, max_length=limit)
+    reference.systemone.assert_not_called()
 
 
 def test_load_requires_directory_and_forces_offline(tmp_path, monkeypatch):

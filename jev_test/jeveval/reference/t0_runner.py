@@ -4,9 +4,12 @@ from jeveval.reference import clef_runner, pplx_runner
 from jeveval.types.t0_io import T0Reference
 
 
-def load(family, checkpoint, *, device="cuda", max_length=16384, reference=None,
+def load(family, checkpoint, *, device="cuda", max_length=None, reference=None,
          answer_module=None, server=None):
+    """Clef 계열은 max_length(모델 yaml limit.tokens) 가 필수다 — 코드 기본값은 없다."""
     if family in ("clef", "clef_flash"):
+        if type(max_length) is not int or max_length <= 0:
+            raise ValueError("max_length is required for Clef references")
         module, model, processor = clef_runner.load(checkpoint, device=device, reference=reference)
         return T0Reference(family, model, module, processor, max_length=max_length)
     if family == "pplx_v1":

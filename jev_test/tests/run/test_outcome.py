@@ -22,7 +22,7 @@ def test_b1_model_specific_length_rejection(env, make_attempt, configured, code,
     cfg = replace(env.bcfg, input_limit_response={
         "status": configured, "body_regex": "maximum context length is"})
     plan, = plan_calls(env.item, env.task, cfg, env.b1)
-    call = call_record(plan, [make_attempt(plan, http_status=code, response_raw=raw)], env.length, cfg)
+    call = call_record(plan, [make_attempt(plan, http_status=code, response_raw=raw)], env.length, cfg, env.policy.max_attempts)
     assert call.reason == reason
     assert call.status == ("rejected" if reason == "input_limit" else "error")
 
@@ -35,7 +35,7 @@ def test_response_fixtures(env, make_attempt, path):
     questions, expected = source["request_questions"], source["expected"]
     plan = replace(env.plan, request=Request("model", "원문", questions), question_ids=list(questions),
                    question_types={key: q["type"] for key, q in questions.items()})
-    result = call_record(plan, [make_attempt(plan, response_raw=source["response_raw"])], env.length, env.cfg)
+    result = call_record(plan, [make_attempt(plan, response_raw=source["response_raw"])], env.length, env.cfg, env.policy.max_attempts)
     assert result.reason == expected["reason"] and result.warnings == expected["warnings"]
     assert result.status == ("ok" if expected["valid"] else "error")
     assert (result.answers_parsed is not None) == expected["valid"]
@@ -48,7 +48,7 @@ def test_terminal_recovery_exact_final(env, fixture_json):
     source = fixture_json("resume/terminal_recovery.json")
     attempts = [AttemptRecord.from_dict(json.loads(line)) for line in source["attempts_jsonl"].splitlines()]
     plan = replace(env.plan, request_sha256=attempts[0].request_sha256)
-    call = call_record(plan, attempts, type(env.length).from_dict(source["input_length"]), env.cfg)
+    call = call_record(plan, attempts, type(env.length).from_dict(source["input_length"]), env.cfg, env.policy.max_attempts)
     assert final_record(plan.logical_id, [plan], [call]).to_dict() == source["expected"]["final"]
 
 
@@ -57,7 +57,7 @@ def test_b1_renormalization_and_missing_fixtures(env, fixture_json, make_attempt
     plan, = plan_calls(env.item, env.task, env.bcfg, env.b1)
     for case in fixture_json("b1/renormalization.json")["cases"]:
         changed = replace(plan, b1_call=replace(plan.b1_call, label_order=case["label_order"], label_map=case["label_map"]))
-        result = call_record(changed, [make_attempt(changed, response_raw=b1_raw(case["top_logprobs"]))], env.length, env.bcfg)
+        result = call_record(changed, [make_attempt(changed, response_raw=b1_raw(case["top_logprobs"]))], env.length, env.bcfg, env.policy.max_attempts)
         parsed, expected = result.answers_parsed[env.q.id], case["expected"]["parsed"]
         assert result.status == "ok" and parsed.answer == expected["answer"]
         assert parsed.probs == pytest.approx(expected["probs"])
@@ -66,7 +66,7 @@ def test_b1_renormalization_and_missing_fixtures(env, fixture_json, make_attempt
     source = fixture_json("b1/missing_label.json")
     for case in source["cases"]:
         rows = case.get("top_logprobs") or json.loads(case["top_logprobs_raw"])
-        result = call_record(plan, [make_attempt(plan, response_raw=b1_raw(rows))], env.length, env.bcfg)
+        result = call_record(plan, [make_attempt(plan, response_raw=b1_raw(rows))], env.length, env.bcfg, env.policy.max_attempts)
         assert (result.status, result.reason) == (source["expected"]["status"], source["expected"]["reason"])
         assert result.answers_parsed is None and result.label_map == source["label_map"]
         assert CallRecord.from_dict(result.to_dict()) == result
@@ -85,13 +85,13 @@ def test_response_branches(env, make_attempt, kind, code, raw, error, expected):
     """두 경로의 전송·코드·본문 실패와 거부 우선순위를 검증한다."""
     cfg = env.cfg if kind == "systemone" else env.bcfg
     plan, = plan_calls(env.item, env.task, cfg, env.b1)
-    result = call_record(plan, [make_attempt(plan, http_status=code, response_raw=raw, transport_error=error)], env.length, cfg)
+    result = call_record(plan, [make_attempt(plan, http_status=code, response_raw=raw, transport_error=error)], env.length, cfg, env.policy.max_attempts)
     assert result.reason == expected and result.status == ("rejected" if expected == "input_limit" else "error")
     assert result.answers_parsed is None and result.length == env.length
     assert result.label_map == (plan.b1_call.label_map if kind == "b1" else None)
     if code == 422:
         no_pattern = call_record(plan, [make_attempt(plan, http_status=422, response_raw=raw)], env.length,
-                                 replace(cfg, input_limit_response=None))
+                                 replace(cfg, input_limit_response=None), env.policy.max_attempts)
         assert no_pattern.reason == "http_422_other"
 
 
@@ -103,7 +103,7 @@ def test_usage_independent_of_answer_and_http(env, make_attempt, kind, key, code
     cfg = env.cfg if kind == "systemone" else env.bcfg
     plan, = plan_calls(env.item, env.task, cfg, env.b1)
     raw = json.dumps({"usage": {key: value}, "error": "too long"})
-    result = call_record(plan, [make_attempt(plan, http_status=code, response_raw=raw)], env.length, cfg)
+    result = call_record(plan, [make_attempt(plan, http_status=code, response_raw=raw)], env.length, cfg, env.policy.max_attempts)
     assert result.usage == ({"input_tokens": 12} if type(value) is int else None)
     assert ("usage_input_tokens_invalid" in result.warnings) == (type(value) is bool)
 
@@ -123,7 +123,7 @@ def test_attempt_integrity(env, make_attempt, failure):
                       "hash": ("request_sha256", "wrong"), "logical": ("logical_id", "wrong")}[failure]
         attempts[0] = replace(attempts[0], **{key: value})
     with pytest.raises(ValueError):
-        call_record(env.plan, attempts, env.length, env.cfg)
+        call_record(env.plan, attempts, env.length, env.cfg, env.policy.max_attempts)
 
 
 def test_partial_record_fixture_and_final_precedence(env, fixture_json):
@@ -153,7 +153,7 @@ def test_systemone_warning_order_and_unmodified_probabilities(env, make_attempt)
                    question_ids=["pick"], question_types={"pick": "choice"})
     answer = {"type": "choice", "choice": "b", "confidence": .2, "probabilities": {"a": .8, "b": .2}}
     raw = json.dumps({"answers": {"pick": answer}, "usage": {"input_tokens": True}})
-    result = call_record(plan, [make_attempt(plan, response_raw=raw)], env.length, env.cfg)
+    result = call_record(plan, [make_attempt(plan, response_raw=raw)], env.length, env.cfg, env.policy.max_attempts)
     assert result.warnings == ["extra_keys", "usage_input_tokens_invalid", "choice_not_argmax"]
     assert result.status == "ok" and result.answers_parsed["pick"].probs == answer["probabilities"]
 
@@ -164,12 +164,12 @@ def test_b1_warning_order_and_transport_usage(env, make_attempt, b1_raw):
     rows = [{"token": "X", "logprob": -1}, {"token": "A", "logprob": -2},
             {"token": " A ", "logprob": -1}, {"token": "B", "logprob": -1}]
     raw = b1_raw(rows, usage={"prompt_tokens": True})
-    result = call_record(plan, [make_attempt(plan, response_raw=raw)], env.length, env.bcfg)
+    result = call_record(plan, [make_attempt(plan, response_raw=raw)], env.length, env.bcfg, env.policy.max_attempts)
     assert result.warnings == ["usage_input_tokens_invalid", "b1_extra_token", "b1_duplicate_label"]
     raw = b1_raw(rows, usage={"prompt_tokens": 12})
     attempt = make_attempt(plan, response_raw=raw, transport_error="timeout")
-    result = call_record(plan, [attempt], env.length, env.bcfg)
+    result = call_record(plan, [attempt], env.length, env.bcfg, env.policy.max_attempts)
     assert result.reason == "timeout" and result.usage == {"input_tokens": 12}
     assert result.answers_parsed is None
     with pytest.raises(ValueError, match="length"):
-        call_record(plan, [attempt], None, env.bcfg)
+        call_record(plan, [attempt], None, env.bcfg, env.policy.max_attempts)

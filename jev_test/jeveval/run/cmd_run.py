@@ -15,7 +15,6 @@ from jeveval.run.derive import derive_stage
 from jeveval.run.encoders import measurer_for
 from jeveval.run.layout import run_dir as result_dir
 from jeveval.run.plan_calls import plan_calls
-from jeveval.run.policy import MAX_ATTEMPTS
 from jeveval.run.resume_check import check_resume
 
 
@@ -80,7 +79,7 @@ def run(*, root, model, task, stage, run_id, base_url=None, results="results",
         plans = [p for item in items for p in plan_calls(item, ctx.task, ctx.cfg, ctx.b1)]
         attempts, _ = records.read_attempts(stage_inputs.attempts_path(directory, stage))
         existing, _ = records.read_finals(stage_inputs.final_path(directory, stage))
-        if check_resume(plans, attempts, existing, MAX_ATTEMPTS):
+        if check_resume(plans, attempts, existing, ctx.policy.max_attempts):
             raise ValueError("resume input mismatch")
     warnings = gate.prepare_stage(run_dir=directory, stage=stage,
         fingerprint=ctx.fingerprint, plan=ctx.plan, now=stamp)
@@ -89,5 +88,5 @@ def run(*, root, model, task, stage, run_id, base_url=None, results="results",
         return dict(ok=True, derived=True, n_logical=len(finals), warnings=warnings)
     summary = executor.run_stage(items=items, task=ctx.task, cfg=ctx.cfg, b1_config=ctx.b1,
         measurer=measurer, run_dir=directory, stage=stage, post=http.post if post is None else post,
-        sleep=time.sleep, session_id=str(uuid4()), headers=headers)
+        sleep=time.sleep, session_id=str(uuid4()), policy=ctx.policy, headers=headers)
     return dict(ok=True, **summary.to_dict(), warnings=warnings)

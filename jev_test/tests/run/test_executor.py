@@ -5,6 +5,7 @@ from dataclasses import replace
 import pytest
 
 from jeveval.io import records
+from jeveval.types import RetryPolicy
 from tests.run.executor_support import Harness, result
 
 
@@ -90,7 +91,7 @@ def test_b1_finishes_after_middle_error(tmp_path, env, b1_raw):
 def test_empty_stage_and_invalid_arguments(tmp_path, env):
     """빈 단계 파일을 만들되 인자 거부는 파일 생성보다 먼저 수행한다."""
     h = Harness(tmp_path, env)
-    for args in ({"stage": "bad"}, {"cfg": env.cfg}, {"max_attempts": 0},
+    for args in ({"stage": "bad"}, {"cfg": env.cfg}, {"policy": replace(env.policy, max_attempts=0)},
                  {"items": [env.item, env.item]}):
         with pytest.raises(ValueError):
             h.run(**args)
@@ -101,3 +102,14 @@ def test_empty_stage_and_invalid_arguments(tmp_path, env):
         n_sent=0, n_recovered=0, by_status={})
     assert (tmp_path / "dev/final.jsonl").read_bytes() == b""
     assert (tmp_path / "dev/attempts.jsonl").read_bytes() == b""
+
+
+def test_custom_policy_controls_executor_budget_and_wait(tmp_path, env):
+    h = Harness(tmp_path, env, [result(429), result(429)])
+    policy = RetryPolicy(2, [429], [.25])
+    summary = h.run(policy=policy)
+    assert summary.n_sent == 2 and h.waits == [.25]
+    attempts = records.read_attempts(tmp_path / "dev/attempts.jsonl")[0]
+    assert [row.terminal for row in attempts] == [False, True]
+    final = records.read_finals(tmp_path / "dev/final.jsonl")[0][0]
+    assert final.reason == "http_429" and final.calls[0].attempts == 2

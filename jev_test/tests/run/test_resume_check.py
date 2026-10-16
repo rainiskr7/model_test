@@ -26,7 +26,7 @@ def test_pure_preflight(env, make_attempt, failure):
     elif failure == "local":
         plans = [replace(env.plan, local_errors=["invalid"])]
     elif failure in ("final", "duplicate_final"):
-        call = call_record(env.plan, attempts, env.length, env.cfg)
+        call = call_record(env.plan, attempts, env.length, env.cfg, env.policy.max_attempts)
         final = final_record(env.plan.logical_id, plans, [call])
         finals = [replace(final, logical_id="outside")] if failure == "final" else [final, final]
     elif failure == "duplicate_plan":
@@ -55,7 +55,7 @@ def test_all_items_checked_before_first_write_or_send(tmp_path, env, make_attemp
     for row in attempts:
         records.append_record(tmp_path / "dev/attempts.jsonl", row)
     if failure == "completed":
-        call = call_record(plan, [make_attempt(plan)], env.length, env.cfg)
+        call = call_record(plan, [make_attempt(plan)], env.length, env.cfg, env.policy.max_attempts)
         records.append_record(tmp_path / "dev/final.jsonl", final_record(plan.logical_id, [plan], [call]))
     before = snapshot(tmp_path)
     with pytest.raises(ValueError):
@@ -80,7 +80,7 @@ def test_nonterminal_exhaustion_recovers_without_rewrite(tmp_path, env, make_att
 def test_foreign_final_refused_before_missing_attempt_file_creation(tmp_path, env, make_attempt):
     """items 밖 final은 새 attempts 파일조차 만들기 전에 거부한다."""
     h = Harness(tmp_path, env)
-    call = call_record(env.plan, [make_attempt(env.plan)], env.length, env.cfg)
+    call = call_record(env.plan, [make_attempt(env.plan)], env.length, env.cfg, env.policy.max_attempts)
     final = final_record(env.plan.logical_id, [env.plan], [call])
     records.append_record(tmp_path / "dev/final.jsonl", replace(final, logical_id="outside"))
     before = snapshot(tmp_path)

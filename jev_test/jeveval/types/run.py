@@ -46,6 +46,15 @@ class CallPlan:
 
 
 @dataclass(frozen=True)
+class RetryPolicy(JsonRecord):
+    """configs/policy.yaml 의 retry — 검사는 contract/policy, 읽기는 io/policy."""
+
+    max_attempts: int
+    http_statuses: list[int]
+    backoff_seconds: list[float]
+
+
+@dataclass(frozen=True)
 class Decision(JsonRecord):
     terminal: bool
     wait_s: float | None

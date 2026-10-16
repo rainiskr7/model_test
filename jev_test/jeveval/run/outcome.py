@@ -8,7 +8,6 @@ from jeveval.contract.response import read_usage, validate_response
 from jeveval.score.answers import parse_b1, parse_systemone
 from jeveval.types import AttemptRecord, CallPlan, CallRecord, FinalRecord, LengthInfo, ModelConfig
 from .length import classify
-from .policy import MAX_ATTEMPTS
 
 
 def _check_attempts(plan, attempts, max_attempts):
@@ -83,7 +82,7 @@ def _response_record(plan, attempt, length, cfg):
 
 
 def call_record(plan: CallPlan, attempts: list[AttemptRecord], length: LengthInfo | None,
-                cfg: ModelConfig, max_attempts: int = MAX_ATTEMPTS) -> CallRecord:
+                cfg: ModelConfig, max_attempts: int) -> CallRecord:
     """로컬 오류 외에는 길이와 완료 기록이 필요하며 예산 소진도 terminal처럼 복구한다."""
     label_map = deepcopy(plan.b1_call.label_map) if plan.kind == "b1" and plan.b1_call else None
     if plan.local_errors:

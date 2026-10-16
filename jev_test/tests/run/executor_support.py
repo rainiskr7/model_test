@@ -40,7 +40,7 @@ class Harness:
         args = dict(items=[self.env.item], task=self.env.task,
                     cfg=replace(self.env.cfg, base_url="http://127.0.0.1:1"),
                     b1_config=self.env.b1, measurer=self, run_dir=self.root, stage="dev",
-                    post=self.post, sleep=self.waits.append, session_id="session-new")
+                    post=self.post, sleep=self.waits.append, session_id="session-new", policy=self.env.policy)
         args.update(changes)
         return executor.run_stage(**args)
 

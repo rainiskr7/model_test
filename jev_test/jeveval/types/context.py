@@ -6,7 +6,7 @@ from pathlib import Path
 from .contract import B1Config
 from .outcomes import RequestOutcome
 from .records import FinalRecord
-from .run import ModelConfig
+from .run import ModelConfig, RetryPolicy
 from .specs import Item, SplitPlan, TaskSpec
 
 
@@ -21,6 +21,7 @@ class RunContext:
     task: TaskSpec
     plan: SplitPlan
     b1: B1Config
+    policy: RetryPolicy
     directory: Path | None = None
     fingerprint: dict | None = None
 

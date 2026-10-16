@@ -16,6 +16,7 @@ from jeveval.reference.t0_runner import load
 from jeveval.run.cmd_t0 import run
 from jeveval.types import AttemptResult, SourceRow
 from jeveval.types.t0_io import T0Sources
+from tests.run.t0_support import add_policy
 from . import fakes
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -28,6 +29,7 @@ def setup(tmp_path, monkeypatch):
     def prepare(family="clef", boundary=False, mismatch=False):
         root = tmp_path / family
         root.mkdir(exist_ok=True)
+        add_policy(root)
         cfg = read_yaml(ROOT / "configs/models" / f"{family}.yaml")
         cfg.update(served_name="served", auth_env="T0_TEST_AUTH", limit=dict(tokens=100, overflow="reject"),
                    input_limit_response=dict(status=400, body_regex="too long"))
@@ -57,7 +59,8 @@ def setup(tmp_path, monkeypatch):
                 mod.systemone = changed
             else:
                 mod.answer = lambda q, p: dict(original(q, p), extra=True)
-        runtime = load(family, checkpoint, device="cpu", reference=mod, answer_module=mod, server=mod)
+        runtime = load(family, checkpoint, device="cpu", reference=mod, answer_module=mod, server=mod,
+                       max_length=cfg["limit"]["tokens"])
         return SimpleNamespace(root=root, family=family, sources=sources, runtime=runtime,
                                fixture=fixture, directory=root / "results/_t0" / family / "r1")
     return prepare

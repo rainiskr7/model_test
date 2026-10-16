@@ -1,0 +1,6 @@
+# 사전 선언 재시도 정책 — 계획 §4-2 · P1 계약 §4-2. 이 파일은 fingerprint(files) 에 들어가므로
+# 값을 바꾸면 진행 중 run 의 재개·채점·certify 가 거부된다 (의도된 동작: 예산 변경은 terminal 없는 기록의 해석을 바꾼다).
+retry:
+  max_attempts: 5                 # 논리 요청(B1 은 호출)당 총 시도 — resume 을 넘어 누적
+  http_statuses: [503, 529]       # 전송 오류(timeout·연결 끊김)와 함께 재시도 대상인 HTTP 상태
+  backoff_seconds: [1, 2, 4, 8]   # Retry-After 가 없을 때 시도 1..4 뒤 대기 (초); 마지막 시도 뒤에는 기다리지 않는다

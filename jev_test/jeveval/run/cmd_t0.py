@@ -52,11 +52,13 @@ def run(*, root, stage, model=None, run_id=None, fixture="configs/t0/fixture_v1.
     if stage == "reference":
         if checkpoint is None:
             raise ValueError("local checkpoint required")
+        limit = bundle.metadata["config"]["limit"]["tokens"]
+        if type(limit) is not int or limit <= 0:
+            raise ValueError("limit.tokens is required for reference execution")
         # 실제 가중치는 GPU 장비의 저장소 밖 폴더에 있다 — 로컬 폴더이기만 하면 된다 (H·I, 다운로드 금지).
         path = Path(checkpoint)
         checkpoint = local_checkpoint(path if path.is_absolute() else root / path)
-        runtime = runtime or t0_runner.load(bundle.metadata["model"], checkpoint, device=device,
-                            max_length=bundle.metadata["config"]["limit"]["tokens"] or 16384)
+        runtime = runtime or t0_runner.load(bundle.metadata["model"], checkpoint, device=device, max_length=limit)
         return t0_reference.execute(directory, bundle, runtime, checkpoint, device)
     if stage == "server":
         options = {} if post is None else {"post": post}

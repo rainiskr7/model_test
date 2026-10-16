@@ -10,6 +10,8 @@ import yaml
 from jeveval.io.hashes import sha256_file
 from jeveval.io.models import load_model_config
 from jeveval.run.fingerprint import build_fingerprint, same_fingerprint
+from jeveval.run import cmd_score, cmd_threshold
+from tests.run.cli_support import Harness, output_files, put_yaml
 from tests.run.t0_support import add_external
 
 
@@ -19,7 +21,7 @@ REPO = Path(__file__).resolve().parents[2]
 @pytest.fixture
 def inputs(tmp_path):
     add_external(tmp_path)
-    paths = ["configs/tasks/kmhas.yaml", "configs/tasks/b1.yaml", "configs/datasets.yaml",
+    paths = ["configs/policy.yaml", "configs/tasks/kmhas.yaml", "configs/tasks/b1.yaml", "configs/datasets.yaml",
              "configs/models/b1_qwen3_8_27b.yaml", "configs/splits/rules.yaml",
              "jeveval/run/encoders/hf_chat_template.py"]
     paths += [str(p.relative_to(REPO)) for p in (REPO / "configs/tasks/lists").glob("*.json")]
@@ -54,7 +56,7 @@ def test_exact_hashes_and_only_started_at_ignored(inputs, fixture_json):
     assert result["schema"] == "fingerprint/1" and result["dataset_verified"] is True
     assert (result["model"], result["set"], result["variant"], result["run_id"]) == (
         "b1_qwen3_8_27b", "kmhas", "default", "r1")
-    expected = ["configs/tasks/kmhas.yaml", "configs/tasks/b1.yaml", "configs/datasets.yaml", "configs/splits/kmhas.json",
+    expected = ["configs/policy.yaml", "configs/tasks/kmhas.yaml", "configs/tasks/b1.yaml", "configs/datasets.yaml", "configs/splits/kmhas.json",
                 "configs/models/b1_qwen3_8_27b.yaml", "configs/splits/rules.yaml", "dataset/kmhas/SHA256SUMS"]
     expected += [p.relative_to(root).as_posix() for p in (root / "configs/tasks/lists").glob("*.json")]
     assert result["files"] == {p: sha256_file(root / p) for p in expected}
@@ -135,3 +137,28 @@ def test_external_and_environment_changes_invalidate_fingerprint(inputs, monkeyp
     original = build_fingerprint(**inputs)
     monkeypatch.setattr(environment, "versions", lambda: {**original["env"], "scipy":"changed"})
     assert not same_fingerprint(original, build_fingerprint(**inputs))
+
+
+@pytest.mark.parametrize("command", ["run", "threshold", "score"])
+def test_policy_change_rejects_consumers_before_writes(tmp_path, monkeypatch, command):
+    h = Harness(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("JEV_TEST_KEY", "synthetic-key")
+    h.run("dev")
+    put_yaml(tmp_path / "configs/policy.yaml", {"retry": {
+        "max_attempts": 4, "http_statuses": [503, 529], "backoff_seconds": [1, 2, 4]}})
+    before, sent = output_files(h.directory), len(h.sent)
+    with pytest.raises(ValueError) as error:
+        if command == "run":
+            h.run("dev")
+        else:
+            {"threshold": cmd_threshold, "score": cmd_score}[command].run(root=h.root, run_dir=h.directory)
+    if command == "run":
+        # gate는 외부 오류를 일반 문구로 감싸므로 실제 fingerprint 거부 원인까지 확인한다.
+        assert str(error.value) == "stage preparation checks failed"
+        assert isinstance(error.value.__context__, ValueError)
+        assert str(error.value.__context__) == "fingerprint mismatch"
+    else:
+        assert str(error.value) == "frozen inputs differ"
+    assert output_files(h.directory) == before
+    assert len(h.sent) == sent

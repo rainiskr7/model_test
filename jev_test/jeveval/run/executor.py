@@ -5,10 +5,10 @@ from collections import Counter, defaultdict
 from jeveval.client.attempt import to_attempt_record
 from jeveval.client.systemone import systemone_url
 from jeveval.io import records
-from jeveval.types import B1Config, Item, ModelConfig, RunSummary, TaskSpec
+from jeveval.types import B1Config, Item, ModelConfig, RetryPolicy, RunSummary, TaskSpec
 from .outcome import call_record, final_record
 from .plan_calls import plan_calls
-from .policy import MAX_ATTEMPTS, decide
+from .policy import decide
 from .resume_check import check_resume
 from .stage_inputs import attempts_path, final_path
 
@@ -29,19 +29,19 @@ def _plans(items, task, cfg, b1_config):
 
 
 def _execute_call(plan, history, *, cfg, measurer, post, sleep, session_id,
-                  headers, timeout, max_attempts, path):
+                  headers, timeout, policy, path):
     """시도를 fsync한 뒤에만 대기/다음 호출로 진행하며 기록 예산을 누적한다."""
     if plan.local_errors:
-        return call_record(plan, [], None, cfg), 0, 0
+        return call_record(plan, [], None, cfg, policy.max_attempts), 0, 0
     length = measurer.measure(plan)
-    recovered = bool(history and (history[-1].terminal or len(history) == max_attempts))
+    recovered = bool(history and (history[-1].terminal or len(history) == policy.max_attempts))
     sent = 0
     url = systemone_url(cfg.base_url) if plan.kind == "systemone" else cfg.base_url + "/v1/chat/completions"
     if not recovered:
-        for number in range(len(history) + 1, max_attempts + 1):
+        for number in range(len(history) + 1, policy.max_attempts + 1):
             result = post(url, plan.body, timeout, headers=headers)
             sent += 1
-            decision = decide(result, number, max_attempts)
+            decision = decide(result, number, policy)
             attempt = to_attempt_record(result, call_id=plan.call_id, logical_id=plan.logical_id,
                 attempt=number, session_id=session_id, terminal=decision.terminal,
                 request_sha256=plan.request_sha256)
@@ -50,21 +50,21 @@ def _execute_call(plan, history, *, cfg, measurer, post, sleep, session_id,
             if decision.terminal:
                 break
             sleep(decision.wait_s)
-    return call_record(plan, history, length, cfg, max_attempts), sent, int(recovered)
+    return call_record(plan, history, length, cfg, policy.max_attempts), sent, int(recovered)
 
 
 def run_stage(*, items: list[Item], task: TaskSpec, cfg: ModelConfig,
               b1_config: B1Config | None, measurer, run_dir, stage, post, sleep,
-              session_id: str, headers: dict | None = None, timeout: float = 600,
-              max_attempts: int = MAX_ATTEMPTS) -> RunSummary:
-    """prepare_stage 통과가 전제다. 반환은 RunSummary만, n_calls는 이번 처리 호출 수다."""
+              session_id: str, policy: RetryPolicy, headers: dict | None = None,
+              timeout: float = 600) -> RunSummary:
+    """prepare_stage 통과가 전제다. 재시도 예산·대기는 policy(configs/policy.yaml). 반환은 RunSummary만."""
     final_file, attempt_file = final_path(run_dir, stage), attempts_path(run_dir, stage)
     if cfg.base_url is None:
         raise ValueError("base_url is required")
     finals, _ = records.read_finals(final_file)
     attempts, _ = records.read_attempts(attempt_file)
     grouped = _plans(items, task, cfg, b1_config)
-    errors = check_resume([p for _, plans in grouped for p in plans], attempts, finals, max_attempts)
+    errors = check_resume([p for _, plans in grouped for p in plans], attempts, finals, policy.max_attempts)
     if errors:
         raise ValueError("; ".join(errors))
     records.ensure_file(attempt_file)
@@ -82,7 +82,7 @@ def run_stage(*, items: list[Item], task: TaskSpec, cfg: ModelConfig,
         for plan in plans:
             call, sent, recovered = _execute_call(plan, history[plan.call_id], cfg=cfg,
                 measurer=measurer, post=post, sleep=sleep, session_id=session_id,
-                headers=headers, timeout=timeout, max_attempts=max_attempts, path=attempt_file)
+                headers=headers, timeout=timeout, policy=policy, path=attempt_file)
             calls.append(call)
             n_calls += 1
             n_sent += sent
