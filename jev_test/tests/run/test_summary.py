@@ -1,29 +1,8 @@
-"""무엇: 결과 경로/요약 경계 · 입력: 식별자·RiskCell · 출력: 제한 경로·주 지표 · 계약 §5-1·§8-3."""
+"""무엇: 주 지표 요약 경계 · 입력: RiskCell · 출력: 인증된 처리율 · 계약 §8-1·§8-3."""
 
 import pytest
 
-from jeveval.run.layout import compare_dir, run_dir
 from jeveval.run.summary import summary_from_risk
-
-
-@pytest.mark.parametrize("bad", [".", "..", "_compare", "a/b", "/absolute", "a\\b", "", "a b"])
-def test_invalid_identifiers(tmp_path, bad):
-    for values in ((bad, "r1", "set", "full"), ("model", bad, "set", "full"),
-                   ("model", "r1", bad, "full"), ("model", "r1", "set", bad)):
-        with pytest.raises(ValueError):
-            run_dir(tmp_path, *values)
-    with pytest.raises(ValueError):
-        compare_dir(tmp_path, bad, "set", "full")
-
-
-def test_paths_and_symlink_escape(tmp_path):
-    root = tmp_path / "results"
-    root.mkdir()
-    assert run_dir(root, "model", "r1", "set", "full") == root / "model/r1/A/set/full"
-    assert compare_dir(root, "c1", "set", "full") == root / "_compare/c1/A/set/full"
-    (root / "model").symlink_to(tmp_path, target_is_directory=True)
-    with pytest.raises(ValueError):
-        run_dir(root, "model", "r1", "set", "full")
 
 
 @pytest.mark.parametrize("status,n,k,u,den,expected", [

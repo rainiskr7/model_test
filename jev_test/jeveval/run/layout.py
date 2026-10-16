@@ -1,13 +1,8 @@
 """무엇: 결과 위치 · 입력: 루트/식별자 · 출력: 제한된 경로 · 계약 §5-1·⑥b R5."""
 
 from pathlib import Path
-import re
 
-
-def identifier(value):
-    if not isinstance(value, str) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", value):
-        raise ValueError("invalid result identifier")
-    return value
+from jeveval.io.paths import identifier
 
 
 def _path(root, *parts):

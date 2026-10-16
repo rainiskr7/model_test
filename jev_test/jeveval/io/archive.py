@@ -6,8 +6,7 @@ import tarfile
 
 from jeveval.io.hashes import sha256_file
 from jeveval.io.environment import external_path
-from jeveval.io.run_inputs import inside
-from jeveval.run.layout import identifier
+from jeveval.io.paths import identifier, inside
 
 
 def _name(name):

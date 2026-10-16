@@ -1,6 +1,8 @@
 """무엇: 모델 횡단 비교 조립 · 입력: 완료 run 폴더 · 출력: compare.json · 계약 §8-6 L·⑥b-2."""
 
-from jeveval.io import run_files, run_inputs
+from jeveval.io import run_files
+from jeveval.io.paths import inside
+from jeveval.run import context
 from jeveval.run.layout import compare_dir
 from jeveval.score.bootstrap import coverage_diff, f1_diff
 from jeveval.score.compare import check_comparable, common_cohort, compare_file
@@ -46,7 +48,7 @@ def _result(contexts, stages, thresholds):
 def run(*, root, run_dirs, compare_id, results="results"):
     contexts, stages, thresholds, metadata = {}, {}, {}, {}
     for directory in run_dirs:
-        ctx, data, threshold = run_inputs.completed(root, directory)
+        ctx, data, threshold = context.completed(root, directory)
         model = ctx.fingerprint["model"]
         if model in contexts:
             raise ValueError("duplicate comparison model")
@@ -57,7 +59,7 @@ def run(*, root, run_dirs, compare_id, results="results"):
     if check_comparable(metadata):
         raise ValueError("incomparable runs")
     value = _result(contexts, stages, thresholds)
-    directory = compare_dir(run_inputs.inside(root, results), compare_id, value["set"], value["variant"])
+    directory = compare_dir(inside(root, results), compare_id, value["set"], value["variant"])
     run_files.json_bytes(value)
     run_files.make_directory(directory)
     run_files.write_json(directory / "compare.json", value)

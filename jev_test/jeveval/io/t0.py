@@ -1,7 +1,7 @@
 """무엇: 본시험 T0 기록 읽기 경계 · 입력: 저장소/모델 YAML 경로 · 출력: 검증/거부 · 계약 §8-7 T-i."""
 
 from jeveval.io.models import load_model_config
-from jeveval.io.run_inputs import inside
+from jeveval.io.paths import inside
 from jeveval.t0.gate import check_record
 
 

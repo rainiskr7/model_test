@@ -1,10 +1,12 @@
 """무엇: compare CLI 거부/모집단 · 입력: 합성 완료 폴더 · 출력: 비교/무변경 · 계약 ⑥b-2 R2·R3·R7."""
 
 from copy import deepcopy
+from dataclasses import replace
 
 import pytest
 
-from jeveval.io import run_files, run_inputs
+from jeveval.io import run_files
+from jeveval.run import context
 from jeveval.run import cli, cmd_compare
 from jeveval.run.layout import compare_dir
 from tests.run.cli_support import output_files
@@ -68,18 +70,17 @@ def test_compare_rejects_before_writing(tmp_path, monkeypatch, defect):
 def test_compare_c4_and_identity_rejection_after_preflight(tmp_path, monkeypatch, field):
     h, other = pair(tmp_path, monkeypatch)
     # 실제 선행을 통과한 객체의 비교 필드만 변경해 C4 거부 경계 자체를 검증한다.
-    restored = {str(x.directory): run_inputs.completed(tmp_path, x.directory) for x in (h, other)}
+    restored = {str(x.directory): context.completed(tmp_path, x.directory) for x in (h, other)}
     ctx, stages, threshold = deepcopy(restored[str(other.directory)])
     if field in ("set", "variant"):
-        from dataclasses import replace
-        ctx.task = replace(ctx.task, **{field: "different"})
+        ctx = replace(ctx, task=replace(ctx.task, **{field: "different"}))
     elif field == "ids":
-        stages["test"].finals = []
+        stages["test"] = replace(stages["test"], finals=[])
     else:
         key = f"configs/splits/{ctx.task.set}.json" if field == "split" else ctx.fingerprint["inputs"]["task_path"]
         ctx.fingerprint["files"][key] = "changed"
     restored[str(other.directory)] = ctx, stages, threshold
-    monkeypatch.setattr(run_inputs, "completed", lambda root, directory: restored[str(directory)])
+    monkeypatch.setattr(context, "completed", lambda root, directory: restored[str(directory)])
     before = output_files(tmp_path)
     assert compare(h, other) == 1
     assert output_files(tmp_path) == before

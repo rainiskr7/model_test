@@ -9,7 +9,7 @@ import zstandard
 from jeveval.io import environment
 from jeveval.io.archive import build_archive, entries_for
 from jeveval.io.hashes import sha256_file
-from jeveval.io.run_inputs import inside
+from jeveval.io.paths import inside
 
 
 @pytest.fixture

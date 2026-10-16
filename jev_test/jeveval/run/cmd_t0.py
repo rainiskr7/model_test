@@ -5,7 +5,7 @@ from pathlib import Path
 from jeveval.io import t0_chain, t0_fingerprint, t0_inputs
 from jeveval.io.models import load_model_config
 from jeveval.io.reference import local_checkpoint
-from jeveval.io.run_inputs import inside
+from jeveval.io.paths import inside
 from jeveval.reference import t0_runner
 from jeveval.run import t0_evaluate, t0_reference, t0_server
 

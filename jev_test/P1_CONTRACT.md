@@ -454,12 +454,12 @@ QStats = {role, type, n_scored, n_missing, accuracy: {num, den}, macro_f1 | null
 ### 8-1. 규칙
 - **파일 하나 = 기능 하나.** 첫머리 docstring 에 "무엇 · 입력 · 출력 · 이 계약의 몇 절". 그 파일만 열어도 고칠 수 있게.
 - **작게**: 파일 ≤ 200 줄, 함수 ≤ 50 줄 정도.
-- **입출력은 정해진 곳에만**: 파일 읽기 `io/` (설정·데이터·분할·레코드), 네트워크 `client/`. 나머지(`contract/`·`data/`·`score/`)는 순수 함수 — 이미 읽은 객체를 받는다.
-- **모듈 사이는 `types/` 의 dataclass 만** (§8-5 필드).
-- **상태기계는 한 곳**: `run/executor.py` 만 시도 시작·재시도·terminal 판정·resume 복구·상태 결합(§4-3)을 소유한다. `client/` 는 **한 번의 시도**만 (재시도 안 함), `io/records.py` 는 줄 추가·읽기만.
-- **기능마다 짝 테스트** `tests/<폴더>/test_<파일>.py` + 경계마다 통합 테스트 하나. GPU·서버 없이 fixture 로 돈다. 한 기능을 고치면 그 단위 테스트와 해당 경계 통합 테스트를 같이 돌린다.
-- **설정은 코드 밖**: 문구·선택지·라벨·재시도·cap 은 yaml. 코드에 박지 않는다.
-- **`jeveval/README.md` 기능 지도**: 파일마다 한 줄 + 의존 방향 `run → client/io → score/data/contract → types` (거꾸로 금지).
+- **입출력은 정해진 곳에만**: 파일 읽기 `io/` (설정·데이터·분할·레코드·경로 제한 `paths.py`), 네트워크 `client/`. 나머지(`contract/`·`data/`·`score/`·`types/`·`t0/`)는 순수 함수 — 이미 읽은 객체를 받는다. `run/` 은 `io/`·`client/` 를 부르되 직접 파일을 열지 않는다. **명시 특례** (보정 10-17): `run/summary.py` 의 `reranker_test/evalcommon` 소스 로딩(§8-6 M), `run/cmd_run._headers`·`run/t0_server` 의 인증 환경변수 조회(값은 설정 밖), `run/layout.py` 의 경로 resolve(경로 제한 검사). 그 밖의 `run/` 직접 파일 조회(glob·stat·환경 설정)는 `io/` 로 옮긴다 (`run/item_summary.py` glob·`run/encoders` 토크나이저 로딩은 미이행 과제).
+- **모듈 사이는 `types/` 의 dataclass 만** (§8-5 필드). 명령 공유 문맥은 `RunContext`·`StageData`(`types/context.py`). **명명된 직렬화 예외** (보정 10-17): 파일 스키마 객체 `risk/1`·`scores/1`·`compare/1`·`fingerprint/1` 은 조립 함수 → 명령 → 쓰기(또는 `summary`) 사이에서 dict 로 오간다; `cli` 의 명령 결과 JSON 도 dict. 그 밖의 dict·SimpleNamespace 경계는 위반.
+- **상태기계는 `run/` 의 모듈군 한 곳** (보정 10-17 — §8-6 이 이미 나눈 소유를 그대로 적음): `executor.py` 전송·대기·기록 순서, `policy.py` 순수 terminal 결정, `outcome.py` 순수 결과 변환·상태 결합(§4-3), `resume_check.py` 기록과 현재 계획 대조, `gate.py` 쓰기 전 진입 검사. `client/` 는 **한 번의 시도**만 (재시도 안 함). `io/records.py` 는 줄 추가·읽기·끝 줄 복구(`repair_tail`, §8-6 A)·기록의 **구조 불변식**(연속 번호·terminal 뒤 시도 없음·같은 call_id 의 logical_id·request_sha256 불변)만 — 예산·실행 상태 전이는 `run/`.
+- **기능마다 짝 테스트** `tests/<폴더>/test_<파일>.py` + 경계마다 통합 테스트 하나. GPU·서버 없이 fixture 로 돈다. 한 기능을 고치면 그 단위 테스트와 해당 경계 통합 테스트를 같이 돌린다. 명령 모듈(`run/cmd_*.py`)도 짝 테스트를 둔다 — 검증·분기·쓰기 순서가 있으므로 통합 테스트로 갈음하지 않는다; 순수 조립만 하는 `run/cli.py` 는 통합 테스트(`tests/run/test_cli_*.py`)로 갈음한다. 같은 패키지 안 상대 import 는 허용하며 의존 방향은 모듈 그래프(`io/score/data/contract/types/t0/client` 에서 `run` import 0)로 검사한다.
+- **설정은 코드 밖**: 문구·선택지·라벨·재시도·cap 은 yaml. 코드에 박지 않는다. 라벨 **어휘**(KoSGD act·K-MHaS·KOTE 목록)도 yaml 이 단일 출처이고 코드의 정답 규칙 등록표는 그 어휘로 만든다 (미이행 과제: `score/labels.py`·`run/policy.py`·`t0/tolerance.py` 상수). yaml 로 옮긴 값은 fingerprint(`run/fingerprint.py` 파일 목록 또는 T0 chain) 에 넣는다.
+- **`jeveval/README.md` 기능 지도**: 파일마다 한 줄 + 의존 방향 `run → client/io → score/data/contract/t0 → types` (거꾸로 금지; `t0/` 는 §8-7 T-b 의 순수 층). 기능을 옮기거나 나누는 커밋은 지도를 같이 고친다.
 
 ### 8-2. 구성
 ```
@@ -475,7 +475,7 @@ jev_test/jeveval/
 ```
 
 ### 8-3. 결과 규약
-새 결과(`scores.json`·`risk.json`·`threshold.json`·`compare.json`)는 이 계약이 정하고, 최상위 집계와 맞추기 위해 `summary.json` 을 `reranker_test/evalcommon` 의 `make_score_summary` 로 추가로 쓴다: **`risk.json` 의 주 지표 판·τ `"0.02"` `RiskCell` 에서만** 만든다 — `metric = "coverage_at_risk_2pct"`, `score` = **인증된 처리율** — `status == MEETS` 일 때만 `test.coverage.num / test.coverage.den`, 그 외(FAILS·UNDERPOWERED·NO_THRESHOLD)와 `den == 0` 은 0 (`score_rule = "meets_only"`; 개정 10-16 — 그 전에는 FAILS 가 관측 처리율을 그대로 내서 UNDERPOWERED 의 0 과 한 지표에 두 뜻이 섞였다). 계획 §4-2 의 (상태, 처리율, k, n, U) 는 최상위 필드로 함께 적는다: `status`, `coverage_observed = test.coverage` (상태와 무관한 관측 수락 `{num, den}`), `n_accepted`, `k_errors`, `U` (NO_THRESHOLD 는 셋 다 null, 수락 0 인 UNDERPOWERED 는 n=k=0·U null — RiskCell 값을 바꾸지 않고 옮긴다), `insufficient_by_design`, `t0_status`. `make_score_summary` 의 `extra` 는 중첩 객체가 아니라 최상위로 펼쳐진다. `scores.json` 의 정답률로 만들지 않는다. 10-16 이전 코드로 쓴 summary(`score_rule` 없음)는 그대로 두고 다시 쓰지 않는다 — fingerprint 의 `code_sha256` 가 그 판을 가리킨다.
+새 결과(`scores.json`·`risk.json`·`threshold.json`·`compare.json`)는 이 계약이 정하고, 최상위 집계와 맞추기 위해 `summary.json` 을 `reranker_test/evalcommon` 의 `make_score_summary` 로 추가로 쓴다: **`risk.json` 의 주 지표 판·τ `"0.02"` `RiskCell` 에서만** 만든다 — `metric = "coverage_at_risk_2pct"`, `score` = **인증된 처리율** — `status == MEETS` 일 때만 `test.coverage.num / test.coverage.den`, 그 외(FAILS·UNDERPOWERED·NO_THRESHOLD)와 `den == 0` 은 0 (`score_rule = "meets_only"`; 개정 10-16 — 그 전에는 FAILS 가 관측 처리율을 그대로 내서 UNDERPOWERED 의 0 과 한 지표에 두 뜻이 섞였다). 계획 §4-2 의 (상태, 처리율, k, n, U) 는 최상위 필드로 함께 적는다: `status`, `coverage_observed = test.coverage` (상태와 무관한 관측 수락 `{num, den}`), `n_accepted`, `k_errors`, `U` (NO_THRESHOLD 는 셋 다 null, 수락 0 인 UNDERPOWERED 는 n=k=0·U null — RiskCell 값을 바꾸지 않고 옮긴다), `insufficient_by_design`, `t0_status`. `make_score_summary` 의 `extra` 는 중첩 객체가 아니라 최상위로 펼쳐진다. `scores.json` 의 정답률로 만들지 않는다. 10-16 이전 코드로 쓴 summary(`score_rule` 없음)는 그대로 두고 다시 쓰지 않는다 — fingerprint 의 `code_sha256` 가 그 판을 가리킨다. run `main_20261014T132446` 의 코드 판은 git 태그 `b1-main-20261014T132446-code`(= 21b78b2, code_sha256 일치 확인 10-17) — 그 run 의 재채점·certify·archive 는 그 판에서만 된다.
 
 ### 8-4. 작업 순서 (각 작업 = 파일 몇 개 + 그 테스트, 따로 리뷰·실행)
 1. ~~`types/` + `io/config.py` + task yaml 스키마 검사 + §9 fixture~~ — **끝** (10-13, 커밋 `dafe4b2`)

@@ -1,5 +1,6 @@
 """무엇: 실행/파생 명령 · 입력: 모델/task/단계 · 출력: 기록/집계 · 계약 §5·⑥b R1–R7."""
 
+from dataclasses import replace
 from datetime import datetime, timezone
 import os
 import time
@@ -7,8 +8,9 @@ from uuid import uuid4
 
 from jeveval.client import http
 from jeveval.contract.model_config import missing_for_run
-from jeveval.io import records, run_files, run_inputs, t0
-from jeveval.run import executor, gate, stage_inputs
+from jeveval.io import records, run_files, t0
+from jeveval.io.paths import inside
+from jeveval.run import context, executor, gate, stage_inputs
 from jeveval.run.derive import derive_stage
 from jeveval.run.encoders import measurer_for
 from jeveval.run.layout import run_dir as result_dir
@@ -26,12 +28,12 @@ def _common(fp):
 
 
 def _derived(ctx, stage, items):
-    source = run_inputs.restore(ctx.root, ctx.directory.parent / "full")
+    source = context.restore(ctx.root, ctx.directory.parent / "full")
     if source.task.variant != "full" or source.task.set != ctx.task.set:
         raise ValueError("invalid full variant")
     if _common(source.fingerprint) != _common(ctx.fingerprint):
         raise ValueError("derived source inputs differ")
-    full = run_inputs.stage(source, stage)
+    full = context.stage(source, stage)
     if {f"{i.set}:{i.group_id}:{i.item_id}" for i in items} != set(full.items):
         raise ValueError("derived Item IDs differ")
     provenance = source.directory.relative_to(ctx.root).as_posix()
@@ -52,8 +54,8 @@ def _headers(cfg):
 
 def run(*, root, model, task, stage, run_id, base_url=None, results="results",
         check_config=False, measurer=None, post=None):
-    ctx = run_inputs.configuration(root, model, task, base_url)
-    directory = result_dir(run_inputs.inside(ctx.root, results), ctx.cfg.id,
+    ctx = context.configuration(root, model, task, base_url)
+    directory = result_dir(inside(ctx.root, results), ctx.cfg.id,
                            run_id, ctx.task.set, ctx.task.variant)
     # stage 이름과 셋별 extra 지원은 check-config에서도 검사한다.
     stage_inputs.final_path(directory, stage)
@@ -71,7 +73,7 @@ def run(*, root, model, task, stage, run_id, base_url=None, results="results",
         measurer = measurer_for(ctx.cfg)
     items = stage_inputs.load_items(root=ctx.root, task_path=ctx.task_path, stage=stage)
     stamp = datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
-    ctx.directory, ctx.fingerprint = directory, run_inputs.fingerprint(ctx, run_id, stamp)
+    ctx = replace(ctx, directory=directory, fingerprint=context.fingerprint(ctx, run_id, stamp))
     if derived:
         finals, provenance = _derived(ctx, stage, items)
     else:

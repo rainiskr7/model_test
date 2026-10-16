@@ -6,7 +6,8 @@ import os
 
 import pytest
 
-from jeveval.io import run_files, run_inputs
+from jeveval.io import run_files
+from jeveval.run import context
 from jeveval.io.hashes import sha256_file
 from jeveval.io.splits import write_split_plan
 from jeveval.run import cli
@@ -51,7 +52,7 @@ def test_all_seal_fixtures_through_cli(tmp_path, monkeypatch, capsys, case):
         assert kwargs["stage"] == "dev"
         return [item]
     # fixture는 synthetic 셋이라 원본 어댑터만 주입한다. fingerprint/완료/outcome/재계산은 실제다.
-    monkeypatch.setattr(run_inputs, "load_items", load)
+    monkeypatch.setattr(context, "load_items", load)
     monkeypatch.chdir(tmp_path)
     before = output_files(directory)
     code = cli.main(["certify", "--run-dir", str(directory)])
