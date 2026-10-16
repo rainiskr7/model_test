@@ -1,7 +1,7 @@
 """무엇: B1 no-think 길이 측정 · 입력: 로컬 토크나이저·CallPlan · 출력: LengthInfo · 계약 §4-3·§8-6."""
 
 from jeveval.io.tokenizers import load_offline, verified_directory
-from jeveval.run.length import token_end
+from jeveval.run.length import state_offsets, token_end
 from jeveval.types import CallPlan, LengthInfo, ModelConfig
 
 
@@ -39,20 +39,6 @@ def _state_span(plan: CallPlan, text: str) -> tuple[int, int, int]:
     return start, start + len(state) - removed, max(0, end - removed)
 
 
-def _state_offsets(offsets, text: str, start: int, end: int, count: int):
-    """양의 겹침을 갖는 토큰만 state 기준으로 옮기며 경계는 임의 보정하지 않는다."""
-    if len(offsets) != count:
-        raise ValueError("offset count differs from token count")
-    result = []
-    for left, right in offsets:
-        if (type(left) is not int or type(right) is not int
-                or not 0 <= left <= right <= len(text)):
-            raise ValueError("invalid token offsets")
-        if max(left, start) < min(right, end):
-            result.append((left - start, right - start))
-    return result
-
-
 class HfChatTemplateNoThink:
     """검증된 로컬 chat template에 thinking 비활성 규칙을 적용한다."""
 
@@ -80,6 +66,6 @@ class HfChatTemplateNoThink:
         if _ids(encoded["input_ids"]) != ids:
             raise ValueError("re-encoded token IDs differ from chat template")
         start, end, target_char = _state_span(plan, text)
-        offsets = _state_offsets(encoded["offset_mapping"], text, start, end, len(ids))
+        offsets = state_offsets(encoded["offset_mapping"], text, start, end, len(ids))
         target = token_end(offsets, target_char)
         return LengthInfo(len(ids), target, self.limit, len(ids) - len(offsets))

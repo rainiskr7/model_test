@@ -1,14 +1,27 @@
 # P0 에서 채울 값은 null — null 이 남으면 run 이 시작하지 않는다
+# 10-17: 토크나이저·인코딩 코드 사본은 HF Cloudflare/clef@0b33120 에서 가중치 없이 받음 (/Users/rainis/Desktop/workplace/models/Cloudflare_clef).
+#   encoder.rule clef_encode_record = 사본의 joint_schema_model.encode_record 를 그대로 호출 (Mac smoke: 전체 137·고정 128·state 9 토큰 일치).
+#   limit.tokens 16384 는 카드 systemone() 의 기본 max_length — 서빙 래퍼가 다른 값을 쓰면 여기와 서빙 둘을 같이 바꾼다 (state 꼬리 잘림 = truncate_tail).
+#   남은 P0: served_name·base_url·auth_env·serving(실제 서빙 뒤), 실서버에서 usage.input_tokens == ℓ 확인, T0.
 id: clef
 kind: systemone
 served_name: null
 base_url: null
 auth_env: null
 question_scoring: joint
-limit: {tokens: null, overflow: null}
-input_limit_response: null
-encoder: {rule: null}
-tokenizer: {path: null, files_sha256: null}
+limit: {tokens: 16384, overflow: truncate_tail}
+input_limit_response: null   # 카드 코드는 state 를 잘라 넣고 거부하지 않는다 (고정부만으로 상한을 넘으면 ValueError — 서빙 래퍼의 상태 코드는 P0 확인)
+encoder: {rule: clef_encode_record}
+tokenizer:
+  path: /Users/rainis/Desktop/workplace/models/Cloudflare_clef
+  files_sha256:
+    tokenizer.json: 06b9509352d2af50381ab2247e083b80d32d5c0aba91c272ca9ff729b6a0e523
+    tokenizer_config.json: 91a08f825d370d085d692e04cf117cdd7faad7bf18e996f1e6031b6dab03db72
+    chat_template.jinja: c3cf9e34abf4f9e36c2d72165aa9c132d3e2a725b6c2586aaa3a8af9d7a81041
+    joint_schema_model.py: 0e304cf7c6500e8bb59bef7e2afd2c6373f82596dfb3b57d1aa93c175e2dc3a3
+    joint_head_config.json: 890be585d75b981201eb96a35f98a9967afe37bc8d220cfdea2e72d56507534f
+    config.json: c42e88892bd3fd84e8276b2ad90df58c1c3b797676ea161035006a72ad468c58
+    processor_config.json: d89ef49ce9cd37fbf510158e13c1ef063d9286411c1ec9049932dbe0487143b1
 concurrency: 1
 b1: null
 serving: {engine: null, engine_version: null, image: null, image_digest: null, command: null}

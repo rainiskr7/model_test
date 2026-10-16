@@ -171,7 +171,7 @@ JSON 파싱은 **중복 키 거부**(`object_pairs_hook`), `bool` 은 숫자로 
   - $e$ = `target_end`: `Rendered.target_end_char` 를 같은 인코더의 토큰 위치로 바꾼 값 (그 문자를 덮는 마지막 토큰의 끝, state 시작 기준).
   - $L_m$ = `limit`, 고정부 = `fixed_tokens` (질문 스키마·봉투·래퍼 — 계산법 P0).
 - `run/length.py` 의 `classify(LengthInfo) -> "not_truncated" | "target_cut" | "tail_cut"` 는 **길이만** 본다: $\ell \le L_m$ → `not_truncated` (`usage.input_tokens == L_m` 이어도). $\ell > L_m$ 이면 $r = L_m −$ `fixed_tokens` (저장 안 함), $e > r$ → `target_cut`, 아니면 `tail_cut`. `None` 을 '안 잘림' 으로 쓰지 않는다.
-- 상태 결합은 `run/executor.py` 만: 서버 길이 거부(`rejected/input_limit`) 가 잘림 판정보다 우선 · 잘림이면서 200 정상 응답 → `answered_over_limit: true` · $\ell \le L_m$ 인데 `usage.input_tokens ≠ ℓ` 이면 `length_mismatch` 경고 (인코더 규칙이 틀렸다는 신호 — 보고한다).
+- 상태 결합은 `run/executor.py` 만: 서버 길이 거부(`rejected/input_limit`) 가 잘림 판정보다 우선 · 잘림이면서 200 정상 응답 → `answered_over_limit: true` · $\ell \le L_m$ 인데 `usage.input_tokens ≠ LengthInfo.usage_tokens`(인코더가 적지 않으면 ℓ; pplx 는 질문 행 길이의 합 — 보정 10-17) 이면 `length_mismatch` 경고 (인코더 규칙이 틀렸다는 신호 — 보고한다).
 - 논리 요청의 **길이 구간**(계획 §4-4: ≤4,096 · 4,097–8,192 · 8,193–16,384 · >16,384) 은 그 요청 호출들의 `length_tokens` 최댓값으로 정한다.
 
 ---
@@ -627,7 +627,7 @@ PoolResult(group_ids: list[str], allocation: dict[str, int])          # data/poo
 
 - pplx: 길이 초과 응답 형태(422 메시지) · 반올림 · 문자열 state 처리 · `choice` 가 확률표 argmax 인지. Clef(SGLang): `usage.input_tokens` · 길이 초과 동작. 각 서버의 `served_name`.
 - 모델별 인코더 규칙(래퍼 포함)·$L_m$·`fixed_tokens` 계산법·문자 위치 → 토큰 위치 변환.
-  - 10-17: Clef·Clef-Flash 는 규칙 `clef_encode_record` 구현 — 체크포인트 사본의 `joint_schema_model.encode_record` 를 그대로 불러 ℓ(max_length 무제한)·`fixed_tokens`(max_state_tokens=0)·대상 끝(`render(state)` 의 offsets) 을 잰다 (H·I: 틀·잘림을 다시 구현하지 않음; 카드 코드가 `state_ids[:max_length-fixed_length]` 로 꼬리를 자르므로 §4-3 classify 와 일치). 모델 yaml `tokenizer.files_sha256` 에 `joint_schema_model.py` 를 넣어 fingerprint 에 묶는다. 남은 P0: 실제 체크포인트에서 ℓ == `usage.input_tokens` 확인, pplx v1/v1.1 규칙(체크포인트 `source/src/autojev/model.py` 의 prepare 가 필요 — 받은 사본에 없음), 경계 빌더.
+  - 10-17: Clef·Clef-Flash 는 규칙 `clef_encode_record` 구현 — 체크포인트 사본의 `joint_schema_model.encode_record` 를 그대로 불러 ℓ(max_length 무제한)·`fixed_tokens`(max_state_tokens=0)·대상 끝(`render(state)` 의 offsets) 을 잰다 (H·I: 틀·잘림을 다시 구현하지 않음; 카드 코드가 `state_ids[:max_length-fixed_length]` 로 꼬리를 자르므로 §4-3 classify 와 일치). 모델 yaml `tokenizer.files_sha256` 에 `joint_schema_model.py` 를 넣어 fingerprint 에 묶는다. 10-17 후속: pplx v1·v1.1 규칙 `pplx_decision_messages` — HF 고정 sha 의 `source/src/autojev/model.py` 를 받아 `decision_messages` 로 질문마다 한 행(system + State/Question/Options 코드)을 만들고 서버 prepare 와 같은 chat 템플릿(생각 끔)으로 잰다; 서버는 행이 8,192 를 넘으면 잘리지 않고 422 거부(`Question branch exceeds the 8192-token limit`) 라 ℓ = 행 최댓값, `usage_tokens` = 행 합. 경계 빌더는 `run/t0_measure.py`. 네 모델 yaml 의 tokenizer·encoder·limit 은 채움(사본 `/Users/rainis/Desktop/workplace/models/<repo>`). 남은 P0: 결정 모델 서빙·served_name·auth·serving 필드, 실제 서버에서 ℓ·usage 일치 확인(Clef 는 `usage.input_tokens == ℓ`, pplx 는 합), T0.
 - B1 진입 조건 (계획 §2-3) · 서버별 안전 동시성.
 - 감사 v4 (§2-2) — 동결 때.
 

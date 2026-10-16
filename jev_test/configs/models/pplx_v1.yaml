@@ -1,14 +1,30 @@
 # P0 에서 채울 값은 null — null 이 남으면 run 이 시작하지 않는다
+# 10-17: 토크나이저·decision_config·autojev 소스 사본은 HF perplexity-ai/pplx-decider-v1-27b@b01a5cb 에서 가중치 없이 받음 (/Users/rainis/Desktop/workplace/models/perplexity-ai_pplx-decider-v1-27b).
+#   encoder.rule pplx_decision_messages = 사본의 autojev.model.decision_messages + 같은 chat 템플릿(생각 끔)으로 질문 행마다 잰다.
+#   limit.tokens 8192 는 prepare() 의 상한 — 행이 넘으면 잘리지 않고 거부("Question branch exceeds the 8192-token limit") → 서버 422.
+#   usage.input_tokens 는 질문 행 길이의 합 (LengthInfo.usage_tokens).
+#   남은 P0: served_name·base_url·auth_env·serving(실제 서빙 뒤), 실서버에서 usage 일치·422 본문 확인, T0(temperature 주입 포함).
 id: pplx_v1
 kind: systemone
 served_name: null
 base_url: null
 auth_env: null
 question_scoring: separate
-limit: {tokens: null, overflow: null}
-input_limit_response: null
-encoder: {rule: null}
-tokenizer: {path: null, files_sha256: null}
+limit: {tokens: 8192, overflow: reject}
+input_limit_response: {status: 422, body_regex: "exceeds the 8192-token limit"}
+encoder: {rule: pplx_decision_messages}
+tokenizer:
+  path: /Users/rainis/Desktop/workplace/models/perplexity-ai_pplx-decider-v1-27b
+  files_sha256:
+    tokenizer.json: 6f32ce20dc35f57a7f9ad1eac03525bd7d30f9df8cea6507e958279cc3657706
+    tokenizer_config.json: 09564f0b57b433b55d536630be3044b4183dbe04d0cbc7b1e9b1154db3671b0b
+    chat_template.jinja: c3cf9e34abf4f9e36c2d72165aa9c132d3e2a725b6c2586aaa3a8af9d7a81041
+    decision_config.json: bacbcbb281a53af5ef5cc6c9028601097d155bf981129f18a727219517921dcd
+    config.json: 687f20bf493b8ee787dadaf338cf6df644dad44e32bcd2c3677a47c6c213d8b3
+    processor_config.json: abb488b9a03a53407dc9c8e43c0a2caec9142e5fc7a1203807fdf54b2149cc8f
+    source/src/autojev/__init__.py: d1b04a13ff70144fcd0bff73a1f00f713a4c58fce753a1872bfbbfcd5a7c81c3
+    source/src/autojev/model.py: a8da7607c9c770ac185e42671a7d7246af2d539966f6fe0a55ac56a02b453c64
+    source/src/autojev/types.py: 0f8e3bfa4e92693ec50b9f258fb9180438a62d30caf9b3e6c00860a71e46dc5a
 concurrency: 1
 b1: null
 serving: {engine: null, engine_version: null, image: null, image_digest: null, command: null}

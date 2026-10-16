@@ -30,7 +30,7 @@ def config():
     ("base_url", "http://host\n"), ("auth_env", "key"), ("auth_env", "A-B"),
     ("auth_env", "1KEY"), ("auth_env", "KEY\n"), ("t0.status", "unknown"),
     ("notes", None), ("b1", {}), ("tokenizer.path", ""),
-    ("tokenizer.files_sha256", []), ("tokenizer.files_sha256", {"a/b": "a" * 64}),
+    ("tokenizer.files_sha256", []),
     ("tokenizer.files_sha256", {"a\\b": "a" * 64}),
     ("tokenizer.files_sha256", {"x": "A" * 64}),
     ("tokenizer.files_sha256", {"x": "a" * 63}),
@@ -113,3 +113,18 @@ def test_missing_b1_exact_label_set(config):
         "b1.label_token_ids", "b1.label_token_ids: incomplete"]
     config["b1"]["label_token_ids"] = {}
     assert missing_for_run(validate_model_config(config, "m"), ["A", "B"]) == ["b1.label_token_ids: incomplete"]
+
+
+@pytest.mark.parametrize("name", ["a/b", "source/src/autojev/model.py", "source/src/autojev/types.py"])
+def test_nested_tokenizer_manifest_paths_allowed(config, name):
+    config["tokenizer"]["files_sha256"] = {name: "a" * 64}
+    result = validate_model_config(config, "m")
+    assert isinstance(result, ModelConfig)
+    assert result.tokenizer["files_sha256"] == {name: "a" * 64}
+
+
+@pytest.mark.parametrize("name", ["/absolute", "..", ".", "../a", "a/../b", "a/./b",
+    "a//b", "a/", "./a", "a\\b", "a\x00b", ""])
+def test_unsafe_or_noncanonical_manifest_paths_rejected(config, name):
+    config["tokenizer"]["files_sha256"] = {name: "a" * 64}
+    assert validate_model_config(config, "m") == ["tokenizer.files_sha256: invalid value"]

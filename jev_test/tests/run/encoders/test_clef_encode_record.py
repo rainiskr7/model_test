@@ -82,9 +82,3 @@ def test_invalid_measurement_boundaries(local, change, message):
         measurer_for(cfg).measure(plan)
 
 
-@pytest.mark.parametrize("offsets,count,message", [([(0, 1)], 2, "offset count differs"),
-    ([(0, 5)], 1, "invalid token offsets"), ([(True, 1)], 1, "invalid token offsets"),
-    ([(2, 1)], 1, "invalid token offsets")])
-def test_invalid_token_offsets(offsets, count, message):
-    with pytest.raises(ValueError, match=message):
-        encoder._offsets({"offset_mapping": offsets}, "text", count)

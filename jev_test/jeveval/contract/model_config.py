@@ -16,7 +16,11 @@ def _nullable(check):
 
 
 def _filename(value):
-    return _text(value) and value not in (".", "..") and not any(c in value for c in "/\\\x00")
+    """폴더 안 상대 경로(하위 폴더 허용). 절대 경로·`..`·`.`·백슬래시·NUL 은 거부한다."""
+    if not _text(value) or value.startswith("/") or "\\" in value or "\x00" in value:
+        return False
+    parts = PurePosixPath(value).parts
+    return bool(parts) and ".." not in parts and "." not in parts and PurePosixPath(value).as_posix() == value
 
 
 def _hashes(value):

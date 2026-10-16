@@ -25,3 +25,4 @@ class LengthInfo(JsonRecord):
     target_end: int
     limit: int
     fixed_tokens: int
+    usage_tokens: int | None = None  # 서버 usage.input_tokens 와 비교할 기대값 — None 이면 length_tokens (pplx 는 질문 행 길이의 합)

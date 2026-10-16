@@ -31,3 +31,18 @@ def test_parsed_answer_uses_strings_and_detaches_probabilities():
     source['answer'] = True
     with pytest.raises(TypeError):
         ParsedAnswer.from_dict(source)
+
+
+def test_length_usage_default_and_legacy_dict_restoration():
+    old = dict(length_tokens=14, target_end=2, limit=100, fixed_tokens=11)
+    value = LengthInfo(**old)
+    assert value.usage_tokens is None
+    assert LengthInfo.from_dict(old) == value
+    assert value.to_dict() == {**old, "usage_tokens": None}
+
+
+@pytest.mark.parametrize("usage", [None, 0, 26])
+def test_length_usage_tokens_roundtrip(usage):
+    value = LengthInfo(14, 2, 100, 11, usage_tokens=usage)
+    assert value.to_dict()["usage_tokens"] == usage
+    assert LengthInfo.from_dict(value.to_dict()) == value

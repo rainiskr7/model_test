@@ -173,3 +173,15 @@ def test_b1_warning_order_and_transport_usage(env, make_attempt, b1_raw):
     assert result.answers_parsed is None
     with pytest.raises(ValueError, match="length"):
         call_record(plan, [attempt], None, env.bcfg, env.policy.max_attempts)
+
+
+@pytest.mark.parametrize("usage,warning", [(26, False), (14, True), (25, True)])
+def test_length_mismatch_compares_explicit_usage_sum(env, make_attempt, usage, warning):
+    length = replace(env.length, length_tokens=14, usage_tokens=26)
+    raw = json.dumps({"answers": {env.q.id: {"type": "noul", "noul": .8}},
+                      "usage": {"input_tokens": usage}})
+    call = call_record(env.plan, [make_attempt(env.plan, response_raw=raw)], length,
+                       env.cfg, env.policy.max_attempts)
+    assert call.status == "ok" and call.length.usage_tokens == 26
+    assert ("length_mismatch" in call.warnings) is warning
+    assert call.usage == {"input_tokens": usage}

@@ -77,10 +77,11 @@ P1_CONTRACT.md 보정 12와 ⑥b-2 R1–R8 기준으로 compare·archive·참조
 - `run/make_splits.py`: 원본·순수 계산·쓰기 조립과 셋별 한 줄 요약, expect_groups 불일치 종료.
 - `run/item_summary.py`: task 선택·입출력 연결, 단계별 원문 없는 JSONL 요약.
 - `run/plan_calls.py`: 공통 항목 검증·고유 B1 호출 ID·렌더 실패를 포함한 로컬 오류 계획·전송 바이트.
-- `run/length.py`: 호출별 잘림·문자 끝→토큰 끝·길이 구간, P0 측정 구현용 Measurer Protocol.
+- `run/length.py`: 호출별 잘림·문자 끝→토큰 끝·state offsets 추출·usage 기대값·길이 구간, 측정 구현용 Measurer Protocol.
 - `run/encoders/__init__.py`: ENCODERS 등록표·measurer_for, 미확정·미등록 규칙 거부.
 - `run/encoders/hf_chat_template.py`: 오프라인 no-think 템플릿·ID 재인코딩 일치·state offsets 기반 LengthInfo (파일 대조·로딩은 io/tokenizers).
 - `run/encoders/clef_encode_record.py`: Clef·Clef-Flash 규칙 `clef_encode_record` — 체크포인트 사본의 joint_schema_model.encode_record 를 그대로 불러 ℓ(무제한)·고정부(max_state_tokens=0)·state offsets 로 LengthInfo (pplx 는 체크포인트의 autojev/model.py 가 있어야 같은 방식으로 추가 가능).
+- `run/encoders/pplx_decision_messages.py`: pplx v1/v1.1 규칙 `pplx_decision_messages` — 사본의 autojev.model.decision_messages + 같은 chat 템플릿으로 질문 행마다 재서 ℓ=행 최댓값·고정부=행−state·usage_tokens=행 합 (서버는 8192 초과를 거부).
 - `io/tokenizers.py`: 모델 yaml tokenizer 폴더·파일 해시 대조, HF 오프라인 환경에서 local_files_only 로딩.
 - `run/policy.py`: RetryPolicy(configs/policy.yaml) 로 전송 오류 우선·정수 Retry-After·누적 번호에 따른 Decision (코드 상수 없음).
 - `contract/policy.py`: configs/policy.yaml 닫힌 스키마 검사 → RetryPolicy 또는 오류 목록.
@@ -96,7 +97,7 @@ P1_CONTRACT.md 보정 12와 ⑥b-2 R1–R8 기준으로 compare·archive·참조
 - `io/paths.py`: 저장소 안 경로 제한(inside)·결과 식별자(identifier)·파일 크기/mtime(file_info).
 - `run/context.py`: 설정·재시도 정책 복원 RunContext·fingerprint 재생성·단계 완료 StageData·identity와 compare/archive 공통 봉인 검사.
 - `io/archive.py`: 전체 run 폴더/보존 입력 열거·결정적 tar.zst·sha/이름/길이 검증.
-- `io/reference.py`: 로컬 체크포인트·오프라인 환경(offline_environment, 토크나이저 로딩과 공용)·참조 소스의 읽기 전용 import.
+- `io/reference.py`: 로컬 체크포인트·오프라인 환경(offline_environment, 토크나이저 로딩과 공용)·참조 소스의 읽기 전용 import·사본 source 폴더의 패키지 import(package_module).
 - `score/observations.py`: 성공 질문의 F1 관측·KoSGD 고정 칸·KorFin pooled 관측.
 - `run/cli.py`: run·threshold·score·certify·compare·archive 인자와 원문 없는 오류 출력.
 - `run/cmd_run.py`, `cmd_threshold.py`, `cmd_score.py`, `cmd_certify.py`: 실행/채점/인증 조립.

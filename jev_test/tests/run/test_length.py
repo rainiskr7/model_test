@@ -4,7 +4,7 @@ from dataclasses import replace
 
 import pytest
 
-from jeveval.run.length import classify, length_bucket, token_end
+from jeveval.run.length import classify, expected_usage, length_bucket, state_offsets, token_end
 from jeveval.run.outcome import call_record, final_record
 from jeveval.run.plan_calls import plan_calls
 from jeveval.types import LengthInfo
@@ -94,3 +94,23 @@ def test_length_required_on_every_sent_response(env, make_attempt, code, raw):
     """검증 실패·거부·HTTP 오류도 length=None이면 기록할 수 없다."""
     with pytest.raises(ValueError, match="length"):
         call_record(env.plan, [make_attempt(env.plan, http_status=code, response_raw=raw)], None, env.cfg, env.policy.max_attempts)
+
+
+@pytest.mark.parametrize("offsets,count,message", [([(0, 1)], 2, "offset count differs"),
+    ([(0, 5)], 1, "invalid token offsets"), ([(True, 1)], 1, "invalid token offsets"),
+    ([(2, 1)], 1, "invalid token offsets")])
+def test_invalid_token_offsets(offsets, count, message):
+    with pytest.raises(ValueError, match=message):
+        state_offsets(offsets, "text", 0, 4, count)
+
+
+@pytest.mark.parametrize("usage,expected", [(None, 14), (0, 0), (26, 26)])
+def test_expected_usage_selects_explicit_sum_or_length(usage, expected):
+    assert expected_usage(LengthInfo(14, 2, 100, 11, usage)) == expected
+
+
+def test_state_offsets_select_positive_overlap_and_shift_without_clipping():
+    offsets = [(0, 2), (1, 4), (2, 2), (3, 5), (3, 5), (5, 6)]
+    assert state_offsets(offsets, "abcdef", 2, 5, 6) == [(-1, 2), (1, 3), (1, 3)]
+    assert state_offsets(offsets, "abcdef", 2, 2, 6) == []
+    assert state_offsets([], "", 0, 0, 0) == []

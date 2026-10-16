@@ -7,7 +7,7 @@ from jeveval.contract.b1_response import read_b1_response, storable_top_logprobs
 from jeveval.contract.response import read_usage, validate_response
 from jeveval.score.answers import parse_b1, parse_systemone
 from jeveval.types import AttemptRecord, CallPlan, CallRecord, FinalRecord, LengthInfo, ModelConfig
-from .length import classify
+from .length import classify, expected_usage
 
 
 def _check_attempts(plan, attempts, max_attempts):
@@ -67,7 +67,7 @@ def _response_record(plan, attempt, length, cfg):
             cut = classify(length)
             status, reason = ("ok", None) if cut == "not_truncated" else ("truncated", cut)
             if (cut == "not_truncated" and usage is not None
-                    and usage["input_tokens"] != length.length_tokens):
+                    and usage["input_tokens"] != expected_usage(length)):
                 warnings.append("length_mismatch")
     elif (cfg.input_limit_response
           and attempt.http_status == cfg.input_limit_response["status"]

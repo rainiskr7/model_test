@@ -2,24 +2,11 @@
 
 from jeveval.io.reference import source_module
 from jeveval.io.tokenizers import load_offline, verified_directory
-from jeveval.run.length import token_end
+from jeveval.run.length import state_offsets, token_end
 from jeveval.types import CallPlan, LengthInfo, ModelConfig
 
 REFERENCE_FILE = "joint_schema_model.py"
 UNBOUNDED = 1 << 31
-
-
-def _offsets(encoded, text: str, count: int) -> list[tuple[int, int]]:
-    """state 하나만 토큰화했으므로 offsets 는 이미 state 시작 기준이다. 개수·범위만 검사한다."""
-    offsets = encoded["offset_mapping"]
-    if len(offsets) != count:
-        raise ValueError("offset count differs from token count")
-    result = []
-    for left, right in offsets:
-        if type(left) is not int or type(right) is not int or not 0 <= left <= right <= len(text):
-            raise ValueError("invalid token offsets")
-        result.append((left, right))
-    return result
 
 
 class ClefEncodeRecord:
@@ -64,4 +51,5 @@ class ClefEncodeRecord:
         count = len(encoded["input_ids"])
         if count != total - fixed:
             raise ValueError("state token count differs from reference encoding")
-        return LengthInfo(total, token_end(_offsets(encoded, state, count), end), self.limit, fixed)
+        offsets = state_offsets(encoded["offset_mapping"], state, 0, len(state), count)
+        return LengthInfo(total, token_end(offsets, end), self.limit, fixed)

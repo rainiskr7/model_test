@@ -34,7 +34,8 @@ def setup(tmp_path, monkeypatch, t0_policy):
         add_datasets(root)
         cfg = read_yaml(ROOT / "configs/models" / f"{family}.yaml")
         cfg.update(served_name="served", auth_env="T0_TEST_AUTH", limit=dict(tokens=100, overflow="reject"),
-                   input_limit_response=dict(status=400, body_regex="too long"))
+                   input_limit_response=dict(status=400, body_regex="too long"),
+                   encoder={"rule": None}, tokenizer={"path": None, "files_sha256": None})
         (root / f"{family}.yaml").write_text(yaml.safe_dump(cfg), encoding="utf-8")
         rows = [SourceRow("kmhas", str(i), {"text": CANARY + str(i)}) for i in range(3)]
         sources = T0Sources({"kmhas": rows}, {"kmhas": group_rows(rows, "text")}, {"kmhas": {"0"}}, 42)

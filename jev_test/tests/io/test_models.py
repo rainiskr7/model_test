@@ -39,10 +39,10 @@ def test_six_registered_models_and_pending_run_fields():
         assert cfg.notes
         assert cfg.input_limit_response == (
             {"status": 400, "body_regex": "maximum context length is"}
-            if cfg.id in B1_SERVING else None)
+            if cfg.id in B1_SERVING else
+            {"status": 422, "body_regex": "exceeds the 8192-token limit"} if cfg.id.startswith("pplx") else None)
         assert ModelConfig.from_dict(cfg.to_dict()) == cfg
-        expected = ["served_name", "base_url", "limit.tokens", "limit.overflow", "encoder.rule",
-                    "tokenizer.path", "tokenizer.files_sha256"]
+        expected = ["served_name", "base_url"]
         if cfg.kind == "b1":
             expected = ["base_url"]
             assert cfg.serving["engine"] == "vllm"
@@ -68,3 +68,19 @@ def test_schema_errors_are_exposed_as_list(tmp_path):
     assert "id: invalid value" in caught.value.errors
     assert "unknown: unknown key" in caught.value.errors
     assert str(caught.value) == "\n".join(caught.value.errors)
+
+
+@pytest.mark.parametrize("name", ["clef", "clef_flash", "pplx_v1", "pplx_v1_1"])
+def test_systemone_encoder_limits_and_manifest(name):
+    cfg = load_model_config(ROOT / f"configs/models/{name}.yaml")
+    clef = name.startswith("clef")
+    assert cfg.encoder["rule"] == ("clef_encode_record" if clef else "pplx_decision_messages")
+    assert cfg.limit == {"tokens": 16384 if clef else 8192, "overflow": "truncate_tail" if clef else "reject"}
+    assert cfg.input_limit_response == (None if clef else
+        {"status": 422, "body_regex": "exceeds the 8192-token limit"})
+    required = {"tokenizer.json", "tokenizer_config.json"}
+    required |= ({"joint_schema_model.py"} if clef else {"decision_config.json",
+        "source/src/autojev/__init__.py", "source/src/autojev/model.py", "source/src/autojev/types.py"})
+    assert required <= cfg.tokenizer["files_sha256"].keys()
+    assert isinstance(cfg.tokenizer["path"], str) and cfg.tokenizer["path"]
+    assert missing_for_run(cfg) == ["served_name", "base_url"]

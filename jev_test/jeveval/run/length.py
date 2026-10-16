@@ -1,4 +1,4 @@
-"""무엇: 순수 길이 판정 · 입력: LengthInfo·문자 offsets · 출력: 잘림/구간/토큰 끝 · 계약 §4-3."""
+"""무엇: 순수 길이 판정 · 입력: LengthInfo·문자 offsets · 출력: 잘림/구간/토큰 끝/usage 기대값 · 계약 §4-3."""
 
 from typing import Literal, Protocol
 
@@ -18,6 +18,25 @@ def classify(info: LengthInfo) -> Literal["not_truncated", "target_cut", "tail_c
     if info.length_tokens <= info.limit:
         return "not_truncated"
     return "target_cut" if info.target_end > info.limit - info.fixed_tokens else "tail_cut"
+
+
+def expected_usage(info: LengthInfo) -> int:
+    """서버 usage.input_tokens 와 비교할 값 — 인코더가 따로 적지 않으면 length_tokens."""
+    return info.length_tokens if info.usage_tokens is None else info.usage_tokens
+
+
+def state_offsets(offsets, text: str, start: int, end: int, count: int) -> list[tuple[int, int]]:
+    """토큰 offsets 중 [start, end) 와 양의 겹침을 갖는 것만 state 기준으로 옮긴다. 경계는 임의 보정하지 않는다."""
+    if len(offsets) != count:
+        raise ValueError("offset count differs from token count")
+    result = []
+    for left, right in offsets:
+        if (type(left) is not int or type(right) is not int
+                or not 0 <= left <= right <= len(text)):
+            raise ValueError("invalid token offsets")
+        if max(left, start) < min(right, end):
+            result.append((left - start, right - start))
+    return result
 
 
 def token_end(offsets: list[tuple[int, int]], char_end: int) -> int:

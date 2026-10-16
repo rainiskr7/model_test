@@ -42,3 +42,23 @@ def source_module(path, name):
             sys.modules[name] = previous
         raise
     return module
+
+
+def package_module(source_root, name):
+    """체크포인트 사본의 source 폴더를 sys.path 앞에 두고 패키지 모듈을 import 한다 (예: autojev.model).
+
+    같은 이름의 다른 사본이 이미 import 돼 있으면 거부한다 — 한 프로세스는 한 체크포인트의 코드만 쓴다.
+    """
+    import importlib
+    import sys
+
+    root = Path(source_root).resolve()
+    if not root.is_dir():
+        raise ValueError("reference source directory required")
+    if str(root) not in sys.path:
+        sys.path.insert(0, str(root))
+    module = importlib.import_module(name)
+    file = getattr(module, "__file__", None)
+    if file is None or not Path(file).resolve().is_relative_to(root):
+        raise ValueError(f"{name} is already imported from a different location")
+    return module

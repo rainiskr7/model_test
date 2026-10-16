@@ -56,3 +56,46 @@ def test_reference_import_does_not_import_heavy_modules():
               "assert not {'torch', 'transformers', 'autojev'} & sys.modules.keys()")
     result = subprocess.run([sys.executable, "-B", "-I", "-c", script, str(root)], capture_output=True, text=True)
     assert result.returncode == 0, result.stderr
+
+
+@pytest.fixture
+def package(tmp_path, monkeypatch):
+    name = "_jev_test_reference"
+    monkeypatch.setattr(sys, "path", list(sys.path))
+    for key in (name, name + ".model", name + ".types"):
+        monkeypatch.setitem(sys.modules, key, sys.modules.get(key))
+        monkeypatch.delitem(sys.modules, key)
+    folder = tmp_path / name
+    folder.mkdir()
+    (folder / "__init__.py").write_text("")
+    (folder / "types.py").write_text("VALUE = 42\n")
+    (folder / "model.py").write_text("from .types import VALUE\n")
+    return tmp_path, name + ".model"
+
+
+def test_package_module_loads_relative_import_and_reuses_same_location(package):
+    root, name = package
+    module = reference.package_module(root, name)
+    assert module.VALUE == 42
+    assert Path(module.__file__).resolve().is_relative_to(root)
+    assert reference.package_module(root, name) is module
+    assert sys.path.count(str(root)) == 1
+
+
+def test_package_module_requires_source_directory(tmp_path):
+    before = list(sys.path)
+    with pytest.raises(ValueError, match="^reference source directory required$"):
+        reference.package_module(tmp_path / "missing", "not_imported.model")
+    assert sys.path == before
+
+
+def test_package_module_rejects_other_location(package, monkeypatch):
+    from types import ModuleType
+    root, name = package
+    other = ModuleType(name)
+    other.__file__ = str(root.parent / "elsewhere/model.py")
+    monkeypatch.setitem(sys.modules, name, other)
+    with pytest.raises(ValueError) as error:
+        reference.package_module(root, name)
+    assert str(error.value) == f"{name} is already imported from a different location"
+    assert sys.modules[name] is other
