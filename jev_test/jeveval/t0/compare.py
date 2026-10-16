@@ -1,6 +1,7 @@
 """무엇: T0 분포/답 정책 대조 · 입력: 검증된 요청별 답/허용폭 · 출력: T0CaseResult · 계약 §8-7 T-f."""
 
-from jeveval.t0.distribution import nonnegative, status_of, vector, within
+from jeveval.t0.distribution import nonnegative, vector, within
+from jeveval.t0.status import status_of
 from jeveval.types import Validated
 from jeveval.types.t0 import T0CaseResult, T0QuestionComparison, T0Tolerance
 

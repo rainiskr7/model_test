@@ -32,7 +32,7 @@ bootstrap 반환은 {models, n_groups, reps, pairs}; F1은 question_id도 포함
 반환은 **RunSummary만**이다. records 읽기 경고는 재반환하지 않으며 gate의 경고를 호출자가 보존한다. `n_calls`는 이번에 처리한 호출 수(로컬 오류·복구 포함, 완료 final skip 제외), `by_status`는 이번에 쓴 final만 센다. `session_id`는 호출자가 프로세스별 UUID4를 한 번 만들어 전달하고 재개 프로세스에서는 새 값으로 바꾼다.
 non-terminal 재개는 잠 없이 다음 기록 번호로 전송한다. 기록 k 다음 전송(k+1)이 fsync 전에 중단되면 재개는 **같은 k+1**을 사용한다. 실제 전송 1회 추가가 가능한 기록 예산의 한계이며 cost는 미기록 전송을 관측할 수 없다. 5회째 non-terminal 복구는 과거 attempts를 고치지 않는다.
 `derive_stage(full_finals, items_full, action_qids, derived_from)`는 완료 ID 집합을 대조한다. 파생 호출의 attempts·usage·length는 원본 관측값을 유지하며, 논리 상태는 제거된 B1 호출의 오류도 보존한다. 호출자가 separate 모델·같은 단계의 전체판을 선택하고 파생 판 자체의 gate/threshold/seal을 적용한다(⑥b).
-`io.run_files.write_derived_stage`도 gate 통과 뒤 호출한다. 출처가 일치하는 final 접두 기록은 이어 쓰고, 변경/중복/실제 attempts는 쓰기 전에 거부한다. `derived.json`을 final append 전에 기록하므로 중단 후 재개가 가능하다. 빈 단계도 final·빈 attempts·출처 파일이 생긴다.
+`io.derived_stage.write_derived_stage`도 gate 통과 뒤 호출한다. 출처가 일치하는 final 접두 기록은 이어 쓰고, 변경/중복/실제 attempts는 쓰기 전에 거부한다. `derived.json`을 final append 전에 기록하므로 중단 후 재개가 가능하다. 빈 단계도 final·빈 attempts·출처 파일이 생긴다.
 ⑥a-2a cost는 `<stage>/derived.json`에서 전달받은 `derived_from`으로 파생을 판별하고 **모든 수치 0·p50/p95 null**을 적용한다. 남긴 CallRecord의 attempts/usage를 비용으로 합산하지 않는다. population/risk는 보존된 final 상태와 파생 Item을 사용한다.
 
 ## 테스트

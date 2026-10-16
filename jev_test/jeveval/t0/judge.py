@@ -4,7 +4,7 @@ from hashlib import sha256
 
 from jeveval.t0.boundary import judge_boundary
 from jeveval.t0.compare import compare_request
-from jeveval.t0.distribution import status_of
+from jeveval.t0.status import status_of
 from jeveval.t0.request import canonical_bytes
 from jeveval.t0.response import validate_response
 from jeveval.types.t0 import T0CaseResult, T0Judgement

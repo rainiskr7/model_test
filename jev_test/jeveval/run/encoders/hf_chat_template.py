@@ -1,28 +1,8 @@
 """무엇: B1 no-think 길이 측정 · 입력: 로컬 토크나이저·CallPlan · 출력: LengthInfo · 계약 §4-3·§8-6."""
 
-import os
-from pathlib import Path
-
-from jeveval.io.hashes import sha256_file
+from jeveval.io.tokenizers import load_offline, verified_directory
 from jeveval.run.length import token_end
 from jeveval.types import CallPlan, LengthInfo, ModelConfig
-
-
-def _verified_path(cfg: ModelConfig) -> Path:
-    """목록 밖 파일은 무시하고 폴더 안의 명시된 파일만 정확히 대조한다."""
-    path, hashes = cfg.tokenizer.get("path"), cfg.tokenizer.get("files_sha256")
-    if not isinstance(path, str) or not path or not isinstance(hashes, dict) or not hashes:
-        raise ValueError("incomplete tokenizer configuration")
-    root = Path(path).resolve()
-    if not root.is_dir():
-        raise ValueError("tokenizer path must be a directory")
-    for name, expected in hashes.items():
-        file = (root / name).resolve()
-        if not file.is_relative_to(root) or not file.is_file():
-            raise ValueError(f"tokenizer file missing or outside directory: {name}")
-        if sha256_file(file) != expected:
-            raise ValueError(f"tokenizer hash mismatch: {name}")
-    return root
 
 
 def _ids(value) -> list[int]:
@@ -77,14 +57,8 @@ class HfChatTemplateNoThink:
     """검증된 로컬 chat template에 thinking 비활성 규칙을 적용한다."""
 
     def __init__(self, cfg: ModelConfig):
-        """파일 대조 후 오프라인으로만 토크나이저를 로드한다."""
-        path = _verified_path(cfg)
-        os.environ["HF_HUB_OFFLINE"] = "1"
-        os.environ["TRANSFORMERS_OFFLINE"] = "1"
-        from transformers import AutoTokenizer
-
-        self.tokenizer = AutoTokenizer.from_pretrained(
-            str(path), local_files_only=True, trust_remote_code=False)
+        """파일 대조 후 오프라인으로만 토크나이저를 로드한다 (io/tokenizers)."""
+        self.tokenizer = load_offline(verified_directory(cfg.tokenizer))
         self.limit = cfg.limit["tokens"]
 
     def measure(self, plan: CallPlan) -> LengthInfo:

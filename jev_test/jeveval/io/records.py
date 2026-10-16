@@ -4,6 +4,7 @@ import json
 import os
 from pathlib import Path
 
+from jeveval.contract.attempt_chain import check_attempt_chain
 from jeveval.types import AttemptRecord, FinalRecord
 
 
@@ -66,17 +67,9 @@ def _read(path, cls):
 
 
 def read_attempts(path) -> tuple[list[AttemptRecord], list[str]]:
+    """읽은 뒤 구조 불변식(contract/attempt_chain)만 검사한다. 예산·상태 전이는 run/."""
     records, warnings = _read(path, AttemptRecord)
-    previous = {}
-    for number, record in enumerate(records, 1):
-        last = previous.get(record.call_id)
-        expected = last.attempt + 1 if last else 1
-        if record.attempt != expected:
-            raise ValueError(f"line {number}: duplicate or nonconsecutive attempt")
-        if last and (last.terminal or last.logical_id != record.logical_id
-                     or last.request_sha256 != record.request_sha256):
-            raise ValueError(f"line {number}: attempt after terminal or changed call identity")
-        previous[record.call_id] = record
+    check_attempt_chain(records)
     return records, warnings
 
 

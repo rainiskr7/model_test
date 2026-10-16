@@ -4,13 +4,18 @@ import os
 from pathlib import Path
 
 
+def offline_environment() -> None:
+    """모델/토크나이저 import 전에 다운로드 경로를 끈다. 설정은 뒤의 로딩에도 유지된다."""
+    os.environ["HF_HUB_OFFLINE"] = "1"
+    os.environ["TRANSFORMERS_OFFLINE"] = "1"
+
+
 def local_checkpoint(path):
     """Hub 식별자를 로컬 폴더로 대체하지 않으며 다운로드를 허용하지 않는다."""
     checkpoint = Path(path).resolve()
     if not checkpoint.is_dir():
         raise ValueError("local checkpoint directory required")
-    os.environ["HF_HUB_OFFLINE"] = "1"
-    os.environ["TRANSFORMERS_OFFLINE"] = "1"
+    offline_environment()
     return checkpoint
 
 

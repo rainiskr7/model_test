@@ -1,12 +1,39 @@
 """무엇: 로컬 소스 로딩·가벼운 import · 입력: 합성 모듈 · 출력: 캐시 없는 모듈 · 계약 §8-6 H·I."""
 
 from pathlib import Path
+import os
 import subprocess
 import sys
 
 import pytest
 
+from jeveval.io import reference
 from jeveval.io.reference import source_module
+
+
+def test_offline_environment_sets_and_preserves_both_flags(monkeypatch):
+    for key in ("HF_HUB_OFFLINE", "TRANSFORMERS_OFFLINE"):
+        monkeypatch.setenv(key, "0")
+    reference.offline_environment()
+    assert os.environ["HF_HUB_OFFLINE"] == "1"
+    assert os.environ["TRANSFORMERS_OFFLINE"] == "1"
+    reference.offline_environment()
+    assert os.environ["HF_HUB_OFFLINE"] == "1"
+    assert os.environ["TRANSFORMERS_OFFLINE"] == "1"
+
+
+def test_local_checkpoint_uses_offline_environment(tmp_path, monkeypatch):
+    calls, original = [], reference.offline_environment
+    for key in ("HF_HUB_OFFLINE", "TRANSFORMERS_OFFLINE"):
+        monkeypatch.setenv(key, "0")
+
+    def offline():
+        calls.append("offline")
+        original()
+
+    monkeypatch.setattr(reference, "offline_environment", offline)
+    assert reference.local_checkpoint(tmp_path) == tmp_path.resolve()
+    assert calls == ["offline"]
 
 
 def test_readonly_source_import_supports_dataclasses(tmp_path):

@@ -7,6 +7,7 @@ from pathlib import Path
 from jeveval.data.items import functionchat, klue_mrc, kmhas, korfin, kosgd, kote
 from jeveval.data.items.common import summarize
 from jeveval.io.config import load_taskspec, read_yaml
+from jeveval.io.hashes import glob_files
 from jeveval.io.sources import read_set_rows
 from jeveval.io.splits import read_split_plan
 from jeveval.io.tasks import read_lists
@@ -21,7 +22,7 @@ def _summaries(args):
     rules = read_yaml(args.root / args.rules)
     tasks = args.root / args.tasks
     lists = read_lists(tasks / "lists")
-    paths = sorted(p for p in tasks.glob("*.yaml") if p.stem != "b1")
+    paths = [p for p in glob_files(tasks, "*.yaml") if p.stem != "b1"]
     if args.task != "all":
         paths = [p for p in paths if p.stem == Path(args.task).stem]
     if not paths:

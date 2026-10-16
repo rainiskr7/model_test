@@ -18,7 +18,8 @@ P1_CONTRACT.md 보정 12와 ⑥b-2 R1–R8 기준으로 compare·archive·참조
 - `contract/model_config.py`: 닫힌 모델 스키마·파일 해시·토큰 ID 검사, 실행 필수 값·B1 라벨 집합 대조.
 - `io/models.py`: 중복 키 거부 YAML 로더와 ModelConfigError.errors.
 - `io/hashes.py`: 스트리밍 SHA-256·SHA256SUMS 대조·정렬된 Python 소스 해시·토크나이저 재검증.
-- `io/run_files.py`: 정규 JSON·fsync/원자 교체·파생 단계 final/빈 attempts/derived.json 기록과 재개.
+- `io/run_files.py`: 정규 JSON·fsync/원자 교체·존재/폴더 생성.
+- `io/derived_stage.py`: 파생 단계 final/빈 attempts/derived.json 기록과 재개 검사.
 - `types/contract.py`: Validated·B1Config·B1Call·B1Response의 frozen JsonRecord 자료형.
 - `types/scoring.py`: AnswerParse·F1Result·CalibResult·SlotJudgement·메모리 전용 Observation 자료형.
 - `contract/__init__.py`: 계약 검사 네임스페이스.
@@ -42,7 +43,8 @@ P1_CONTRACT.md 보정 12와 ⑥b-2 R1–R8 기준으로 compare·archive·참조
 - `score/risk_mix.py`: 성공 질문 정답 클래스·서비스·층·질문 수 분포, 다섯 길이 칸과 수락 내 진단 오류.
 - `score/cost.py`: 단계별 논리 완료 지연·실패·호출·재시도·입력 토큰 하한·파생 비용 0.
 - `io/__init__.py`: 파일 입출력 네임스페이스.
-- `io/records.py`: JSONL 추가·flush/fsync·타입/호출 연속성 검사·끝 줄 복구·없는 기록 파일 생성.
+- `io/records.py`: JSONL 추가·flush/fsync·타입 검사·끝 줄 복구·없는 기록 파일 생성 (호출 연속성은 contract/attempt_chain).
+- `contract/attempt_chain.py`: attempts 기록의 구조 불변식 — 연속 번호·terminal 뒤 시도 없음·call_id 별 logical_id/request_sha256 불변.
 - `client/__init__.py`: 단일 시도 전송 네임스페이스.
 - `client/http.py`: proxy·리디렉트 없는 urllib POST, 소켓 timeout·부분 본문·HTTP 오류 응답 보존.
 - `client/systemone.py`: request_bytes 그대로 전송하고 SHA-256 반환.
@@ -74,7 +76,8 @@ P1_CONTRACT.md 보정 12와 ⑥b-2 R1–R8 기준으로 compare·archive·참조
 - `run/plan_calls.py`: 공통 항목 검증·고유 B1 호출 ID·렌더 실패를 포함한 로컬 오류 계획·전송 바이트.
 - `run/length.py`: 호출별 잘림·문자 끝→토큰 끝·길이 구간, P0 측정 구현용 Measurer Protocol.
 - `run/encoders/__init__.py`: ENCODERS 등록표·measurer_for, 미확정·미등록 규칙 거부.
-- `run/encoders/hf_chat_template.py`: 파일 해시 대조·오프라인 no-think 템플릿·ID 재인코딩 일치·state offsets 기반 LengthInfo.
+- `run/encoders/hf_chat_template.py`: 오프라인 no-think 템플릿·ID 재인코딩 일치·state offsets 기반 LengthInfo (파일 대조·로딩은 io/tokenizers).
+- `io/tokenizers.py`: 모델 yaml tokenizer 폴더·파일 해시 대조, HF 오프라인 환경에서 local_files_only 로딩.
 - `run/policy.py`: MAX_ATTEMPTS=5·전송 오류 우선·정수 Retry-After·누적 번호에 따른 Decision.
 - `run/outcome.py`: 기록 연결·예산·길이 필수 검사, 독립 usage·답 변환·거부 우선·논리 상태 합성.
 - `run/resume_check.py`: 전체 계획·attempts·final ID·누적 예산을 첫 전송/쓰기 전에 대조하는 순수 검사.
@@ -87,7 +90,7 @@ P1_CONTRACT.md 보정 12와 ⑥b-2 R1–R8 기준으로 compare·archive·참조
 - `io/paths.py`: 저장소 안 경로 제한(inside)·결과 식별자(identifier)·파일 크기/mtime(file_info).
 - `run/context.py`: 설정 복원 RunContext·fingerprint 재생성·단계 완료 StageData·identity와 compare/archive 공통 봉인 검사.
 - `io/archive.py`: 전체 run 폴더/보존 입력 열거·결정적 tar.zst·sha/이름/길이 검증.
-- `io/reference.py`: 로컬 체크포인트·오프라인 환경·참조 소스의 읽기 전용 import.
+- `io/reference.py`: 로컬 체크포인트·오프라인 환경(offline_environment, 토크나이저 로딩과 공용)·참조 소스의 읽기 전용 import.
 - `score/observations.py`: 성공 질문의 F1 관측·KoSGD 고정 칸·KorFin pooled 관측.
 - `run/cli.py`: run·threshold·score·certify·compare·archive 인자와 원문 없는 오류 출력.
 - `run/cmd_run.py`, `cmd_threshold.py`, `cmd_score.py`, `cmd_certify.py`: 실행/채점/인증 조립.
@@ -104,7 +107,7 @@ P1_CONTRACT.md 보정 12와 ⑥b-2 R1–R8 기준으로 compare·archive·참조
 의존 방향은 `run → io/data → score/types`, `io → contract → types`, `score → types`다. 전체 예정 방향은 `run → client/io → score/data/contract → types`다.
 data/items는 io·contract·run을 import하지 않는다. expand·items·labels는 파일·난수를 사용하지 않는다. types는 jeveval의 다른 패키지를 import하지 않는다.
 contract·score는 서로 import하지 않으며 파일·네트워크·시계에 접근하지 않는다. score/bootstrap의 난수는 지역 random.Random(f"{seed}:boot:{set_name}")만 쓴다. data도 파일·네트워크·시계에 접근하지 않고, 난수는 계약의 문자열 seed로 만든 random.Random만 쓴다.
-run/encoders의 의존은 types·io.hashes·run.length·표준 라이브러리·transformers/tokenizers로 제한한다. 로드는 HF_HUB_OFFLINE=1·TRANSFORMERS_OFFLINE=1, local_files_only=True·trust_remote_code=False다.
+run/encoders의 의존은 types·io.tokenizers·run.length·표준 라이브러리로 제한한다(transformers 는 io/tokenizers 안에서만 import). 로드는 HF_HUB_OFFLINE=1·TRANSFORMERS_OFFLINE=1, local_files_only=True·trust_remote_code=False다.
 
 세부 규칙·기존 시험 지도·이전 구현 결정은 [NOTES.md](NOTES.md)에 보존한다.
 

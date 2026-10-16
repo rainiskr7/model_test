@@ -5,7 +5,8 @@
 
 - `request.py`: contract/render 사용, T0 세 종류 요청과 model 별칭, 봉투 바이트·동일성 해시.
 - `response.py`: noul/choice 공개 검증기를 질문별 재사용, score 및 요청 전체 오류 우선순위.
-- `distribution.py`: 순서 고정 분포 벡터·수치 도메인·상태 우선순위.
+- `distribution.py`: 순서 고정 분포 벡터·수치 도메인.
+- `status.py`: 질문/사례 상태 합성 — FAIL > INCOMPLETE > PASS, 참조 없으면 PARTIAL (distribution 에서 분리, 10-17).
 - `compare.py`: 분포와 별도 답 정책, 요청 검증 실패 시 모든 질문을 실패로 기록.
 - `tolerance.py`: 고정 반복/배치 변형 완전성·대상 동일성·질문별 변동과 허용폭.
 - `boundary.py`: 전체 입력 길이와 HTTP/길이 상태 판정; usage를 사용하지 않음.
