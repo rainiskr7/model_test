@@ -63,3 +63,17 @@ def test_boundary_target_requires_positive_integer(base_request, target):
 def test_boundary_cannot_shorten_base_request(base_request):
     with pytest.raises(ValueError, match="^base request already exceeds the target length$"):
         boundary_builder_with(CharacterMeasurer())(base_request, 7)
+
+
+@pytest.mark.parametrize("adapter", ["measure", "boundary"])
+def test_images_rejected_before_measuring(base_request, adapter):
+    request = build_request("m", "state", {"kind": "plain_text"}, base_request.body["questions"],
+                            images=["synthetic-image"])
+    before = deepcopy(request.body)
+    measurer = CharacterMeasurer()
+    with pytest.raises(NotImplementedError, match="^media requests are out of scope$"):
+        if adapter == "measure":
+            measure_with(measurer)(request)
+        else:
+            boundary_builder_with(measurer)(request, 9)
+    assert measurer.plans == [] and request.body == before

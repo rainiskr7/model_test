@@ -80,13 +80,30 @@ def test_separate_actions_only_uses_derived_writer_without_auth(tmp_path, monkey
     h.variant = "actions_only"
     monkeypatch.delenv("JEV_TEST_KEY")
     calls, original = [], cmd_run.derived_stage.write_derived_stage
-    def write(directory, stage, finals, provenance):
-        calls.append((directory, stage, provenance))
-        return original(directory, stage, finals, provenance)
+    resume, gate = cmd_run.derived_resume.resume_derived, cmd_run.gate.prepare_stage
+    def checked(*args, **kwargs):
+        count = resume(*args, **kwargs)
+        calls.append(("resume", kwargs.get("allow_tail", False), count))
+        return count
+    def prepared(**kwargs):
+        result = gate(**kwargs)
+        calls.append(("gate",))
+        return result
+    def write(directory, stage, finals, provenance, existing):
+        calls.append(("write", directory, stage, provenance, existing))
+        return original(directory, stage, finals, provenance, existing)
+    monkeypatch.setattr(cmd_run.derived_resume, "resume_derived", checked)
+    monkeypatch.setattr(cmd_run.gate, "prepare_stage", prepared)
     monkeypatch.setattr(cmd_run.derived_stage, "write_derived_stage", write)
     result = h.run("dev")
     assert result["derived"] is True and len(h.sent) == sent
     provenance = (h.directory.parent / "full").relative_to(h.root).as_posix()
-    assert calls == [(h.directory, "dev", provenance)]
+    assert calls == [("resume", True, 0), ("gate",), ("resume", False, 0),
+                     ("write", h.directory, "dev", provenance, 0)]
     assert run_files.read_json(h.directory / "dev/derived.json") == {"derived_from": provenance}
     assert output_files(h.directory.parent / "full") == source
+    calls.clear()
+    assert h.run("dev")["derived"] is True
+    assert calls == [("resume", True, 1), ("gate",), ("resume", False, 1),
+                     ("write", h.directory, "dev", provenance, 1)]
+    assert len(h.sent) == sent

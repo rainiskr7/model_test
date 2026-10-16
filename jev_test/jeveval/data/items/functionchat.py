@@ -6,15 +6,21 @@ from jeveval.data.items.common import assemble, fields, questions
 from jeveval.types import Item, SourceRow, SplitPlan, TaskSpec
 
 
-S = "누락된 필수 정보가 여러가지이면, 각각을 모두 빠짐없이 구체적으로 요청하세요."
+def _sentence(lists):
+    """정규화 대상 문장은 configs/tasks/lists/functionchat_normalization.json 이 단일 출처다 (fingerprint 포함)."""
+    value = lists.get("functionchat_normalization", {}).get("duplicate_sentence")
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError("functionchat_normalization.duplicate_sentence is required")
+    return value
 
 
 def _state_and_options(row, lists):
+    sentence = _sentence(lists)
     messages = deepcopy(row.fields["input_messages"])
     if not messages or messages[0].get("role") != "system":
         raise ValueError("FunctionChat first message must be system")
-    messages[0]["content"] = messages[0]["content"].replace(S + " " + S, S)
-    if messages[0]["content"].count(S) >= 2:
+    messages[0]["content"] = messages[0]["content"].replace(sentence + " " + sentence, sentence)
+    if messages[0]["content"].count(sentence) >= 2:
         raise ValueError("FunctionChat repeated normalization sentence remains")
     tools, options = deepcopy(row.fields["input_tools"]), {}
     for tool in tools:

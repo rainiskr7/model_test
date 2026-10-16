@@ -82,3 +82,11 @@ def test_invalid_measurement_boundaries(local, change, message):
         measurer_for(cfg).measure(plan)
 
 
+def test_empty_questions_rejected_before_reference_encoding(local):
+    cfg, plan, _, calls, _ = local
+    plan = replace(plan, request=replace(plan.request, questions={}), question_ids=[], question_types={})
+    with pytest.raises(ValueError, match="^at least one question is required$"):
+        measurer_for(cfg).measure(plan)
+    assert calls == []
+
+

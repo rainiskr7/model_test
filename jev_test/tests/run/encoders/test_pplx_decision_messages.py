@@ -10,18 +10,17 @@ from tokenizers import Tokenizer, models, pre_tokenizers
 from transformers import PreTrainedTokenizerFast
 
 from jeveval.io.hashes import sha256_file
-from jeveval.run.encoders import ENCODERS, measurer_for
-from jeveval.run.encoders.pplx_decision_messages import PplxDecisionMessages
+from jeveval.run.encoders import measurer_for
 from jeveval.types import LengthInfo, Rendered, Request
 
 TEMPLATE = ("{% if enable_thinking %}think {% endif %}"
     "{% for m in messages %}{{ m.role }} {{ m.content }} [END] {% endfor %}"
     "{% if add_generation_prompt %}assistant{% endif %}")
-SOURCE = '''from .types import describe
+SOURCE = r'''from .types import describe
 
 def decision_messages(row, codes):
     return [{"role": "system", "content": "choose " + " ".join(codes)},
-            {"role": "user", "content": describe(row["state"]) + " " + row["question"]["instructions"]}]
+            {"role": "user", "content": "State:\n" + describe(row["state"]) + "\n\nQuestion:\n" + row["question"]["instructions"]}]
 '''
 
 
@@ -33,7 +32,7 @@ def local(tmp_path, env, monkeypatch):
     for name in names:
         monkeypatch.setitem(sys.modules, name, sys.modules.get(name))
         monkeypatch.delitem(sys.modules, name)
-    words = "[UNK] [END] system user assistant choose A B alpha beta tail ask more now think".split()
+    words = "[UNK] [END] system user assistant choose A B alpha beta tail ask more now think State: Question:".split()
     backend = Tokenizer(models.WordLevel(dict(zip(words, range(len(words)))), unk_token="[UNK]"))
     backend.pre_tokenizer = pre_tokenizers.WhitespaceSplit()
     tokenizer = PreTrainedTokenizerFast(tokenizer_object=backend, unk_token="[UNK]", chat_template=TEMPLATE)
@@ -58,16 +57,16 @@ def local(tmp_path, env, monkeypatch):
 def test_manual_row_max_fixed_target_and_usage_sum(local, monkeypatch):
     cfg, plan = local
     measurer = measurer_for(cfg)
-    assert ENCODERS["pplx_decision_messages"] is PplxDecisionMessages
     original, calls = measurer.tokenizer.apply_chat_template, []
     def render(messages, **kwargs):
         calls.append(kwargs)
         return original(messages, **kwargs)
     monkeypatch.setattr(measurer.tokenizer, "apply_chat_template", render)
-    # short: system choose A B END user alpha beta tail ask END assistant = 12.
-    # long: 同行에 more now 2개 추가 = 14, state 3개, 대상 alpha beta 2개, usage 12+14.
-    assert measurer.measure(plan) == LengthInfo(14, 2, 100, 11, usage_tokens=26)
-    assert calls == [dict(tokenize=False, add_generation_prompt=True, enable_thinking=False)] * 2
+    # short: system choose A B END user State: alpha beta tail Question: ask END assistant = 14.
+    # long adds more/now: 16; state=3, target alpha/beta=2, usage=14+16.
+    assert measurer.measure(plan) == LengthInfo(16, 2, 100, 13, usage_tokens=30)
+    assert calls == [dict(tokenize=False, add_generation_prompt=True, enable_thinking=False),
+        dict(tokenize=True, return_dict=False, add_generation_prompt=True, enable_thinking=False)] * 2
 
 
 @pytest.mark.parametrize("name", ["decision_config.json", "source/src/autojev/model.py", "source/src/autojev/types.py"])
@@ -94,12 +93,32 @@ def test_other_autojev_location_is_rejected(local, tmp_path, monkeypatch):
     assert sys.modules["autojev.model"] is other
 
 
-def test_repeated_state_in_rendered_row_is_rejected(local):
+def test_repeated_state_in_question_is_measured(local):
     cfg, plan = local
     questions = {"q": {"type": "noul", "instructions": plan.rendered.state}}
     plan = replace(plan, request=replace(plan.request, questions=questions))
-    with pytest.raises(ValueError, match="^state must occur exactly once in the rendered row$"):
+    assert measurer_for(cfg).measure(plan) == LengthInfo(16, 2, 100, 13, usage_tokens=16)
+
+
+def test_duplicate_state_blocks_are_rejected(local):
+    cfg, plan = local
+    marker = "State:\n" + plan.rendered.state + "\n\nQuestion:\n"
+    questions = {"q": {"type": "noul", "instructions": marker + "ask"}}
+    plan = replace(plan, request=replace(plan.request, questions=questions))
+    with pytest.raises(ValueError, match="^rendered row must contain the State block exactly once$"):
         measurer_for(cfg).measure(plan)
+
+
+def test_reencoded_token_ids_must_match(local, monkeypatch):
+    cfg, plan = local
+    measurer = measurer_for(cfg)
+    original = measurer.tokenizer.apply_chat_template
+    def altered(*args, **kwargs):
+        result = original(*args, **kwargs)
+        return result + [0] if kwargs["tokenize"] else result
+    monkeypatch.setattr(measurer.tokenizer, "apply_chat_template", altered)
+    with pytest.raises(ValueError, match="^re-encoded token IDs differ from chat template$"):
+        measurer.measure(plan)
 
 
 @pytest.mark.parametrize("media", ["images", "videos"])

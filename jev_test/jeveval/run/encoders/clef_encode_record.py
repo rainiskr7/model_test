@@ -40,6 +40,8 @@ class ClefEncodeRecord:
         body = plan.request.to_dict()
         if body.get("images") or body.get("videos"):
             raise NotImplementedError("media requests are out of scope")
+        if not body["questions"]:
+            raise ValueError("at least one question is required")
         state = self.reference.render(body["state"])
         if state != plan.rendered.state:
             raise ValueError("reference state rendering differs from request")

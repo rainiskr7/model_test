@@ -13,6 +13,8 @@ MAX_DOUBLINGS = 24
 def _plan(request: T0Request) -> CallPlan:
     """본시험 인코더(Measurer)가 받는 CallPlan 모양으로 T0 요청을 감싼다. 전송용이 아니다."""
     body = request.body
+    if body.get("images") or body.get("videos"):
+        raise NotImplementedError("media requests are out of scope")
     return CallPlan("t0", "t0", "systemone", list(body["questions"]),
                     {qid: q["type"] for qid, q in body["questions"].items()}, request.envelope_bytes,
                     request.request_sha256, Request(body["model"], body["state"], deepcopy(body["questions"])),
@@ -33,7 +35,7 @@ def _with_state(base: T0Request, state: str) -> T0Request:
 
 
 def _grow(base, state, filler, target, length):
-    """채움 개수를 두 배씩 늘려 target 이상을 찾고 이분 탐색으로 가장 작은 개수를 고른다. 정확히 맞을 때만 요청을 준다."""
+    """채움 개수를 두 배씩 늘려 target 이상을 찾고 이분 탐색으로 가장 작은 개수를 고른다 (토큰 수가 개수에 단조라고 가정; 아니면 다음 filler). 정확히 맞을 때만 요청을 준다."""
     low, high = 0, 1
     while length(_with_state(base, state + filler * high)) < target:
         low, high = high, high * 2

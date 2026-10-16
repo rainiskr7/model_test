@@ -5,7 +5,7 @@ from pathlib import Path
 
 from .contract import B1Config
 from .outcomes import RequestOutcome
-from .records import FinalRecord
+from .records import AttemptRecord, FinalRecord
 from .run import ModelConfig, RetryPolicy
 from .specs import Item, SplitPlan, TaskSpec
 
@@ -34,3 +34,14 @@ class StageData:
     items: dict[str, Item]
     outcomes: list[RequestOutcome]
     warnings: list[str]
+
+
+@dataclass(frozen=True)
+class DerivedStageFiles:
+    """파생 단계 폴더에서 읽은 것: 기존 final·읽기 경고·attempts(있으면 거부 대상)·pending 경고·derived.json 내용."""
+
+    existing: list[FinalRecord]
+    warnings: list[str]
+    attempts: list[AttemptRecord]
+    pending: list[str]
+    provenance: dict | None

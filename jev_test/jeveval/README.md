@@ -14,12 +14,12 @@ P1_CONTRACT.md 보정 12와 ⑥b-2 R1–R8 기준으로 compare·archive·참조
 - `types/records.py`: Request, 메모리 전용 AttemptResult, session_id를 포함한 AttemptRecord, CallRecord, FinalRecord.
 - `types/outcomes.py`: 필수 roles를 포함한 메모리 전용 RequestOutcome, JSON 왕복 지원.
 - `types/run.py`: ModelConfig·Decision·RunSummary JSON 왕복, bytes를 담는 메모리 전용 CallPlan.
-- `types/context.py`: 명령 공유 문맥 RunContext(frozen, directory·fingerprint 는 replace 로 채움)·단계 기록 StageData.
+- `types/context.py`: 명령 공유 문맥 RunContext(frozen, directory·fingerprint 는 replace 로 채움)·단계 기록 StageData·파생 단계 읽기 묶음 DerivedStageFiles.
 - `contract/model_config.py`: 닫힌 모델 스키마·파일 해시·토큰 ID 검사, 실행 필수 값·B1 라벨 집합 대조.
 - `io/models.py`: 중복 키 거부 YAML 로더와 ModelConfigError.errors.
 - `io/hashes.py`: 스트리밍 SHA-256·SHA256SUMS 대조·정렬된 Python 소스 해시·토크나이저 재검증.
 - `io/run_files.py`: 정규 JSON·fsync/원자 교체·존재/폴더 생성.
-- `io/derived_stage.py`: 파생 단계 final/빈 attempts/derived.json 기록과 재개 검사.
+- `io/derived_stage.py`: 파생 단계 기록 읽기(DerivedStageFiles)와 final/빈 attempts/derived.json 쓰기 (판정은 run/derived_resume).
 - `types/contract.py`: Validated·B1Config·B1Call·B1Response의 frozen JsonRecord 자료형.
 - `types/scoring.py`: AnswerParse·F1Result·CalibResult·SlotJudgement·메모리 전용 Observation 자료형.
 - `contract/__init__.py`: 계약 검사 네임스페이스.
@@ -80,7 +80,7 @@ P1_CONTRACT.md 보정 12와 ⑥b-2 R1–R8 기준으로 compare·archive·참조
 - `run/length.py`: 호출별 잘림·문자 끝→토큰 끝·state offsets 추출·usage 기대값·길이 구간, 측정 구현용 Measurer Protocol.
 - `run/encoders/__init__.py`: ENCODERS 등록표·measurer_for, 미확정·미등록 규칙 거부.
 - `run/encoders/hf_chat_template.py`: 오프라인 no-think 템플릿·ID 재인코딩 일치·state offsets 기반 LengthInfo (파일 대조·로딩은 io/tokenizers).
-- `run/encoders/clef_encode_record.py`: Clef·Clef-Flash 규칙 `clef_encode_record` — 체크포인트 사본의 joint_schema_model.encode_record 를 그대로 불러 ℓ(무제한)·고정부(max_state_tokens=0)·state offsets 로 LengthInfo (pplx 는 체크포인트의 autojev/model.py 가 있어야 같은 방식으로 추가 가능).
+- `run/encoders/clef_encode_record.py`: Clef·Clef-Flash 규칙 `clef_encode_record` — 체크포인트 사본의 joint_schema_model.encode_record 를 그대로 불러 ℓ(무제한)·고정부(max_state_tokens=0)·state offsets 로 LengthInfo.
 - `run/encoders/pplx_decision_messages.py`: pplx v1/v1.1 규칙 `pplx_decision_messages` — 사본의 autojev.model.decision_messages + 같은 chat 템플릿으로 질문 행마다 재서 ℓ=행 최댓값·고정부=행−state·usage_tokens=행 합 (서버는 8192 초과를 거부).
 - `io/tokenizers.py`: 모델 yaml tokenizer 폴더·파일 해시 대조, HF 오프라인 환경에서 local_files_only 로딩.
 - `run/policy.py`: RetryPolicy(configs/policy.yaml) 로 전송 오류 우선·정수 Retry-After·누적 번호에 따른 Decision (코드 상수 없음).
@@ -100,7 +100,11 @@ P1_CONTRACT.md 보정 12와 ⑥b-2 R1–R8 기준으로 compare·archive·참조
 - `io/reference.py`: 로컬 체크포인트·오프라인 환경(offline_environment, 토크나이저 로딩과 공용)·참조 소스의 읽기 전용 import·사본 source 폴더의 패키지 import(package_module).
 - `score/observations.py`: 성공 질문의 F1 관측·KoSGD 고정 칸·KorFin pooled 관측.
 - `run/cli.py`: run·threshold·score·certify·compare·archive 인자와 원문 없는 오류 출력.
-- `run/cmd_run.py`, `cmd_threshold.py`, `cmd_score.py`, `cmd_certify.py`: 실행/채점/인증 조립.
+- `run/cmd_run.py`: 설정 복원·check-config·인증 헤더·파생/전송 분기·gate 뒤 실행 조립.
+- `run/cmd_threshold.py`: 봉인 전 dev 임계값 재계산·기록.
+- `run/cmd_score.py`: 봉인 확인·risk/scores/summary 조립과 순서 있는 쓰기.
+- `run/cmd_certify.py`: 봉인 (a)(b)(c) 재계산·시간대·mtime 경고.
+- `run/derived_resume.py`: 파생 단계 재개 가능 판정(기존 final 접두 일치·attempts 없음·출처 일치) — 상태기계 모듈군.
 - `run/cmd_compare.py`: C4 검사·전체 시험 처리율·공통 성공 F1·T0 상태 출력 조립.
 - `run/cmd_archive.py`: run_id 전체 완료 확인·한 번의 보존·모델별 archive.json 쓰기.
 - `run/layout.py`: 결과 폴더 run_dir·compare_dir 경로 제한 (식별자 검사는 io/paths).
@@ -114,7 +118,7 @@ P1_CONTRACT.md 보정 12와 ⑥b-2 R1–R8 기준으로 compare·archive·참조
 의존 방향은 `run → io/data → score/types`, `io → contract → types`, `score → types`다. 전체 예정 방향은 `run → client/io → score/data/contract → types`다.
 data/items는 io·contract·run을 import하지 않는다. expand·items·labels는 파일·난수를 사용하지 않는다. types는 jeveval의 다른 패키지를 import하지 않는다.
 contract·score는 서로 import하지 않으며 파일·네트워크·시계에 접근하지 않는다. score/bootstrap의 난수는 지역 random.Random(f"{seed}:boot:{set_name}")만 쓴다. data도 파일·네트워크·시계에 접근하지 않고, 난수는 계약의 문자열 seed로 만든 random.Random만 쓴다.
-run/encoders의 의존은 types·io.tokenizers·io.reference·run.length·표준 라이브러리로 제한한다(transformers 는 io/tokenizers 안에서만 import; Clef 규칙은 체크포인트 사본의 참조 모듈을 io.reference.source_module 로 읽는다). 로드는 HF_HUB_OFFLINE=1·TRANSFORMERS_OFFLINE=1, local_files_only=True·trust_remote_code=False다.
+run/encoders의 의존은 types·io.tokenizers·io.reference·io.run_files·run.length·표준 라이브러리로 제한한다(transformers 는 io/tokenizers 안에서만 import; Clef 규칙은 체크포인트 사본의 참조 모듈을 io.reference.source_module 로 읽는다). 로드는 HF_HUB_OFFLINE=1·TRANSFORMERS_OFFLINE=1, local_files_only=True·trust_remote_code=False다.
 
 세부 규칙·기존 시험 지도·이전 구현 결정은 [NOTES.md](NOTES.md)에 보존한다.
 

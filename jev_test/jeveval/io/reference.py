@@ -47,7 +47,8 @@ def source_module(path, name):
 def package_module(source_root, name):
     """체크포인트 사본의 source 폴더를 sys.path 앞에 두고 패키지 모듈을 import 한다 (예: autojev.model).
 
-    같은 이름의 다른 사본이 이미 import 돼 있으면 거부한다 — 한 프로세스는 한 체크포인트의 코드만 쓴다.
+    같은 이름(또는 그 최상위 패키지)이 다른 위치에서 이미 import 돼 있으면 **import 전에** 거부한다 — 한 프로세스는 한 사본의 코드만 쓴다.
+    실패하면 sys.path 를 되돌리고, 사본 폴더에 bytecode 를 쓰지 않는다.
     """
     import importlib
     import sys
@@ -55,10 +56,26 @@ def package_module(source_root, name):
     root = Path(source_root).resolve()
     if not root.is_dir():
         raise ValueError("reference source directory required")
-    if str(root) not in sys.path:
+    for loaded in (name, name.split(".")[0]):
+        file = getattr(sys.modules.get(loaded), "__file__", None)
+        if sys.modules.get(loaded) is not None and (file is None or not Path(file).resolve().is_relative_to(root)):
+            raise ValueError(f"{loaded} is already imported from a different location")
+    inserted = str(root) not in sys.path
+    if inserted:
         sys.path.insert(0, str(root))
-    module = importlib.import_module(name)
+    previous = sys.dont_write_bytecode
+    sys.dont_write_bytecode = True
+    try:
+        module = importlib.import_module(name)
+    except Exception:
+        if inserted:
+            sys.path.remove(str(root))
+        raise
+    finally:
+        sys.dont_write_bytecode = previous
     file = getattr(module, "__file__", None)
     if file is None or not Path(file).resolve().is_relative_to(root):
+        if inserted:
+            sys.path.remove(str(root))
         raise ValueError(f"{name} is already imported from a different location")
     return module

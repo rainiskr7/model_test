@@ -3,6 +3,7 @@
 이 디렉터리는 순수 계산만 담당한다. 실제 요청 확정·참조/서버 호출·CLI는 아래 ⑦b 층이다.
 본시험 request/response의 score 거부는 그대로 유지한다.
 
+- `__init__.py`: 패키지 네임스페이스(docstring 만).
 - `request.py`: contract/render 사용, T0 세 종류 요청과 model 별칭, 봉투 바이트·동일성 해시.
 - `response.py`: noul/choice 공개 검증기를 질문별 재사용, score 및 요청 전체 오류 우선순위.
 - `distribution.py`: 순서 고정 분포 벡터·수치 도메인.

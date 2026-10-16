@@ -4,7 +4,7 @@ from copy import deepcopy
 
 import pytest
 
-from jeveval.data.items.functionchat import S, build_items
+from jeveval.data.items.functionchat import build_items
 from jeveval.types import SourceRow
 
 
@@ -18,6 +18,7 @@ def _row(i, content, action="slot"):
 
 def test_normalization_options_order_extra_and_detachment(settings, plan_for, label_rules):
     task, lists = settings("fc_call_decision")
+    S = lists["functionchat_normalization"]["duplicate_sentence"]
     rows = [_row(2, S + " " + S), _row(1, S, "call"), _row(3, "no sentence")]
     plan = plan_for(rows, task, extra=["fc_call_decision:1:2", "fc_call_decision:1:3"])
     before = deepcopy((rows, lists, task, plan))
@@ -36,9 +37,10 @@ def test_normalization_options_order_extra_and_detachment(settings, plan_for, la
     assert (rows, lists, task, plan) == before
 
 
-@pytest.mark.parametrize("content", [" ".join([S] * 3), S + "\n" + S, S + " x " + S])
-def test_remaining_repetitions_stop(settings, plan_for, content, label_rules):
+@pytest.mark.parametrize("separator,count", [(" ", 3), ("\n", 2), (" x ", 2)])
+def test_remaining_repetitions_stop(settings, plan_for, separator, count, label_rules):
     task, lists = settings("fc_call_decision")
+    content = separator.join([lists["functionchat_normalization"]["duplicate_sentence"]] * count)
     rows = [_row(1, content)]
     with pytest.raises(ValueError, match="remains"):
         build_items(rows, plan_for(rows, task), task, lists, label_rules)
@@ -47,7 +49,30 @@ def test_remaining_repetitions_stop(settings, plan_for, content, label_rules):
 @pytest.mark.parametrize("name", ["z", "NONE"])
 def test_bad_tool_names_stop(settings, plan_for, name, label_rules):
     task, lists = settings("fc_call_decision")
-    rows = [_row(1, S)]
+    rows = [_row(1, lists["functionchat_normalization"]["duplicate_sentence"])]
     rows[0].fields["input_tools"][1]["function"]["name"] = name
     with pytest.raises(ValueError, match="tool name"):
         build_items(rows, plan_for(rows, task), task, lists, label_rules)
+
+
+@pytest.mark.parametrize("config", [None, {}, {"duplicate_sentence": ""},
+                                  {"duplicate_sentence": " \n\t"}])
+def test_normalization_sentence_required(settings, plan_for, label_rules, config):
+    task, lists = settings("fc_call_decision")
+    lists = deepcopy(lists)
+    if config is None:
+        del lists["functionchat_normalization"]
+    else:
+        lists["functionchat_normalization"] = config
+    rows = [_row(1, "synthetic system")]
+    with pytest.raises(ValueError, match=r"^functionchat_normalization\.duplicate_sentence is required$"):
+        build_items(rows, plan_for(rows, task), task, lists, label_rules)
+
+
+def test_normalization_uses_supplied_sentence(settings, plan_for, label_rules):
+    task, lists = settings("fc_call_decision")
+    lists = deepcopy(lists)
+    lists["functionchat_normalization"] = {"duplicate_sentence": "synthetic normalization"}
+    rows = [_row(1, "synthetic normalization synthetic normalization")]
+    result = build_items(rows, plan_for(rows, task), task, lists, label_rules)
+    assert result["dev"][0].state_fields["input_messages"][0]["content"] == "synthetic normalization"

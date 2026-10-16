@@ -27,7 +27,7 @@ def _prepare(root):
     task = read_yaml(REPO / "configs/tasks/fc_call_decision.yaml")
     (tasks / "fc.yaml").write_text(yaml.safe_dump(task))
     (tasks / "b1.yaml").write_text("not a task")
-    for name in ("fc_actions", "functionchat_none"):
+    for name in ("fc_actions", "functionchat_none", "functionchat_normalization"):
         (tasks / f"lists/{name}.json").write_bytes((REPO / f"configs/tasks/lists/{name}.json").read_bytes())
     data = [dict(serial_num=i, input_messages=[dict(role="system", content="PRIVATE_SYSTEM"),
             dict(role="user", content="PRIVATE_USER")], input_tools=[dict(function=dict(

@@ -89,13 +89,63 @@ def test_package_module_requires_source_directory(tmp_path):
     assert sys.path == before
 
 
-def test_package_module_rejects_other_location(package, monkeypatch):
+@pytest.mark.parametrize("loaded", ["module", "package"])
+@pytest.mark.parametrize("has_file", [True, False])
+def test_package_module_prechecks_location_before_import(package, monkeypatch, loaded, has_file):
+    import importlib
     from types import ModuleType
     root, name = package
-    other = ModuleType(name)
-    other.__file__ = str(root.parent / "elsewhere/model.py")
-    monkeypatch.setitem(sys.modules, name, other)
+    key = name if loaded == "module" else name.split(".")[0]
+    other = ModuleType(key)
+    if has_file:
+        other.__file__ = str(root.parent / "elsewhere/model.py")
+    monkeypatch.setitem(sys.modules, key, other)
+    def forbidden(*args, **kwargs):
+        pytest.fail("foreign cached module reached import")
+    monkeypatch.setattr(importlib, "import_module", forbidden)
+    before, bytecode = list(sys.path), sys.dont_write_bytecode
     with pytest.raises(ValueError) as error:
         reference.package_module(root, name)
+    assert str(error.value) == f"{key} is already imported from a different location"
+    assert sys.modules[key] is other
+    assert sys.path == before and sys.dont_write_bytecode is bytecode
+
+
+@pytest.mark.parametrize("previous", [False, True])
+@pytest.mark.parametrize("fail", [False, True])
+@pytest.mark.parametrize("already_on_path", [False, True])
+def test_package_module_restores_bytecode_and_failed_import_path(
+        package, monkeypatch, previous, fail, already_on_path):
+    root, name = package
+    module_path = root / name.replace(".", "/")
+    module_path.with_suffix(".py").write_text(
+        "import sys\nDISABLED = sys.dont_write_bytecode\nassert DISABLED\n" +
+        ("raise RuntimeError('synthetic import failure')\n" if fail else "from .types import VALUE\n"))
+    monkeypatch.setattr(sys, "dont_write_bytecode", previous)
+    if already_on_path:
+        sys.path.append(str(root))
+    before = list(sys.path)
+    if fail:
+        with pytest.raises(RuntimeError, match="^synthetic import failure$"):
+            reference.package_module(root, name)
+        assert sys.path == before
+    else:
+        module = reference.package_module(root, name)
+        assert module.DISABLED is True and module.VALUE == 42
+        assert sys.path == (before if already_on_path else [str(root), *before])
+    assert sys.dont_write_bytecode is previous
+    assert list(root.rglob("*.pyc")) == [] and list(root.rglob("__pycache__")) == []
+
+
+def test_package_module_post_import_rejection_restores_path(package):
+    """미캐시 패키지를 다른 검색 경로에서 찾은 경우도 실패한 로딩이다."""
+    root, name = package
+    requested = root / "empty_source"
+    requested.mkdir()
+    sys.path.insert(0, str(root))
+    before, bytecode = list(sys.path), sys.dont_write_bytecode
+    with pytest.raises(ValueError) as error:
+        reference.package_module(requested, name)
     assert str(error.value) == f"{name} is already imported from a different location"
-    assert sys.modules[name] is other
+    assert sys.dont_write_bytecode is bytecode
+    assert sys.path == before

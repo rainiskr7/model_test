@@ -8,6 +8,7 @@ from jeveval.types import CallPlan, LengthInfo, ModelConfig
 
 REQUIRED = ("decision_config.json", "source/src/autojev/model.py", "source/src/autojev/types.py")
 TEMPLATE = dict(tokenize=False, add_generation_prompt=True, enable_thinking=False)
+STATE_PREFIX, STATE_SUFFIX = "State:\n", "\n\nQuestion:\n"   # autojev.model.decision_messages 의 프롬프트 틀
 
 
 class PplxDecisionMessages:
@@ -29,14 +30,18 @@ class PplxDecisionMessages:
         self.limit = cfg.limit["tokens"]
 
     def _row(self, state: str, question: dict):
-        """한 질문 행의 토큰 수·state 토큰 offsets(state 기준)."""
+        """한 질문 행의 토큰 수·state 토큰 offsets(state 기준). state 위치는 참조 프롬프트의 'State:' 틀로 찾는다."""
         messages = self.reference.decision_messages({"state": state, "question": question}, self.codes)
         text = self.tokenizer.apply_chat_template(messages, **TEMPLATE)
-        if not isinstance(text, str) or text.count(state) != 1:
-            raise ValueError("state must occur exactly once in the rendered row")
+        marker = STATE_PREFIX + state + STATE_SUFFIX
+        if not isinstance(text, str) or text.count(marker) != 1:
+            raise ValueError("rendered row must contain the State block exactly once")
         encoded = self.tokenizer(text, add_special_tokens=False, return_offsets_mapping=True)
-        count, start = len(encoded["input_ids"]), text.index(state)
-        return count, state_offsets(encoded["offset_mapping"], text, start, start + len(state), count)
+        ids = list(encoded["input_ids"])
+        if ids != list(self.tokenizer.apply_chat_template(messages, **{**TEMPLATE, "tokenize": True, "return_dict": False})):
+            raise ValueError("re-encoded token IDs differ from chat template")
+        start = text.index(marker) + len(STATE_PREFIX)
+        return len(ids), state_offsets(encoded["offset_mapping"], text, start, start + len(state), len(ids))
 
     def measure(self, plan: CallPlan) -> LengthInfo:
         if plan.kind != "systemone" or plan.request is None:

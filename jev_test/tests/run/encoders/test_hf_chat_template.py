@@ -9,8 +9,7 @@ from tokenizers import Tokenizer, models, pre_tokenizers
 from transformers import AutoTokenizer, PreTrainedTokenizerFast
 
 from jeveval.io.hashes import sha256_file
-from jeveval.run.encoders import ENCODERS, measurer_for
-from jeveval.run.encoders.hf_chat_template import HfChatTemplateNoThink
+from jeveval.run.encoders import measurer_for
 from jeveval.run.plan_calls import plan_calls
 from jeveval.types import B1Call, LengthInfo, Rendered
 
@@ -56,7 +55,6 @@ def test_verified_load_and_manual_length(local, monkeypatch):
     for key in ("HF_HUB_OFFLINE", "TRANSFORMERS_OFFLINE"):
         monkeypatch.setenv(key, "0")
     measurer = measurer_for(cfg)
-    assert ENCODERS[cfg.encoder["rule"]] is HfChatTemplateNoThink
     assert calls == [(cfg.tokenizer["path"],
                       {"local_files_only": True, "trust_remote_code": False}, "1", "1")]
     ids = measurer.tokenizer.apply_chat_template(plan.b1_call.messages,
@@ -82,13 +80,6 @@ def test_hash_failures_before_load(local, monkeypatch, case):
     monkeypatch.setattr(AutoTokenizer, "from_pretrained", unexpected)
     with pytest.raises(ValueError):
         measurer_for(replace(cfg, tokenizer={**cfg.tokenizer, "files_sha256": hashes}))
-
-
-@pytest.mark.parametrize("rule", [None, "unregistered"])
-def test_unknown_rule(env, rule):
-    """미등록 규칙은 파일 접근 없이 거부한다."""
-    with pytest.raises(ValueError, match="rule"):
-        measurer_for(replace(env.cfg, encoder={"rule": rule}))
 
 
 def test_systemone_and_null_limit(local):

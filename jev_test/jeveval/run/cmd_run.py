@@ -10,7 +10,7 @@ from jeveval.client import http
 from jeveval.contract.model_config import missing_for_run
 from jeveval.io import derived_stage, records, run_files, t0
 from jeveval.io.paths import inside
-from jeveval.run import context, executor, gate, stage_inputs
+from jeveval.run import context, derived_resume, executor, gate, stage_inputs
 from jeveval.run.derive import derive_stage
 from jeveval.run.encoders import measurer_for
 from jeveval.run.layout import run_dir as result_dir
@@ -38,7 +38,7 @@ def _derived(ctx, stage, items):
     provenance = source.directory.relative_to(ctx.root).as_posix()
     finals = derive_stage(full.finals, list(full.items.values()),
                           [q.id for q in ctx.task.questions], provenance)
-    derived_stage.check_derived_stage(ctx.directory, stage, finals, provenance, allow_tail=True)
+    derived_resume.resume_derived(ctx.directory, stage, finals, provenance, allow_tail=True)
     return finals, provenance
 
 
@@ -84,7 +84,8 @@ def run(*, root, model, task, stage, run_id, base_url=None, results="results",
     warnings = gate.prepare_stage(run_dir=directory, stage=stage,
         fingerprint=ctx.fingerprint, plan=ctx.plan, now=stamp)
     if derived:
-        derived_stage.write_derived_stage(directory, stage, finals, provenance)
+        existing = derived_resume.resume_derived(directory, stage, finals, provenance)
+        derived_stage.write_derived_stage(directory, stage, finals, provenance, existing)
         return dict(ok=True, derived=True, n_logical=len(finals), warnings=warnings)
     summary = executor.run_stage(items=items, task=ctx.task, cfg=ctx.cfg, b1_config=ctx.b1,
         measurer=measurer, run_dir=directory, stage=stage, post=http.post if post is None else post,
