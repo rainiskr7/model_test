@@ -10,10 +10,10 @@ from jeveval.score.labels import gold
 from jeveval.types import Item
 
 
-def questions(rows, task, lists, item_options=None, bindings=()):
-    """해당 항목의 원본 행을 정답 함수에 연결한다."""
+def questions(rows, task, lists, item_options=None, bindings=(), *, rules):
+    """해당 항목의 원본 행을 정답 함수(어휘로 만든 등록표 rules)에 연결한다."""
     return expand_questions(task, lists, item_options, bindings,
-                            lambda label, binding, options: gold(label, rows, binding, options))
+                            lambda label, binding, options: gold(label, rows, binding, options, rules))
 
 
 def fields(state, bound, service=None, stratum=None, flags=(), baseline=None):

@@ -7,6 +7,7 @@ from pathlib import Path
 from jeveval.data.t0_fixture import make_fixture
 from jeveval.io.run_files import read_json
 from jeveval.io.t0_files import write_fixture
+from jeveval.io.t0_policy import read_t0_policy
 from jeveval.io.t0_sources import read_sources
 
 
@@ -15,8 +16,10 @@ def main(argv=None):
     parser.add_argument("--root", type=Path, default=Path.cwd())
     parser.add_argument("--template", default="configs/t0/template_v1.json")
     parser.add_argument("--out", default="configs/t0/fixture_v1.json")
+    parser.add_argument("--tolerance-policy", default="configs/t0/tolerance_v1.yaml")
     args = parser.parse_args(argv)
-    fixture = make_fixture(read_sources(args.root), read_json(args.root / args.template))
+    policy = read_t0_policy(args.root / args.tolerance_policy)
+    fixture = make_fixture(read_sources(args.root), read_json(args.root / args.template), policy.variants["pplx_v1_1"])
     write_fixture(args.root / args.out, fixture)
     counts = Counter(c["state_ref"]["set"] for c in fixture["cases"] if "state_ref" in c)
     print(dict(cases=len(fixture["cases"]), sources=dict(sorted(counts.items()))))

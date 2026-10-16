@@ -13,24 +13,24 @@ def _catalog(lists):
     return catalog, options
 
 
-def _previous(row, bucket, options):
+def _previous(row, bucket, options, rules):
     earlier = [r for r in bucket if r.fields["turn_index"] < row.fields["turn_index"]]
     if not earlier:
         return ["NONE", "NONE"]
     previous = max(earlier, key=lambda r: r.fields["turn_index"])
-    return [gold(label, [previous], {}, options) for label in ("ongoing_slot_1", "ongoing_slot_2")]
+    return [gold(label, [previous], {}, options, rules) for label in ("ongoing_slot_1", "ongoing_slot_2")]
 
 
 def build_items(rows: list[SourceRow], plan: SplitPlan, task: TaskSpec,
-                lists: dict) -> dict[str, list[Item]]:
+                lists: dict, rules: dict) -> dict[str, list[Item]]:
     """전체판·행동판 모두 같은 카탈로그와 직전 USER 고정 칸 기준선을 쓴다."""
     catalog, options = _catalog(lists)
 
     def make(selected, bucket):
         row = selected[0]
         state = dict(dialogue=row.fields["dialogue"], catalog=catalog)
-        baseline = {"copy_prev": _previous(row, bucket, options)}
-        return fields(state, questions(selected, task, lists), service=row.fields["services"],
+        baseline = {"copy_prev": _previous(row, bucket, options, rules)}
+        return fields(state, questions(selected, task, lists, rules=rules), service=row.fields["services"],
                       baseline=baseline)
 
     return assemble(rows, plan, task, make)

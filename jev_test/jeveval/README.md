@@ -29,7 +29,10 @@ P1_CONTRACT.md 보정 12와 ⑥b-2 R1–R8 기준으로 compare·archive·참조
 - `contract/response.py`: JSON 중복 키 거부, 전역 사유 우선순위·누적 경고·원 답 반환·독립 usage 추출.
 - `contract/b1_response.py`: B1 로그확률 검증·독립 usage 추출·기록용 -inf 문자열 사본.
 - `contract/b1_prompt.py`: 설정 기반 문구·매개변수, 정렬된 선택지의 라벨 배정.
-- `score/labels.py`: 전체 라벨 이름 등록표, 33개 정답 규칙과 누락·타입 오류 거부.
+- `score/labels.py`: LabelVocab(configs/datasets.yaml label_vocab) 으로 만든 전체 이름 등록표 rules()·gold(…, rules), 누락·타입 오류 거부 (어휘 상수 없음).
+- `types/labels.py`: LabelVocab(kosgd_acts·kmhas·kote).
+- `contract/label_vocab.py`: 세 셋 label_vocab 검사(고유 이름 목록, KoSGD 는 GOODBYE·THANK_YOU 포함) → LabelVocab 또는 오류 목록.
+- `io/datasets.py`: datasets.yaml 항목 조회(dataset_entry)·label_vocab 읽기(read_label_vocab).
 - `score/answers.py`: systemone 원 확률 보존, B1 토큰 대조·softmax·동률·경고 처리.
 - `score/f1.py`: 출현 클래스 macro-F1과 support·예측 수·tp·재현율·정밀도.
 - `score/calibration.py`: 15 bin top-label ECE·one-hot Brier·clip log loss.

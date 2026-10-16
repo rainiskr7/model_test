@@ -16,7 +16,7 @@ from jeveval.reference.t0_runner import load
 from jeveval.run.cmd_t0 import run
 from jeveval.types import AttemptResult, SourceRow
 from jeveval.types.t0_io import T0Sources
-from tests.run.t0_support import add_policy
+from tests.run.t0_support import add_policy, add_t0_policy, add_datasets
 from . import fakes
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -24,12 +24,14 @@ CANARY = "PRIVATE_T0_STATE_CANARY_70913"
 
 
 @pytest.fixture
-def setup(tmp_path, monkeypatch):
+def setup(tmp_path, monkeypatch, t0_policy):
     monkeypatch.setenv("T0_TEST_AUTH", "secret_auth_canary")
     def prepare(family="clef", boundary=False, mismatch=False):
         root = tmp_path / family
         root.mkdir(exist_ok=True)
         add_policy(root)
+        add_t0_policy(root)
+        add_datasets(root)
         cfg = read_yaml(ROOT / "configs/models" / f"{family}.yaml")
         cfg.update(served_name="served", auth_env="T0_TEST_AUTH", limit=dict(tokens=100, overflow="reject"),
                    input_limit_response=dict(status=400, body_regex="too long"))
@@ -38,7 +40,7 @@ def setup(tmp_path, monkeypatch):
         sources = T0Sources({"kmhas": rows}, {"kmhas": group_rows(rows, "text")}, {"kmhas": {"0"}}, 42)
         template = json.loads((ROOT / "configs/t0/template_v1.json").read_text())
         # 작은 표본에서도 생성기는 모든 직렬화/질문 수를 만든다.
-        fixture = make_fixture(sources, template)
+        fixture = make_fixture(sources, template, t0_policy.variants["pplx_v1_1"])
         ordinary = [deepcopy(fixture["cases"][0]), deepcopy(fixture["cases"][0])]
         ordinary[1]["case_id"] = "second"
         fixture["cases"] = ordinary + ([fixture["cases"][-1]] if boundary else [])

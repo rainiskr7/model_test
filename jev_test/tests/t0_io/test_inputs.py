@@ -15,11 +15,11 @@ from jeveval.types import SourceRow
 from .conftest import ROOT, inputs
 
 
-def test_fixture_coverage_and_determinism(setup):
+def test_fixture_coverage_and_determinism(setup, t0_policy):
     ctx = setup()
     template = json.loads((ROOT / "configs/t0/template_v1.json").read_text())
-    fixture = make_fixture(ctx.sources, template)
-    assert fixture == make_fixture(ctx.sources, template)
+    fixture = make_fixture(ctx.sources, template, t0_policy.variants["pplx_v1_1"])
+    assert fixture == make_fixture(ctx.sources, template, t0_policy.variants["pplx_v1_1"])
     questions = [q for c in fixture["cases"] for q in c.get("questions", {}).values()]
     assert {len(q["criteria"]) for q in questions if q["type"] == "choice"} == {2, 8, 16}
     assert {len(q["criteria"]) for q in questions if q["type"] == "score"} == {3, 5}

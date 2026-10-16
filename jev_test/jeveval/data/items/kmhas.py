@@ -5,10 +5,10 @@ from jeveval.types import Item, SourceRow, SplitPlan, TaskSpec
 
 
 def build_items(rows: list[SourceRow], plan: SplitPlan, task: TaskSpec,
-                lists: dict) -> dict[str, list[Item]]:
+                lists: dict, rules: dict) -> dict[str, list[Item]]:
     """대표 원문·이름 라벨 정답과 묶음 전체의 라벨 충돌 flag를 조립한다."""
     def make(selected, bucket):
-        return fields(selected[0].fields["text"], questions(selected, task, lists),
+        return fields(selected[0].fields["text"], questions(selected, task, lists, rules=rules),
                       flags=conflict_flags(bucket, "label"))
 
     return assemble(rows, plan, task, make)

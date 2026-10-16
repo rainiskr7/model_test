@@ -13,7 +13,7 @@ from jeveval.io.splits import write_split_plan
 from jeveval.run import cli, cmd_run
 from jeveval.run.layout import run_dir
 from jeveval.types import AttemptResult, LengthInfo, SplitPlan
-from tests.run.t0_support import add_external, add_policy
+from tests.run.t0_support import add_external, add_policy, add_t0_policy, label_entries
 
 REPO = Path(__file__).resolve().parents[2]
 
@@ -29,6 +29,7 @@ class Harness:
         root.mkdir(parents=True, exist_ok=True)
         add_external(root)
         add_policy(root)
+        add_t0_policy(root)
         shutil.copytree(REPO / "configs/tasks", root / "configs/tasks")
         self.markers = json.loads((REPO / "tests/fixtures/canary/input.json").read_text())["markers"]
         rules = self._write_source(root, set_name)
@@ -76,8 +77,13 @@ class Harness:
         self.plan = SplitPlan(set_name, 1, {}, {}, groups, representatives, ["1"], ["2"], [], extra, {})
         write_split_plan(self.plan, root / f"configs/splits/{set_name}.json")
         put_yaml(root / "configs/splits/rules.yaml", {"sets": {set_name: rules}})
-        put_yaml(root / "configs/datasets.yaml", {"sets": [{"id": set_name,
-                 "map": {"primary_variant": "full"} if set_name == "kosgd" else {}}]})
+        entries = label_entries()
+        if set_name not in {entry["id"] for entry in entries}:
+            entries.append({"id": set_name})
+        for entry in entries:
+            if entry["id"] == "kosgd":
+                entry["map"] = {"primary_variant": "full"}
+        put_yaml(root / "configs/datasets.yaml", {"sets": entries})
 
     def _write_model(self, root, kind):
         tokenizer = root / "tokenizer"

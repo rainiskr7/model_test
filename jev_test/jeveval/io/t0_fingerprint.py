@@ -12,7 +12,8 @@ def initialize(directory, bundle, root):
     cfg = bundle.metadata["config"]
     record = dict(schema="t0_fingerprint/1", inputs_sha256=bundle.sha256,
                   fixture_sha256=bundle.metadata["fixture_sha256"],
-                  config_sha256=bundle.metadata["config_sha256"], code_sha256=code_sha256(root),
+                  config_sha256=bundle.metadata["config_sha256"],
+                  tolerance_policy_sha256=bundle.metadata["tolerance_policy_sha256"], code_sha256=code_sha256(root),
                   server={k: cfg["serving"][k] for k in ("engine_version", "image_digest")},
                   reference=None)
     record["server"]["served_name"] = cfg["served_name"]

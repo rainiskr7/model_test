@@ -16,12 +16,12 @@ def _row(i, content, action="slot"):
         type_of_output=action, ground_truth=truth))
 
 
-def test_normalization_options_order_extra_and_detachment(settings, plan_for):
+def test_normalization_options_order_extra_and_detachment(settings, plan_for, label_rules):
     task, lists = settings("fc_call_decision")
     rows = [_row(2, S + " " + S), _row(1, S, "call"), _row(3, "no sentence")]
     plan = plan_for(rows, task, extra=["fc_call_decision:1:2", "fc_call_decision:1:3"])
     before = deepcopy((rows, lists, task, plan))
-    result = build_items(rows, plan, task, lists)
+    result = build_items(rows, plan, task, lists, label_rules)
     assert [i.item_id for i in result["extra"]] == ["2", "3"]
     assert [i.group_id for i in result["extra"]] == ["1", "1"]
     assert result["test"] == []
@@ -37,17 +37,17 @@ def test_normalization_options_order_extra_and_detachment(settings, plan_for):
 
 
 @pytest.mark.parametrize("content", [" ".join([S] * 3), S + "\n" + S, S + " x " + S])
-def test_remaining_repetitions_stop(settings, plan_for, content):
+def test_remaining_repetitions_stop(settings, plan_for, content, label_rules):
     task, lists = settings("fc_call_decision")
     rows = [_row(1, content)]
     with pytest.raises(ValueError, match="remains"):
-        build_items(rows, plan_for(rows, task), task, lists)
+        build_items(rows, plan_for(rows, task), task, lists, label_rules)
 
 
 @pytest.mark.parametrize("name", ["z", "NONE"])
-def test_bad_tool_names_stop(settings, plan_for, name):
+def test_bad_tool_names_stop(settings, plan_for, name, label_rules):
     task, lists = settings("fc_call_decision")
     rows = [_row(1, S)]
     rows[0].fields["input_tools"][1]["function"]["name"] = name
     with pytest.raises(ValueError, match="tool name"):
-        build_items(rows, plan_for(rows, task), task, lists)
+        build_items(rows, plan_for(rows, task), task, lists, label_rules)

@@ -16,14 +16,14 @@ def _row(did, index, intent):
 
 
 @pytest.mark.parametrize("variant", ["kosgd_full", "kosgd_actions_only"])
-def test_previous_user_not_previous_item_both_variants(settings, plan_for, variant):
+def test_previous_user_not_previous_item_both_variants(settings, plan_for, variant, label_rules):
     task, _ = settings(variant)
     lists = {"kosgd_catalog": [{"service": "z", "intents": [{"id": "z/old"}, {"id": "z/new"}]}],
              "catalog_intents_plus_none": {"z/old": "old", "z/new": "new", "NONE": "none"}}
     rows = [_row("d2", 4, "new"), _row("d1", 0, "old"), _row("d2", 0, "NONE"), _row("d2", 2, "old")]
     plan = plan_for(rows, task, {"d2": "kosgd:d2:4"})
     before = deepcopy((rows, plan, task, lists))
-    result = build_items(rows, plan, task, lists)
+    result = build_items(rows, plan, task, lists, label_rules)
     assert result["extra"] == []
     assert result["dev"][0].baseline == {"copy_prev": ["NONE", "NONE"]}
     item = result["test"][0]
@@ -38,14 +38,14 @@ def test_previous_user_not_previous_item_both_variants(settings, plan_for, varia
     assert (rows, plan, task, lists) == before
 
 
-def test_catalog_and_group_mismatch_stop(settings, plan_for):
+def test_catalog_and_group_mismatch_stop(settings, plan_for, label_rules):
     task, lists = settings("kosgd_full")
     rows = [_row("d", 0, "NONE")]
     plan = plan_for(rows, task)
     bad = deepcopy(lists)
     bad["catalog_intents_plus_none"] = dict(reversed(list(bad["catalog_intents_plus_none"].items())))
     with pytest.raises(ValueError, match="catalog"):
-        build_items(rows, plan, task, bad)
+        build_items(rows, plan, task, bad, label_rules)
     plan = replace(plan, groups={"d": ["0", "2"]})
     with pytest.raises(ValueError, match="plan.groups"):
-        build_items(rows, plan, task, lists)
+        build_items(rows, plan, task, lists, label_rules)

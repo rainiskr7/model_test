@@ -7,6 +7,8 @@ import sys
 
 import yaml
 
+from tests.run.t0_support import add_datasets
+
 from jeveval.data.grouping import group_rows
 from jeveval.data.split import build_split_plan
 from jeveval.io.config import read_yaml
@@ -19,6 +21,7 @@ BOOTSTRAP = "import runpy,sys; sys.path.insert(0,sys.argv.pop(1)); runpy.run_mod
 
 
 def _prepare(root):
+    add_datasets(root)
     tasks = root / "tasks"
     (tasks / "lists").mkdir(parents=True)
     task = read_yaml(REPO / "configs/tasks/fc_call_decision.yaml")

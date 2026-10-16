@@ -45,6 +45,7 @@ def variants(directory, bundle):
     header, records = read_lines(path)
     if (header.get("schema") != "t0_variants/1" or header["inputs_sha256"] != bundle.sha256
             or header["family"] != bundle.metadata["model"]
+            or header.get("tolerance_policy_sha256") != bundle.metadata["tolerance_policy_sha256"]
             or header["reference_sha256"] != digest(Path(directory) / "reference.jsonl")):
         raise ValueError("T0 variants provenance mismatch")
     expected = {r.case_id: r for r in bundle.rows if r.boundary is None}
@@ -66,7 +67,15 @@ def fingerprint(directory, bundle):
     value = read_json(Path(directory) / "fingerprint.json")
     for key, expected in (("inputs_sha256", bundle.sha256),
                           ("config_sha256", bundle.metadata["config_sha256"]),
-                          ("fixture_sha256", bundle.metadata["fixture_sha256"])):
+                          ("fixture_sha256", bundle.metadata["fixture_sha256"]),
+                          ("tolerance_policy_sha256", bundle.metadata["tolerance_policy_sha256"])):
         if value[key] != expected:
             raise ValueError("T0 fingerprint provenance mismatch")
     return value
+
+
+def policy(bundle, policy):
+    """지금 읽은 허용폭 규칙 파일이 inputs 확정 때의 파일과 바이트까지 같아야 한다."""
+    if policy.sha256 != bundle.metadata["tolerance_policy_sha256"]:
+        raise ValueError("T0 tolerance policy mismatch")
+    return policy

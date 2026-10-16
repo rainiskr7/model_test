@@ -38,6 +38,16 @@ class T0Reference:
 
 
 @dataclass(frozen=True)
+class T0Policy(JsonRecord):
+    """configs/t0/tolerance_v1.yaml — 검사는 contract/t0_policy, 읽기는 io/t0_policy. sha256 은 파일 바이트 해시(단계 연결용)."""
+
+    repeats: int
+    max_variation: float
+    variants: dict[str, list[str]]
+    sha256: str
+
+
+@dataclass(frozen=True)
 class T0Sources:
     rows: dict
     groups: dict

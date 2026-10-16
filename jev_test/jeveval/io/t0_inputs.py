@@ -11,9 +11,8 @@ from jeveval.io.t0_files import read_lines, write_lines
 from jeveval.io.t0_sources import read_sources
 from jeveval.t0.record import config_sha256
 from jeveval.t0.request import build_request
-from jeveval.t0.tolerance import VARIANTS, V11_VARIANTS
 from jeveval.types.t0 import T0Boundary, T0Case
-from jeveval.types.t0_io import T0Input, T0Inputs
+from jeveval.types.t0_io import T0Input, T0Inputs, T0Policy
 
 
 def identifier(value):
@@ -42,7 +41,7 @@ def _entry(cid, request, reference_name, lengths, boundary=None):
                    request.envelope_sha256, ref.envelope_sha256, _lengths(lengths), boundary)
 
 
-def _ordinary(fixture, cfg, sources, reference_name, measurer):
+def _ordinary(fixture, cfg, sources, reference_name, measurer, placements):
     entries = []
     for case in fixture["cases"]:
         if case.get("kind") == "boundary":
@@ -62,7 +61,7 @@ def _ordinary(fixture, cfg, sources, reference_name, measurer):
     targets = {(r.case_id, qid) for r in entries for qid in r.body["questions"]}
     batches = fixture["batches"]
     if (len(batches) != len(targets) or {tuple(b["target"]) for b in batches} != targets
-            or any(b["placements"] != list(V11_VARIANTS) for b in batches)):
+            or any(b["placements"] != list(placements) for b in batches)):
         raise ValueError("incomplete T0 target placements")
     return entries
 
@@ -92,11 +91,12 @@ def _boundaries(fixture, entries, cfg, reference_name, builder):
             entries.append(_entry(f"{rule['case_id']}_{offset}", request, reference_name, lengths, boundary))
 
 
-def freeze(path, fixture_path, cfg, root, run_id, *, sources=None, reference_name=None,
+def freeze(path, fixture_path, cfg, root, run_id, *, policy: T0Policy, sources=None, reference_name=None,
            boundary_builder=None, measurer=None):
+    """허용폭 규칙 파일의 해시를 헤더에 적어 reference·tolerance·judge 가 같은 규칙에 묶이게 한다."""
     if Path(path).exists():
         raise ValueError("T0 inputs already frozen")
-    if cfg.id not in VARIANTS or cfg.kind != "systemone":
+    if cfg.id not in policy.variants or cfg.kind != "systemone":
         raise ValueError("unsupported T0 model family")
     fixture = read_json(fixture_path)
     if fixture.get("schema") != "t0_fixture/1":
@@ -104,14 +104,14 @@ def freeze(path, fixture_path, cfg, root, run_id, *, sources=None, reference_nam
     if sources is None:
         selected = sorted({c["state_ref"]["set"] for c in fixture["cases"] if "state_ref" in c})
         sources = read_sources(root, selected)
-    entries = _ordinary(fixture, cfg, sources, reference_name, measurer)
+    entries = _ordinary(fixture, cfg, sources, reference_name, measurer, policy.variants["pplx_v1_1"])
     _boundaries(fixture, entries, cfg, reference_name, boundary_builder)
     ids = [r.case_id for r in entries]
     if not entries or len(set(ids)) != len(ids):
         raise ValueError("duplicate/empty T0 cases")
     header = dict(schema="t0_inputs/1", model=cfg.id, run_id=identifier(run_id),
                   config=cfg.to_dict(), config_sha256=config_sha256(cfg.to_dict()),
-                  fixture_sha256=sha256_file(fixture_path))
+                  fixture_sha256=sha256_file(fixture_path), tolerance_policy_sha256=policy.sha256)
     write_lines(path, header, [r.to_dict() for r in entries])
     return load(path)
 

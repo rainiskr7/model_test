@@ -33,3 +33,25 @@ def passed_record(root, cfg, *, name="t0_record.json"):
     (root / name).write_bytes(payload)
     cfg["t0"] = dict(status="passed", record=dict(path=name, sha256=sha256(payload).hexdigest()))
     return root / name
+
+
+def add_t0_policy(root):
+    source = Path(__file__).resolve().parents[2] / "configs/t0/tolerance_v1.yaml"
+    target = root / "configs/t0/tolerance_v1.yaml"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_bytes(source.read_bytes())
+
+
+def add_datasets(root):
+    source = Path(__file__).resolve().parents[2] / "configs/datasets.yaml"
+    target = root / "configs/datasets.yaml"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_bytes(source.read_bytes())
+
+
+def label_entries():
+    from jeveval.io.config import read_yaml
+    from jeveval.io.datasets import dataset_entry
+    data = read_yaml(Path(__file__).resolve().parents[2] / "configs/datasets.yaml")
+    return [{"id": name, "label_vocab": dataset_entry(data, name)["label_vocab"]}
+            for name in ("kosgd", "kmhas", "kote_escalation")]

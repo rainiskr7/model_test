@@ -8,18 +8,17 @@ from jeveval.io.hashes import sha256_file
 from jeveval.io.run_files import read_json
 from jeveval.io.t0_files import read_lines
 from jeveval.t0.request import build_request
-from jeveval.t0.tolerance import REPEATS, VARIANTS
 from .conftest import CANARY, fake_post, inputs, stage
 
 
 @pytest.mark.parametrize("family", ["clef", "clef_flash", "pplx_v1", "pplx_v1_1"])
 @pytest.mark.parametrize("mode, expected", [("same", "PASS"), ("flip", "FAIL"),
     ("timeout_and_fail", "FAIL"), ("timeout", "INCOMPLETE")])
-def test_full_pipeline(setup, family, mode, expected):
+def test_full_pipeline(setup, family, mode, expected, t0_policy):
     ctx = setup(family)
     inputs(ctx)
     result = stage(ctx, "reference", checkpoint="checkpoint", runtime=ctx.runtime, device="cpu")
-    assert result["variants"] == 2 * len(VARIANTS[family]) * REPEATS
+    assert result["variants"] == 2 * len(t0_policy.variants[family]) * t0_policy.repeats
     post = fake_post(mode)
     stage(ctx, "server", base_url="http://127.0.0.1:1", post=post)
     assert len(post.calls) == 2
@@ -93,12 +92,12 @@ def test_missing_boundary_builder_and_rounding(setup):
     assert stage(ctx, "judge")["status"] == "INCOMPLETE"
 
 
-def test_all_v11_targets_and_placements(setup):
+def test_all_v11_targets_and_placements(setup, t0_policy):
     ctx = setup("pplx_v1_1")
     inputs(ctx)
     stage(ctx, "reference", checkpoint="checkpoint", runtime=ctx.runtime)
     calls = ctx.runtime.model.calls[2:]
-    assert len(calls) == 2 * 6 * len(VARIANTS[ctx.family]) * REPEATS
+    assert len(calls) == 2 * 6 * len(t0_policy.variants[ctx.family]) * t0_policy.repeats
     for qid in ctx.fixture["cases"][0]["questions"]:
         positions = {(len(b["questions"]), list(b["questions"]).index(qid)) for b in calls if qid in b["questions"]}
         assert positions == {(1,0), (8,0), (8,7), (17,0), (17,7), (17,8), (17,15), (17,16)}

@@ -7,7 +7,7 @@ from jeveval.types import Item, SourceRow, SplitPlan, TaskSpec
 
 
 def build_items(rows: list[SourceRow], plan: SplitPlan, task: TaskSpec,
-                lists: dict) -> dict[str, list[Item]]:
+                lists: dict, rules: dict) -> dict[str, list[Item]]:
     """투표 과반수 정답을 쓰며 동결된 감정만 diagnostic으로 강등한다."""
     demotions = {"kote:" + name for name in plan.diagnostic_demotions}
     if not demotions <= {q.label for q in task.questions}:
@@ -15,7 +15,7 @@ def build_items(rows: list[SourceRow], plan: SplitPlan, task: TaskSpec,
 
     def make(selected, bucket):
         bound = [replace(q, role="diagnostic") if q.label in demotions else q
-                 for q in questions(selected, task, lists)]
+                 for q in questions(selected, task, lists, rules=rules)]
         return fields(selected[0].fields["text"], bound,
                       flags=conflict_flags(bucket, "labels_majority"))
 

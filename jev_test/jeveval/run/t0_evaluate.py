@@ -20,10 +20,11 @@ def _provenance(directory, bundle):
                 variants_sha256=t0_chain.digest(directory / "variants.jsonl"))
 
 
-def tolerance(directory, bundle, rounding=None):
+def tolerance(directory, bundle, rounding, policy):
     directory = Path(directory)
-    policy = parse(rounding)
+    rounding = parse(rounding)
     t0_chain.fingerprint(directory, bundle)
+    t0_chain.policy(bundle, policy)
     t0_chain.observations(directory, bundle, "reference")
     header, records = t0_chain.variants(directory, bundle)
     result = {}
@@ -33,41 +34,44 @@ def tolerance(directory, bundle, rounding=None):
         questions = row.body["questions"]
         samples = [T0Variant(r["variant"], r["repeat"], r["target_sha256"],
                    validate_response(r["response_raw"] if r["error"] is None else "", questions,
-                                     epsilon(policy["reference"])))
+                                     epsilon(rounding["reference"])))
                    for r in records if r["case_id"] == row.case_id]
         measured = measure(questions, samples, family=bundle.metadata["model"],
-            epsilon_r=epsilon(policy["reference"]), target_sha256=targets(row),
+            epsilon_r=epsilon(rounding["reference"]), target_sha256=targets(row), policy=policy,
             batch_one_equal=header["batch_one_equal"])
         result[row.case_id] = {qid: value.to_dict() for qid, value in measured.items()}
     record = dict(schema="t0_tolerance/1", **_provenance(directory, bundle),
-                  rounding=policy["reference"], reason=header["reason"], cases=result)
+                  tolerance_policy_sha256=policy.sha256, rounding=rounding["reference"],
+                  reason=header["reason"], cases=result)
     write_json(directory / "tolerance.json", record)
     return dict(ok=True, cases=len(result))
 
 
-def evaluate(directory, bundle, rounding=None, no_reference=False):
+def evaluate(directory, bundle, rounding, no_reference, policy):
     directory = Path(directory)
-    policy = parse(rounding)
+    rounding = parse(rounding)
     t0_chain.fingerprint(directory, bundle)
+    t0_chain.policy(bundle, policy)
     refs = t0_chain.observations(directory, bundle, "reference")
     servers = t0_chain.observations(directory, bundle, "server")
     t0_chain.variants(directory, bundle)
     measured = read_json(directory / "tolerance.json")
-    if measured.get("schema") != "t0_tolerance/1" or any(
+    if measured.get("schema") != "t0_tolerance/1" or measured.get("tolerance_policy_sha256") != policy.sha256 or any(
             measured[k] != v for k, v in _provenance(directory, bundle).items()):
         raise ValueError("T0 tolerance provenance mismatch")
-    if policy["reference"] is not None and measured["rounding"] != policy["reference"]:
+    if rounding["reference"] is not None and measured["rounding"] != rounding["reference"]:
         raise ValueError("T0 tolerance rounding policy mismatch")
     tolerances = {cid: {qid: T0Tolerance.from_dict(t) for qid, t in qs.items()}
                   for cid, qs in measured["cases"].items()}
     result = judge([as_case(r) for r in bundle.rows], refs, servers, tolerances,
-                   inputs_sha256=bundle.sha256, reference_epsilon=epsilon(policy["reference"]),
-                   server_epsilon=epsilon(policy["server"]), has_reference=not no_reference)
+                   inputs_sha256=bundle.sha256, reference_epsilon=epsilon(rounding["reference"]),
+                   server_epsilon=epsilon(rounding["server"]), has_reference=not no_reference)
     record = build_record(model=bundle.metadata["model"], run_id=bundle.metadata["run_id"],
         model_yaml_dict=bundle.metadata["config"], judgement=result, inputs_sha256=bundle.sha256,
         tolerance_sha256=t0_chain.digest(directory / "tolerance.json"),
         temperature=dict(path="real", status="NOT_RUN", evidence_sha256=None))
-    record.update(rounding=policy, **{k: v for k, v in _provenance(directory, bundle).items()
+    record.update(rounding=rounding, tolerance_policy_sha256=policy.sha256,
+                  **{k: v for k, v in _provenance(directory, bundle).items()
                                     if k != "inputs_sha256"},
                   server_sha256=t0_chain.digest(directory / "server.jsonl"),
                   fingerprint_sha256=t0_chain.digest(directory / "fingerprint.json"))

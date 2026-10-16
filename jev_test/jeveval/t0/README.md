@@ -8,7 +8,8 @@
 - `distribution.py`: 순서 고정 분포 벡터·수치 도메인.
 - `status.py`: 질문/사례 상태 합성 — FAIL > INCOMPLETE > PASS, 참조 없으면 PARTIAL (distribution 에서 분리, 10-17).
 - `compare.py`: 분포와 별도 답 정책, 요청 검증 실패 시 모든 질문을 실패로 기록.
-- `tolerance.py`: 고정 반복/배치 변형 완전성·대상 동일성·질문별 변동과 허용폭.
+- `tolerance.py`: T0Policy(configs/t0/tolerance_v1.yaml) 의 반복/배치 변형 완전성·대상 동일성·질문별 변동과 허용폭 (코드 상수 없음).
+- `../types/t0_io.py` T0Policy · `../contract/t0_policy.py` 검사 · `../io/t0_policy.py` 읽기(파일 해시 포함): 규칙 파일은 inputs 헤더·fingerprint·variants·tolerance 의 `tolerance_policy_sha256` 으로 단계가 묶이고, reference 뒤 바꾸면 tolerance/judge 가 거부한다.
 - `boundary.py`: 전체 입력 길이와 HTTP/길이 상태 판정; usage를 사용하지 않음.
 - `judge.py`: 기대 케이스 분모·중복/누락·inputs/요청 해시 사슬·최종 상태와 변경 개수.
 - `record.py`: t0 제외 설정 해시·원문 없는 t0/1·T0/C1 검출 범위 및 실제/가짜 증거.
@@ -27,7 +28,7 @@
 `epsilon_r=None`은 정상 응답에서도 unknown_rounding이며 확정 계약 위반보다 후순위다.
 반올림 확률은 재정규화하지 않는다. 비교에는 검증된 Validated만 전달한다.
 
-반복 번호는 0..4다. Clef/Flash/v1 배치는 1·4·8, v1.1 대상 위치는
+반복 번호는 0..repeats-1 (configs/t0/tolerance_v1.yaml, 기본 5). Clef/Flash/v1 배치는 1·4·8, v1.1 대상 위치는
 1질문 위치0, 8질문 위치0/7, 17질문 위치0/7/8/15/16이다. 이 목록의 모든 반복과
 질문별 동일 대상 해시가 필요하다. Clef/v1은 batch_one_equal=True 증거가 선행한다.
 미측정과 측정값 0을 구분하며, 변동 >0.02면 tol_prob를 내지 않고 INCOMPLETE다.

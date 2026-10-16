@@ -5,11 +5,11 @@ from jeveval.types import Item, SourceRow, SplitPlan, TaskSpec
 
 
 def build_items(rows: list[SourceRow], plan: SplitPlan, task: TaskSpec,
-                lists: dict) -> dict[str, list[Item]]:
+                lists: dict, rules: dict) -> dict[str, list[Item]]:
     """context·question state와 bool 정답, source 층을 보존한다."""
     def make(selected, bucket):
         row = selected[0].fields
         state = {key: row[key] for key in ("context", "question")}
-        return fields(state, questions(selected, task, lists), stratum=row["source"])
+        return fields(state, questions(selected, task, lists, rules=rules), stratum=row["source"])
 
     return assemble(rows, plan, task, make)

@@ -2,14 +2,13 @@
 
 from pathlib import Path
 
-from jeveval.io import t0_fingerprint
+from jeveval.io import t0_chain, t0_fingerprint
 from jeveval.io.hashes import sha256_file
 from jeveval.io.t0_files import write_lines
 from jeveval.reference.t0_runner import respond
 from jeveval.reference.variants import batch, placed
 from jeveval.t0.request import canonical_bytes
 from jeveval.t0.samples import observation, targets
-from jeveval.t0.tolerance import REPEATS, VARIANTS
 
 
 def _public(bundle, runtime):
@@ -52,12 +51,12 @@ def _variant(runtime, row, variant, companions):
     return batch(runtime, requests, size)[0]
 
 
-def _samples(bundle, runtime, rows):
+def _samples(bundle, runtime, rows, policy):
     records = []
     for row in rows:
         companions = [r.reference_body for r in rows if r.case_id != row.case_id]
-        for variant in VARIANTS[runtime.family]:
-            for repeat in range(REPEATS):
+        for variant in policy.variants[runtime.family]:
+            for repeat in range(policy.repeats):
                 raw, error = "", None
                 try:
                     raw = canonical_bytes(_variant(runtime, row, variant, companions)).decode()
@@ -69,20 +68,21 @@ def _samples(bundle, runtime, rows):
     return records
 
 
-def execute(directory, bundle, runtime, checkpoint, device):
+def execute(directory, bundle, runtime, checkpoint, device, policy):
     directory = Path(directory)
+    t0_chain.policy(bundle, policy)
     if runtime.family != bundle.metadata["model"]:
         raise ValueError("reference family mismatch")
     records, public = _public(bundle, runtime)
     normal = [r for r in bundle.rows if r.boundary is None]
     equal, reason = _batch_one(normal, runtime, public)
     # 불일치가 하나라도 있으면 그 모델 전체 변형을 unmeasured로 남긴다.
-    samples = _samples(bundle, runtime, normal) if equal else []
+    samples = _samples(bundle, runtime, normal, policy) if equal else []
     header = dict(schema="t0_reference/1", inputs_sha256=bundle.sha256)
     write_lines(directory / "reference.jsonl", header, records)
     header = dict(schema="t0_variants/1", inputs_sha256=bundle.sha256, family=runtime.family,
                   reference_sha256=sha256_file(directory / "reference.jsonl"),
-                  batch_one_equal=equal, reason=reason)
+                  tolerance_policy_sha256=policy.sha256, batch_one_equal=equal, reason=reason)
     write_lines(directory / "variants.jsonl", header, samples)
     t0_fingerprint.add_reference(directory, bundle, runtime, checkpoint, device)
     return dict(ok=True, cases=len(records), variants=len(samples), reason=reason)

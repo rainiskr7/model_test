@@ -1,0 +1,10 @@
+# T0 허용폭 규칙 (P1 계약 §8-7 T-d/T-e, 사전 등록 — 실측 전 고정). 값을 바꾸면 inputs 헤더·fingerprint·variants·tolerance 의
+# tolerance_policy_sha256 이 달라져 이어지는 단계가 거부된다 (reference 뒤 바꾸면 tolerance/judge 불가 — 의도된 동작).
+schema: t0_tolerance_policy/1
+repeats: 5              # 변형마다 반복 횟수 (반복 번호 0..repeats-1)
+max_variation: 0.02     # 질문별 참조 변동 v_q 상한 — 넘으면 허용폭을 키우지 않고 INCOMPLETE
+variants:               # 모델 계열별 배치/위치 변형 목록 (T-d)
+  clef: [batch_1, batch_4, batch_8]
+  clef_flash: [batch_1, batch_4, batch_8]
+  pplx_v1: [batch_1, batch_4, batch_8]
+  pplx_v1_1: [single, eight_0, eight_7, seventeen_0, seventeen_7, seventeen_8, seventeen_15, seventeen_16]   # fixture batches[].placements 와 같아야 함

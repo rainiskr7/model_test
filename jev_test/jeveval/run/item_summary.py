@@ -7,10 +7,12 @@ from pathlib import Path
 from jeveval.data.items import functionchat, klue_mrc, kmhas, korfin, kosgd, kote
 from jeveval.data.items.common import summarize
 from jeveval.io.config import load_taskspec, read_yaml
+from jeveval.io.datasets import read_label_vocab
 from jeveval.io.hashes import glob_files
 from jeveval.io.sources import read_set_rows
 from jeveval.io.splits import read_split_plan
 from jeveval.io.tasks import read_lists
+from jeveval.score.labels import rules as label_rules
 
 
 BUILDERS = {"kosgd": kosgd, "fc_call_decision": functionchat, "kmhas": kmhas,
@@ -22,6 +24,7 @@ def _summaries(args):
     rules = read_yaml(args.root / args.rules)
     tasks = args.root / args.tasks
     lists = read_lists(tasks / "lists")
+    rules_ = label_rules(read_label_vocab(args.root / args.datasets))
     paths = [p for p in glob_files(tasks, "*.yaml") if p.stem != "b1"]
     if args.task != "all":
         paths = [p for p in paths if p.stem == Path(args.task).stem]
@@ -33,7 +36,7 @@ def _summaries(args):
         if task.set not in cache:
             cache[task.set] = read_set_rows(task.set, rules["sets"][task.set], args.root)
         plan = read_split_plan(args.root / args.splits / f"{task.set}.json")
-        items = BUILDERS[task.set].build_items(cache[task.set], plan, task, lists)
+        items = BUILDERS[task.set].build_items(cache[task.set], plan, task, lists, rules_)
         yield dict(task=path.stem, by_stage=summarize(items))
 
 
@@ -44,6 +47,7 @@ def main(argv=None) -> int:
     parser.add_argument("--root", type=Path, default=Path("."))
     parser.add_argument("--tasks", type=Path, default=Path("configs/tasks"))
     parser.add_argument("--splits", type=Path, default=Path("configs/splits"))
+    parser.add_argument("--datasets", type=Path, default=Path("configs/datasets.yaml"))
     parser.add_argument("--task", required=True)
     args = parser.parse_args(argv)
     try:

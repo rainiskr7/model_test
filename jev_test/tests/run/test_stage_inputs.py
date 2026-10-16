@@ -4,15 +4,22 @@ import json
 from pathlib import Path
 import shutil
 
+import pyarrow as pa
+import pyarrow.parquet as pq
 import pytest
 import yaml
+
+from tests.run.t0_support import add_datasets
 
 from jeveval.data.grouping import group_rows
 from jeveval.data.split import build_split_plan
 from jeveval.io.hashes import sha256_file
+from jeveval.io.config import read_yaml
+from jeveval.io.datasets import dataset_entry
 from jeveval.io.splits import write_split_plan
 from jeveval.run.stage_inputs import attempts_path, final_path, load_items, read_stage_finals
-from jeveval.types import PoolResult, SourceRow
+from jeveval.types import PoolResult, SourceRow, SplitPlan
+from tests.run.cli_support import put_yaml
 
 
 REPO = Path(__file__).resolve().parents[2]
@@ -20,6 +27,7 @@ REPO = Path(__file__).resolve().parents[2]
 
 @pytest.fixture
 def source(tmp_path):
+    add_datasets(tmp_path)
     shutil.copytree(REPO / "configs/tasks", tmp_path / "configs/tasks")
     data = tmp_path / "dataset/fc_call_decision"
     data.mkdir(parents=True)
@@ -90,3 +98,28 @@ def test_missing_final_invalid_stage_and_dataset_tamper(tmp_path, source):
     (tmp_path / "dataset/fc_call_decision/rows.jsonl").write_text("changed")
     with pytest.raises(ValueError, match="dataset hash mismatch"):
         load_items(root=tmp_path, task_path="configs/tasks/fc_call_decision.yaml", stage="dev")
+
+
+def test_removed_kmhas_vocab_name_rejects_item_loading(tmp_path, vocab):
+    add_datasets(tmp_path)
+    shutil.copytree(REPO / "configs/tasks", tmp_path / "configs/tasks")
+    data = tmp_path / "dataset/kmhas"
+    data.mkdir(parents=True)
+    path = data / "rows.parquet"
+    table = pa.Table.from_pylist([{"text": "synthetic", "label": [0]}])
+    metadata = {b"huggingface": json.dumps({"info": {"features": {
+        "label": {"feature": {"names": vocab.kmhas}}}}}).encode()}
+    pq.write_table(table.replace_schema_metadata(metadata), path)
+    (data / "SHA256SUMS").write_text(sha256_file(path) + "  rows.parquet\n")
+    plan = SplitPlan("kmhas", 1, {}, {}, {"0": ["0"]}, {"0": "kmhas:0:0"}, ["0"], [], [], [], {})
+    write_split_plan(plan, tmp_path / "configs/splits/kmhas.json")
+    put_yaml(tmp_path / "configs/splits/rules.yaml", {"sets": {"kmhas": {
+        "source": {"file": "dataset/kmhas/rows.parquet"}}}})
+    args = dict(root=tmp_path, task_path="configs/tasks/kmhas.yaml", stage="dev")
+    assert len(load_items(**args)) == 1
+    path = tmp_path / "configs/datasets.yaml"
+    config = read_yaml(path)
+    dataset_entry(config, "kmhas")["label_vocab"].remove("origin")
+    put_yaml(path, config)
+    with pytest.raises(ValueError, match="^unknown label rule: kmhas:origin$"):
+        load_items(**args)

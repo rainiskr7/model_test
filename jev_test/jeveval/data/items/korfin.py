@@ -17,12 +17,12 @@ def _bindings(rows):
 
 
 def build_items(rows: list[SourceRow], plan: SplitPlan, task: TaskSpec,
-                lists: dict) -> dict[str, list[Item]]:
+                lists: dict, rules: dict) -> dict[str, list[Item]]:
     """SRC의 SID 원본 순서대로 질문·정답을 연결하고 미포함 aspect를 표시한다."""
     def make(selected, bucket):
         bindings = _bindings(selected)
         text = selected[0].fields["SRC"]
-        bound = questions(selected, task, lists, bindings=bindings)
+        bound = questions(selected, task, lists, bindings=bindings, rules=rules)
         dynamic = bound[len(task.questions):]
         flags = ["aspect_not_in_text:" + q.id for b, q in zip(bindings, dynamic)
                  if b["ASPECT"] not in text]

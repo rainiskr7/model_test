@@ -4,7 +4,6 @@ from copy import deepcopy
 from hashlib import sha256
 
 from jeveval.t0.request import canonical_bytes
-from jeveval.t0.tolerance import V11_VARIANTS
 from jeveval.types.t0_io import T0Sources
 
 
@@ -26,7 +25,7 @@ def resolve_source(ref, sources: T0Sources):
     return source_state(next(row for row in sources.rows[name] if row.row_id == rid))
 
 
-def make_fixture(sources: T0Sources, template):
+def make_fixture(sources: T0Sources, template, v11_placements):
     cases = []
     for name in sorted(sources.rows):
         eligible = [r for r in sources.rows[name]
@@ -50,7 +49,7 @@ def make_fixture(sources: T0Sources, template):
         cases.append(dict(case_id=cid, synthetic_state={"text":state},
                           state_spec=dict(kind="json_string", keys=["text"], target_key="text"),
                           questions=deepcopy(template["mixed"]), purpose="serialization"))
-    placements = [dict(target=[case["case_id"], qid], placements=list(V11_VARIANTS))
+    placements = [dict(target=[case["case_id"], qid], placements=list(v11_placements))
                   for case in cases for qid in case["questions"]]
     cases.append(dict(case_id="boundary", kind="boundary", offsets=[0, 1], base_case=cases[0]["case_id"]))
     return dict(schema="t0_fixture/1", seed=sources.seed, cases=cases, batches=placements)

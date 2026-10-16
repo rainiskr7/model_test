@@ -5,6 +5,7 @@ from pathlib import Path
 from jeveval.io import t0_chain, t0_fingerprint, t0_inputs
 from jeveval.io.models import load_model_config
 from jeveval.io.reference import local_checkpoint
+from jeveval.io.t0_policy import read_t0_policy
 from jeveval.io.paths import inside
 from jeveval.reference import t0_runner
 from jeveval.run import t0_evaluate, t0_reference, t0_server
@@ -19,9 +20,11 @@ def configure(commands):
     inputs.add_argument("--fixture", default="configs/t0/fixture_v1.json")
     inputs.add_argument("--results", default="results")
     inputs.add_argument("--reference-name")
+    inputs.add_argument("--tolerance-policy", default="configs/t0/tolerance_v1.yaml")
     for name in ("reference", "server", "tolerance", "judge"):
         stage = stages.add_parser(name)
         stage.add_argument("--run-dir", required=True)
+        stage.add_argument("--tolerance-policy", default="configs/t0/tolerance_v1.yaml")
         if name == "reference":
             stage.add_argument("--checkpoint", required=True)
             stage.add_argument("--device", default="cuda")
@@ -37,12 +40,14 @@ def configure(commands):
 def run(*, root, stage, model=None, run_id=None, fixture="configs/t0/fixture_v1.json",
         results="results", reference_name=None, run_dir=None, checkpoint=None, device="cuda",
         base_url=None, timeout=600, rounding=None, no_reference=False, sources=None,
-        boundary_builder=None, measurer=None, runtime=None, post=None):
+        boundary_builder=None, measurer=None, runtime=None, post=None,
+        tolerance_policy="configs/t0/tolerance_v1.yaml"):
     root = Path(root)
+    policy = read_t0_policy(inside(root, tolerance_policy))
     if stage == "inputs":
         cfg = load_model_config(inside(root, model))
         directory = inside(root, f"{results}/_t0/{t0_inputs.identifier(cfg.id)}/{t0_inputs.identifier(run_id)}")
-        bundle = t0_inputs.freeze(directory / "inputs.jsonl", inside(root, fixture), cfg, root, run_id,
+        bundle = t0_inputs.freeze(directory / "inputs.jsonl", inside(root, fixture), cfg, root, run_id, policy=policy,
             sources=sources, reference_name=reference_name, boundary_builder=boundary_builder, measurer=measurer)
         t0_fingerprint.initialize(directory, bundle, root)
         return dict(ok=True, cases=len(bundle.rows), inputs_sha256=bundle.sha256)
@@ -59,12 +64,12 @@ def run(*, root, stage, model=None, run_id=None, fixture="configs/t0/fixture_v1.
         path = Path(checkpoint)
         checkpoint = local_checkpoint(path if path.is_absolute() else root / path)
         runtime = runtime or t0_runner.load(bundle.metadata["model"], checkpoint, device=device, max_length=limit)
-        return t0_reference.execute(directory, bundle, runtime, checkpoint, device)
+        return t0_reference.execute(directory, bundle, runtime, checkpoint, device, policy)
     if stage == "server":
         options = {} if post is None else {"post": post}
         return t0_server.execute(directory, bundle, base_url, timeout=timeout, **options)
     if stage == "tolerance":
-        return t0_evaluate.tolerance(directory, bundle, rounding)
+        return t0_evaluate.tolerance(directory, bundle, rounding, policy)
     if stage == "judge":
-        return t0_evaluate.evaluate(directory, bundle, rounding, no_reference)
+        return t0_evaluate.evaluate(directory, bundle, rounding, no_reference, policy)
     raise ValueError("unknown T0 stage")

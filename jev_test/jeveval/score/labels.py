@@ -1,16 +1,12 @@
-"""무엇: 정답 등록 규칙 · 입력: SourceRow·binding·options · 출력: 클래스 ID · 계약 §6-2."""
+"""무엇: 정답 등록 규칙 · 입력: LabelVocab(어휘)·SourceRow·binding·options · 출력: 클래스 ID · 계약 §6-2."""
 
 from functools import partial
 from typing import Callable
 
 from jeveval.score.kosgd_slots import fixed_gold
+from jeveval.types import LabelVocab
 
-
-ACTS = ("INFORM", "REQUEST", "AFFIRM", "NEGATE", "REQUEST_ALTS", "SELECT",
-        "GOODBYE", "THANK_YOU", "INFORM_INTENT", "AFFIRM_INTENT", "NEGATE_INTENT")
-KMHAS = ("origin", "physical", "politics", "profanity", "age", "gender", "race",
-         "religion", "not_hate_speech")
-KOTE = ("불평/불만", "화남/분노", "짜증", "안타까움/실망", "의심/불신", "불안/걱정", "고마움", "없음")
+CLOSE = ("GOODBYE", "THANK_YOU")
 
 
 def _field(obj, key, kind):
@@ -31,14 +27,14 @@ def _truth(value):
     return "true" if value else "false"
 
 
-def _act(target, rows, binding, options):
+def _act(target, allowed, rows, binding, options):
     acts = set()
     for frame in _field(_one(rows), "frames", list):
         for action in _field(frame, "actions", list):
             acts.add(_field(action, "act", str))
-    if not acts <= set(ACTS):
+    if not acts <= set(allowed):
         raise ValueError("unknown KoSGD act")
-    targets = {"GOODBYE", "THANK_YOU"} if target == "CLOSE" else {target}
+    targets = set(CLOSE) if target == "CLOSE" else {target}
     return _truth(bool(acts & targets))
 
 
@@ -97,23 +93,26 @@ def _answerable(rows, binding, options):
     return _truth(not _field(_one(rows), "is_impossible", bool))
 
 
-RULES: dict[str, Callable] = {
-    **{"act:" + act: partial(_act, act) for act in ACTS if act not in ("GOODBYE", "THANK_YOU")},
-    "act:CLOSE": partial(_act, "CLOSE"),
-    "ongoing_slot_1": partial(_slot, 0), "ongoing_slot_2": partial(_slot, 1),
-    "fc:type_of_output": _fc_action, "fc:tool": _fc_tool,
-    **{"kmhas:" + name: partial(_membership, "label_names", name) for name in KMHAS},
-    **{"kote:" + name: partial(_membership, "labels_majority", name) for name in KOTE},
-    "korfin:sentiment": _sentiment, "klue:answerable": _answerable,
-}
+def rules(vocab: LabelVocab) -> dict[str, Callable]:
+    """어휘(configs/datasets.yaml label_vocab)로 전체 이름 등록표를 만든다. 규칙 본문은 코드, 어휘는 yaml."""
+    acts = tuple(vocab.kosgd_acts)
+    return {
+        **{"act:" + act: partial(_act, act, acts) for act in acts if act not in CLOSE},
+        "act:CLOSE": partial(_act, "CLOSE", acts),
+        "ongoing_slot_1": partial(_slot, 0), "ongoing_slot_2": partial(_slot, 1),
+        "fc:type_of_output": _fc_action, "fc:tool": _fc_tool,
+        **{"kmhas:" + name: partial(_membership, "label_names", name) for name in vocab.kmhas},
+        **{"kote:" + name: partial(_membership, "labels_majority", name) for name in vocab.kote},
+        "korfin:sentiment": _sentiment, "klue:answerable": _answerable,
+    }
 
 
-def gold(label, rows, binding, options) -> str | None:
-    """전체 이름으로 규칙을 찾고 누락·잘못된 정답은 ValueError로 멈춘다."""
-    if label not in RULES:
+def gold(label, rows, binding, options, rules: dict[str, Callable]) -> str | None:
+    """등록표에서 전체 이름으로 규칙을 찾고 누락·잘못된 정답은 ValueError로 멈춘다."""
+    if label not in rules:
         raise ValueError(f"unknown label rule: {label}")
     try:
-        result = RULES[label](rows, binding, options)
+        result = rules[label](rows, binding, options)
     except (KeyError, TypeError, AttributeError, IndexError) as exc:
         raise ValueError(f"invalid label input: {label}") from exc
     if type(result) is not str:

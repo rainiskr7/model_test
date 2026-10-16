@@ -4,11 +4,13 @@ from pathlib import Path
 
 from jeveval.data.items import functionchat, klue_mrc, kmhas, korfin, kosgd, kote
 from jeveval.io.config import load_taskspec, read_yaml
+from jeveval.io.datasets import read_label_vocab
 from jeveval.io.hashes import verify_dir
 from jeveval.io.records import read_finals
 from jeveval.io.sources import read_set_rows
 from jeveval.io.splits import read_split_plan
 from jeveval.io.tasks import read_lists
+from jeveval.score.labels import rules as label_rules
 from jeveval.types import FinalRecord, Item
 
 
@@ -36,7 +38,8 @@ def load_items(*, root, task_path, stage) -> list[Item]:
     rows = read_set_rows(task.set, rules["sets"][task.set], root)
     plan = read_split_plan(root / "configs/splits" / f"{task.set}.json")
     lists = read_lists(root / "configs/tasks/lists")
-    return BUILDERS[task.set].build_items(rows, plan, task, lists)[stage]
+    rules_ = label_rules(read_label_vocab(root / "configs/datasets.yaml"))
+    return BUILDERS[task.set].build_items(rows, plan, task, lists, rules_)[stage]
 
 
 def final_path(run_dir, stage):

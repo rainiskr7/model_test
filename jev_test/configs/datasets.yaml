@@ -54,6 +54,7 @@ korean_decisions:
         행동_성공판정: {type: noul, items: [INFORM, REQUEST, AFFIRM, NEGATE, REQUEST_ALTS, SELECT, "CLOSE(GOODBYE·THANK_YOU)", INFORM_INTENT], label: "frames[].actions[].act 집합"}
         행동_진단: {type: noul, items: [AFFIRM_INTENT, NEGATE_INTENT], note: "시험 양성 ~60 건씩 — 성공 판정·확신 점수에서 뺀다"}
       baseline_copy: "직전 USER 턴의 정답 진행 중인 일 집합 (첫 USER 턴은 NONE) — 모델이 모르는 직전 정답을 쓰는 지속성 기준, 칸 묶음 정답률만"
+    label_vocab: [INFORM, REQUEST, AFFIRM, NEGATE, REQUEST_ALTS, SELECT, GOODBYE, THANK_YOU, INFORM_INTENT, AFFIRM_INTENT, NEGATE_INTENT]   # 허용 act 어휘 (단일 출처, score/labels 규칙 등록표가 이걸로 만들어짐) — 아래 act_inventory 와 같은 11종
     act_inventory: "11종으로 동결 (10-12 전체 3,000 턴 라벨 집계): INFORM 1864 · INFORM_INTENT 812 · THANK_YOU 409 · AFFIRM 368 · SELECT 564 · REQUEST 519 · GOODBYE 223 · NEGATE 228 · REQUEST_ALTS 130 · NEGATE_INTENT 78 · AFFIRM_INTENT 68 — 목록 밖 act 0 건이어야 한다(R1 v2)"
     audit: "audits/kosgd_audit (보존본 — 실행은 세션 폴더) (R1 FAIL 31.2% · R2 FAIL 82.6% · R3 PASS, 개정 9 구성 기준) → 개정 10 구성: 목록 밖 0/3000, 요청 최대 4,329 토큰, 8,192 초과 0% → 개정 11 구성: 감사 v3 (계획 §7-1, 보존본 audits/audit_v3) R2v3·R4·R5·R6·R7 PASS (10-13) → 주 지표 full, 최대 4,902 토큰"
     pair: "영어 원본 SGD test (google-research-datasets/dstc8-schema-guided-dialogue) 와 dialogue_id 로 짝 — 언어 격차. 행동·진행 중인 의도 라벨은 USER 턴 42,297 개 전부 영어판과 같다 (감사 v3, KoSGD 수정은 슬롯 쪽) — 판본 민감도 표는 내지 않는다"
@@ -71,6 +72,7 @@ korean_decisions:
     cap: 2000
     license: CC-BY-SA-4.0
     map: {state: text, questions: "혐오 유형 8개(출신·외모·정치·욕설·연령·성별·인종·종교) 를 noul 로 한 번에 + '혐오 아님'", label: "label (사람 다중 라벨)"}
+    label_vocab: [origin, physical, politics, profanity, age, gender, race, religion, not_hate_speech]   # label_names 어휘 (단일 출처) — task yaml 의 kmhas:<name> 규칙은 이 안에서만
     note: 콘텐츠 검수 게이트. kor_unsmile 보다 시험셋이 크고 split 이 정식 test
     tier: 1
     group: A
@@ -84,6 +86,7 @@ korean_decisions:
     rows: 5000
     cap: 2000
     license: MIT
+    label_vocab: [불평/불만, 화남/분노, 짜증, 안타까움/실망, 의심/불신, 불안/걱정, 고마움, 없음]   # 동결 감정 8개 어휘 (단일 출처) — task yaml 의 kote:<감정> 규칙은 이 안에서만
     map:
       state: text
       questions: "감정 8개 noul (동결): 불평/불만 · 화남/분노 · 짜증 · 안타까움/실망 · 의심/불신 · 불안/걱정 · 고마움 · 없음. 풀 양성(과반수 라벨) < 50 인 감정은 진단으로 내리고 대체하지 않는다. '없음' 은 원 라벨(평가자의 NO EMOTION 선택)이지 '나머지 7개 거짓' 이 아니다"

@@ -7,6 +7,7 @@ from jeveval.contract.model_config import validate_model_config
 from jeveval.data.split import check_split_plan
 from jeveval.io import run_files
 from jeveval.io.config import load_taskspec, read_yaml
+from jeveval.io.datasets import dataset_entry
 from jeveval.io.hashes import glob_files
 from jeveval.io.models import load_model_config
 from jeveval.io.paths import identifier, inside
@@ -88,19 +89,7 @@ def stage(ctx, name) -> StageData:
 
 
 def primary_variant(ctx):
-    def entries(value):
-        if isinstance(value, dict):
-            if value.get("id") == ctx.task.set:
-                yield value
-            for child in value.values():
-                yield from entries(child)
-        elif isinstance(value, list):
-            for child in value:
-                yield from entries(child)
-    matches = list(entries(read_yaml(ctx.root / "configs/datasets.yaml")))
-    if len(matches) != 1:
-        raise ValueError("dataset identity missing or duplicated")
-    mapping = matches[0].get("map", {})
+    mapping = dataset_entry(read_yaml(ctx.root / "configs/datasets.yaml"), ctx.task.set).get("map", {})
     if "primary_variant" in mapping:
         return identifier(mapping["primary_variant"])
     variants = {task.variant for path in glob_files(ctx.root / "configs/tasks", "*.yaml")
