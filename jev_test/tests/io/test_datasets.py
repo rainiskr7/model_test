@@ -41,3 +41,26 @@ def test_label_vocab_loader_joins_errors(tmp_path):
         read_label_vocab(path)
     assert str(exc.value) == "; ".join(
         f"{name}: label_vocab must be a non-empty list of unique names" for name in names)
+
+
+def test_family_defaults_and_conflicting_declaration_rejected(tmp_path):
+    from jeveval.io.datasets import family, checked_family
+    import yaml
+    data = {"sets": [{"id": "kosgd"}, {"id": "kosgd2", "family": "kosgd"}]}
+    assert family("kosgd", data) == family("kosgd2", data) == "kosgd"
+    path = tmp_path / "configs/datasets.yaml"
+    path.parent.mkdir()
+    path.write_text(yaml.safe_dump(data))
+    assert checked_family("kosgd2", {"family": "kosgd"}, tmp_path) == "kosgd"
+    with pytest.raises(ValueError, match="family mismatch"):
+        checked_family("kosgd2", {}, tmp_path)
+
+
+def test_alias_uses_family_vocabulary_without_new_vocab_field():
+    from pathlib import Path
+    from jeveval.io.config import read_yaml
+    from jeveval.io.datasets import dataset_entry, read_label_vocab
+    path = Path(__file__).resolve().parents[2] / "configs/datasets.yaml"
+    data = read_yaml(path)
+    assert "label_vocab" not in dataset_entry(data, "kosgd2")
+    assert read_label_vocab(path).kosgd_acts == dataset_entry(data, "kosgd")["label_vocab"]

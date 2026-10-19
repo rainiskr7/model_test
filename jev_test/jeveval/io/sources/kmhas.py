@@ -8,7 +8,7 @@ import pyarrow.parquet as pq
 from jeveval.types import SourceRow
 
 
-def read_rows(source_cfg: dict, root: Path) -> list[SourceRow]:
+def read_rows(source_cfg: dict, root: Path, *, set_name="kmhas") -> list[SourceRow]:
     """물리 행 ID·정수 라벨을 보존하고 메타데이터 이름을 원래 순서로 붙인다."""
     table = pq.read_table(root / source_cfg["file"])
     try:
@@ -27,4 +27,4 @@ def read_rows(source_cfg: dict, root: Path) -> list[SourceRow]:
                                                 for i in labels):
             raise ValueError("K-MHaS label must contain integers in metadata range")
         row["label_names"] = [names[i] for i in labels]
-    return [SourceRow("kmhas", str(i), row) for i, row in enumerate(fields)]
+    return [SourceRow(set_name, str(i), row) for i, row in enumerate(fields)]

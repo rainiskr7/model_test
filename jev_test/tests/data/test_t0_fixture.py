@@ -36,3 +36,21 @@ def test_no_out_of_pool_source_rejected(setup, t0_policy):
     template = json.loads((ROOT / "configs/t0/template_v1.json").read_text())
     with pytest.raises(ValueError, match="^no out-of-pool T0 source$"):
         make_fixture(sources, template, t0_policy.variants["pplx_v1_1"])
+
+
+def test_source_state_uses_explicit_family_for_alias():
+    from jeveval.data.t0_fixture import source_state
+    from jeveval.types import SourceRow
+    assert source_state(SourceRow("kosgd2", "d#0", {"dialogue": []}), "kosgd") == "[]"
+
+
+def test_resolver_excludes_other_alias_pool_in_memory():
+    import pytest
+    from jeveval.data.t0_fixture import resolve_source
+    from jeveval.types import SourceRow, Groups
+    from jeveval.types.t0_io import T0Sources
+    sources = T0Sources({"kosgd2": [SourceRow("kosgd2", "d#0", {"dialogue": []})]},
+        {"kosgd2": Groups({"d#0": "d"}, {"d": ["0"]})},
+        {"kosgd": {"d"}, "kosgd2": set()}, 1, {"kosgd": "kosgd", "kosgd2": "kosgd"})
+    with pytest.raises(ValueError, match="inside evaluation pool"):
+        resolve_source({"set": "kosgd2", "row_id": "d#0"}, sources)

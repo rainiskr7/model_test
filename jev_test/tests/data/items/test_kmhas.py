@@ -53,7 +53,7 @@ def test_all_frozen_tasks_and_b1_template(label_rules):
     root = Path(__file__).resolve().parents[3] / "configs/tasks"
     lists = read_lists(root / "lists")
     tasks = [load_taskspec(p) for p in sorted(root.glob("*.yaml")) if p.stem != "b1"]
-    assert len(tasks) == 7
+    assert len(tasks) == 9
     for task in tasks:
         specs = [q.to_dict() for q in task.questions] + ([task.per_item_questions] if task.per_item_questions else [])
         for spec in specs:

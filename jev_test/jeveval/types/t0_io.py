@@ -1,6 +1,6 @@
 """무엇: T0 단계 경계 자료형 · 입력: 확정 입력/참조 핸들 · 출력: 단계 전달 객체 · 계약 §8-7."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 from .base import JsonRecord
@@ -53,3 +53,4 @@ class T0Sources:
     groups: dict
     pools: dict
     seed: int
+    families: dict[str, str] = field(default_factory=dict)

@@ -31,3 +31,10 @@ def test_roles_are_required_and_diagnostic_roundtrips():
         RequestOutcome.from_dict(data)
     value = replace(outcome(), roles={'ready': 'diagnostic'})
     assert RequestOutcome.from_dict(value.to_dict()) == value
+
+
+def test_question_outcome_roundtrip_preserves_absent_and_missing():
+    from jeveval.types import QuestionOutcome
+    row = QuestionOutcome("s:g:i", "g", "test", "error", False, "q", "diagnostic", "x", "noul",
+                          None, None, None, None, False, None, {})
+    assert QuestionOutcome.from_dict(row.to_dict()) == row

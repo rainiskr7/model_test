@@ -106,3 +106,12 @@ def test_risk_file_json_boundary_and_input_checks():
 def test_upper_rejects_invalid_counts(k, n):
     with pytest.raises(ValueError):
         upper(k, n)
+
+
+def test_question_and_request_share_unrounded_status_boundary():
+    from jeveval.score.risk import cell_status, n_min, upper
+    n = n_min("0.02")
+    assert cell_status("0.02", None, None, None) == "NO_THRESHOLD"
+    assert cell_status("0.02", .9, 0, None) == "UNDERPOWERED"
+    assert cell_status("0.02", .9, n, upper(0, n)) == "MEETS"
+    assert cell_status("0.02", .9, n, upper(1, n)) == "FAILS"

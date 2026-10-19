@@ -7,7 +7,7 @@ import pyarrow.parquet as pq
 from jeveval.types import SourceRow
 
 
-def read_rows(source_cfg: dict, root: Path) -> list[SourceRow]:
+def read_rows(source_cfg: dict, root: Path, *, set_name="klue_mrc_answerable") -> list[SourceRow]:
     """is_impossible 여부와 관계없이 모든 행과 source를 보존한다."""
     fields = pq.read_table(root / source_cfg["file"]).to_pylist()
-    return [SourceRow("klue_mrc_answerable", row["guid"], row) for row in fields]
+    return [SourceRow(set_name, row["guid"], row) for row in fields]

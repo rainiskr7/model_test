@@ -23,9 +23,9 @@ def _add(table, key, accepted, wrong):
     cell["k"] += int(accepted and wrong)
 
 
-def distributions(test, test_items, accepted_ids):
+def distributions(test, test_items, accepted_ids, family_name=None):
     """빈 마스크를 제외하고 요청 오류를 모든 소속 칸에 센다. 진단은 질문 오류다."""
-    sets = {item.set for item in test_items.values()}
+    sets = {family_name or item.set for item in test_items.values()}
     mix = dict(by_class={}, by_service={} if "kosgd" in sets else None,
                by_stratum={} if "klue_mrc_answerable" in sets else None, by_n_questions={})
     lengths = {key: dict(sampled=0, n_valid=0, n=0, k=0) for key in LENGTH_BUCKETS}
@@ -46,10 +46,10 @@ def distributions(test, test_items, accepted_ids):
         for qid in success:
             if row.gold[qid] is not None:
                 _add(mix["by_class"].setdefault(qid, {}), row.gold[qid], accepted, row.wrong)
-        if test_items[row.logical_id].set == "kosgd":
+        if (family_name or test_items[row.logical_id].set) == "kosgd":
             for service in set(row.meta["service"] or []):
                 _add(mix["by_service"], service, accepted, row.wrong)
-        if test_items[row.logical_id].set == "klue_mrc_answerable":
+        if (family_name or test_items[row.logical_id].set) == "klue_mrc_answerable":
             _add(mix["by_stratum"], row.meta["stratum"], accepted, row.wrong)
         for qid, role in row.roles.items():
             if role == "diagnostic" and row.gold[qid] is not None:

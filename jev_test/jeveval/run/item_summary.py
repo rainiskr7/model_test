@@ -4,19 +4,15 @@ import argparse
 import json
 from pathlib import Path
 
-from jeveval.data.items import functionchat, klue_mrc, kmhas, korfin, kosgd, kote
+from jeveval.run.stage_inputs import BUILDERS
 from jeveval.data.items.common import summarize
 from jeveval.io.config import load_taskspec, read_yaml
-from jeveval.io.datasets import read_label_vocab
+from jeveval.io.datasets import checked_family, read_label_vocab
 from jeveval.io.hashes import glob_files
 from jeveval.io.sources import read_set_rows
 from jeveval.io.splits import read_split_plan
 from jeveval.io.tasks import read_lists
 from jeveval.score.labels import rules as label_rules
-
-
-BUILDERS = {"kosgd": kosgd, "fc_call_decision": functionchat, "kmhas": kmhas,
-            "kote_escalation": kote, "korfin_asc": korfin, "klue_mrc_answerable": klue_mrc}
 
 
 def _summaries(args):
@@ -36,7 +32,8 @@ def _summaries(args):
         if task.set not in cache:
             cache[task.set] = read_set_rows(task.set, rules["sets"][task.set], args.root)
         plan = read_split_plan(args.root / args.splits / f"{task.set}.json")
-        items = BUILDERS[task.set].build_items(cache[task.set], plan, task, lists, rules_)
+        family = checked_family(task.set, rules["sets"][task.set], args.root)
+        items = BUILDERS[family].build_items(cache[task.set], plan, task, lists, rules_)
         yield dict(task=path.stem, by_stage=summarize(items))
 
 

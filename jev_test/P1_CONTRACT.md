@@ -1,7 +1,7 @@
 # P1 계약 — 결정 모델 평가 코드의 입출력·채점·기록 규칙
 
-작성 2026-10-13 · **판 4** (10-19: 확신·보정 분리와 replay/offline; 이전 판의 변경 사유는 §11 보존) · 상태: 구현 중
-상위 문서: [`JEV_TEST_PLAN.md`](JEV_TEST_PLAN.md) 개정 14. 이 문서와 계획이 다르면 계획이 기준이고, 이 문서를 고친다.
+작성 2026-10-13 · **판 5** (10-19: Phase A 추가; 판 4 설명 보존: 확신·보정 분리와 replay/offline; 이전 판의 변경 사유는 §11 보존) · 상태: 구현 중
+상위 문서: [`JEV_TEST_PLAN.md`](JEV_TEST_PLAN.md) 개정 15. 이 문서와 계획이 다르면 계획이 기준이고, 이 문서를 고친다.
 범위: **첫 실행 = A 묶음 + B1** (계획 §7). B·C·T2·WorkflowEvals·B2 는 이 판에서 정하지 않는다. **score 질문은 이 판의 범위 밖**이다 (A 묶음에 없다) — 응답 검증기(§3-1)·채점은 score 를 만나면 `NotImplementedError` 로 멈추고, task yaml 검사기(§1-1)는 오류 목록에 넣는다.
 
 이 문서는 코드를 쓰는 사람(Codex)이 **추측 없이** 구현할 수 있게 하는 것이 목적이다. 여기 없는 결정이 필요하면 구현하지 말고 `SPEC_AMBIGUOUS: <절> <내용>` 으로 보고한다.
@@ -29,6 +29,8 @@
 ## 1. 설정 파일 (코드보다 먼저)
 
 ### 1-1. `configs/tasks/<set>.yaml` 스키마 (셋마다 하나, 동결 대상)
+
+판 5 가족/별칭 추가 계약은 문서 끝의 「§1-1 가족 디스패치」에 있다.
 
 ```yaml
 set: kosgd                     # datasets.yaml 의 id
@@ -71,6 +73,8 @@ fingerprint 에는 **파일별** sha256 을 넣는다: 쓰인 task yaml 들 · �
 `{"model": <모델 yaml 의 served_name>, "state": <문자열>, "questions": {<id>: {...}}}` — 키는 이 셋뿐. 바이트 = `json.dumps(body, ensure_ascii=False, separators=(",", ":"))`, UTF-8. `request_sha256` 은 이 바이트로.
 
 ### 2-2. state 는 항상 문자열
+
+판 5 감사 v4의 실행 명세는 문서 끝 「§2-2 감사 v4 명세」에 있다.
 - 이유: 모델마다 객체 state 를 렌더링하는 방식이 다르거나(Clef 는 키 정렬) 알 수 없다(pplx). 문자열로 보내면 **모든 모델이 같은 글자를 같은 순서로** 받는다. 계획 §1 도 state 를 "문자열 또는 JSON" 으로 허용한다.
 - `json_string`: 내부 객체를 `keys` 순서로 `json.dumps(obj, ensure_ascii=False, separators=(",", ":"))`. `plain_text`: 원문의 **앞뒤 공백을 지운 것** (`str.strip()` — 판 3 보정 12, 10-13). 문장 안쪽 공백·줄바꿈은 그대로. 이유: B1(Qwen) chat 템플릿이 메시지에 `|trim` 을 걸어 B1 만 공백 없는 문장을 받았다 — 모든 모델이 같은 글자를 받게 한다. 실측(10-13): 앞뒤 공백이 있는 원문은 KOTE 74 (평가 풀 30)·K-MHaS 0·KorFin 0, 지운 뒤 서로 다른 묶음의 원문이 같아지는 경우 0 (분할·누출 영향 없음, 분할 파일 그대로), 지우면 빈 문장 0 — 빈 문장이 되면 멈춘다. `target_end_char` = 지운 문자열의 길이. `Item.state_fields` 는 원문 그대로 두고 렌더에서 지운다.
 - **render 의 출력** (판 3) = `Rendered(state: str, target_end_char: int)`. `target_end_char` = state 문자열 안에서 대상 발화가 끝나는 **문자 위치(끝 다음 칸, 0부터)**:
@@ -180,6 +184,8 @@ JSON 파싱은 **중복 키 거부**(`object_pairs_hook`), `bool` 은 숫자로 
 ## 5. 기록·resume·보존
 
 ### 5-1. 위치 (판 3: 개발·시험 기록을 나눈다)
+
+판 5 보고/질문 위험 파일과 역사 읽기는 문서 끝 §5-1·§5-1b 추가 계약을 따른다.
 ```
 jev_test/results/<safe_model>/<run_id>/A/<set>/<variant>/
 ├─ fingerprint.json    # 커밋
@@ -324,6 +330,8 @@ executor는 **전체 계획으로 기존 resume 검사**를 한 뒤, 논리 요�
 - extra 는 임계값·인증에 쓰지 않는다. 시험 단계 뒤에 돌리고, `scores.json` 의 `all_rows` 모집단(dev 대표 + test 대표 + extra)에만 쓴다.
 
 ### 6-2. 항목 만들기 순서 (판 3)
+
+kosgd2 선정·exclude는 문서 끝 §6-2 추가 계약을 따른다.
 `io/sources/<set>.py` (원본 → `SourceRow` 목록) → `data/grouping.py` (`SourceRow` 목록 + 묶음 규칙 → `{row_id: group_id}`, **전체 행을 본 뒤에** 정한다 — FunctionChat 연결요소) → `data/items/<set>.py` (`SourceRow` 들 + `group_id` + `TaskSpec` + 목록 + `SplitPlan.diagnostic_demotions` → `Item`, 순수).
 - `Item` 을 만들 때 **질문을 펼치고 질문마다 정답을 붙인다** (`BoundQuestion.gold`). 정답은 `score/labels.py` 의 등록 규칙 `label_rule(rows, binding) -> str | None` 이 만든다 — `binding` 은 펼친 질문의 재료 (`{k, ASPECT}` 등, 정적 질문은 `{}`).
 - KOTE 강등 감정은 이때 `role = diagnostic` 으로 바꾼다.
@@ -349,6 +357,8 @@ executor는 **전체 계획으로 기존 resume 검사**를 한 뒤, 논리 요�
 ## 7. 채점
 
 ### 7-1. 셋별 적용표
+
+kosgd2의 성공10/진단3 역할은 문서 끝 §7-1 추가 계약을 따른다.
 요청 오류 $\ell_i$ = 성공 질문 중 **정답이 있는 것**($M_i$) 하나라도 틀림 (KoSGD 칸 예외). 확신 $s_i = \min_{j \in J_i}$ 질문 `confidence` (**성공 질문 전체** — 정답 유무와 무관). $v_i = 1$ iff 상태 `ok`.
 
 | 셋 (판) | 성공 질문 | 진단 | 질문별 F1 | 보정 |
@@ -420,6 +430,8 @@ executor는 **전체 계획으로 기존 resume 검사**를 한 뒤, 논리 요�
 - KoSGD 의 $\ell_i$ 는 칸 묶음 비교(§7-2), 다른 셋은 기본 규칙 — 같은 함수를 `score/tasks` 가 셋별로 부른다.
 
 ### 7-6. 점수 (`scores.json` = `ScoreTable`) 와 비교 (`compare.json`) — 판 3
+
+판 5 공개 보고 규칙은 문서 끝 §7-6 추가 계약을 따른다.
 비율은 전부 `{num, den}` 으로 적는다 (채점 코호트 분모와 처리율 분모가 섞이지 않게). 값(소수)은 보고서가 계산한다.
 
 ```
@@ -474,6 +486,8 @@ QStats = {role, type, n_scored, n_missing, accuracy: {num, den}, macro_f1 | null
 사용자 지시(10-13): **기능별로, 기능 하나씩 AI 에게 맡겨 고치기 편하게.**
 
 ### 8-1. 규칙
+
+판 5 모듈/CLI 추가 목록은 문서 끝 §8-1 추가 계약에 있다.
 - **파일 하나 = 기능 하나.** 첫머리 docstring 에 "무엇 · 입력 · 출력 · 이 계약의 몇 절". 그 파일만 열어도 고칠 수 있게.
 - 판 4 모듈: `run/cmd_replay.py`는 복사 명령 조립·쓰기 순서, `run/replay_check.py`는 순수 fingerprint/파일 완결 검사, `io/run_files.py`는 바이트 읽기·원자 복사다. offline 항목 미룸은 기존 `run/executor.py`가 소유한다.
 - **작게**: 파일 ≤ 200 줄, 함수 ≤ 50 줄 정도.
@@ -615,6 +629,8 @@ PoolResult(group_ids: list[str], allocation: dict[str, int])          # data/poo
 
 ## 9. 최소 fixture (`tests/fixtures/`, 코드보다 먼저)
 
+판 5 역사/질문/가족 fixture는 문서 끝 §9 추가 표에 있다.
+
 | fixture | 확인 |
 |---|---|
 | `render/*.json` → 기대 state 문자열·요청 바이트·sha256 · **`target_end_char`** (판 3) | §2 직렬화 바이트 고정 · 대상 끝 위치 (KoSGD 는 catalog 앞, FunctionChat 은 tools 앞) |
@@ -659,6 +675,8 @@ PoolResult(group_ids: list[str], allocation: dict[str, int])          # data/poo
 
 ## 11. 판 이력
 
+판 5 변경 사유는 문서 끝 §11 판 5 이력에 보존한다.
+
 - 판 1 (10-13): 초안.
 - 판 2 (10-13): Codex 반박 반영 — 잘림 판정 경계 오류(ℓ = L_m 오판, 발화 시작이 아니라 끝 위치) · state 키 이름을 datasets.yaml 로 · 감사 v4 필요 · noul criteria 명시 · 422 원인 분리 · 상태와 사유 분리 · 비공개 보존 · FunctionChat 도구 macro-F1 제외(정답 도구 25/100, 모든 행 6선택지) · KoSGD 칸 보정은 고정 칸 정답 · B1 선택지에 ID · 세 단계 식별자 · terminal 응답 복구 · 판 파생 · 설정 스키마 · 평가 풀 추출 · 코호트 · 검증기 문법 · score 범위 밖 · 원리적 부족은 플래그 · evalcommon 호환 · 상태기계 소유 · 작업 순서. yaml `label_source` 중복 키 수정.
 - 판 3 (10-13): 작업 ① 의 SPEC_AMBIGUOUS 6곳(Item·ParsedAnswer·LengthInfo·threshold.json·ScoreTable·answers_parsed)을 채움. Claude 안 → Codex 반박(6분 34초) · grok 반박(1–4 는 1차 13KB 가 8분에 끊겨 절반, 5–6 은 8.6KB 로 다시 3분 30초) → Claude 가 근거를 계획·코드에서 재확인. 받아들인 것 — 질문을 펼치고 정답을 붙인 Item(KorFin 정답 연결·KoSGD `서비스/의도`·직전 정답·FunctionChat 선택지 단일 출처·묶음 뒤 Item) · 클래스 ID 문자열 · one-hot Brier · 호출별 LengthInfo·대상 끝 문자 위치·길이만 보는 classify · 인코더 규칙은 fingerprint(grok) · `answers_parsed` 타입·null 규칙 · 개발/시험 기록 분리·봉인·certify 의 t\* 재계산(grok)·mtime 은 보조 · NO_THRESHOLD null · τ 문자열 키 · 묶음 단위 분모 · 모집단 분리(FunctionChat 606 기술 통계)·공통 코호트는 compare.json · 클래스별 재현율·빈 bin 포함 ECE 15·`{num,den}`(grok) · KorFin pooled · 수락 클래스별 위험·길이 구간·사람 이관률 · 논리 요청 단위 비용 · summary 는 RiskCell 에서 · bootstrap 의 FunctionChat 107 묶음(계획과 어긋났던 판 2 고침) · 작업 ① 검사기의 KorFin 거부 결함 · MISSING 구분. 사용자 결정(10-13, 네 가지 모두 권고대로): B1 noul 동률 p ≥ 0.5 → true(grok 안, Codex 는 라벨 순서) · choice 확신은 API `confidence` + `choice_not_argmax` 경고 · 빈 마스크는 분모에서도 뺌 · 잘린 정상 응답의 답은 남김(Codex 안, grok 은 null). 데이터 확인(10-13): 6셋 정답 빠짐 0 · 8,192 초과 0 · K-MHaS 라벨 충돌 묶음 1 · KorFin aspect 미포함 71. 빼고 넣지 않은 것: KorSTS 등급 필드(첫 실행 범위 밖).
@@ -677,3 +695,131 @@ PoolResult(group_ids: list[str], allocation: dict[str, int])          # data/poo
 - 판 3 보정 13 (10-14, T0 설계 — Claude 초안 → Codex 반박 11건 전부 수용): §8-7. 규칙 H·I 를 허용폭 측정에 한해 보정 — 공개 진입점과 배치 1 결과가 바이트까지 같을 때만 참조 구현 하위 함수 조합으로 배치를 바꾼다 (Clef·v1 은 공개 진입점이 요청 하나씩이라 배치 변동을 달리 잴 수 없다). 결정 기록 — 가정: 하위 함수 조합이 배치 1 에서 공개 진입점과 같으면 배치 k 에서도 참조 구현의 산술이다 · 이유: 계획 §3 의 허용폭 정의(배치 구성만 바꾼 변동)를 지키려면 필요 · 다시 볼 조건: 배치 1 동일성 검사가 실패하거나 참조 저장소가 배치 API 를 공개하면.
 
 - 판 4 (10-19): 사용자 결정(3안), Codex·grok 검토에 따라 API confidence 수락 점수와 선택 확률 ECE를 분리. pplx choice를 거부하던 값 일치 오류를 통과 요청 경고로 바꾸고 구조·범위 오류는 유지한다. 이전 판 3 머리의 설명은 ‘판 2의 미정 필드 6곳을 채움 — Codex·grok 반박 반영’이었다. 이전 §3-1 규칙 7: `choice` ∈ 선택지, |`confidence` − `probabilities[choice]`| ≤ 1e-9 → `choice_pick`; 이전 ECE 표현: top-label (`confidence` 대 `answer == gold`). 이를 현행 규칙으로 대체한 사유는 두 필드의 모델 정의가 다르기 때문이다. 기존 ‘질문 확신은 confidence’ 결정은 유지한다. 1판 반박 11건을 반영해 replay를 출처 복사와 run --offline으로 분리하고 전체 resume 검사·게이트를 보존했다. 부분 test의 미완료 의미, 파생 판의 출처 경로 정규화, 비용 모집단 재계산, 쓰기 전 검사와 짝 시험을 명시했다. 기존 감사 증거는 수정하지 않고 audits/replay_20261019에 원문 없는 감사 도구를 추가한다. T0 confidence 대조는 아직 범위 밖이며 경고 전달 범위는 Validated까지다.
+
+
+## 판 5 추가 계약 — Phase A (2026-10-19)
+
+기존 절의 문장은 역사 실행 규칙으로 보존하며 아래 명시적 추가 사항만 적용한다.
+변경 사유: 판 4 run을 새 코드로 resume하지 않고 역사 증거로 읽고, 사후 질문 지표와
+다의성 수정 실험의 등록 지위를 분리한다. 이전 머리는 판 4(확신·보정 분리와 replay/offline)였다.
+
+### §1-1 가족 디스패치
+
+datasets 항목의 family 기본값은 set ID이며 splits/rules의 같은 선언과 일치해야 한다.
+별칭은 가족 대표의 reader·builder·어휘를 공유한다. SourceRow.set, Item.set, logical_id,
+경로와 fingerprint는 별칭 set을 유지한다. 가족은 Item.meta에 추가하지 않고 호출자가
+score에 전달한다. LabelVocab는 kosgd/kmhas/kote_escalation 대표 어휘를 공유한다.
+T0 공개 별칭 kosgd2를 허용하되 동일 가족 모든 분할의 풀 합집합을 제외한다.
+
+### §2-2 감사 v4 명세 (Phase B 구현·실행)
+
+1. catalog·질문 객체를 원 schema와 동결 task에서 독립 재구성해 실제 요청 바이트와 대조한다.
+   요청 간 동일성만으로 PASS하지 않는다. 순서·criteria·ID·역할 연결을 함께 검사한다.
+2. dialogue 키 집합은 speaker/utterance뿐이며 첫 턴부터 대상 USER까지 위치별 원문과 같아야 한다.
+   frame/state/services 부재, 전체 기대 ID·개수·중복·누락도 검사한다.
+3. systemone request_bytes 및 B1 chat_bytes/messages/라벨 대응 모두 실제 호출 해시와 대조한다.
+4. Clef 결합 인코더·pplx 질문별 인코더·B1 chat template 경로에서 전체 입력을 측정한다.
+   최종 13질문·두 판·세 경로 모두 8,192 초과 0건이어야 한다. diagnostic 추가도 재감사 대상이다.
+5. ongoing_two는 독립 oracle로 service/intent 집합을 만들고 비교한다. 오류 주입을 검출해야 한다.
+   입력/스크립트/문구/토크나이저 해시와 분모를 기록하며 미실행·누락은 INCOMPLETE, 위반은 FAIL이다.
+   감사 v3 보존본은 변경하지 않는다. Phase A에는 감사 v4 수행 증거가 없다.
+
+### §5-1 추가 공개 산출물
+
+- `results/_report/<run_id>.md`: 검증 통계·ID·해시·고정 문구만 커밋.
+- `<run>/question_risk.json`: question_risk/1, 탐색적 질문별 집계·등록 manifest 해시.
+- `configs/analysis/question_risk_v1.yaml`: 질문 손실·분모·실패·τ·주장 범위의 등록 정책.
+- Phase B 예정 `question_threshold.json`, `question_seal.json`: 첫 test 전 별도 봉인 증거.
+
+Item/final은 재구성 메모리에서만 사용한다. 공개 출력에 원문, 원문 묶음 키, 원문 정답,
+자유 경로·reason·예외 메시지를 전달하지 않는다. 논리 ID는 내부 결합에만 사용하고 보고서는 집계한다.
+
+### §5-1b 역사 읽기
+
+현재 code_sha256·공용 files와 비교하지 않는다. fingerprint의 저장 code_sha256/started_at을
+출처로 표시한다. read-only io/history와 순수 run/history_check를 통해 세 상태를 구분한다.
+
+- verified_complete: fingerprint 스키마/디렉터리/inputs identity, threshold/risk/scores identity,
+  seal 존재, threshold 바이트 해시 및 존재하는 dev final 해시, risk.threshold_sha256 연결,
+  dev/test(FC는 extra 포함)의 기대 대표 ID 전체 일치와 정상 기록.
+- incomplete: 파일 누락, 기대 집합의 진부분집합, 끝 줄 절단/줄바꿈 경고, 기대 분할 해시 확인 불가.
+  단계별 expected/finalized/pending·상태 분포를 표시한다. 기대 미확인 수량은 unknown이다.
+- damaged: identity/해시 불일치, 중복·여분 ID, 중간 손상, 잘못된 스키마. 수치를 내지 않는다.
+
+분모는 fingerprint.files에 저장된 해당 split의 SHA가 현재 파일과 같을 때만 사용한다.
+summary는 기존 evalcommon 형식에 model/benchmark가 있으나 run_id는 없으며 비주판에는 없다.
+따라서 존재할 때 model/benchmark 및 run_id(있을 때)를 검사하며 run_id를 새로 꾸며 넣지 않는다.
+summary 없이도 다른 필수 증거가 충족되면 완료로 분류한다. 이것은 2판 A-2의 identity 요구를
+기존 스키마에 적용할 때의 명시적 한계다. request 원기록 재계산 없이 점수 자체의 진실성을 인증하지 않는다.
+
+분해/질문 위험을 위한 역사 Item은 동결 task·split·lists·데이터 manifest와 재구성 호출 해시가
+일치해야 한다. 데이터 부재면 분해는 불가로 표시한다. 역사 파생 actions_only 재구성은
+출처 full 입력 검증 정책이 미정이므로 거부한다. 원래 산출물의 역사 집계 읽기는 허용한다.
+역사 파일을 수정하거나 현재 fingerprint/resume/replay의 비교를 완화하지 않는다.
+
+### §6-2 kosgd2
+
+선정은 개정 15 절차 그대로다: ID 정렬·옛 대화 제외·USER 없는 대화 제외·seed 20261019의
+연속 choice. 저장 ID 이외 발화·라벨 원문은 출력하지 않는다. fixed_selection.exclude의
+path/field/by=dialogue_id는 로더가 읽고 순수 pool이 교집합 0을 검증한다. 다른 턴도 거부한다.
+make_splits는 전역 seed=20261012/dev_fraction=0.2를 유지한다. 실제 selection·split 생성은 Phase B다.
+ongoing_two gold는 완전한 service/intent ID를 중복 제거한 fixed_gold의 비NONE 개수가 2인가다.
+UNKNOWN/3개는 거부하며 기존 ongoing_slot_1/2의 의미는 그대로다.
+
+### §7-1 추가 역할
+
+kosgd2 full은 성공 10·진단 3(기존 둘+ongoing_two), actions_only는 기존 성공8·진단2다.
+진단은 성공 손실과 확신 min에서는 제외되지만 요청 유효성·길이·비용에는 영향을 준다.
+
+### §7-4b 질문 단위 위험
+
+QuestionOutcome는 요청 identity/stage/status/valid와 question_id/role/label/qtype/gold/answer/
+confidence/wrong/present/length_max/meta를 담는다. FinalRecord+Item에서 생성하며 요청 valid를 상속한다.
+KoSGD는 ongoing_bundle 하나로 min confidence와 judge_slots 오류를 사용한다. 부분 MISSING은 거부,
+동시 MISSING은 해당 분모 제외. KorFin aspect_k는 위치별로 따로 계산하고 미존재도 기록한다.
+분모는 존재하고 gold 있는 묶음 전체(무효 포함); false/NONE은 MISSING이 아니다.
+threshold.select 및 CP/n_min 상태 경계를 재사용한다. risk_cell 전체의 Item 가정은 사용하지 않는다.
+주 표와 diagnostic 표를 분리하고 τ마다 t_star/n_accepted/k_errors/U/status/coverage를 기록한다.
+claims는 per_question_marginal, confidence_level=0.95, simultaneous=false. 질문을 골라 전체 결론으로 쓰지 않는다.
+
+Phase A registration.status는 항상 exploratory이며 manifest 경로와 실제 sha를 기록한다.
+현재 실행은 context.completed, --history는 verified_complete 역사만 허용한다.
+Phase B: 첫 fingerprint 전 manifest·task·구현 등록 → dev 뒤 question_threshold.json → 첫 test 전
+question_seal.json(개발 final·질문 임계값·등록 해시) → test 적용. 그 전에는 registered를 허용하지 않는다.
+
+### §7-6 보고 규칙
+
+검증 완료 주 지표의 MEETS만 인증. 나머지는 관측이며 손상은 사유만, 미완은 단계 수량만 낸다.
+U는 표시만 소수 4자리이며 판정은 저장 status를 사용한다. 질문 acc/F1/ECE(p[answer])·양성
+support/predicted/tp를 낸다. support<30은 희소 양성 해석 제한 주석이며 역할·점수는 불변이다.
+KoSGD 유형 우선순위는 중복 > 동수 다른 집합 대체 > 진상위집합 추가 > 진부분집합 누락 > 기타.
+그리드는 정답 서로 다른 비NONE 수 × 예측 비NONE 칸 수, 중복 일치는 유일 정답과 같은 값이다.
+공통 오류는 동일 셋/판/단계의 유효 ID 교집합이며 교집합 크기와 양쪽 제외 수를 함께 낸다.
+compare는 정확한 사용자 지정 ID와 모델·셋·판으로만 연결한다(run 귀속은 증명 불가).
+coverage CI는 τ=0.02 전체 test 대표 분모, F1 CI는 공통 ok 코호트다.
+
+### §8-1 모듈·CLI 추가
+
+types/history·report·QuestionOutcome를 경계로 사용한다. io/history·history_inputs·report_inputs·analysis는
+파일 읽기, io/report_markdown은 Report→문자열, run_files.write_text는 원자 쓰기다.
+run/history_check는 순수 증거 검사, history_stage는 재구성 검증, cmd_report·cmd_question_risk는 조립이다.
+score/report_tables·report_extras·kosgd_decompose·question_outcomes·question_risk는 순수 계산이다.
+파일 schema/그 조립 통계 dict 예외는 기존 §8-1과 같고 보고 도메인은 frozen dataclass다.
+CLI: report --run-id ID --models ID... [--results DIR] [--compare-id ID...] [--note-unrun ID...] [--out FILE.md]
+및 question-risk --run-dir DIR [--history]. 모델 호출·원본 수정은 하지 않는다.
+
+### §9 추가 fixture
+
+| 범위 | 기계 확인 |
+|---|---|
+| history/report | identity·seal·연결 해시·중복·여분·절단·원문 canary·입력 무변경·경로 탈출 |
+| question risk | 같은 KLUE의 상태/마스크/confidence/ID/분할이면 핵심 6필드 동치; NO_THRESHOLD·0수락·동률·무효·MISSING·가변 |
+| kosgd2 | family·reader stamp·bundle/by_service·동명 다른 서비스·중복 frame·미지/3의도·exclude 다른 턴 |
+| 보존 | 0906d42 기존 kosgd task/split/모든 lists 해시 고정 |
+
+### §11 판 5 이력
+
+판 4의 엄격한 fingerprint/replay/offline 비교와 scores/risk/summary/compare 스키마는 변경하지 않았다.
+새 family dispatch로 셋 정체성과 공유 구현을 분리했다. 과거 결과는 역사 읽기로 분리하고,
+사후 질문 위험은 exploratory로만 낸다. 새 kosgd2 문구의 파일럿·v4/v5 감사·최종 primary_variant·
+등록 임계값 봉인·분할 동결은 Phase B로 남긴다. 기존 문서 문장과 감사 폴더는 당시 증거로 보존한다.

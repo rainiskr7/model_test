@@ -51,6 +51,14 @@ def _slot(index, rows, binding, options):
     return fixed_gold(unique, [key for key in options if key != "NONE"])[index]
 
 
+def ongoing_two(rows, binding, options, *, catalog_order=None):
+    """완전한 서비스/의도를 기존 슬롯 규칙으로 검증한다. catalog는 명시 주입한다."""
+    if catalog_order is None or len(set(catalog_order)) != len(catalog_order):
+        raise ValueError("ongoing_two requires explicit unique catalog")
+    options = dict.fromkeys([*catalog_order, "NONE"], "")
+    return _truth(_slot(1, rows, binding, options) != "NONE")
+
+
 def _fc_action(rows, binding, options):
     action = _field(_one(rows), "type_of_output", str)
     if action not in ("call", "slot", "relevance"):
@@ -99,6 +107,7 @@ def rules(vocab: LabelVocab) -> dict[str, Callable]:
     return {
         **{"act:" + act: partial(_act, act, acts) for act in acts if act not in CLOSE},
         "act:CLOSE": partial(_act, "CLOSE", acts),
+        "ongoing_two": ongoing_two,
         "ongoing_slot_1": partial(_slot, 0), "ongoing_slot_2": partial(_slot, 1),
         "fc:type_of_output": _fc_action, "fc:tool": _fc_tool,
         **{"kmhas:" + name: partial(_membership, "label_names", name) for name in vocab.kmhas},

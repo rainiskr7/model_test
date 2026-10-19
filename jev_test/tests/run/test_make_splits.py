@@ -151,3 +151,24 @@ def test_kote_votes_setting_and_invalid_raw_stop_cli(tmp_path):
     assert result.returncode != 0
     assert "KOTE raw missing ID: 106" in result.stderr
     assert not (tmp_path / "failed" / "kote_escalation.json").exists()
+
+
+def test_alias_split_exclusion_is_checked_at_make_time(tmp_path):
+    import json
+    import yaml
+    import pytest
+    from jeveval.run.make_splits import _make_plan
+    (tmp_path / "configs").mkdir()
+    (tmp_path / "configs/datasets.yaml").write_text(yaml.safe_dump({"sets": [{"id": "kosgd2", "family": "kosgd"}]}))
+    dialogues = [dict(dialogue_id=g, services=[], turns=[dict(speaker="USER", utterance="x", frames=[])]) for g in ("old", "new")]
+    (tmp_path / "dialogues_1.json").write_text(json.dumps(dialogues))
+    for name, gid in (("old", "old"), ("selection", "new")):
+        (tmp_path / f"{name}.json").write_text(json.dumps({"selected_turns": [{"dialogue_id": gid, "turn_index": 0}]}))
+    cfg = dict(family="kosgd", source={"dir": ".", "dialogues_glob": "dialogues_*.json"}, group_key="dialogue_id",
+        pool={"kind": "fixed_selection", "path": "selection.json", "field": "selected_turns", "exclude": [
+            {"path": "old.json", "field": "selected_turns", "by": "dialogue_id"}]})
+    plan = _make_plan("kosgd2", cfg, {"seed": 20261012, "dev_fraction": .2}, tmp_path)
+    assert plan.test == ["new"] and plan.dev == []
+    (tmp_path / "selection.json").write_bytes((tmp_path / "old.json").read_bytes())
+    with pytest.raises(ValueError, match="intersects"):
+        _make_plan("kosgd2", cfg, {"seed": 20261012, "dev_fraction": .2}, tmp_path)

@@ -109,10 +109,11 @@ def _inputs(outcomes, finals, items, certified, unit, set_name):
 
 
 def population(*, outcomes: list[RequestOutcome], finals: list[FinalRecord],
-               items: dict[str, Item], certified: bool, unit: str, set_name: str) -> Population:
+               items: dict[str, Item], certified: bool, unit: str, set_name: str, family_name=None) -> Population:
     """입력은 호출자가 선택한 모집단. Item은 빈 코호트의 질문 틀을 위해 상위 집합도 허용한다."""
     by_id, headers, pairs = _inputs(outcomes, finals, items, certified, unit, set_name)
-    specific = _specific(set_name, items)
+    family_name = family_name or set_name
+    specific = _specific(family_name, items)
     for row in outcomes:
         final, item = by_id[row.logical_id], items[row.logical_id]
         if outcome(final, item, row.stage) != row:
@@ -120,16 +121,16 @@ def population(*, outcomes: list[RequestOutcome], finals: list[FinalRecord],
         if row.status != "ok":
             continue
         parsed = {qid: p for c in final.calls for qid, p in c.answers_parsed.items()}
-        gold = _slot_gold(item, parsed, specific if set_name == "kosgd" else {})
+        gold = _slot_gold(item, parsed, specific if family_name == "kosgd" else {})
         for q in item.questions:
             pairs[q.id].append((parsed[q.id], gold[q.id]))
-        _set_rows(set_name, item, parsed, gold, specific)
+        _set_rows(family_name, item, parsed, gold, specific)
     questions = {}
     for qid, (role, kind, label) in sorted(headers.items()):
-        stats_id = "tool" if set_name == "fc_call_decision" and label == "fc:tool" else qid
+        stats_id = "tool" if family_name == "fc_call_decision" and label == "fc:tool" else qid
         questions[qid] = _stats(stats_id, role, kind, pairs[qid])
     pooled = {}
-    if set_name == "korfin_asc":
+    if family_name == "korfin_asc":
         aspect = [pair for qid in sorted(pairs) for pair in pairs[qid]
                   if headers[qid][2] == "korfin:sentiment"]
         pooled["aspect"] = _stats("aspect", "success", "choice", aspect)

@@ -21,3 +21,7 @@ def run_dir(results_root, model_id, run_id, set, variant):
 def compare_dir(results_root, compare_id, set, variant):
     return _path(results_root, "_compare", identifier(compare_id), "A",
                  identifier(set), identifier(variant))
+
+
+def report_path(results_root, run_id):
+    return _path(results_root, "_report", identifier(run_id) + ".md")

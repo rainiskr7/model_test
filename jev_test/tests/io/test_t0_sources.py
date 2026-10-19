@@ -34,3 +34,13 @@ def test_public_rows_grouped_before_pool_check(tmp_path, monkeypatch):
     sources = t0_sources.read_sources(tmp_path, ["kmhas"])
     assert sources.groups["kmhas"].row_to_group == {"0":"0", "1":"0"}
     assert sources.pools["kmhas"] == {"0"}
+
+
+def test_same_family_pool_union_even_when_only_one_alias_selected(tmp_path, monkeypatch):
+    rules = dict(seed=42, sets={name: dict(family="kosgd", source=dict(dir=f"dataset/{name}"), group_key="dialogue_id")
+                              for name in ("kosgd", "kosgd2")})
+    monkeypatch.setattr(t0_sources, "read_yaml", lambda p: rules)
+    monkeypatch.setattr(t0_sources, "read_set_rows", lambda *args: [SourceRow("kosgd2", "d#0", {"dialogue_id": "d", "turn_index": 0})])
+    monkeypatch.setattr(t0_sources, "read_split_plan", lambda p: SimpleNamespace(groups={"old" if p.stem == "kosgd" else "new": []}))
+    result = t0_sources.read_sources(tmp_path, ["kosgd2"])
+    assert result.pools["kosgd2"] == {"old", "new"} and result.families["kosgd2"] == "kosgd"

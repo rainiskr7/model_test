@@ -9,7 +9,7 @@ import pyarrow.parquet as pq
 from jeveval.types import SourceRow
 
 
-def read_rows(source_cfg: dict, root: Path, votes_cfg: dict) -> list[SourceRow]:
+def read_rows(source_cfg: dict, root: Path, votes_cfg: dict, *, set_name="kote_escalation") -> list[SourceRow]:
     """물리 행 ID와 원본 labels를 보존하고 raw 투표의 과반수 라벨을 붙인다."""
     n_raters, min_raters = votes_cfg["n_raters"], votes_cfg["min_raters"]
     if type(min_raters) is not int or not 1 <= min_raters <= n_raters:
@@ -21,7 +21,7 @@ def read_rows(source_cfg: dict, root: Path, votes_cfg: dict) -> list[SourceRow]:
         votes = _row_votes(row, raw, names, n_raters)
         row["votes"] = votes
         row["labels_majority"] = sorted(n for n, count in votes.items() if count >= min_raters)
-    return [SourceRow("kote_escalation", str(i), row) for i, row in enumerate(fields)]
+    return [SourceRow(set_name, str(i), row) for i, row in enumerate(fields)]
 
 
 def _row_votes(row, raw, names, n_raters):

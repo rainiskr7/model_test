@@ -7,12 +7,18 @@ from jeveval.t0.request import canonical_bytes
 from jeveval.types.t0_io import T0Sources
 
 
-def source_state(row):
+def source_state(row, family_name=None):
     """라벨 없이 원문 필드만 선택하며 복합 대화도 정규 문자열로 보존한다."""
     key = {"kmhas": "text", "kote_escalation": "text", "korfin_asc": "SRC",
-           "klue_mrc_answerable": "context", "kosgd": "dialogue"}[row.set]
+           "klue_mrc_answerable": "context", "kosgd": "dialogue"}[family_name or row.set]
     value = row.fields[key]
     return value if isinstance(value, str) else canonical_bytes(value).decode("utf-8")
+
+
+def _pool(sources, name):
+    family = sources.families.get(name, name)
+    return set().union(*(pool for other, pool in sources.pools.items()
+                         if sources.families.get(other, other) == family))
 
 
 def resolve_source(ref, sources: T0Sources):
@@ -20,22 +26,23 @@ def resolve_source(ref, sources: T0Sources):
     if name not in sources.rows:
         raise ValueError("T0 source set unavailable")
     group = sources.groups[name].row_to_group.get(rid)
-    if group is None or group in sources.pools[name]:
+    if group is None or group in _pool(sources, name):
         raise ValueError("T0 source is missing or inside evaluation pool")
-    return source_state(next(row for row in sources.rows[name] if row.row_id == rid))
+    return source_state(next(row for row in sources.rows[name] if row.row_id == rid),
+                        sources.families.get(name))
 
 
 def make_fixture(sources: T0Sources, template, v11_placements):
     cases = []
     for name in sorted(sources.rows):
         eligible = [r for r in sources.rows[name]
-                    if sources.groups[name].row_to_group[r.row_id] not in sources.pools[name]]
+                    if sources.groups[name].row_to_group[r.row_id] not in _pool(sources, name)]
         if not eligible:
             raise ValueError("no out-of-pool T0 source")
         def rank(row):
             return sha256(canonical_bytes([sources.seed, "t0", name, row.row_id])).hexdigest()
         row = min(eligible, key=rank)
-        state = source_state(row)
+        state = source_state(row, sources.families.get(name))
         cases.append(dict(case_id=name, state_ref=dict(set=name, row_id=row.row_id),
                           state_sha256=sha256(state.encode()).hexdigest(),
                           questions=deepcopy(template["mixed"]), purpose="mixed_public"))

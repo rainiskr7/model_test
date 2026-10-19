@@ -74,8 +74,15 @@ def _check_rows(rows, stage):
         raise ValueError("expected unique group representatives")
 
 
+def cell_status(tau, t_star, n, u):
+    """요청/질문 지표가 동일한 CP 상태 경계를 공유한다. 표시 반올림은 하지 않는다."""
+    target = _tau(tau)
+    return ("NO_THRESHOLD" if t_star is None else "UNDERPOWERED" if n < n_min(tau)
+            else "MEETS" if u <= target else "FAILS")
+
+
 def risk_cell(*, tau: str, threshold: Threshold, dev: list[RequestOutcome],
-              test: list[RequestOutcome], test_items: dict[str, Item]) -> RiskCell:
+              test: list[RequestOutcome], test_items: dict[str, Item], family_name=None) -> RiskCell:
     """봉인 임계값을 적용한다. 호출자는 분할의 대표 집합과 입력 완료를 먼저 대조한다."""
     target, minimum = _tau(tau), n_min(tau)
     if threshold.tau != tau or threshold.status not in ("SELECTED", "NO_THRESHOLD"):
@@ -96,14 +103,13 @@ def risk_cell(*, tau: str, threshold: Threshold, dev: list[RequestOutcome],
         raise ValueError("threshold/dev counts mismatch")
     n, k = trial["n_accepted"], trial["k_errors"]
     u = None if t is None else upper(k, n)
-    status = ("NO_THRESHOLD" if t is None else "UNDERPOWERED" if n < minimum
-              else "MEETS" if u <= target else "FAILS")
+    status = cell_status(tau, t, n, u)
     trial.update(U=u, coverage=dict(num=n or 0, den=trial["n_denom"]),
                  b_flip=b_flip(k, n, tau) if status == "MEETS" else None)
     by_status = {s: sum(r.status == s and not r.mask_empty for r in test)
                  for s in ("ok", "rejected", "truncated", "error")}
     accepted_ids = {r.logical_id for r in _accepted(test, t)}
-    mix, lengths, diagnostic = distributions(test, test_items, accepted_ids)
+    mix, lengths, diagnostic = distributions(test, test_items, accepted_ids, family_name)
     return RiskCell(tau, status, len(test) < minimum, UNIT, t, development, trial,
                     by_status, mix, lengths, diagnostic)
 

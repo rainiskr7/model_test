@@ -4,7 +4,7 @@ from pathlib import Path
 
 from jeveval.data.items import functionchat, klue_mrc, kmhas, korfin, kosgd, kote
 from jeveval.io.config import load_taskspec, read_yaml
-from jeveval.io.datasets import read_label_vocab
+from jeveval.io.datasets import checked_family, read_label_vocab
 from jeveval.io.hashes import verify_dir
 from jeveval.io.records import read_finals
 from jeveval.io.sources import read_set_rows
@@ -30,16 +30,15 @@ def load_items(*, root, task_path, stage) -> list[Item]:
     _stage(stage)
     root = Path(root)
     task = load_taskspec(root / task_path)
-    if task.set not in BUILDERS:
-        raise ValueError("unknown item set")
     if verify_dir(root / "dataset" / task.set):
         raise ValueError("dataset hash mismatch")
     rules = read_yaml(root / "configs/splits/rules.yaml")
+    family = checked_family(task.set, rules["sets"][task.set], root)
     rows = read_set_rows(task.set, rules["sets"][task.set], root)
     plan = read_split_plan(root / "configs/splits" / f"{task.set}.json")
     lists = read_lists(root / "configs/tasks/lists")
     rules_ = label_rules(read_label_vocab(root / "configs/datasets.yaml"))
-    return BUILDERS[task.set].build_items(rows, plan, task, lists, rules_)[stage]
+    return BUILDERS[family].build_items(rows, plan, task, lists, rules_)[stage]
 
 
 def final_path(run_dir, stage):

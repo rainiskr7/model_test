@@ -34,3 +34,22 @@ def test_duplicate_dialogue_and_no_files(tmp_path):
         {"dialogue_id": "d", "turns": []}, {"dialogue_id": "d", "turns": []}]))
     with pytest.raises(ValueError, match="duplicate dialogue"):
         read_rows(config, tmp_path)
+
+
+def test_alias_stamps_source_set(tmp_path):
+    path = tmp_path / "dialogues_1.json"
+    path.write_text(json.dumps([dict(dialogue_id="d", services=[], turns=[
+        dict(speaker="USER", utterance="private", frames=[])])]))
+    rows = read_rows({"dir": ".", "dialogues_glob": "dialogues_*.json"}, tmp_path, set_name="kosgd2")
+    assert rows[0].set == "kosgd2"
+
+
+def test_exclusion_reader_validates_rule_and_collects_dialogue_ids(tmp_path):
+    from jeveval.io.sources.kosgd import read_exclusions
+    path = tmp_path / "old.json"
+    path.write_text(json.dumps({"selected_turns": [{"dialogue_id": "old", "turn_index": 0}]}))
+    cfg = {"exclude": [{"path": "old.json", "field": "selected_turns", "by": "dialogue_id"}]}
+    assert read_exclusions(cfg, tmp_path) == {"old"}
+    cfg["exclude"][0]["by"] = "turn_index"
+    with pytest.raises(ValueError):
+        read_exclusions(cfg, tmp_path)

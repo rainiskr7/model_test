@@ -7,7 +7,7 @@ from jeveval.data.grouping import group_rows
 from jeveval.data.pool import select_pool
 from jeveval.data.split import build_split_plan
 from jeveval.io.config import read_yaml
-from jeveval.io.sources import READERS, kosgd, kote, read_set_rows
+from jeveval.io.sources import kosgd, kote, read_set_rows
 from jeveval.io.splits import write_split_plan
 
 
@@ -21,7 +21,8 @@ def _make_plan(set_name, cfg, rules, root):
     label_names = kote.read_label_names(cfg["source"], root) if "demotion" in cfg else None
     field = cfg["pool"].get("stratum_field")
     strata = {groups.row_to_group[r.row_id]: r.fields[field] for r in rows} if field else None
-    pool = select_pool(groups, cfg["pool"], rules["seed"], set_name, strata, fixed)
+    pool = select_pool(groups, cfg["pool"], rules["seed"], set_name, strata, fixed,
+                       kosgd.read_exclusions(cfg["pool"], root))
     return build_split_plan(rows, groups, pool, set_name, cfg, rules["seed"],
                             rules["dev_fraction"], fixed, label_names)
 
@@ -41,7 +42,7 @@ def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description="Build deterministic evaluation splits")
     parser.add_argument("--rules", type=Path, required=True)
     parser.add_argument("--root", type=Path, default=Path("."))
-    parser.add_argument("--set", choices=[*READERS, "all"], required=True)
+    parser.add_argument("--set", required=True)
     parser.add_argument("--out", type=Path, required=True)
     args = parser.parse_args(argv)
     try:

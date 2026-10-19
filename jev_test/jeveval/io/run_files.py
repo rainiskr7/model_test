@@ -82,3 +82,10 @@ def read_json(path, cls=None):
     data = json.loads(Path(path).read_text(encoding="utf-8"), object_pairs_hook=_unique,
                       parse_constant=_nonfinite, parse_float=_float)
     return cls.from_dict(data) if cls is not None else data
+
+
+def write_text(path, text):
+    """검증한 공개 문자열을 UTF-8 원자 교체로 쓴다."""
+    if not isinstance(text, str):
+        raise TypeError("text must be a string")
+    _write_bytes(path, text.encode("utf-8"))

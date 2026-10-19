@@ -81,3 +81,12 @@ def test_invalid_fixed_selection(fixed):
 def test_missing_stratum_rejected():
     with pytest.raises(ValueError, match="cover every group"):
         select_pool(Groups({}, {"a": ["a"]}), {"kind": "proportional", "cap": 1}, 1, "s", {})
+
+
+def test_fixed_selection_rejects_other_turn_of_excluded_dialogue():
+    groups = Groups({}, {"old": ["0", "2"], "new": ["0"]})
+    cfg = {"kind": "fixed_selection", "exclude": [{"path": "old", "field": "selected_turns", "by": "dialogue_id"}]}
+    with pytest.raises(ValueError, match="exclusion evidence"):
+        select_pool(groups, cfg, 1, "kosgd2", fixed=[{"dialogue_id": "new", "turn_index": 0}])
+    with pytest.raises(ValueError, match="intersects"):
+        select_pool(groups, cfg, 1, "kosgd2", fixed=[{"dialogue_id": "old", "turn_index": 2}], excluded={"old"})

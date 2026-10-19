@@ -1,6 +1,6 @@
 # 결정 모델(Jev 계열) 평가 계획
 
-작성 2026-10-12 · 개정 14 (10-19) · 상태: **계획 — P1 코드 작업 ① 끝** (계약 [`P1_CONTRACT.md`](P1_CONTRACT.md) 판 4)
+작성 2026-10-12 · 개정 15 (10-19) · 상태: **계획 — P1 코드 작업 ① 끝** (계약 [`P1_CONTRACT.md`](P1_CONTRACT.md) 판 5)
 데이터셋 목록의 기준(SSOT): [`configs/datasets.yaml`](configs/datasets.yaml)
 
 ---
@@ -78,6 +78,8 @@ Jev(TypeSafe AI, 2026-09-15 early access)가 처음 내놓은 형식을 오픈�
 - **진입 조건 (P0, 실서버)**: 배포 버전 0.19.0 · 위 실효 설정 · chat 엔드포인트가 `top_logprobs=64` 를 받는지 · 마스크된 토큰(−9999 등) 처리 · 모든 후보 반환.
 
 ## 3. 시험 트랙
+
+개정 15 kosgd2 문구·진단·기대치는 문서 끝 「§3 KoSGD」 추가 명세에 있다.
 
 ### T0 · 서빙 게이트 — "우리 서버가 개발사와 같은 확률을 내는가"
 
@@ -194,6 +196,8 @@ LBox 법조항 분류(276) · FunctionChat 도구 선택(100) · KoBBQ 사회적
 
 ### 4-2. 위험 고정 처리율 — 정의
 
+개정 15 질문 단위 보조 지표와 등록 절차는 문서 끝 「§4-2 보조 지표」에 있다.
+
 요청 $i$ 의 성공 판정 질문 집합 $J_i$, 질문별 확률 $p_{ij}$, 채점 마스크 $M_i \subseteq J_i$ (정답이 있는 질문):
 
 - 요청 오류 $\ell_i = \mathbf 1\{\exists j \in M_i : \hat y_{ij} \ne y_{ij}\}$ — 예외: KoSGD 진행 중인 일 두 칸은 묶음 하나로 비교한다 (순서 무관, §3 KoSGD 세부). 확신 점수에는 두 칸이 각각 들어간다
@@ -256,6 +260,8 @@ LBox 법조항 분류(276) · FunctionChat 도구 선택(100) · KoBBQ 사회적
 
 ### 4-6. 문구·라벨 체계 동결 절차
 
+개정 15의 풀 밖 1회 파일럿과 새 분할 절차는 문서 끝 「§4-6 적용」에 있다.
+
 - 질문 문구 · 선택지 설명 · 행동/감정 목록 · 직렬화 · 분할 ID · §4-2 의 임계값 규칙 · §4-1 출력 계약 · B1 라벨 대응표를 **평가 풀 문항으로 모델을 처음 돌리기 전에** `configs/tasks/*.yaml` 로 커밋하고 해시를 C5 재현 지문에 넣는다. `tasks/` 커밋 시각이 `results/` 의 어떤 파일보다 앞서야 한다.
 - **동결 경계**: P0 의 서빙 검증(T0 fixture, 길이·메모리·속도, B1 진입 조건)은 **합성 fixture 와 평가 풀 밖 문항**으로만 하므로 동결 전에 해도 된다. 평가 풀 문항이 모델에 들어가는 순간부터는 동결 후다.
 - 문구는 **데이터 빈도와 업무 정의**로만 정한다. 수정 사유는 열거형만 허용: 지시가 두 가지로 읽힘 · 정답이 선택지에 없음 · 사전 등록한 빈도 바닥 · 스키마 한계(choice ≤255, score 2–10). "모델이 틀렸다" 는 사유가 아니다. 빈도 표는 라벨만 읽는 스크립트로 만들고, 그 스크립트에 모델 호출이 없어야 한다.
@@ -301,6 +307,8 @@ LBox 법조항 분류(276) · FunctionChat 도구 선택(100) · KoBBQ 사회적
 - T2 48조건·B·C·영어 짝·WorkflowEvals 는 무엇을 확인하려고 켜는지 이 문서에 적은 뒤 돌린다.
 
 ### 7-1. KoSGD 감사 v3 — 사전 등록 규칙 (10-13, 실행 전)
+
+kosgd2 감사 v5/실전 바이트 v4는 문서 끝 「§7-1 감사 및 단계 종료」에 추가 등록한다.
 
 라벨만 읽는다. 모델 호출 없음. 스크립트는 Codex 작성 → Claude 검토·실행 (실행 위치 세션 폴더, 보존본 `audits/audit_v3/` — `audits/README.md`). 대상은 10-12 에 뽑은 3,000 턴(seed 20261012, `kosgd_audit/audit_result.json`)이고, R6 만 KoSGD test 의 USER 턴 전부를 쓴다.
 
@@ -380,6 +388,8 @@ jev_test/
 
 ## 12. 검토 이력 (요약)
 
+개정 15 변경 이유와 수용 증거는 문서 끝 「§12 개정 15 이력」에 보존한다.
+
 - Codex 반박 4회(10-12): logprob 라벨 방식 · STS 반올림 제거 · 보정 계약 / pplx SGLang 지원 누락 정정 · T0 를 확률 대조 중심으로 / 리랭커 트랙 유예 / 데이터셋 재편 (FunctionChat 정답 단서, 러너 모델 이름 제한, 동적 질문 생성 — 모두 직접 확인).
 - grok 반박 1회(10-12, 다른 계열): WorkflowEvals 를 보조로, 위험 고정 처리율, (case, policy) 단위, 번역기에서 Qwen 제외, C 를 중복 확인 함수로 — Codex 와 핵심 결론 일치.
 - 새 세션 중재(10-12): 개정 9 를 확정하지 말 것 → 결정적 점검(KoSGD 재구성 감사, 판정 규칙 사전 등록) 실행: R1 FAIL(행동 목록 밖 31.2%) · R2 FAIL(8,192 초과 82.6%) · R3 PASS. 스크립트는 Codex 작성, Claude 검토·실행 (보존본 `audits/kosgd_audit`).
@@ -406,3 +416,84 @@ jev_test/
 - [Decision Index](https://github.com/apolinario/decision-index) · [WorkflowEvals](https://github.com/typesafe-ai/WorkflowEvals) (`core/providers.py:33`)
 - 데이터셋별 출처·sha 는 `configs/datasets.yaml`
 - [Jev (AI model) — Wikipedia](https://en.wikipedia.org/wiki/Jev_(AI_model))
+
+
+## 개정 15 적용 명세 — Phase A / Phase B (2026-10-19)
+
+이 절은 기존 §3·§4-2·§4-6·§7-1·§12의 개정 15 추가 사항이다. 기존 문장과
+과거 감사 결과는 실행 당시 기록으로 보존한다. 변경 사유: 판 4 이후 분석과 새 문항을
+옛 run의 fingerprint와 혼동하지 않고, 지시 다의성 수정과 사후 분석의 지위를 구분한다.
+
+### §3 KoSGD: 새 평가 셋 kosgd2
+
+family=kosgd를 공유하되 set/경로/분할/실행 ID는 kosgd2로 구분한다. 옛 task·split·lists는
+바이트 그대로 보존한다. 수정 사유는 **지시가 두 가지로 읽힘**이다. “두 번째 작업”은
+앞서 고른 작업을 다시 고르는 지시로도 읽힐 수 있다. 모델 정답률을 높이는 것이 수정
+사유가 아니다. 중복 279건과 유일 정답 일치 211건 등의 기존 출력 패턴은 **사후 관측**이다.
+행동 noul 8개 어려움은 모델·데이터 한계로 두며, kosgd2로 처리율이 크게 오르리라 기대하지 않는다.
+
+W1 ongoing_2: “고객의 이번 발화와 관련된 서비스에서 지금 진행 중인 작업이 서로 다른
+서비스에서 둘인 경우, catalog 의 서비스 순서에서 뒤에 있는 서비스의 작업은? 진행 중인
+작업이 하나이거나 없으면 NONE.” ongoing_1과 행동 10개는 그대로다.
+진단 ongoing_two: “고객의 이번 발화와 관련된 서비스에서 지금 진행 중인 작업이 서로 다른
+서비스에서 둘인가?” true: “서로 다른 두 서비스에서 각각 작업이 진행 중이다” / false:
+“진행 중인 작업이 하나이거나 없다”. 성공 10·진단 3·입력 13문항이다. 정답 규칙은 완전한
+서비스/의도 ID를 중복 제거하고 catalog 범위·최대 2개를 검증한 뒤 개수가 2인지 판정한다.
+동일 서비스의 서로 다른 두 의도와 W1 문구의 관계는 미정이다. 그런 자료가 발견되면
+문구 적합성 감사는 INCOMPLETE로 멈추며 임의로 gold를 바꾸지 않는다.
+
+### §4-6 적용: 풀 밖 1회 파일럿과 동결
+
+파일럿은 옛 풀 3,000 대화(새 풀 밖)에서 seed 20261019로 200대화 각 1 USER 턴을 뽑는다.
+두 모델(pplx·B1)은 같은 표본을 받는다. 분모는 모델마다 200이며 무효 응답은 통과로
+치지 않는다. 두 모델 각각 중복 비율 ≤5% **그리고** 무효 비율 ≤5%일 때만 W1을 동결한다.
+아니면 멈추고 사용자에게 알린다. seed·표본·문구를 바꾸어 재시도하지 않는다. 정답률은
+보지 않는다. 이 게이트는 반복 응답과 유효성 진단일 뿐 정확도 향상이나 인증 증거가 아니다.
+파일럿의 구체적인 대화 표집 RNG 호출 순서는 Phase B 실행 전에 고정해야 한다.
+
+새 선정: 모든 대화를 dialogue_id 정렬 → 옛 selected_turns의 dialogue_id 전체 제외 →
+USER 턴 없는 대화 제외(건수 기록) → random.Random(20261019)로 정렬 순서대로 각 대화의
+USER index 목록에서 choice 한 번. selection에는 ID·건수·배제 목록 해시만 쓴다.
+실행 명령(Phase B):
+`python audits/kosgd2_selection/select_turns.py --source dataset/kosgd2 --excluded audits/kosgd_audit/audit_result.json --out audits/kosgd2_selection/selection.json`
+분할은 전역 seed=20261012, dev_fraction=0.2를 유지해 dev=floor(0.2G), test=나머지다.
+`python -m jeveval.run.make_splits --rules configs/splits/rules.yaml --set kosgd2 --out configs/splits`
+exclude는 make_splits에서도 검사하며, 옛 대화의 다른 턴 역시 거부한다.
+
+### §4-2 보조 지표: 질문 단위 위험 고정 처리율
+
+Phase A의 question_risk/1은 항상 exploratory다. 성공 질문과 진단 질문은 별도 표이며,
+KoSGD 두 칸은 하나의 단위, KorFin aspect_k는 존재할 때의 k번째 aspect다. 논리 요청의
+valid를 상속하고 부분 성공 호출을 구제하지 않는다. 분모는 해당 질문이 존재하고 gold가
+있는 대표 묶음 수이며 무효도 남긴다. MISSING·미존재·false·NONE은 따로 센다.
+확신은 ParsedAnswer.confidence(칸은 min), 손실은 답 오류(칸은 순서 무관 묶음 오류),
+임계값 선택은 기존 dev 규칙과 τ=0.01/0.02/0.05다. 질문별 주변적 단측 95% CP 상한이며
+동시 보장이 아니다. 모든 보고 모델·셋·판·질문·τ가 주장 범위다. 질문을 골라 전체 결론으로 쓰지 않는다.
+
+Phase B 등록 절차: 첫 fingerprint 전에 분석 manifest·task·정책·구현 해시를 등록하고,
+dev 완료 뒤 question_threshold.json에 dev-final 해시와 질문별 임계값을 기록한다.
+첫 test 전에 question_seal.json으로 그 바이트를 봉인한다. 이 증거가 없으면 exploratory다.
+Phase A는 --registered 인자를 제공하지 않는다. 현재 run은 context.completed,
+과거 run은 --history로 검증된 완료 산출물만 허용한다.
+
+### §7-1 감사 및 단계 종료
+
+kosgd2의 13문항·두 판에 R2v3·R4·R5·R6·R7을 새 감사 v5로 수행한다. 기존 audit_v3는
+고치지 않는다. 판마다 해당 규칙을 모두 통과한 판만 후보이며 full 우선, 아니면
+행동판, 둘 다 아니면 중단한다. datasets의 primary_variant=full은 감사 전 임시값이다.
+감사 v4는 실제 전송 바이트·독립 원본·세 인코더를 비교한다(판 5 계약 §2-2 추가 명세).
+Phase A에서는 파일럿·감사 실행·실데이터 분할·T0 재생성·서버 호출을 하지 않는다.
+Phase A CLOSE는 구현 검토 종료만 의미하며 최종 주 지표 판과 실험 동결 완료를 뜻하지 않는다.
+T0는 동일 family의 모든 평가 풀 합집합을 제외한다. 역사 T0 노출 목록 검토와 fixture
+재생성은 Phase B이며 필요한 가족 분할이 없으면 진행을 거부한다.
+
+### §12 개정 15 이력 및 수용 증거
+
+역사 보고를 현재 context.restore와 분리했다. 코드/공용 설정 변경으로 옛 restore가
+거부되는 기존 규칙은 유지한다. 문구·분할·라벨 의미의 기존 자료는 보존한다.
+희소 양성 support<30은 모든 이후 보고의 해석 주석이며 점수·진단 역할은 바꾸지 않는다.
+보고서는 미완료와 손상을 구분하고, 비교는 사용자가 지정한 정확한 compare ID만 연결한다.
+C1은 기존 node 삭제0·새 skip/xfail0·전체 pytest, C2/C3/C4 실데이터 검증은 Claude가 수행한다.
+C5는 문서·manifest가 모델 호출 전에 커밋되었음을 외부 실행 기록과 함께 확인한다.
+C6은 identity/seal/해시/중복·여분 ID/절단/제외 풀/출력 경로/원문 canary 반례를 기계 검증한다.
+B 중재 대상은 W1·5%/5% 게이트·희소30·family 설계다. 구현자는 커밋·B 중재를 수행하지 않는다.

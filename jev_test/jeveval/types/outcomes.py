@@ -30,3 +30,25 @@ class RequestOutcome(JsonRecord):
         if any(not isinstance(key, str) or role not in ("success", "diagnostic")
                for key, role in self.roles.items()):
             raise ValueError("roles: expected success or diagnostic")
+
+
+@dataclass(frozen=True)
+class QuestionOutcome(JsonRecord):
+    """질문 하나 또는 두 칸 묶음의 관측. 무효성은 논리 요청에서 상속한다."""
+
+    logical_id: str
+    group_id: str
+    stage: str
+    status: str
+    valid: bool
+    question_id: str
+    role: str
+    label: str
+    qtype: str
+    gold: str | None
+    answer: str | None
+    confidence: float | None
+    wrong: bool | None
+    present: bool
+    length_max: int | None
+    meta: dict

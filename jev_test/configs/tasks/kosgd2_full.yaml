@@ -1,0 +1,116 @@
+# 개정 15 W1 — Phase B 감사 전, 모델 호출 없음.
+set: kosgd2
+variant: full
+state:
+  kind: json_string
+  keys:
+  - dialogue
+  - catalog
+  target_key: dialogue
+questions:
+- id: ongoing_1
+  role: success
+  type: choice
+  instructions: 고객의 이번 발화와 관련된 서비스에서 지금 진행 중인 작업(시스템이 처리하고 있는 작업)은? 그런 작업이 둘이면 catalog
+    의 서비스 순서에서 앞에 있는 서비스의 작업을 고른다. 없으면 NONE.
+  options: catalog_intents_plus_none
+  label: ongoing_slot_1
+- id: ongoing_2
+  role: success
+  type: choice
+  instructions: 고객의 이번 발화와 관련된 서비스에서 지금 진행 중인 작업이 서로 다른 서비스에서 둘인 경우, catalog 의 서비스
+    순서에서 뒤에 있는 서비스의 작업은? 진행 중인 작업이 하나이거나 없으면 NONE.
+  options: catalog_intents_plus_none
+  label: ongoing_slot_2
+- id: act_inform
+  role: success
+  type: noul
+  instructions: 고객의 이번 발화에서 작업에 필요한 항목의 값(날짜·시간·장소·인원·이름 등)을 시스템에 알려 주는가? 작업 종류만 밝히는
+    것은 여기에 들지 않는다.
+  criteria:
+    'true': 항목의 값을 하나 이상 알려 준다
+    'false': 알려 주는 항목의 값이 없다
+  label: act:INFORM
+- id: act_request
+  role: success
+  type: noul
+  instructions: '고객의 이번 발화에서 어떤 항목의 값(예: 주소, 가격, 시간)을 알려 달라고 시스템에 요청하는가?'
+  criteria:
+    'true': 항목의 값을 알려 달라고 요청한다
+    'false': 요청하는 항목의 값이 없다
+  label: act:REQUEST
+- id: act_affirm
+  role: success
+  type: noul
+  instructions: '고객의 이번 발화에서 시스템이 확인한 정보·조건이나 시스템의 말(예: ''내일 오후 3시, 2명 맞나요?'')에 동의하는가?
+    제안된 작업을 할지 말지에 대한 동의는 따로 묻는다.'
+  criteria:
+    'true': 시스템이 확인한 내용에 동의한다
+    'false': 동의하지 않거나, 동의할 확인 내용이 없다
+  label: act:AFFIRM
+- id: act_negate
+  role: success
+  type: noul
+  instructions: 고객의 이번 발화에서 시스템이 확인한 정보·조건이나 시스템의 말을 부정하는가? 제안된 작업을 거절하는 것은 따로 묻는다.
+  criteria:
+    'true': 시스템이 확인한 내용을 부정한다
+    'false': 부정하지 않는다
+  label: act:NEGATE
+- id: act_request_alts
+  role: success
+  type: noul
+  instructions: 고객의 이번 발화에서 시스템이 보여 준 결과 말고 다른 결과(대안)를 더 찾아 달라고 하는가?
+  criteria:
+    'true': 다른 결과를 더 요청한다
+    'false': 다른 결과를 요청하지 않는다
+  label: act:REQUEST_ALTS
+- id: act_select
+  role: success
+  type: noul
+  instructions: 고객의 이번 발화에서 시스템이 보여 준 결과 가운데 하나를 고르는가?
+  criteria:
+    'true': 보여 준 결과 중 하나를 고른다
+    'false': 고르지 않는다
+  label: act:SELECT
+- id: act_close
+  role: success
+  type: noul
+  instructions: 고객의 이번 발화에서 감사 인사를 하거나 대화를 끝내는가?
+  criteria:
+    'true': 감사하거나 대화를 끝내려는 의사를 표현한다
+    'false': 감사도, 대화를 끝내려는 의사도 표현하지 않는다
+  label: act:CLOSE
+- id: act_inform_intent
+  role: success
+  type: noul
+  instructions: 고객의 이번 발화에서 어떤 작업(예약·조회·구매 등)을 하고 싶다는 의사를 밝히는가?
+  criteria:
+    'true': 하고 싶은 작업을 밝힌다
+    'false': 하고 싶은 작업을 밝히지 않는다
+  label: act:INFORM_INTENT
+- id: act_affirm_intent
+  role: diagnostic
+  type: noul
+  instructions: '고객의 이번 발화에서 시스템이 제안한 작업(예: ''이 식당을 예약해 드릴까요?'')을 하는 데 동의하는가?'
+  criteria:
+    'true': 제안된 작업을 하는 데 동의한다
+    'false': 동의하지 않거나, 제안된 작업이 없다
+  label: act:AFFIRM_INTENT
+- id: act_negate_intent
+  role: diagnostic
+  type: noul
+  instructions: 고객의 이번 발화에서 시스템이 제안한 작업을 하는 것을 거절하는가?
+  criteria:
+    'true': 제안된 작업을 거절한다
+    'false': 거절하지 않거나, 제안된 작업이 없다
+  label: act:NEGATE_INTENT
+- id: ongoing_two
+  role: diagnostic
+  type: noul
+  instructions: 고객의 이번 발화와 관련된 서비스에서 지금 진행 중인 작업이 서로 다른 서비스에서 둘인가?
+  criteria:
+    'true': 서로 다른 두 서비스에서 각각 작업이 진행 중이다
+    'false': 진행 중인 작업이 하나이거나 없다
+  label: ongoing_two
+per_item_questions: null
+group_key: dialogue_id

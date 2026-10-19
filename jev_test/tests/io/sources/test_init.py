@@ -27,4 +27,4 @@ def test_only_kote_receives_votes_config(monkeypatch, tmp_path, set_name):
     result = sources.read_set_rows(set_name, config, tmp_path)
     assert result is expected
     assert calls == [(config["source"], tmp_path,
-                      {"votes_cfg": config["votes"]} if set_name == "kote_escalation" else {})]
+                      {"set_name": set_name, **({"votes_cfg": config["votes"]} if set_name == "kote_escalation" else {})})]

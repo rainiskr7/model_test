@@ -48,7 +48,7 @@ def _proportional(ids, cap, strata, prefix) -> PoolResult:
 
 def select_pool(groups: Groups, pool_cfg: dict, seed: int, set_name: str,
                 strata: dict[str, str] | None = None,
-                fixed: list[dict] | None = None) -> PoolResult:
+                fixed: list[dict] | None = None, excluded: set[str] | None = None) -> PoolResult:
     """strata는 group_id→층 이름, fixed는 감사 selected_turns 목록이다."""
     ids = sorted(groups.members)
     if not ids:
@@ -56,6 +56,10 @@ def select_pool(groups: Groups, pool_cfg: dict, seed: int, set_name: str,
     kind = pool_cfg["kind"]
     if kind == "fixed_selection":
         ids = _fixed_ids(groups, fixed)
+        if pool_cfg.get("exclude") and excluded is None:
+            raise ValueError("fixed_selection exclusion evidence required")
+        if set(ids) & (excluded or set()):
+            raise ValueError("fixed_selection intersects excluded dialogue pool")
     elif kind in {"simple_cap", "proportional"}:
         cap = pool_cfg.get("cap")
         if type(cap) is not int or cap <= 0:

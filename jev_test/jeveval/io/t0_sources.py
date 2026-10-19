@@ -8,7 +8,7 @@ from jeveval.io.sources import read_set_rows
 from jeveval.io.splits import read_split_plan
 from jeveval.types.t0_io import T0Sources
 
-PUBLIC_SETS = ("kmhas", "kote_escalation", "korfin_asc", "klue_mrc_answerable", "kosgd")
+PUBLIC_SETS = ("kmhas", "kote_escalation", "korfin_asc", "klue_mrc_answerable", "kosgd", "kosgd2")
 
 
 def read_sources(root, selected=PUBLIC_SETS):
@@ -29,4 +29,9 @@ def read_sources(root, selected=PUBLIC_SETS):
         rows[name] = read_set_rows(name, cfg, root)
         groups[name] = group_rows(rows[name], cfg["group_key"])
         pools[name] = set(read_split_plan(root / "configs/splits" / f"{name}.json").groups)
-    return T0Sources(rows, groups, pools, rules["seed"])
+    families = {name: rules["sets"][name].get("family", name) for name in rows}
+    for name, fam in families.items():
+        for other, cfg in rules["sets"].items():
+            if other != name and cfg.get("family", other) == fam:
+                pools[name].update(read_split_plan(root / "configs/splits" / f"{other}.json").groups)
+    return T0Sources(rows, groups, pools, rules["seed"], families)

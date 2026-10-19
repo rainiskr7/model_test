@@ -1,7 +1,9 @@
 """무엇: KoSGD 항목 · 입력: USER 행·분할·task·목록 · 출력: 단계별 Item · 계약 §6-2·§7-2."""
 
 from jeveval.data.items.common import assemble, fields, questions
-from jeveval.score.labels import gold
+from functools import partial
+
+from jeveval.score.labels import gold, ongoing_two
 from jeveval.types import Item, SourceRow, SplitPlan, TaskSpec
 
 
@@ -25,6 +27,8 @@ def build_items(rows: list[SourceRow], plan: SplitPlan, task: TaskSpec,
                 lists: dict, rules: dict) -> dict[str, list[Item]]:
     """전체판·행동판 모두 같은 카탈로그와 직전 USER 고정 칸 기준선을 쓴다."""
     catalog, options = _catalog(lists)
+    rules = {**rules, "ongoing_two": partial(ongoing_two,
+             catalog_order=[key for key in options if key != "NONE"])}
 
     def make(selected, bucket):
         row = selected[0]

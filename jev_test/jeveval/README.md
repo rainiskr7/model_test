@@ -251,3 +251,58 @@ REBUTTAL: R1–R8 반영. 이번 작업의 SPEC_AMBIGUOUS / FIXTURE_CONFLICT 없
 ⑦b의 파일별 지도·CLI 실행 순서·서버 점유·P0 잔여 항목은 [t0/README.md](t0/README.md#단계-실행-⑦b)에 있다.
 GPU 장비에서 inputs → reference → tolerance, 참조 종료 후 어디서나 server → judge를 실행한다.
 계획 §6에 따라 같은 장비에서 참조와 서빙을 동시에 실행하지 않는다.
+
+## 판 5 Phase A: 역사 보고·질문 위험·셋 가족
+
+현재 코드와 다른 run은 resume하지 않고 `report`의 역사 읽기를 쓴다. 검증 완료/미완/손상을
+구분하며 손상 수치는 공개하지 않는다. 데이터 없이 집계 보고가 가능하지만 KoSGD 분해와
+질문 단위 위험은 동결 입력과 호출 바이트를 재검증할 수 있어야 한다.
+
+```sh
+python -m jeveval.run.cli report --run-id RUN --models MODEL1 MODEL2 --out report.md
+python -m jeveval.run.cli report --run-id RUN --models MODEL1 MODEL2 --compare-id EXACT_COMPARE_ID --note-unrun clef clef_flash
+python -m jeveval.run.cli question-risk --run-dir results/MODEL/RUN/A/SET/VARIANT --history
+```
+
+Phase A의 질문 위험은 항상 exploratory다. summary는 현재 스키마에 run_id가 없으므로
+model/benchmark만 확인한다. 역사 파생 actions_only의 Item 재구성은 출처 정책 미정으로 거부한다.
+실제 kosgd2 데이터/선정/분할·파일럿·감사 v4/v5·등록 봉인·T0 fixture 재생성은 Phase B다.
+
+추가·변경 모듈 지도(의존 방향은 기존 §8-1 그대로):
+
+- `types/history.py`: 역사 읽기 입력과 검증 결과의 frozen 경계.
+- `types/report.py`: 공개 보고 행·변형·분해·비교 자료형.
+- `types/outcomes.py`: 요청 관측에 더해 QuestionOutcome 정의.
+- `io/datasets.py`: 가족 대표와 rules/datasets 선언 일치 검사; 어휘는 대표 셋 공유.
+- `io/sources/*.py`: 가족 reader에 별칭 set_name을 전달해 원본 행 ID 유지.
+- `io/history.py`: 역사 파일/분할/단계 기록을 수정 없이 읽기.
+- `io/history_inputs.py`: 재구성 task·split·lists·데이터 manifest의 동결 해시 검사.
+- `io/report_inputs.py`: 명시 compare와 보고 metadata·출력 경로 읽기/검사.
+- `io/report_markdown.py`: Report에서 공개 Markdown 문자열 생성.
+- `io/analysis.py`: 질문 분석 정책 읽기와 manifest 해시.
+- `io/run_files.py`: UTF-8 보고 문자열 원자 교체 추가.
+- `io/t0_sources.py`: 같은 가족 모든 평가 풀의 합집합 제외.
+- `data/t0_fixture.py`: 명시 가족으로 원본 state 해석.
+- `data/pool.py`: fixed_selection의 대화 ID exclude 검사.
+- `data/items/kosgd.py`: 진단 라벨에 공통 catalog를 명시 주입.
+- `run/history_check.py`: 저장 identity·seal·hash·단계 완결성 순수 검사.
+- `run/history_stage.py`: 역사 입력과 실제 호출 해시를 확인한 StageData 재구성.
+- `run/cmd_report.py`: 역사 보고 조립과 최종 쓰기.
+- `run/cmd_question_risk.py`: 현재/역사 완료 run의 탐색적 질문 위험 명령.
+- `run/cli.py`: report·question-risk 등록; 오류 메시지 원문 차단 유지.
+- `run/layout.py`: 기본 results/_report 출력 경로.
+- `run/stage_inputs.py`: 단일 BUILDERS를 family로 선택.
+- `run/item_summary.py`: stage_inputs의 BUILDERS 재사용.
+- `run/make_splits.py`: 별칭 셋과 exclude 읽기 연결; 전역 seed/fraction 유지.
+- `run/cmd_score.py`, `run/cmd_compare.py`: family를 집계 계산에 명시 전달.
+- `score/report_tables.py`: 검증 결과와 파일 schema의 공개 dataclass 투영.
+- `score/report_extras.py`: 비교/탐색 지표의 공개 통계 투영.
+- `score/kosgd_decompose.py`: 슬롯·행동 4분할 및 상호 배타 오류 유형.
+- `score/question_outcomes.py`: FinalRecord+Item의 질문/묶음 관측과 가변 질문 정렬.
+- `score/question_risk.py`: 기존 select와 CP 경계를 이용한 탐색적 셀.
+- `score/labels.py`: service/intent 집합 기반 ongoing_two; 기존 슬롯 정답 의미 유지.
+- `score/population.py`, `score/risk.py`, `score/risk_mix.py`: 전달된 family로 슬롯·서비스 집계.
+- `configs/analysis/question_risk_v1.yaml`: 손실·분모·주장 범위 등록 정책.
+- `audits/kosgd2_selection/select_turns.py`: 표준 라이브러리만 쓰는 결정적 새 풀 선정 CLI.
+- `run/history_statistics.py`: 역사 파일의 수치 타입·범위와 임계값 연결 검사.
+- `contract/label_vocab.py`: 어휘 등록 키는 가족 대표만 사용한다는 규칙 명시.

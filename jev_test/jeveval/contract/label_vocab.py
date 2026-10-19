@@ -2,6 +2,8 @@
 
 from jeveval.types import LabelVocab
 
+
+# 가족 대표만 어휘를 소유한다. kosgd2 같은 별칭은 여기에 추가하지 않는다.
 SETS = {"kosgd": "kosgd_acts", "kmhas": "kmhas", "kote_escalation": "kote"}
 CLOSE_ACTS = ("GOODBYE", "THANK_YOU")
 

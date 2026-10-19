@@ -20,6 +20,12 @@ EXPECTED = {
     "b1_qwen3_8_27b": ("b1", "separate", None, None),
     "b1_qwen3_8_27b_fp8": ("b1", "separate", None, None),
 }
+# pplx: v1 은 참조 앱의 422, v1.1 은 SGLang --context-length 의 400 (10-18 P0 실서버 확인, yaml 머리 주석)
+PPLX_LIMIT_RESPONSE = {
+    "pplx_v1": {"status": 422, "body_regex": "exceeds the 8192-token limit"},
+    "pplx_v1_1": {"status": 400, "body_regex": "does not fit the context length of 8192 tokens"},
+}
+SYSTEMONE_SERVED = {"pplx_v1_1": "perplexity-ai_pplx-decider-v1.1-27b"}
 B1_SERVING = {
     "b1_qwen3_8_27b": ("qwen_qwen3.8_27b", "OPENAI_API_KEY"),
     "b1_qwen3_8_27b_fp8": ("qwen_qwen3.8_27B_FP8", "OPENAI_API_KEY_7"),
@@ -38,15 +44,17 @@ def test_six_registered_models_and_pending_run_fields():
         assert cfg.concurrency == 1 and cfg.t0 == {"status": "not_run", "record": None}
         assert cfg.notes
         assert cfg.input_limit_response == (
-            {"status": 400, "body_regex": "maximum context length is"}
-            if cfg.id in B1_SERVING else
-            {"status": 422, "body_regex": "exceeds the 8192-token limit"} if cfg.id.startswith("pplx") else None)
+            {"status": 400, "body_regex": "maximum context length is"} if cfg.id in B1_SERVING
+            else PPLX_LIMIT_RESPONSE.get(cfg.id))
         assert ModelConfig.from_dict(cfg.to_dict()) == cfg
         expected = ["served_name", "base_url"]
         if cfg.kind == "b1":
             expected = ["base_url"]
             assert cfg.serving["engine"] == "vllm"
             assert (cfg.served_name, cfg.auth_env) == B1_SERVING[cfg.id]
+        elif cfg.id in SYSTEMONE_SERVED:
+            expected = ["base_url"]   # 10-18 P0 실서버 확인 뒤 served_name 을 채움
+            assert cfg.served_name == SYSTEMONE_SERVED[cfg.id]
         else:
             assert cfg.served_name is None
         assert missing_for_run(cfg, labels) == expected
@@ -76,11 +84,10 @@ def test_systemone_encoder_limits_and_manifest(name):
     clef = name.startswith("clef")
     assert cfg.encoder["rule"] == ("clef_encode_record" if clef else "pplx_decision_messages")
     assert cfg.limit == {"tokens": 16384 if clef else 8192, "overflow": "truncate_tail" if clef else "reject"}
-    assert cfg.input_limit_response == (None if clef else
-        {"status": 422, "body_regex": "exceeds the 8192-token limit"})
+    assert cfg.input_limit_response == (None if clef else PPLX_LIMIT_RESPONSE[name])
     required = {"tokenizer.json", "tokenizer_config.json"}
     required |= ({"joint_schema_model.py"} if clef else {"decision_config.json",
         "source/src/autojev/__init__.py", "source/src/autojev/model.py", "source/src/autojev/types.py"})
     assert required <= cfg.tokenizer["files_sha256"].keys()
     assert isinstance(cfg.tokenizer["path"], str) and cfg.tokenizer["path"]
-    assert missing_for_run(cfg) == ["served_name", "base_url"]
+    assert missing_for_run(cfg) == (["base_url"] if name in SYSTEMONE_SERVED else ["served_name", "base_url"])

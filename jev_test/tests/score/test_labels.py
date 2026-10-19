@@ -88,7 +88,24 @@ def test_korfin_binding_and_klue_boolean(label_rules):
 
 
 def test_all_rules_reject_missing_fields_and_unknown_name(label_rules):
-    assert len(label_rules) == 33
+    assert len(label_rules) == 34
     for label in [*label_rules, "unknown:name"]:
         with pytest.raises(ValueError):
             gold(label, [row()], {}, {}, label_rules)
+
+
+@pytest.mark.parametrize("pairs,expected", [([], "false"), ([("a", "x")], "false"),
+    ([("a", "x"), ("b", "x")], "true"), ([("a", "x"), ("a", "x")], "false"),
+    ([("a", "NONE")], "false")])
+def test_ongoing_two_uses_complete_service_intent_ids(pairs, expected):
+    from jeveval.score.labels import ongoing_two
+    rows = [row(frames=[dict(service=s, state={"active_intent": i}) for s, i in pairs])]
+    assert ongoing_two(rows, {}, None, catalog_order=["a/x", "b/x", "c/x"]) == expected
+
+
+@pytest.mark.parametrize("pairs", [[("unknown", "x")], [("a", "x"), ("b", "x"), ("c", "x")]])
+def test_ongoing_two_rejects_unknown_or_three_intents(pairs):
+    from jeveval.score.labels import ongoing_two
+    rows = [row(frames=[dict(service=s, state={"active_intent": i}) for s, i in pairs])]
+    with pytest.raises(ValueError):
+        ongoing_two(rows, {}, None, catalog_order=["a/x", "b/x", "c/x"])

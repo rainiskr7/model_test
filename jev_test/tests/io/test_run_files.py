@@ -119,3 +119,17 @@ def test_copy_failure_preserves_files(tmp_path, monkeypatch, step):
                              tmp_path / "missing/target" if step == "parent" else dst)
     assert src.read_bytes() == b"new" and dst.read_bytes() == b"old"
     assert set(tmp_path.iterdir()) == {src, dst}
+
+
+def test_write_text_atomic_utf8_and_non_string_rejected(tmp_path, monkeypatch):
+    path = tmp_path / "report.md"
+    path.write_text("before")
+    original = run_files.os.replace
+    def replace(source, destination):
+        assert path.read_text() == "before" and source.read_bytes() == "한글\n".encode()
+        original(source, destination)
+    monkeypatch.setattr(run_files.os, "replace", replace)
+    run_files.write_text(path, "한글\n")
+    assert path.read_text() == "한글\n"
+    with pytest.raises(TypeError):
+        run_files.write_text(path, {})

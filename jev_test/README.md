@@ -13,3 +13,8 @@
 - 사전 감사 기록(라벨만 읽는 스크립트·실행 기록): [`audits/`](audits/README.md)
 
 현재 상태: **계획 단계** (개정 12, 평가 코드 없음). 첫 실행은 A 묶음 + B1.
+
+판 5 Phase A는 역사 산출물 보고(`report`), 탐색적 질문 위험(`question-risk --history`),
+kosgd2 가족 디스패치와 선정 스크립트를 추가한다. 명령 예와 모듈 지도는
+[`jeveval/README.md`](jeveval/README.md)의 판 5 절에 있다. 데이터 생성·모델 호출·
+파일럿·감사 v4/v5·최종 동결은 Phase B이며 이번 구현에 포함하지 않는다.

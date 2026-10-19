@@ -8,6 +8,18 @@ sets:
     unit: user_turn                      # item_id = 대화 안 turn_index (SYSTEM 턴 포함 전체 목록의 위치)
     group_key: dialogue_id
     pool: {kind: fixed_selection, path: audits/kosgd_audit/audit_result.json, field: selected_turns}   # 10-12 선정, 대화당 1턴 3,000
+  # 개정 15: 선택 seed=20261019, 분할은 전역 20261012/0.2를 그대로 사용.
+  kosgd2:
+    family: kosgd
+    source: {dir: dataset/kosgd2, dialogues_glob: "dialogues_*.json", schema: extended_schema.json}
+    unit: user_turn
+    group_key: dialogue_id
+    pool:
+      kind: fixed_selection
+      path: audits/kosgd2_selection/selection.json
+      field: selected_turns
+      exclude:
+        - {path: audits/kosgd_audit/audit_result.json, field: selected_turns, by: dialogue_id}
   fc_call_decision:
     source: {file: dataset/fc_call_decision/FunctionChat-CallDecision.jsonl}
     unit: row                            # item_id = serial_num

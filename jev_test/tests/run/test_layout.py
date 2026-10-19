@@ -23,3 +23,10 @@ def test_paths_and_symlink_escape(tmp_path):
     (root / "model").symlink_to(tmp_path, target_is_directory=True)
     with pytest.raises(ValueError):
         run_dir(root, "model", "r1", "set", "full")
+
+
+def test_report_default_path_and_identifier_escape(tmp_path):
+    from jeveval.run.layout import report_path
+    assert report_path(tmp_path, "r1") == tmp_path / "_report/r1.md"
+    with pytest.raises(ValueError):
+        report_path(tmp_path, "../escape")

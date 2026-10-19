@@ -4,7 +4,21 @@ import argparse
 import json
 from pathlib import Path
 
-from jeveval.run import cmd_archive, cmd_certify, cmd_compare, cmd_replay, cmd_run, cmd_score, cmd_threshold, cmd_t0
+from jeveval.run import cmd_report, cmd_question_risk, cmd_archive, cmd_certify, cmd_compare, cmd_replay, cmd_run, cmd_score, cmd_threshold, cmd_t0
+
+
+def _report_commands(commands):
+    """보고와 탐색 분석의 인자만 조립한다."""
+    report = commands.add_parser("report")
+    report.add_argument("--run-id", required=True)
+    report.add_argument("--models", nargs="+", required=True)
+    report.add_argument("--results", default="results")
+    report.add_argument("--compare-id", nargs="+")
+    report.add_argument("--note-unrun", nargs="+")
+    report.add_argument("--out")
+    questions = commands.add_parser("question-risk")
+    questions.add_argument("--run-dir", required=True)
+    questions.add_argument("--history", action="store_true")
 
 
 def main(argv=None):
@@ -35,12 +49,14 @@ def main(argv=None):
     archive.add_argument("--run-id", required=True)
     archive.add_argument("--results", default="results")
     archive.add_argument("--archive-root", default="archive")
+    _report_commands(commands)
     cmd_t0.configure(commands)
     args = vars(parser.parse_args(argv))
     command = args.pop("command")
     handler = {"run": cmd_run, "threshold": cmd_threshold, "score": cmd_score,
                "certify": cmd_certify, "compare": cmd_compare, "archive": cmd_archive,
-               "replay": cmd_replay, "t0": cmd_t0}[command]
+               "replay": cmd_replay, "t0": cmd_t0, "report": cmd_report,
+               "question-risk": cmd_question_risk}[command]
     try:
         result = handler.run(root=Path.cwd(), **args)
     except Exception:

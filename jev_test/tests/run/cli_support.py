@@ -8,6 +8,8 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 import yaml
 
+from jeveval.io.datasets import family
+from jeveval.io.config import read_yaml
 from jeveval.io.hashes import sha256_file
 from jeveval.io.splits import write_split_plan
 from jeveval.run import cli, cmd_run
@@ -25,6 +27,7 @@ def put_yaml(path, value):
 
 class Harness:
     def __init__(self, root, set_name="klue_mrc_answerable", variant="default", kind="systemone"):
+        self.family = family(set_name, read_yaml(REPO / "configs/datasets.yaml"))
         self.root, self.set, self.variant, self.sent = root, set_name, variant, []
         root.mkdir(parents=True, exist_ok=True)
         add_external(root)
@@ -67,7 +70,7 @@ class Harness:
     def _write_split(self, root, set_name, rules):
         groups, representatives = {}, {}
         for i in (1, 2):
-            item = "0" if set_name == "kosgd" else str(i)
+            item = "0" if self.family == "kosgd" else str(i)
             groups[str(i)] = [item]
             representatives[str(i)] = f"{set_name}:{i}:{item}"
         extra = []
@@ -76,12 +79,12 @@ class Harness:
             extra = [f"{set_name}:2:3"]
         self.plan = SplitPlan(set_name, 1, {}, {}, groups, representatives, ["1"], ["2"], [], extra, {})
         write_split_plan(self.plan, root / f"configs/splits/{set_name}.json")
-        put_yaml(root / "configs/splits/rules.yaml", {"sets": {set_name: rules}})
+        put_yaml(root / "configs/splits/rules.yaml", {"sets": {set_name: {**rules, "family": self.family}}})
         entries = label_entries()
         if set_name not in {entry["id"] for entry in entries}:
-            entries.append({"id": set_name})
+            entries.append({"id": set_name, "family": self.family})
         for entry in entries:
-            if entry["id"] == "kosgd":
+            if entry["id"] == set_name and self.family == "kosgd":
                 entry["map"] = {"primary_variant": "full"}
         put_yaml(root / "configs/datasets.yaml", {"sets": entries})
 
@@ -111,7 +114,7 @@ class Harness:
 
     @property
     def args(self):
-        name = f"kosgd_{self.variant}" if self.set == "kosgd" else self.set
+        name = f"{self.set}_{self.variant}" if self.family == "kosgd" else self.set
         return dict(root=self.root, model="configs/models/synthetic.yaml",
                     task=f"configs/tasks/{name}.yaml", run_id="r1")
 

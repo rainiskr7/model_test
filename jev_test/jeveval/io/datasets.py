@@ -27,7 +27,28 @@ def dataset_entry(data, set_id) -> dict:
 def read_label_vocab(path) -> LabelVocab:
     """세 셋 항목의 label_vocab 을 읽어 순수 검사기로 위임한다."""
     data = read_yaml(path)
+    if any(family(set_id, data) != set_id for set_id in SETS):
+        raise ValueError("label vocabulary requires family representatives")
     result = validate_label_vocab({set_id: dataset_entry(data, set_id).get("label_vocab") for set_id in SETS})
     if isinstance(result, list):
         raise ValueError("; ".join(result))
     return result
+
+
+def family(set_id, data):
+    """셋 정체성과 독립인 가족을 조회한다. 어휘는 가족 대표 셋을 공유한다."""
+    from jeveval.io.paths import identifier
+    return identifier(dataset_entry(data, set_id).get("family", set_id))
+
+
+def checked_family(set_id, cfg, root):
+    """두 설정의 가족 선언을 대조한다. 별칭에는 datasets 선언이 필수다."""
+    from pathlib import Path
+    path = Path(root) / "configs/datasets.yaml"
+    declared = cfg.get("family", set_id)
+    if path.exists():
+        if family(set_id, read_yaml(path)) != declared:
+            raise ValueError("dataset/rules family mismatch")
+    elif declared != set_id:
+        raise ValueError("alias requires datasets family")
+    return declared

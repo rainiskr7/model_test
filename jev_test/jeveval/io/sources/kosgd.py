@@ -6,7 +6,7 @@ from pathlib import Path
 from jeveval.types import SourceRow
 
 
-def read_rows(source_cfg: dict, root: Path) -> list[SourceRow]:
+def read_rows(source_cfg: dict, root: Path, *, set_name="kosgd") -> list[SourceRow]:
     """USER 위치·frames와 대상까지의 대화, 대화의 서비스 목록을 보존한다."""
     rows, seen = [], set()
     paths = sorted((root / source_cfg["dir"]).glob(source_cfg["dialogues_glob"]))
@@ -24,10 +24,26 @@ def read_rows(source_cfg: dict, root: Path) -> list[SourceRow]:
                     fields["dialogue"] = [{k: t[k] for k in ("speaker", "utterance")}
                                           for t in dialogue["turns"][:index + 1]]
                     fields["services"] = list(dialogue["services"])
-                    rows.append(SourceRow("kosgd", f"{did}#{index}", fields))
+                    rows.append(SourceRow(set_name, f"{did}#{index}", fields))
     return rows
 
 
 def read_selection(pool_cfg: dict, root: Path) -> list[dict]:
     """감사 JSON에서 지정된 selected_turns만 반환한다."""
     return json.loads((root / pool_cfg["path"]).read_text(encoding="utf-8"))[pool_cfg["field"]]
+
+
+def read_exclusions(pool_cfg, root):
+    """선정 제외 목록은 대화 ID로 읽는다. 다른 턴도 같은 제외 단위다."""
+    from jeveval.io.paths import inside
+    excluded = set()
+    for rule in pool_cfg.get("exclude", []):
+        if set(rule) != {"path", "field", "by"} or rule["by"] != "dialogue_id":
+            raise ValueError("invalid selection exclusion rule")
+        data = json.loads(inside(root, rule["path"]).read_text(encoding="utf-8"))
+        for entry in data[rule["field"]]:
+            value = entry["dialogue_id"]
+            if not isinstance(value, str) or not value:
+                raise ValueError("invalid excluded dialogue ID")
+            excluded.add(value)
+    return excluded

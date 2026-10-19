@@ -7,7 +7,7 @@ import pyarrow.parquet as pq
 from jeveval.types import SourceRow
 
 
-def read_rows(source_cfg: dict, root: Path) -> list[SourceRow]:
+def read_rows(source_cfg: dict, root: Path, *, set_name="korfin_asc") -> list[SourceRow]:
     """aspect 행을 원본 순서대로 유지한다. SRC 축약은 grouping이 맡는다."""
     fields = pq.read_table(root / source_cfg["file"]).to_pylist()
-    return [SourceRow("korfin_asc", row["SID"], row) for row in fields]
+    return [SourceRow(set_name, row["SID"], row) for row in fields]
