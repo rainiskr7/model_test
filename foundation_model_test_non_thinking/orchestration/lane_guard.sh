@@ -4,6 +4,18 @@
 # The old watchdog/temp_guard must already have been retired by the operator.
 set -u
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+LANES_LOGICAL=$HERE/lanes
+LANES_PHYSICAL=$(cd "$LANES_LOGICAL" && pwd -P) || exit 4
+# Escape literal paths for pgrep's extended regular expression. Keep the lane
+# symlink basename: resolving the script itself would collapse all lane names.
+ere_literal() { printf '%s' "$1" | sed 's/[][\\.^$*+?(){}|]/\\&/g'; }
+lane_pattern() {
+  local logical physical
+  logical=$(ere_literal "$LANES_LOGICAL/$1.sh")
+  physical=$(ere_literal "$LANES_PHYSICAL/$1.sh")
+  if [ "$logical" = "$physical" ]; then printf '%s' "$logical"
+  else printf '(%s|%s)' "$logical" "$physical"; fi
+}
 BASE=$HERE/..
 ORCH=${LANEGUARD_RUNTIME_DIR:-$BASE/logs/resume_orch}
 mkdir -p "$ORCH" || exit 4
@@ -180,7 +192,8 @@ while :; do
     [ -n "$name" ] || continue
     case "$name" in *[!a-zA-Z0-9_-]*) log 'invalid lane name'; exit 4 ;; esac
     load_state
-    roots=$(pgrep -f "^([^ ]*/)?bash [^ ]*/orchestration/lanes/${pat}\.sh$" 2>/dev/null)
+    script_pattern=$(lane_pattern "$pat")
+    roots=$(pgrep -f "^([^ ]*/)?bash ${script_pattern}$" 2>/dev/null)
     count=$(printf '%s\n' "$roots" | awk 'NF{n++}END{print n+0}')
     if [ "$count" -ge 2 ]; then
       if [ "$duplicate_warned" = 0 ]; then log "$name: 레인 2개 이상 — 신호 없음"; duplicate_warned=1; save_state; fi
@@ -188,7 +201,9 @@ while :; do
     fi
     root=$roots
     if [ -z "$root" ] && [ "$unsupported_warned" = 0 ]; then
-      if ps -axo command= | awk -v pat="$pat" '$1 ~ /(^|\/)bash$/ && index($0,"/orchestration/lanes/" pat){found=1}END{exit !found}'; then
+      # The same literal path policy, allowing bash options/extra script args
+      # only for warning. A longer basename (e.g. name_full.sh) is not this lane.
+      if ps -axo command= | grep -E "^([^ ]*/)?bash (.*[[:space:]])?${script_pattern}([[:space:]]|$)" >/dev/null; then
         log "$name: 미지원 실행 형태"; unsupported_warned=1
       fi
     fi

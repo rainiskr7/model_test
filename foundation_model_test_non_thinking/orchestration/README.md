@@ -2,10 +2,13 @@
 
 이 디렉터리는 실행 코드와 conf를 보관한다. 런타임 상태와 로그는 기존
 `logs/resume_orch/`에 이어 쓴다. 명령은 N 저장소 루트에서 실행한다.
-아래 N은 실제 절대 경로로 설정한다.
+아래 N은 디렉터리 심볼릭 링크가 없는 정규 절대경로로 설정한다.
+guard와 레인을 같은 정규 경로로 기동한다(`/tmp`는 macOS에서 `/private/tmp`).
+레인 진입 파일 자체의 `../run_lane.sh` 링크는 유지하며 resolve하지 않는다.
 
 ```bash
 N=/Users/rainis/Desktop/workspace/source/model_test/foundation_model_test_non_thinking
+N=$(cd "$N" && pwd -P)
 cd "$N"
 # 1. 운영자가 서빙 상태를 확인한다.
 bash check_servers.sh
@@ -24,8 +27,11 @@ nohup perl -e 'setpgrp; exec @ARGV' /bin/bash "$N/orchestration/lane_guard.sh" >
    `LANEGUARD_RUNTIME_DIR`로 런타임 디렉터리를 바꿀 수 있다.
 6. 새 레인은 `lanes/<name>.conf`, `ln -s ../run_lane.sh lanes/<name>.sh`,
    `lanes.conf` 한 줄을 추가한다. 레인은 인자 없이 `/bin/bash <절대경로>.sh`로
-   실행한다. guard는 `/orchestration/lanes/<pat>.sh`와 이름이 정확히 일치하는
-   bash 프로세스만 root로 인정한다.
+   실행한다. guard는 자기 `$HERE/lanes`의 논리 경로와 `pwd -P` 물리 경로
+   두 문자열만 인정한다(같으면 하나). 경로와 `<pat>.sh`가 정확히 일치하고
+   추가 인자가 없는 bash 프로세스만 root다. 다른 체크아웃은 식별·미지원
+   경고에서 제외하며, 임의의 다른 심볼릭 링크 별칭까지 탐색하지 않는다.
+   `nohup perl ... exec` 이후에는 bash가 같은 PID를 이어받으므로 이 형식과 호환된다.
 7. 실행 전 해석 결과를 확인한다.
 
 ```bash
@@ -55,9 +61,45 @@ END_LABEL은 `=== <END_LABEL> 레인 종료 ===`에 그대로 사용한다.
 
 ```bash
 bash orchestration/tests/test_lane_guard.sh
-python3 -I ../foundation_model_test_thinking/shared/harness/tests/runner_checks.py guard "$PWD/orchestration/lane_guard.sh"
+# 같은 guard 시험의 직접 진입점:
+bash orchestration/tests/test_lane_guard_isolated.sh
 bash orchestration/tests/test_run_lane_equivalence.sh
 cmp shared/harness/tests/runner_checks.py ../foundation_model_test_thinking/shared/harness/tests/runner_checks.py
+```
+
+guard 시험은 표준 라이브러리 패키지 `orchestration.tests.lane_guard_check`를
+`PYTHONPATH=N python3 -m`으로 실행한다. 운영 `lanes.conf`를 읽거나 복사하지
+않으며, 합성 conf와 임시 guard/helper 사본만 사용한다. 동결 시험을 import하지 않는다.
+기존 래퍼의 선택 인자 및 `LANEGUARD_TARGET`은 검사할 guard 파일 선택용으로 유지한다.
+
+합성 층은 fixture `bin/`의 `ps`/`pgrep`/`kill`이 `processes.json`만 읽는다.
+실프로세스 층도 같은 어댑터를 거치며, fixture가 띄운 bash·sleep·미끼의 등록 PID만
+`/bin/ps -p <PID>`로 조회한다. 전역 프로세스 목록은 조회하지 않는다. 시작 시각을
+재확인한 등록 PID만 신호를 받으며, Bash 내장 kill은 fixture의 `BASH_ENV`에서만
+비활성화해 PATH 어댑터를 우회하지 못하게 한다. `LG_CHECK_*`는 시험 어댑터 전용
+변수이며 guard의 운영 주입 변수는 추가하지 않는다. health/온도는 기존 주입 명령을
+사용하고 네트워크 명령은 실패하는 스텁으로 차단한다.
+
+미끼는 fixture 밖 별도 임시 경로의 `qwen38.sh`를 운영과 같은 nohup/Perl 형식으로
+기동한다. 생존·T 상태를 반복 관측하고 guard 로그와 신호 기록에 미끼 PID가 없는지
+검사한다. 관측 간 순간 상태의 부재는 샘플링만으로 증명하지 않으므로 모든 신호
+시도 기록도 함께 검사한다. 정리는 등록한 PID에만 수행한다.
+
+C1.2는 `git show HEAD:./orchestration/lane_guard.sh` 사본을 사용한다. Git 루트가
+N의 상위 디렉터리이므로 `HEAD:orchestration/lane_guard.sh` 대신 cwd 상대 Git
+표기를 사용한다. 수정 전의 미끼 식별은 예상된 격리 FAIL, 수정 후는 PASS로 기록한다.
+이 재현 검사는 수정 전 guard가 HEAD인 1단계 커밋 전에 실행한다. 커밋 후에는
+HEAD도 수정 후 코드가 되므로 같은 명령으로 수정 전 FAIL을 재현할 수 없다.
+수정 전 실프로세스 보존 검사도 PID 허용목록 안에서만 수행한다.
+`ARTIFACTS=/tmp/lane_guard_check.*` 아래 `summary.json`, `head_source.txt`, 케이스별
+`cycles.log`, `calls.jsonl`, `signals.jsonl`, `decoy_samples.json`을 남긴다.
+실패가 있으면 rc 1, 실제 프로세스 증거가 불가하면 rc 77, 모두 통과하면 rc 0이다.
+
+동결 guard suite는 **운영 레인이 하나도 없을 때만 직접 호출**한다. 1단계의
+C1.5는 A가 실행하며, 5b 이후에는 새 계약과 비호환이므로 이 suite를 퇴역시킨다.
+
+```bash
+python3 -I shared/harness/tests/runner_checks.py guard "$PWD/orchestration/lane_guard.sh"
 ```
 
 시험은 임시 fixture에서만 가짜 레인/키/HTTP 및 harness 스텁을 사용한다.
