@@ -22,6 +22,7 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Any, Iterable, Mapping
 
+from shared.reproidentity.core import digest as _digest, metadata_identity as _metadata_identity
 from shared.functionchat.scoring.exact_match import exact_match
 from shared.functionchat.scoring.score_run import scorable_status
 
@@ -31,24 +32,6 @@ __all__ = [
 ]
 
 DATASET_FILES = ("singlecall", "call_decision", "dialog")
-
-
-def _digest(values: Iterable[str]) -> str:
-    material = "\n".join(sorted(values)).encode("utf-8")
-    return hashlib.sha256(material).hexdigest()[:16]
-
-
-def _metadata_identity(values: Iterable[Any]) -> Any:
-    """한 런 안에서 기록된 메타데이터를 비교 가능한 값으로 보존한다."""
-
-    encoded = {
-        json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
-        for value in values
-    }
-    if not encoded:
-        return None
-    decoded = [json.loads(value) for value in sorted(encoded)]
-    return decoded[0] if len(decoded) == 1 else tuple(sorted(encoded))
 
 
 def _read_run_datasets(run_dir: Path) -> tuple:

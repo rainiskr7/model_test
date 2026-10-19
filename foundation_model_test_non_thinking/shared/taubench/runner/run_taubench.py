@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any, Iterable, Mapping, MutableMapping, Optional
 
 from shared.jsonwrite.atomic_json import write_json_atomic
+from shared.resultspath.model_dir import results_model_dir_name, safe_model_name
 from shared.resultspath.run_dir import run_timestamp as _timestamp
 
 
@@ -19,38 +20,6 @@ SOURCE_COMMIT = "c3398666e6559e3a063da3fc04b5acf7f941464e"
 DEFAULT_SPLIT = "test"
 JUDGE_BASES = frozenset({"NL_ASSERTION", "COMMUNICATE"})
 PROGRAMMATIC_BASES = frozenset({"DB", "ENV_ASSERTION", "ACTION"})
-
-
-def safe_model_name(model: str) -> str:
-    return model.replace("/", "_").replace("-", "_").replace(":", "_")
-
-
-def results_model_dir_name(base_dir: Path, model: str) -> str:
-    """이미 있는 모델 디렉토리의 **실제 표기**를 재사용한다.
-
-    문자열 치환만 하면 macOS 에서는 대소문자를 무시해 드러나지 않지만, 리눅스에서는
-    ``results/google_gemma_4_26b_a4b_it`` 와 ``results/google_gemma_4_26B_A4B_it`` 가
-    서로 다른 디렉토리가 되어 한 런의 산출물이 둘로 갈린다. 이 저장소에는 이미 두
-    표기가 모두 git 에 들어 있다. multimodal 트랙에서 같은 결함을 실증하고 고쳤고,
-    같은 규칙을 여기서도 쓴다 — 규칙을 복제하지 말고 동작을 맞춘다.
-    """
-
-    requested = safe_model_name(model)
-    results_root = Path(base_dir) / "results"
-    if not results_root.is_dir():
-        return requested
-    matches = sorted(
-        entry.name
-        for entry in results_root.iterdir()
-        if entry.is_dir() and entry.name.casefold() == requested.casefold()
-    )
-    if len(matches) == 1:
-        return matches[0]
-    if len(matches) > 1:
-        raise ValueError(
-            f"case-fold ambiguous results model directory for {requested!r}: {matches}"
-        )
-    return requested
 
 
 def normalize_api_base(base_url: str) -> str:

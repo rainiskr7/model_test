@@ -36,6 +36,7 @@ __all__ = [
 ]
 
 
+# reproidentity.digest와 다름: JSON 직렬화 후 전체 SHA-256을 반환한다.
 def _digest(value: Any) -> str:
     material = json.dumps(value, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
     return hashlib.sha256(material.encode("utf-8")).hexdigest()

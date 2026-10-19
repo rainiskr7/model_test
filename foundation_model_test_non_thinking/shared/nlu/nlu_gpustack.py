@@ -9,6 +9,8 @@ import importlib
 from datetime import datetime
 from pathlib import Path
 
+from shared.resultspath.model_dir import results_model_dir_name, safe_model_name
+
 # Compatibility for callers that replace get_response with the legacy signature.
 # Credentials are resolved only when main() starts, never during import.
 api_key = None
@@ -142,45 +144,8 @@ def get_response(prompt, model, endpoint: str, timeout: float = 600.0,
     return content, {key: value for key, value in served.items() if value is not None}
 
 
-def safe_model_name(model: str) -> str:
-    """Normalize model name for filesystem path.
-
-    Examples:
-        google/gemma-4-26B-A4B → google_gemma_4_26B_A4B
-        Qwen/Qwen3.5-122B-A10B-FP8 → Qwen_Qwen3.5_122B_A10B_FP8
-    """
-    return model.replace("/", "_").replace("-", "_").replace(":", "_")
-
-
 MANIFEST_NAME = "run.json"
 MANIFEST_SCHEMA_VERSION = 1
-
-
-def results_model_dir_name(base_dir: Path, model: str) -> str:
-    """이미 있는 모델 디렉토리의 **실제 표기**를 재사용한다.
-
-    macOS 는 대소문자를 무시해 드러나지 않지만 리눅스에서는
-    ``results/google_gemma_4_26B_A4B_it`` 와 ``results/google_gemma_4_26b_a4b_it`` 가
-    서로 다른 디렉토리가 되어 한 런의 산출물이 둘로 갈린다. 이 저장소의 results/ 에는
-    두 표기가 실제로 모두 들어 있다.
-    """
-
-    requested = safe_model_name(model)
-    results_root = Path(base_dir) / "results"
-    if not results_root.is_dir():
-        return requested
-    matches = sorted(
-        entry.name
-        for entry in results_root.iterdir()
-        if entry.is_dir() and entry.name.casefold() == requested.casefold()
-    )
-    if len(matches) == 1:
-        return matches[0]
-    if len(matches) > 1:
-        raise ValueError(
-            f"case-fold ambiguous results model directory for {requested!r}: {matches}"
-        )
-    return requested
 
 
 def write_json_atomic(path: Path, payload) -> None:

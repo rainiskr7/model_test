@@ -54,6 +54,7 @@ from configs.secrets import (
 )
 
 
+# gpustack_custom은 외부 배치 코드라 공용 import 불가 — 같은 본문 유지.
 def _env_flag(name: str) -> bool:
     return os.environ.get(name, "").strip().lower() in ("1", "true", "yes")
 

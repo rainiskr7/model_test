@@ -5,7 +5,7 @@ import re
 from pathlib import Path
 from typing import Any, Dict, Iterable, List
 
-from shared.resultspath.model_dir import results_model_dir_name
+from shared.resultspath.model_dir import results_model_dir_name, safe_model_name
 
 from shared.agent.scoring.aggregate_coverage import _format_l7_coverage
 from shared.agent.scoring import SCORING_VERSION, SCORING_VERSION_V3, SCORING_VERSION_V4
@@ -776,10 +776,6 @@ def _native_tool_calling(level_data: Iterable[Dict[str, Any]]):
     # 이 필드가 추가되기 전 결과는 text parser 기반(non-native) 런이었다.
     # 오래된 raw 결과를 재채점해도 현재 summary 계약(boolean)을 만족시킨다.
     return False
-
-
-def safe_model_name(model: str) -> str:
-    return model.replace("/", "_").replace("-", "_").replace(":", "_")
 
 
 def _model_name(results_dir: Path, level_data: Iterable[Dict[str, Any]]) -> str:

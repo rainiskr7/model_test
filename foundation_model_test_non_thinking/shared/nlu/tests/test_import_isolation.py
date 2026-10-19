@@ -114,6 +114,8 @@ def test_cli_without_key_keeps_exit_contract(tmp_path, arguments, rc, expected):
     for source in (RUNNER.parent / "scoring", RUNNER.parent.parent / "serving"):
         destination = nlu / "scoring" if source.name == "scoring" else shared / "serving"
         shutil.copytree(source, destination, ignore=shutil.ignore_patterns("__pycache__", "tests"))
+    shutil.copytree(CODE_ROOT / "shared/resultspath", shared / "resultspath",
+                    ignore=shutil.ignore_patterns("__pycache__", "tests"))
     (tmp_path / ".env").write_text("# deliberately no API key\n", encoding="utf-8")
     env = dict(os.environ, MODEL_TEST_BASE=str(tmp_path), EVAL_TIMESTAMP="synthetic",
                PYTHONPATH=str(tmp_path))

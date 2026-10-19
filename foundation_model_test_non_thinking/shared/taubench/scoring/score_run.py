@@ -12,7 +12,8 @@ from typing import Any, Iterable, Mapping, NamedTuple, Optional
 
 from shared.jsonwrite.atomic_json import write_json_atomic
 from shared.resultspath.run_dir import scoring_results_dir
-from shared.resultspath.model_dir import results_model_dir_name
+from shared.resultspath.model_dir import results_model_dir_name, safe_model_name
+from shared.jsonread.object import load_json_object as _load
 from shared.taubench.scoring.passk import pass_hat_k_table
 
 
@@ -33,10 +34,6 @@ DECLARED_INVENTORY = {
     "retail": {"total_records": 116},
     "airline": {"total_records": 52},
 }
-
-
-def safe_model_name(model: str) -> str:
-    return model.replace("/", "_").replace("-", "_").replace(":", "_")
 
 
 def classify_task(task: Mapping[str, Any]) -> tuple[str, Optional[str]]:
@@ -540,15 +537,8 @@ def build_summary(
     )
 
 
-def _load(path: Path) -> dict[str, Any]:
-    with path.open("r", encoding="utf-8") as handle:
-        data = json.load(handle)
-    if not isinstance(data, dict):
-        raise ValueError(f"expected JSON object: {path}")
-    return data
-
-
 def _results_dir(args: argparse.Namespace) -> Path:
+    # 유지: __file__의 깊이에 묶인 기본 루트이므로 공용 모듈로 옮기지 않는다.
     return scoring_results_dir(args, Path(__file__).resolve().parents[3])
 
 

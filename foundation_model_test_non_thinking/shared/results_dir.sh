@@ -1,4 +1,5 @@
 #!/bin/bash
+# §12 예외: 동결 harness가 이 helper를 단독 복사해 쓰므로 heredoc 유지.
 # Print the sole existing casefold-equivalent spelling under <base>/results.
 # Sourcing defines the helper only; no directories or session files are written.
 results_model_dir() {

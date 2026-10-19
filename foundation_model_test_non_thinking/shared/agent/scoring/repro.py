@@ -13,30 +13,13 @@ from pathlib import Path
 from typing import Any, Iterable, Mapping
 
 from shared.publish.claims import comparable, credential
+from shared.reproidentity.core import digest as _digest, metadata_identity as _identity
 
 __all__ = [
     "load_run",
     "cohort_key",
     "reproducibility_report",
 ]
-
-
-def _digest(values: Iterable[str]) -> str:
-    material = "\n".join(sorted(values)).encode("utf-8")
-    return hashlib.sha256(material).hexdigest()[:16]
-
-
-def _identity(values: Iterable[Any]) -> Any:
-    """기록된 값 하나는 그대로, 런 내부 불일치는 구별 가능한 값으로 남긴다."""
-
-    encoded = {
-        json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
-        for value in values
-    }
-    if not encoded:
-        return None
-    decoded = [json.loads(value) for value in sorted(encoded)]
-    return decoded[0] if len(decoded) == 1 else tuple(sorted(encoded))
 
 
 def load_run(run_dir: Path) -> dict[str, Any] | None:

@@ -8,7 +8,9 @@ import sys
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Mapping, Tuple
 
+from shared.jsonread.object import load_json_object as _load
 from shared.jsonwrite.atomic_json import write_json_atomic
+from shared.resultspath.model_dir import results_model_dir_name, safe_model_name
 from shared.resultspath.run_dir import scoring_results_dir
 
 from shared.functionchat.scoring.exact_match import CALL, exact_match
@@ -32,37 +34,6 @@ INTEGRITY_FIELDS = (
     "sdk_max_retries",
     "openai_sdk_version",
 )
-
-
-def safe_model_name(model: str) -> str:
-    return model.replace("/", "_").replace("-", "_").replace(":", "_")
-
-
-def results_model_dir_name(base_dir: Path, model: str) -> str:
-    """이미 있는 모델 디렉토리의 **실제 표기**를 재사용한다.
-
-    문자열 치환만 하면 macOS 에서는 대소문자를 무시해 드러나지 않지만, 리눅스에서는
-    ``results/google_gemma_4_26b_a4b_it`` 와 ``results/google_gemma_4_26B_A4B_it`` 가
-    서로 다른 디렉토리가 되어 한 런의 산출물이 둘로 갈린다. 이 저장소에는 두 표기가
-    모두 git 에 들어 있고, multimodal 트랙에서 리눅스로 실증한 결함이다.
-    """
-
-    requested = safe_model_name(model)
-    results_root = Path(base_dir) / "results"
-    if not results_root.is_dir():
-        return requested
-    matches = sorted(
-        entry.name
-        for entry in results_root.iterdir()
-        if entry.is_dir() and entry.name.casefold() == requested.casefold()
-    )
-    if len(matches) == 1:
-        return matches[0]
-    if len(matches) > 1:
-        raise ValueError(
-            f"case-fold ambiguous results model directory for {requested!r}: {matches}"
-        )
-    return requested
 
 
 def scorable_status(item: Mapping[str, Any]) -> str:
@@ -237,15 +208,8 @@ def build_summary(
     }
 
 
-def _load(path: Path) -> Dict[str, Any]:
-    with path.open("r", encoding="utf-8") as handle:
-        data = json.load(handle)
-    if not isinstance(data, dict):
-        raise ValueError(f"expected JSON object: {path}")
-    return data
-
-
 def _results_dir(args: argparse.Namespace) -> Path:
+    # 유지: __file__의 깊이에 묶인 기본 루트이므로 공용 모듈로 옮기지 않는다.
     return scoring_results_dir(args, Path(__file__).resolve().parents[3])
 
 
