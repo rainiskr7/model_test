@@ -33,12 +33,23 @@ class Fixture:
         helper = base / "shared/harness/harness_lib.sh"
         helper.parent.mkdir(parents=True)
         shutil.copyfile(repo / "shared/harness/harness_lib.sh", helper)
-        self.lanes = f"fixture|{pattern}|fixture.invalid|FIXTURE_KEY|fixture-model"
+        # HEAD may still use the retired five-field contract during migration.
+        self.legacy = 'read -r name pat hostname keyvar model' in target.read_text()
+        self.name = "fixture" if self.legacy else pattern + "_kmmlu"
+        self.script = pattern if self.legacy else "kmmlu"
+        self.arguments = [] if self.legacy else [pattern]
+        self.lanes = (f"fixture|{pattern}|fixture.invalid|FIXTURE_KEY|fixture-model" if self.legacy else
+                      f"{self.name}|kmmlu|{pattern}|fixture.invalid|FIXTURE_KEY|fixture-model")
         (self.orch / "lanes.conf").write_text(self.lanes + "\n")
         self.table({})
         self.env = self.environment(repo, mode)
         self.install_adapters()
         self.values("up", "60 70")
+
+    def command(self, directory=None):
+        base = directory or self.base
+        suffix = " " + " ".join(self.arguments) if self.arguments else ""
+        return f"/bin/bash {base}/orchestration/lanes/{self.script}.sh{suffix}"
 
     def environment(self, repo, mode):
         return {"PATH": f"{self.base}/bin:/usr/bin:/bin", "HOME": str(self.base),

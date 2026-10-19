@@ -1,48 +1,70 @@
 #!/bin/bash
-# Invoke through orchestration/lanes/<name>.sh; do not resolve the symlink.
+# Invoke as lanes/<track>.sh <model_conf>; do not resolve the entry symlink.
 set -u
 bad() { printf 'run_lane: %s\n' "$*" >&2; exit 2; }
-[ "$#" -eq 0 ] || bad 'arguments are not supported'
-lane=$(basename "$0" .sh)
+[ "$#" -eq 1 ] || bad 'expected one model_conf argument'
+model_conf=$1
+[[ "$model_conf" =~ ^[a-z0-9_]+$ ]] || bad 'invalid model_conf: use [a-z0-9_] only'
+TRACK=$(basename "$0" .sh)
+case "$TRACK" in kmmlu|taubench_std4|full) ;; *) bad "unknown TRACK: $TRACK" ;; esac
+lane=${model_conf}_${TRACK}
 HERE=$(cd "$(dirname "$0")/.." && pwd) || exit 2
 BASE=$(cd "$HERE/.." && pwd) || exit 2
-conf=$HERE/lanes/$lane.conf
-CONFIG= HOST_ENV= HOST_DEFAULT= KEYVAR= TRACK= SESSION= LABEL= LANE_TOKENIZER=
-PREFIX= STOP_LABEL= END_LABEL=
+conf=$HERE/models/$model_conf.conf
+CONFIG= HOST_ENV= HOST_DEFAULT= KEYVAR= DISPLAY= LANE_TOKENIZER=
+SESSION_KMMLU= SESSION_TAUBENCH_STD4= SESSION_FULL=
 REPS=3 REQUIRE_NOTHINK=1 LM_EVAL_MODE=chat NUM_CONCURRENT=8
 TAUBENCH_USER_MODEL=openrouter/openai/gpt-4.1-mini
 TAUBENCH_TRIALS=4 TAUBENCH_MAX_CONCURRENCY=4 AGENT_REQUEST_TIMEOUT=300
 FULL_KRETA_WORKERS=4 FULL_KRETA_RESUME=0 FULL_RESUME_FROM=
 FULL_AGENT_TASK_TIMEOUT=900
-[ -f "$conf" ] || bad "missing conf: $conf"
-while IFS= read -r line || [ -n "$line" ]; do
-  case "$line" in ''|\#*) continue ;; *=*) ;; *) bad "expected key=value: $line" ;; esac
-  key=${line%%=*}; value=${line#*=}
-  # Optional enclosing quotes are literal delimiters, never shell evaluation.
-  case "$value" in \"*\") value=${value#\"}; value=${value%\"} ;; \'*\') value=${value#\'}; value=${value%\'} ;; esac
-  case "$key" in
-    CONFIG) CONFIG=$value ;; HOST_ENV) HOST_ENV=$value ;; HOST_DEFAULT) HOST_DEFAULT=$value ;;
-    KEYVAR) KEYVAR=$value ;; TRACK) TRACK=$value ;; SESSION) SESSION=$value ;; LABEL) LABEL=$value ;;
-    PREFIX) PREFIX=$value ;; STOP_LABEL) STOP_LABEL=$value ;; END_LABEL) END_LABEL=$value ;;
-    REPS) REPS=$value ;; LANE_TOKENIZER) LANE_TOKENIZER=$value ;; REQUIRE_NOTHINK) REQUIRE_NOTHINK=$value ;;
-    LM_EVAL_MODE) LM_EVAL_MODE=$value ;; NUM_CONCURRENT) NUM_CONCURRENT=$value ;;
-    TAUBENCH_USER_MODEL) TAUBENCH_USER_MODEL=$value ;; TAUBENCH_TRIALS) TAUBENCH_TRIALS=$value ;;
-    TAUBENCH_MAX_CONCURRENCY) TAUBENCH_MAX_CONCURRENCY=$value ;; AGENT_REQUEST_TIMEOUT) AGENT_REQUEST_TIMEOUT=$value ;;
-    AGENT_TASK_TIMEOUT) FULL_AGENT_TASK_TIMEOUT=$value ;;
-    KRETA_WORKERS) FULL_KRETA_WORKERS=$value ;; KRETA_RESUME) FULL_KRETA_RESUME=$value ;;
-    RESUME_FROM) FULL_RESUME_FROM=$value ;;
-    *) bad "unknown key: $key" ;;
+# A whitelist maps literal conf keys to variables; no shell evaluation.
+config_setting() {
+  local setting=$1 value=$2 scope=$3 pass=$4 variable
+  case "$setting" in
+    CONFIG|HOST_ENV|HOST_DEFAULT|KEYVAR|DISPLAY|SESSION_KMMLU|SESSION_TAUBENCH_STD4|SESSION_FULL)
+      [ "$scope" = common ] || bad "key cannot have track prefix: $setting"
+      variable=$setting ;;
+    REPS|LANE_TOKENIZER|REQUIRE_NOTHINK|LM_EVAL_MODE|NUM_CONCURRENT|TAUBENCH_USER_MODEL|TAUBENCH_TRIALS|TAUBENCH_MAX_CONCURRENCY|AGENT_REQUEST_TIMEOUT)
+      variable=$setting ;;
+    AGENT_TASK_TIMEOUT|KRETA_WORKERS|KRETA_RESUME|RESUME_FROM) variable=FULL_$setting ;;
+    *) bad "unknown key: $setting" ;;
   esac
-done < "$conf"
-for key in CONFIG HOST_ENV HOST_DEFAULT KEYVAR TRACK SESSION LABEL PREFIX END_LABEL; do
+  [ "$scope" != "$pass" ] || printf -v "$variable" '%s' "$value"
+}
+
+read_config() {
+  local pass=$1 line key value scope
+  while IFS= read -r line || [ -n "$line" ]; do
+    case "$line" in ''|\#*) continue ;; *=*) ;; *) bad "expected key=value: $line" ;; esac
+    key=${line%%=*}; value=${line#*=}; scope=common
+    # Optional enclosing quotes are literal delimiters, never shell evaluation.
+    case "$value" in \"*\") value=${value#\"}; value=${value%\"} ;; \'*\') value=${value#\'}; value=${value%\'} ;; esac
+    case "$key" in
+      KMMLU_*) scope=kmmlu; key=${key#KMMLU_} ;;
+      TAUBENCH_STD4_*) scope=taubench_std4; key=${key#TAUBENCH_STD4_} ;;
+      FULL_*) scope=full; key=${key#FULL_} ;;
+    esac
+    config_setting "$key" "$value" "$scope" "$pass"
+  done < "$conf"
+}
+[ -f "$conf" ] || bad "missing conf: $conf"
+read_config common
+read_config "$TRACK"
+for key in CONFIG HOST_ENV HOST_DEFAULT KEYVAR DISPLAY; do
   [ -n "${!key}" ] || bad "required key: $key"
 done
-case "$HOST_ENV:$KEYVAR" in *[!a-zA-Z0-9_:]*|[0-9]*|*:[0-9]*) bad 'invalid environment variable name' ;; esac
-# Validate the name before selecting the track's function definitions.
 case "$TRACK" in
-  kmmlu|taubench_std4|full) source "$HERE/tracks/$TRACK.sh" ;;
-  *) bad "unknown TRACK: $TRACK" ;;
+  kmmlu) session_key=SESSION_KMMLU ;;
+  taubench_std4) session_key=SESSION_TAUBENCH_STD4 ;;
+  full) session_key=SESSION_FULL ;;
 esac
+SESSION=${!session_key}
+[ -n "$SESSION" ] || bad "required key: $session_key"
+LABEL="$DISPLAY $TRACK" PREFIX="$DISPLAY $TRACK"
+STOP_LABEL="$DISPLAY $TRACK" END_LABEL="$DISPLAY $TRACK"
+case "$HOST_ENV:$KEYVAR" in *[!a-zA-Z0-9_:]*|[0-9]*|*:[0-9]*) bad 'invalid environment variable name' ;; esac
+source "$HERE/tracks/$TRACK.sh"
 track_validate
 cd "$BASE" || exit 1
 source "$BASE/.venv/bin/activate"
@@ -79,7 +101,7 @@ case "$lock_rc" in
   3) log "$PREFIX: 같은 호스트 레인 실행 중 — 시작 안 함"; exit 2 ;;
   *) log "$PREFIX: 잠금 오류"; exit 4 ;;
 esac
-# Preserve the exact wording supplied by each lane's configuration.
+# The template check remains after the HOST lock and before HTTP preflight.
 if [ "$TRACK" = kmmlu ] && [ "$REQUIRE_NOTHINK" = 1 ]; then
   grep -q 'set enable_thinking = false' "$TOK/chat_template.jinja" || { log "$PREFIX: 생각 끈 사본이 아니다 — $TOK"; exit 1; }
 fi

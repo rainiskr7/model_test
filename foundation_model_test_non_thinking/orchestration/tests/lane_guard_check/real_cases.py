@@ -46,14 +46,14 @@ def real_case(repo, root, target, report, label, physical=True, decoy=True):
     f = Fixture(repo, root / label, target, mode="real")
     owned, monitor = Owned(f), None
     try:
-        lane = f.orch / "lanes/qwen38.sh"
+        lane = f.orch / "lanes" / (f.script + ".sh")
         lane = lane.resolve() if physical else lane
-        pids = owned.launch(lane, "lane")
+        pids = owned.launch(lane, "lane", f.arguments)
         if not all(row["stamp"] for row in owned.records.values()):
             raise Inconclusive("owned PID start identity unavailable")
         if decoy:
-            bait = root / "outside" / label / "orchestration/lanes/qwen38.sh"
-            decoys = owned.launch(bait.resolve(), "decoy")
+            bait = root / "outside" / label / "orchestration/lanes" / (f.script + ".sh")
+            decoys = owned.launch(bait.resolve(), "decoy", f.arguments)
             monitor = DecoyMonitor(decoys)
             monitor.thread.start()
         exercise_tree(f, owned, pids, report, label)

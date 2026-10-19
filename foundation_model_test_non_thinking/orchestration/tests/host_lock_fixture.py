@@ -66,20 +66,20 @@ class Fixture:
         return path
 
     def lane(self, name, track, host='fixture.invalid:18023'):
-        self.put('orchestration/lanes/' + name + '.conf', '\n'.join([
+        self.put('orchestration/models/' + name + '.conf', '\n'.join([
             'CONFIG=fixture', 'HOST_ENV=FIXTURE_HOST', 'HOST_DEFAULT=' + host, 'KEYVAR=FIXTURE_KEY',
-            'TRACK=' + track, 'SESSION=' + name, 'LABEL=fixture', 'PREFIX=fixture', 'STOP_LABEL=fixture',
-            'END_LABEL=fixture', 'REPS=1', 'REQUIRE_NOTHINK=0', 'LANE_TOKENIZER=unused',
+            'SESSION_' + track.upper() + '=' + name, 'DISPLAY=fixture', 'REPS=1', 'REQUIRE_NOTHINK=0', 'LANE_TOKENIZER=unused',
         ]) + '\n')
-        path = self.base / 'orchestration/lanes' / (name + '.sh')
-        path.symlink_to('../run_lane.sh')
+        path = self.base / 'orchestration/lanes' / (track + '.sh')
+        if not path.is_symlink():
+            path.symlink_to('../run_lane.sh')
         return path
 
     def start(self, name, track, host='fixture.invalid:18023', dry=False):
         path = self.lane(name, track, host)
         env = dict(self.env, LANE_DRY_RUN='1' if dry else '0')
         with (self.base / (name + '.stdout')).open('wb') as log:
-            proc = subprocess.Popen(['/bin/bash', str(path)], cwd=self.base, env=env,
+            proc = subprocess.Popen(['/bin/bash', str(path), name], cwd=self.base, env=env,
                                     stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
         session = name + '_r1' if track != 'taubench_std4' else name
         self.processes.append((proc, session))

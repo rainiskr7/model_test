@@ -12,9 +12,10 @@ N=$(cd "$N" && pwd -P)
 cd "$N"
 # 1. 운영자가 서빙 상태를 확인한다.
 bash check_servers.sh
-# 2. qwen38 또는 qwenfp8을 각각 독립 프로세스 그룹으로 시작한다.
-name=qwen38
-nohup perl -e 'setpgrp; exec @ARGV' /bin/bash "$N/orchestration/lanes/$name.sh" >> "logs/resume_orch/$name.nohup.log" 2>&1 &
+# 2. 트랙과 모델을 고르고 독립 프로세스 그룹으로 시작한다.
+name=qwen35fp8_kmmlu
+mkdir -p logs/resume_orch
+nohup perl -e 'setpgrp; exec @ARGV' /bin/bash "$N/orchestration/lanes/kmmlu.sh" qwen35fp8 >> "logs/resume_orch/$name.nohup.log" 2>&1 &
 # 3. 기존 watchdog/temp_guard가 종료되었음을 확인하고 guard를 시작한다.
 nohup perl -e 'setpgrp; exec @ARGV' /bin/bash "$N/orchestration/lane_guard.sh" >> logs/resume_orch/lane_guard.nohup.log 2>&1 &
 ```
@@ -25,18 +26,24 @@ nohup perl -e 'setpgrp; exec @ARGV' /bin/bash "$N/orchestration/lane_guard.sh" >
 5. 상태는 `logs/resume_orch/.lane_guard/<name>.state`, 로그는
    `logs/resume_orch/orchestrator.log`, 잠금은 `.lane_guard.lock`이다.
    `LANEGUARD_RUNTIME_DIR`로 런타임 디렉터리를 바꿀 수 있다.
-6. 새 레인은 `lanes/<name>.conf`, `ln -s ../run_lane.sh lanes/<name>.sh`,
-   `lanes.conf` 한 줄을 추가한다. 레인은 인자 없이 `/bin/bash <절대경로>.sh`로
-   실행한다. guard는 자기 `$HERE/lanes`의 논리 경로와 `pwd -P` 물리 경로
-   두 문자열만 인정한다(같으면 하나). 경로와 `<pat>.sh`가 정확히 일치하고
-   추가 인자가 없는 bash 프로세스만 root다. 다른 체크아웃은 식별·미지원
-   경고에서 제외하며, 임의의 다른 심볼릭 링크 별칭까지 탐색하지 않는다.
-   `nohup perl ... exec` 이후에는 bash가 같은 PID를 이어받으므로 이 형식과 호환된다.
+6. 진입은 `bash orchestration/lanes/<track>.sh <model_conf>`다. track은
+   `kmmlu`, `taubench_std4`, `full`이며 세 링크 모두 `../run_lane.sh`를 가리킨다.
+   model_conf는 `^[a-z0-9_]+$`만 허용한다. `.conf`·`/`·추가 인자는 rc 2다.
+   모델 설정은 `models/<model_conf>.conf`에 둔다. 런타임 이름은
+   `<model_conf>_<track>`이며 상태 파일과 nohup 로그에 이 이름을 쓴다.
+   `lanes.conf` 행은 `name|track|model_conf|hostname|keyvar|model`의 6필드다.
+   name은 반드시 `<model_conf>_<track>`이어야 한다.
+   guard는 자기 `$HERE/lanes`의 논리 경로와 `pwd -P` 물리 경로만 인정한다.
+   root는 `/bin/bash <lanes>/<track>.sh <model_conf>`처럼 모델 인자가 정확히
+   하나인 프로세스다. 인자 없음·추가 인자·bash 옵션은 미지원 형태로 경고한다.
+   같은 트랙의 다른 모델은 별도 레인이며 잘못된 중복·미지원 경고를 만들지 않는다.
+   다른 체크아웃과 임의의 심볼릭 링크 별칭은 탐색하지 않는다.
+   `nohup perl ... exec` 뒤 bash가 같은 PID를 이어받으므로 이 형식과 호환된다.
 7. 실행 전 해석 결과를 확인한다.
 
 ```bash
-LANE_DRY_RUN=1 bash orchestration/lanes/qwen38.sh
-LANE_DRY_RUN=1 bash orchestration/lanes/qwenfp8.sh
+LANE_DRY_RUN=1 bash orchestration/lanes/kmmlu.sh qwen38
+LANE_DRY_RUN=1 bash orchestration/lanes/kmmlu.sh qwenfp8
 ```
 
 Dry-run은 cd, venv 활성화, config loader까지만 진행하며 `.env`를 읽지 않는다.
@@ -61,17 +68,38 @@ rc 4로 끝난다. dry-run에서는 잠금 helper를 source하지 않고 잠금 
 
 conf는 빈 줄/`#` 주석과 `key=value`를 지원한다. 값 양끝의 한 쌍 따옴표는
 제거하며 shell 확장이나 eval은 하지 않는다. 모르는 키/인자는 rc 2다.
-필수 키는 CONFIG, HOST_ENV, HOST_DEFAULT, KEYVAR, TRACK, SESSION, LABEL,
-PREFIX, END_LABEL이다. TRACK은 kmmlu 또는 taubench_std4다.
-kmmlu는 LANE_TOKENIZER, STOP_LABEL도 필수이며
-REPS=3, REQUIRE_NOTHINK=1, LM_EVAL_MODE=chat, NUM_CONCURRENT=8이 기본이다.
-NUM_CONCURRENT는 1..8만 허용한다. std4 기본은
-TAUBENCH_USER_MODEL=openrouter/openai/gpt-4.1-mini, TAUBENCH_TRIALS=4,
-TAUBENCH_MAX_CONCURRENCY=4, AGENT_REQUEST_TIMEOUT=300이며 호출 시
-TAUBENCH_MODE=standard를 설정한다. LABEL은 원본 시작 문구를 사용한다.
-PREFIX는 오류 로그 접두, STOP_LABEL은 `harness 실패 — <STOP_LABEL> 레인 중단`,
-END_LABEL은 `=== <END_LABEL> 레인 종료 ===`에 그대로 사용한다.
-로그 문구를 LABEL이나 레인 이름에서 파생하지 않는다.
+필수 공통 키는 DISPLAY, CONFIG, HOST_ENV, HOST_DEFAULT, KEYVAR다.
+선택 트랙의 `SESSION_KMMLU`·`SESSION_TAUBENCH_STD4`·`SESSION_FULL` 중 하나가
+반드시 있어야 한다. 없거나 비어 있으면 rc 2다. TRACK·SESSION·LABEL·PREFIX·
+STOP_LABEL·END_LABEL은 conf 키가 아니다. 네 로그 레이블은 모두
+`<DISPLAY> <track>`으로 조합한다. 따라서 5b부터 운영 로그 문구는 바뀐다.
+
+kmmlu는 LANE_TOKENIZER도 필수이며 REPS=3, REQUIRE_NOTHINK=1,
+LM_EVAL_MODE=chat, NUM_CONCURRENT=8이 기본이다. NUM_CONCURRENT는 1..8이다.
+std4 기본은 TAUBENCH_USER_MODEL=openrouter/openai/gpt-4.1-mini,
+TAUBENCH_TRIALS=4, TAUBENCH_MAX_CONCURRENCY=4, AGENT_REQUEST_TIMEOUT=300이다.
+호출 시 TAUBENCH_MODE=standard를 설정한다. full 옵션은 [README_full.md](README_full.md)를 따른다.
+
+선택 키에는 `KMMLU_`, `TAUBENCH_STD4_`, `FULL_` 접두를 붙일 수 있다.
+기본값 → 접두 없는 공통값 → 선택 트랙 접두 값 순으로 적용하며, 파일 안의
+공통값/접두 값 배치 순서와 무관하다. 같은 키·같은 범위에서는 마지막 값이 우선이다.
+접두를 허용하는 키는 REPS, LANE_TOKENIZER, REQUIRE_NOTHINK, LM_EVAL_MODE,
+NUM_CONCURRENT, TAUBENCH_USER_MODEL, TAUBENCH_TRIALS, TAUBENCH_MAX_CONCURRENCY,
+AGENT_REQUEST_TIMEOUT, AGENT_TASK_TIMEOUT, KRETA_WORKERS, KRETA_RESUME, RESUME_FROM이다.
+DISPLAY·접속 식별 키·SESSION_*에는 접두를 붙이지 않는다. 알 수 없는 키는
+다른 트랙 접두가 붙어 있어도 rc 2다.
+
+`models/qwen35fp8.conf`는 KMMLU 세션 `kmmlu_nothink_20261015`와 full 세션
+`20261015_full`을 함께 보관한다. 이전 full의 REPS=3·KRETA_WORKERS=4·
+KRETA_RESUME=0은 FULL_REPS·FULL_KRETA_WORKERS·FULL_KRETA_RESUME으로 보존했다.
+KMMLU의 tokenizer도 그대로다. 기존 네 모델의 CONFIG·서버·키·세션은 변경하지 않았다.
+
+재개할 때는 해당 모델 conf의 선택 트랙 세션과 옵션을 먼저 확인한다. full의
+재개 설정은 `FULL_RESUME_FROM=r<N>:<stage>`이며 필요하면
+`FULL_KRETA_RESUME=1`을 지정한다. dry-run의 SESSION·SKIP·COMMAND를 확인하고
+같은 `<track>.sh <model_conf>` 명령으로 시작한다. KMMLU/std4에는 full 재개
+의미를 적용하지 않는다. 이전 상태 파일을 새 이름으로 복사하지 않으며,
+운영 guard와 레인이 없는 상태에서 새 계약으로 전환한다.
 
 ## 검증
 
@@ -104,35 +132,30 @@ guard 시험은 표준 라이브러리 패키지 `orchestration.tests.lane_guard
 변수이며 guard의 운영 주입 변수는 추가하지 않는다. health/온도는 기존 주입 명령을
 사용하고 네트워크 명령은 실패하는 스텁으로 차단한다.
 
-미끼는 fixture 밖 별도 임시 경로의 `qwen38.sh`를 운영과 같은 nohup/Perl 형식으로
+미끼는 fixture 밖 별도 임시 경로의 `kmmlu.sh qwen38`을 운영과 같은 nohup/Perl 형식으로
 기동한다. 생존·T 상태를 반복 관측하고 guard 로그와 신호 기록에 미끼 PID가 없는지
 검사한다. 관측 간 순간 상태의 부재는 샘플링만으로 증명하지 않으므로 모든 신호
 시도 기록도 함께 검사한다. 정리는 등록한 PID에만 수행한다.
 
-C1.2는 `git show HEAD:./orchestration/lane_guard.sh` 사본을 사용한다. Git 루트가
-N의 상위 디렉터리이므로 `HEAD:orchestration/lane_guard.sh` 대신 cwd 상대 Git
-표기를 사용한다. 수정 전의 미끼 식별은 예상된 격리 FAIL, 수정 후는 PASS로 기록한다.
-이 재현 검사는 수정 전 guard가 HEAD인 1단계 커밋 전에 실행한다. 커밋 후에는
-HEAD도 수정 후 코드가 되므로 같은 명령으로 수정 전 FAIL을 재현할 수 없다.
-수정 전 실프로세스 보존 검사도 PID 허용목록 안에서만 수행한다.
+C1.2는 `git show HEAD:./orchestration/lane_guard.sh` 사본과 현재 guard를
+각각 격리 fixture에서 검사한다. HEAD가 이미 경로 격리를 포함하면 양쪽 모두
+미끼를 배제해야 한다. HEAD가 옛 5필드 형식이면 HEAD 전용 fixture만 그 형식을
+사용하고 현재 guard는 6필드로 검사한다. 두 모델의 같은 트랙 식별은 합성 층과
+등록 PID만 조회하는 실프로세스 층에서 별도로 확인한다.
 `ARTIFACTS=/tmp/lane_guard_check.*` 아래 `summary.json`, `head_source.txt`, 케이스별
 `cycles.log`, `calls.jsonl`, `signals.jsonl`, `decoy_samples.json`을 남긴다.
 실패가 있으면 rc 1, 실제 프로세스 증거가 불가하면 rc 77, 모두 통과하면 rc 0이다.
 
-동결 guard suite는 **운영 레인이 하나도 없을 때만 직접 호출**한다. 1단계의
-C1.5는 A가 실행하며, 5b 이후에는 새 계약과 비호환이므로 이 suite를 퇴역시킨다.
-
-```bash
-python3 -I shared/harness/tests/runner_checks.py guard "$PWD/orchestration/lane_guard.sh"
-```
+동결 `shared/harness/tests/runner_checks.py guard` suite는 **퇴역(실행 금지)**이다.
+5b의 모델 인자·6필드 계약과 비호환이다. 운영 레인이 없어도 실행하지 않으며,
+위의 `test_lane_guard_isolated.sh`를 사용한다.
 
 시험은 임시 fixture에서만 가짜 레인/키/HTTP 및 harness 스텁을 사용한다.
 legacy 파일은 원본을 `cp -p`로 보관한 비교 기준이며 수정하지 않는다.
 실제 `.env`나 운영 로그를 시험 입력/출력으로 사용하지 않는다.
 runner_checks.py의 모든 suite는 `.codex_work/harness_stop_guard/` 아래에
 fixture를 만든다. 샌드박스가 fixture 생성이나 ps/TCP bind를 거부하면
-해당 검증은 INCONCLUSIVE로 보고한다. 등가성 시험은 INCONCLUSIVE만 남으면
-rc 77이다. runner_checks.py는 실패가 없을 때 PASS 없이 INCONCLUSIVE만 있으면
+해당 동결 시험의 검증은 INCONCLUSIVE로 보고한다. runner_checks.py는 실패가 없을 때 PASS 없이 INCONCLUSIVE만 있으면
 rc 77, PASS가 있으면 기존 계약대로 rc 0이다. guard의 MODEL PASS는
 모의 프로세스 상태 검사이며 실제 프로세스 C7 PASS를 대신하지 않는다.
 
@@ -140,3 +163,7 @@ D8 아카이브 이동과 C4 manifest/상태 해시 확인은 A 담당이다. C2
 이동하며 이 구현은 `logs/`를 변경하지 않는다. T 파일 패치가 샌드박스로
 거부된 환경에서는 N의 runner_checks.py를 T의 같은 위치에 복사하고 cmp 후
 T 시험을 실행해야 한다.
+
+5b 등가성 시험은 harness/taubench의 호출 argv·환경·세션 및 결과 경로·rc를 비교한다.
+DISPLAY 기반 orchestrator 로그 문구의 byte 비교는 제외하며 평가 자식의 로그 append 검사는 유지한다.
+fixture curl 어댑터로 200·500·다른 모델 응답을 재현하며 소켓을 열지 않는다.

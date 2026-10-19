@@ -5,21 +5,15 @@ from orchestration.tests.lane_guard_check.model_cases import process
 
 
 def regression_case(repo, root, target, old, report):
-    decoy = root / "outside/orchestration/lanes/qwen38.sh"
-    # The pre-fix FAIL was demonstrated once before commit 8dd8b82. Once HEAD
-    # carries the fix, only the isolation PASS remains a meaningful regression check.
-    cases = [("after", target, "없음")]
-    if old.read_bytes() != target.read_bytes():
-        cases.insert(0, ("before", old, "800009"))
-    else:
-        print("NOTE C1.2 before-check skipped: HEAD guard == target", flush=True)
-    for label, code, expected in cases:
+    # The historical global-match bug is independent of the 5b CLI change.
+    # HEAD is still read once; a fixed HEAD must retain isolation, not fail it.
+    for label, code in (("HEAD", old), ("working", target)):
         f = Fixture(repo, root / ("regression_" + label), code)
-        f.table({"800009": process(f"/bin/bash {decoy}")})
+        expected = "없음" if "LANES_LOGICAL=" in code.read_text() else "800009"
+        f.table({"800009": process(f.command(root / "outside"))})
         f.cycle()
         report.check("C1.2 " + label + " root=" + expected,
-                     f"root={expected} " in f.log() and not f.signals(),
-                     "isolation FAIL (expected regression)" if label == "before" else "isolation PASS")
+                     f"root={expected} " in f.log() and not f.signals())
 
 
 def path_case(repo, root, target, report):
@@ -29,11 +23,11 @@ def path_case(repo, root, target, report):
     link.symlink_to(f.base, target_is_directory=True)
     guard = link / "orchestration/lane_guard.sh"
     for label, directory in (("logical", link), ("physical", f.base.resolve())):
-        f.table({"800001": process(f"/bin/bash {directory}/orchestration/lanes/qwen38.sh")})
+        f.table({"800001": process(f.command(directory))})
         f.cycle(guard=guard)
         report.check(label + " literal directory accepted", "root=800001 " in f.log())
         (f.base / "guard.log").unlink()
-        f.table({"800001": process(f"/bin/bash {directory}/orchestration/lanes/qwen38.sh extra")})
+        f.table({"800001": process(f.command(directory) + " extra")})
         f.cycle(guard=guard)
         report.check(label + " unsupported directory accepted",
                      "root=없음 " in f.log() and "미지원 실행 형태" in f.log())
@@ -42,19 +36,22 @@ def path_case(repo, root, target, report):
             path.unlink()
     # A near-match must not be admitted by an unescaped dot/bracket expression.
     wrong = str(f.base).replace("space.", "spaceX")
-    f.table({"800009": process(f"/bin/bash {wrong}/orchestration/lanes/qwen38.sh")})
+    f.table({"800009": process(f.command(wrong))})
     f.cycle(guard=guard)
     report.check("regex near-match excluded", "root=없음 " in f.log() and "미지원" not in f.log())
 
 
 def unsupported_case(repo, root, target, report):
     f = Fixture(repo, root / "unsupported.[x]+", target, pattern="qwen35fp8")
-    exact = f"{f.orch}/lanes/qwen35fp8.sh"
-    commands = [("longer basename", exact.replace(".sh", "_full.sh"), False),
-                ("suffix", exact + "suffix", False),
-                ("other checkout", str(root / "other/orchestration/lanes/qwen35fp8.sh") + " extra", False),
-                ("extra argument", exact + " extra", True),
-                ("bash option", "-x " + exact, True)]
+    exact = f"{f.orch}/lanes/kmmlu.sh"
+    commands = [("longer basename", exact.replace(".sh", "_full.sh") + " qwen35fp8", False),
+                ("suffix", exact + "suffix qwen35fp8", False),
+                ("other checkout", str(root / "other/orchestration/lanes/kmmlu.sh") + " qwen35fp8 extra", False),
+                ("other model", exact + " another_model", False),
+                ("model prefix", exact + " qwen35fp8_extra", False),
+                ("missing argument", exact, True),
+                ("extra argument", exact + " qwen35fp8 extra", True),
+                ("bash option", "-x " + exact + " qwen35fp8", True)]
     for label, command, warned in commands:
         for path in (f.base / "state").glob("*"):
             path.unlink()
@@ -70,4 +67,4 @@ def default_conf_case(repo, root, target, report):
     f = Fixture(repo, root / "synthetic_default", target)
     del f.env["LANEGUARD_LANES"]
     f.cycle()
-    report.check("synthetic lanes.conf default", "fixture: 레인 식별 root=없음" in f.log())
+    report.check("synthetic lanes.conf default", f"{f.name}: 레인 식별 root=없음" in f.log())

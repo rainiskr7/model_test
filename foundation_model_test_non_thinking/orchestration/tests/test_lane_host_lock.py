@@ -38,7 +38,8 @@ def test_same_host_excludes_other_track_and_normal_exit_releases(fixture, track)
         winner, loser = loser, winner
     assert loser[0].wait(timeout=5) == 2
     session, record = fixture.ready(winner[1], winner[2], winner[0])
-    assert 'fixture: 같은 호스트 레인 실행 중 — 시작 안 함' in fixture.output(loser[1])
+    # 5b: generated log prefix includes the selected track.
+    assert 'fixture ' + loser[2] + ': 같은 호스트 레인 실행 중 — 시작 안 함' in fixture.output(loser[1])
     assert len((fixture.base / 'preflights').read_text().splitlines()) == 1
     assert not list((fixture.base / 'records').glob(loser[1] + '*'))
     locks = list((fixture.base / 'logs/resume_orch').glob('.lane_host_*.lock'))
@@ -89,7 +90,7 @@ def test_lock_tool_error_mapping_before_preflight(fixture, tool_rc, expected, me
     fixture.put('bin/flock', '#!/bin/bash\nexit ' + str(tool_rc) + '\n', True)
     proc = fixture.start('error', 'kmmlu')
     assert proc.wait(timeout=5) == expected
-    assert 'fixture: ' + message in fixture.output('error')
+    assert 'fixture kmmlu: ' + message in fixture.output('error')
     assert not (fixture.base / 'preflights').exists()
     assert not list((fixture.base / 'records').iterdir())
 
@@ -108,7 +109,7 @@ def test_lock_file_open_failure_is_rc4_before_preflight(fixture):
     (fixture.base / 'logs/resume_orch/.lane_host_fixture.invalid_18023.lock').mkdir(parents=True)
     proc = fixture.start('open_error', 'kmmlu')
     assert proc.wait(timeout=5) == 4
-    assert 'fixture: 잠금 오류' in fixture.output('open_error')
+    assert 'fixture kmmlu: 잠금 오류' in fixture.output('open_error')
     assert not (fixture.base / 'preflights').exists()
 
 

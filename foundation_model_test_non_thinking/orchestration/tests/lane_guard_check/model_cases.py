@@ -9,7 +9,7 @@ def process(command, parent=0, stat="S", stamp="Mon Oct 19 00:00:00 2026"):
 
 def populated(repo, root, target, name):
     fixture = Fixture(repo, root / name, target)
-    fixture.table({"800001": process(f"/bin/bash {fixture.orch}/lanes/qwen38.sh"),
+    fixture.table({"800001": process(fixture.command()),
                    "800002": process("sleep 300", parent=800001)})
     return fixture
 
@@ -45,7 +45,7 @@ def heat_case(repo, root, target, report, hot, label):
     report.check(label + " two cool readings keep STOP", f.stopped())
     f.values("up", "")
     f.cycle()
-    state = (f.base / "state/fixture.state").read_text().splitlines()[0].split("|")
+    state = (f.base / "state" / (f.name + ".state")).read_text().splitlines()[0].split("|")
     report.check(label + " read failure keeps heat and resets cool", state[3] == "1" and state[6] == "0")
     f.values("up", "72 85")
     f.cycle(2)

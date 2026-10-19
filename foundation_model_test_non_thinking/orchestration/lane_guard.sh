@@ -188,12 +188,20 @@ resume_entries() {
 log "시작 PID=$$ interval=${INTERVAL}s"
 first_cycle=1
 while :; do
-  while IFS='|' read -r name pat hostname keyvar model; do
-    [ -n "$name" ] || continue
-    case "$name" in *[!a-zA-Z0-9_-]*) log 'invalid lane name'; exit 4 ;; esac
+  while IFS= read -r lane_row; do
+    [ -n "$lane_row" ] || continue
+    if ! [[ "$lane_row" =~ ^[^\|]+\|[^\|]+\|[^\|]+\|[^\|]+\|[^\|]+\|[^\|]+$ ]]; then
+      log 'invalid lane row: expected six nonempty fields'; exit 4
+    fi
+    IFS='|' read -r name track model_conf hostname keyvar model <<< "$lane_row"
+    case "$track" in kmmlu|taubench_std4|full) ;; *) log 'invalid lane track'; exit 4 ;; esac
+    if ! [[ "$model_conf" =~ ^[a-z0-9_]+$ ]] || [ "$name" != "${model_conf}_${track}" ] ||
+       [ -z "$hostname" ] || [ -z "$keyvar" ] || [ -z "$model" ]; then
+      log 'invalid lane row: expected name|track|model_conf|hostname|keyvar|model'; exit 4
+    fi
     load_state
-    script_pattern=$(lane_pattern "$pat")
-    roots=$(pgrep -f "^([^ ]*/)?bash ${script_pattern}$" 2>/dev/null)
+    script_pattern=$(lane_pattern "$track")
+    roots=$(pgrep -f "^([^ ]*/)?bash ${script_pattern} ${model_conf}$" 2>/dev/null)
     count=$(printf '%s\n' "$roots" | awk 'NF{n++}END{print n+0}')
     if [ "$count" -ge 2 ]; then
       if [ "$duplicate_warned" = 0 ]; then log "$name: 레인 2개 이상 — 신호 없음"; duplicate_warned=1; save_state; fi
@@ -201,9 +209,9 @@ while :; do
     fi
     root=$roots
     if [ -z "$root" ] && [ "$unsupported_warned" = 0 ]; then
-      # The same literal path policy, allowing bash options/extra script args
-      # only for warning. A longer basename (e.g. name_full.sh) is not this lane.
-      if ps -axo command= | grep -E "^([^ ]*/)?bash (.*[[:space:]])?${script_pattern}([[:space:]]|$)" >/dev/null; then
+      # Warn for missing args or this model with options/extra args. A valid
+      # invocation for a different model on the same track is not this lane.
+      if ps -axo command= | grep -E "^([^ ]*/)?bash (.*[[:space:]])?${script_pattern}([[:space:]]*$|[[:space:]]+${model_conf}([[:space:]]|$))" >/dev/null; then
         log "$name: 미지원 실행 형태"; unsupported_warned=1
       fi
     fi

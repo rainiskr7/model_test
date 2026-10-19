@@ -1,6 +1,10 @@
-# TRACK=full — README 통합용 초안
+# full 트랙
 
-`run_lane.sh`는 2026-10-17 에 full 분기와 전용 함수를 추가한 판으로 교체됐다(교체 전 후보 이름은 `run_lane_next.sh`, 등가성 시험 103 PASS·F1..F7 PASS 뒤 rename). guard, 등록 목록, 기존 conf 의 계약은 그대로다. 실행 진입점은 기존과 같이 `orchestration/lanes/<name>.sh` symlink다. 러너 파일을 직접 실행하면 lane 이름/BASE 해석이 맞지 않는다.
+실행은 `bash orchestration/lanes/full.sh <model_conf>`다. 모델 설정은
+`orchestration/models/<model_conf>.conf`이며 SESSION_FULL이 필수다. 예:
+`LANE_DRY_RUN=1 bash orchestration/lanes/full.sh qwen35fp8`.
+진입 링크는 `../run_lane.sh`를 가리키며 런타임 이름은 `qwen35fp8_full`이다.
+모델 인자 규칙·기동·로그 이름은 [레인 README](README.md)를 따른다.
 
 ## 실행 범위와 설정
 
@@ -20,9 +24,9 @@ KMMLU/harness와 taubench standard는 포함하지 않는다. 같은 mtime의 wo
 
 | 키 | full 계약 |
 | --- | --- |
-| TRACK | `full` |
+| SESSION_FULL | full 결과 세션 접두, 필수 |
 | REPS | 양의 정수, 기본 3 |
-| STOP_LABEL | 필수 |
+| DISPLAY | 공통 필수 표시명; 로그 레이블은 `<DISPLAY> full` |
 | KRETA_WORKERS | 1..4, 기본 4; multimodal에만 주입 |
 | KRETA_RESUME | 0 또는 1, 기본 0; 정확한 multimodal 재개 지점에만 1 주입 |
 | RESUME_FROM | 선택: `r<N>:<stage>`, N은 1..REPS |
@@ -32,7 +36,7 @@ KMMLU/harness와 taubench standard는 포함하지 않는다. 같은 mtime의 wo
 
 알 수 없는 키, 잘못된 REPS/KRETA 값, 유효하지 않은 재개 단계나 반복 번호는 rc 2다. 단계 이름은 위 7개 이름과 정확히 같아야 한다. full에서는 `TAUBENCH_TRIALS`의 기존 기본 4 대신 해당 단계에 1을 주입한다. `AGENT_REQUEST_TIMEOUT`(기본 300초)과 `AGENT_TASK_TIMEOUT`(기본 900초)은 conf에서 양의 정수 초로 지정하며, TASK가 REQUEST보다 커야 한다(아니면 rc 2). full 자식 환경에서는 `NUM_CONCURRENT`와 두 timeout의 상속값을 제거한 뒤 FunctionChat·solo tau 단계에만 conf 값 또는 레인 기본값을 `env` 접두로 전달한다. nlu·multimodal·judge·derive에는 두 timeout을 전달하지 않는다. 기존 kmmlu·taubench_std4의 timeout 전달은 유지한다. taubench와 KRETA의 단계별 변수도 자식 환경에서 먼저 제거하고 필요한 단계에만 다시 넣는다. loader 출력은 기존 방식으로 적용하며, Python 모듈 호출에만 `PYTHONPATH`를 붙인다.
 
-`qwen35fp8_full.conf`는 `CONFIG=qwen_qwen3.5_27b_fp8`, `QWEN35FP8_HOST`(기본 `192.168.0.7:18023`), `OPENAI_API_KEY_7`, `SESSION=20261015_full`, REPS=3, KRETA_WORKERS=4를 사용한다. MODEL은 loader 출력이며 러너에 하드코딩하지 않는다. 현재 모델 YAML은 `kreta_setting: direct`를 loader로 전달한다.
+`models/qwen35fp8.conf`는 `CONFIG=qwen_qwen3.5_27b_fp8`, `QWEN35FP8_HOST`(기본 `192.168.0.7:18023`), `OPENAI_API_KEY_7`, `SESSION_FULL=20261015_full`, FULL_REPS=3, FULL_KRETA_WORKERS=4를 사용한다. MODEL은 loader 출력이며 러너에 하드코딩하지 않는다. 현재 모델 YAML은 `kreta_setting: direct`를 loader로 전달한다.
 
 ## 충돌과 재개
 
@@ -44,11 +48,12 @@ flock/lockf 선택과 잠금 수명은 [레인 README](README.md)를 따른다.
 
 RESUME_FROM이 없으면 각 반복의 첫 단계 전에 결과 세션 경로가 이미 있는지 확인한다. 있으면 `세션 존재 — 재개는 RESUME_FROM`을 기록하고 rc 2로 중단한다. 결과 모델 디렉터리는 MODEL의 `/`, `-`, `:`를 `_`로 바꾼 뒤 `shared/results_dir.sh`의 `results_model_dir`로 기존 대소문자 철자를 재사용한다. 이 helper가 여러 casefold 일치를 발견하면 rc 2로 중단한다.
 
-예를 들어 conf에 다음 두 줄을 지정한다.
+선택 키는 접두 없는 공통값보다 FULL_ 접두 값이 우선한다(파일 배치 순서 무관).
+예를 들어 공용 모델 conf에 다음 두 줄을 지정한다.
 
 ```ini
-RESUME_FROM=r2:multimodal
-KRETA_RESUME=1
+FULL_RESUME_FROM=r2:multimodal
+FULL_KRETA_RESUME=1
 ```
 
 r1의 7단계와 r2의 앞 3단계는 `skip (resume)` 로그만 남기고 건너뛴다. r2 multimodal에만 `KRETA_RESUME=1`이 들어가며 r3에는 들어가지 않는다. KRETA_RESUME=0이면 해당 단계도 새 KRETA 실행이다. 재개 지점이 다른 단계면 KRETA_RESUME=1을 설정해도 multimodal에 전달하지 않는다. RESUME_FROM이 지정된 실행은 명세대로 세션 존재 충돌 거부를 적용하지 않는다.
@@ -82,30 +87,28 @@ r1의 7단계와 r2의 앞 3단계는 `skip (resume)` 로그만 남기고 건너
 /bin/bash orchestration/tests/test_run_lane_full.sh
 ```
 
-F1..F6은 temp에 orchestration을 복사해 실행한다(옛 러너와의 dry-run 비교 F7은 10-17 교체 뒤 제거). stub loader/러너/judge/derive/curl과 합성 키/결과만 사용하고 `env -i`, 외부 cwd에서 실행한다. 실제 `results_model_dir` helper는 복사해서 합성 results에 대해서만 호출한다. 네트워크 접근은 없다. 기대 파일은 `fixtures_full/dry_run.txt`이며 임시 BASE만 치환한다. 각 단계 argv/env/cwd/EVAL_TIMESTAMP, 로그 append, 최신 xlsx, 조건부 skip, 실패 누적, 모든 단계의 rc 3/130을 검증한다.
+F1..F9는 temp에 orchestration을 복사해 실행한다. stub loader/러너/judge/derive/curl과 합성 키/결과만 사용하고 `env -i`, 외부 cwd에서 실행한다. 실제 `results_model_dir` helper는 복사해서 합성 results에 대해서만 호출한다. 네트워크 접근은 없다. 기대 파일은 `fixtures_full/dry_run.txt`이며 임시 BASE만 치환한다. 각 단계 argv/env/cwd/EVAL_TIMESTAMP, 로그 append, 최신 xlsx, 조건부 skip, 실패 누적, 모든 단계의 rc 3/130을 검증한다.
 
-기존 등가성 시험 `test_run_lane_equivalence.sh`는 교체된 러너에 그대로 적용된다. 이 시험은 임시 127.0.0.1 HTTP 서버를 사용하므로, 네트워크 전면 금지 세션에서는 loopback 예외 승인이 있어야 실행한다. `.venv`와 `configs` symlink는 기존 시험이 필요로 하는 읽기용 참조다. 실제 러너/결과/키를 사용하지 않는다.
+등가성 시험 `test_run_lane_equivalence.sh`는 harness/taubench의 argv·환경·결과 경로를 비교하며, DISPLAY로 바뀐 orchestrator 로그 문구는 비교하지 않는다. 5b부터 fixture curl 어댑터가 200·500·다른 모델 응답을 재현하므로 소켓을 열지 않는다. `.venv`와 `configs` symlink는 기존 시험이 필요로 하는 읽기용 참조다. 실제 러너/결과/키를 사용하지 않는다.
 
 ```bash
-lane_eq_tmp=$(mktemp -d /tmp/lane_full_equivalence.XXXXXX)
-cp -R orchestration "$lane_eq_tmp/orchestration"
-ln -s "$PWD/.venv" "$lane_eq_tmp/.venv"
-ln -s "$PWD/configs" "$lane_eq_tmp/configs"
-env -i HOME="$HOME" USER="${USER:-fixture}" LANG=C PATH="$PATH" \
-  PYTHONDONTWRITEBYTECODE=1 /bin/bash "$lane_eq_tmp/orchestration/tests/test_run_lane_equivalence.sh"
+bash orchestration/tests/test_run_lane_equivalence.sh
 ```
 
-## 운영 파일 교체 순서 (2026-10-17 완료 기록)
+## 등록과 기동
 
-1. 기존 BF16 lane과 해당 runner를 읽는 프로세스가 종료된 뒤 후보 diff와 F1..F7/등가성 결과를 확인한다. 이 구현 작업에서는 교체하지 않는다.
-2. 후보 `run_lane_next.sh`를 기존 경로로 rename 교체한다.
-3. `orchestration/lanes/qwen35fp8_full.sh -> ../run_lane.sh` 진입 symlink를 만들고 아래 한 줄을 `lanes.conf`에 등록한다. 현재 작업에서는 symlink/등록 목록을 변경하지 않는다.
-4. 배포 후 `LANE_DRY_RUN=1 bash orchestration/lanes/qwen35fp8_full.sh`로 계획을 확인하고 세션/재개 설정에 맞춰 실행한다.
-
-등록 후보 한 줄:
+`models/qwen35fp8.conf`는 KMMLU와 full 설정을 함께 가진다. `lanes/full.sh` 링크는
+모델마다 추가하지 않는다. `lanes.conf`의 등록 행은 다음과 같다.
 
 ```text
-qwen35fp8_full|qwen35fp8_full|aitopatom-337f|OPENAI_API_KEY_7|qwen_qwen3.5_27b_fp8
+qwen35fp8_full|full|qwen35fp8|aitopatom-337f|OPENAI_API_KEY_7|qwen_qwen3.5_27b_fp8
+```
+
+기동 전 dry-run으로 세션·재개 위치를 확인한다. 정규 절대경로 N에서 실행한다.
+
+```bash
+LANE_DRY_RUN=1 bash orchestration/lanes/full.sh qwen35fp8
+nohup perl -e 'setpgrp; exec @ARGV' /bin/bash "$N/orchestration/lanes/full.sh" qwen35fp8 >> "$N/logs/resume_orch/qwen35fp8_full.nohup.log" 2>&1 &
 ```
 
 실제 모델 서버, 외부 judge, 실제 데이터/결과를 통한 평가와 checkpoint 복구는 이 격리 시험의 검증 범위 밖이다.

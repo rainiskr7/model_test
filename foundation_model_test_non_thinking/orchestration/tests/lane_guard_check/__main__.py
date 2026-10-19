@@ -5,6 +5,7 @@ import sys
 import tempfile
 import unittest
 
+from orchestration.tests.lane_guard_check.contract_cases import invalid_rows_case, same_track_case, same_track_real_case
 from orchestration.tests.lane_guard_check.fixture import head_guard
 from orchestration.tests.lane_guard_check.model_cases import (
     duplicate_case, health_case, heat_case, manual_case, overlap_case,
@@ -37,7 +38,7 @@ def main():
     report.run("units", lambda: unit_cases(report))
     report.run("regression", lambda: regression_case(repo, root, target, old, report))
     for case in (path_case, unsupported_case, default_conf_case, health_case,
-                 duplicate_case, manual_case, overlap_case):
+                 duplicate_case, manual_case, overlap_case, same_track_case, same_track_real_case, invalid_rows_case):
         report.run(case.__name__, lambda case=case: case(repo, root, target, report))
     for hot, label in (("84 70", "gpu"), ("60 96", "sensor")):
         report.run(label, lambda hot=hot, label=label: heat_case(repo, root, target, report, hot, label))

@@ -325,7 +325,7 @@ foundation_model_test_non_thinking/
 │   ├── resultspath/               # 공용: results/ 모델 폴더 철자 재사용·채점 경로·실행 시각
 │   └── results_dir.sh             # 위 철자 재사용의 bash 판 (run_harness.sh 가 source)
 ├── llm/  slm/  vlm/  vsm/         # 클래스별 진입점 = shared/ 로의 symlink + recommended_models.md + 평가계획
-├── orchestration/                 # 레인 실행·감시: run_lane.sh + lanes/<이름>.conf · lane_guard.sh · tests/ · README
+├── orchestration/                 # 레인 실행·감시: run_lane.sh + tracks/ + models/<모델>.conf · lane_guard.sh · tests/ · README
 ├── reports/                       # 보고서 패키지: python3 -m reports.report_<track>_tracks
 ├── configs/                       # 모델별 YAML (models/), 로더, model_identity.json, serving_profiles/
 ├── data/                          # 외부 repo 중앙 clone (.gitignore)
@@ -337,7 +337,7 @@ foundation_model_test_non_thinking/
 └── README.md
 ```
 
-KMMLU·taubench std4 같은 단일 트랙 재측정은 `orchestration/lanes/<이름>.sh` 로, 절차는 `orchestration/README.md`.
+KMMLU·taubench std4 같은 단일 트랙 재측정은 `bash orchestration/lanes/<track>.sh <model_conf>`로(track: kmmlu·taubench_std4·full), 절차는 `orchestration/README.md`.
 
 `bash tests/run_pytests.sh`로 전체 Python 시험을 실행하며, 선택 트랙 이름과 pytest 옵션을 뒤에 붙일 수 있다(예: `bash tests/run_pytests.sh nlu -q`).
 

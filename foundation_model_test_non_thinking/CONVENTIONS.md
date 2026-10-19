@@ -11,7 +11,7 @@ shared/                          # 단일 소스 — 공통 코드. 트랙마다
 ├── publish/ serving/            # 발행 등급 · 서빙 제약
 ├── jsonwrite/ resultspath/      # 공용 모듈 (§11 참고)
 └── results_dir.sh
-orchestration/                   # 레인 실행·감시 (run_lane.sh + lanes/<이름>.conf, lane_guard.sh)
+orchestration/                   # 레인 실행·감시 (run_lane.sh + tracks/ + models/<모델>.conf, lane_guard.sh)
 reports/                         # 트랙별 보고 스크립트
 
 {llm,slm,vsm,vlm}/               # 클래스별 진짜 특화

@@ -88,8 +88,8 @@ fixture() {
   printf 'export PATH="%s/bin:/usr/bin:/bin"\n' "$FX" > "$FX/.venv/bin/activate"
   printf 'fixture_model\n' > "$FX/model_dir"
   printf 'OPENAI_API_KEY_7=synthetic-model-key\nTAUBENCH_USER_API_KEY=synthetic-judge-key\n' > "$FX/.env"
-  cp "$ORCH/lanes/qwen35fp8_full.conf" "$FX/orchestration/lanes/full.conf"
-  ln -s ../run_lane.sh "$FX/orchestration/lanes/full.sh"
+  # 5b: one model conf supplies the full session; entry takes its model name.
+  cp "$ORCH/models/qwen35fp8.conf" "$FX/orchestration/models/fixture.conf"
   LANE=full
   put_stubs
   local stage path
@@ -106,7 +106,7 @@ run_lane() {
     PYTHONDONTWRITEBYTECODE=1 MODEL_TEST_BASE="$FX" LANE_DRY_RUN="${1:-0}" \
     AGENT_REQUEST_TIMEOUT=999 AGENT_TASK_TIMEOUT=9999 NUM_CONCURRENT=99 TAUBENCH_MODE=standard TAUBENCH_TRIALS=9 \
     TAUBENCH_MAX_CONCURRENCY=9 KRETA_WORKERS=9 KRETA_RESUME=1 \
-    /bin/bash "$FX/orchestration/lanes/$LANE.sh") > "$FX/stdout" 2>&1
+    /bin/bash "$FX/orchestration/lanes/$LANE.sh" fixture) > "$FX/stdout" 2>&1
   RC=$?
 }
 
@@ -135,6 +135,7 @@ f1() {
   # REQUEST=300 and TASK=900; TASK must exceed REQUEST to pass runner validation.
   # 4c: the three judge lines now show --judge-api-key-env and the variable name,
   # matching actual argv instead of a masked key argument.
+  # 5b: only the conf path in the dry-run fixture changes to models/fixture.conf.
   sed "s|@BASE@|$FX|g" "$HERE/fixtures_full/dry_run.txt" > "$FX/expected"
   diff -u "$FX/expected" "$FX/stdout" || return 1
   [ ! -e "$FX/helper_called" ] && [ ! -e "$FX/preflight" ] &&
@@ -169,8 +170,9 @@ failure_case() {
 }
 
 f3() {
+  # 5b: log labels now combine DISPLAY and the selected track.
   failure_case F3_nlu nlu 1 1 yes || return 1
-  has "$FX/stdout" 'nlu 실패 — qwen3.5-FP8 레인 중단 (원인 확인 후 수동 재개)' || return 1
+  has "$FX/stdout" 'nlu 실패 — qwen3.5 27B FP8 full 레인 중단 (원인 확인 후 수동 재개)' || return 1
   failure_case F3_functionchat functionchat 2 2 yes || return 1
   failure_case F3_multimodal multimodal 1 1 yes || return 1
   failure_case F3_tau taubench 1 0 no || return 1
@@ -178,7 +180,7 @@ f3() {
   local stage code
   for stage in functionchat_judge koffvqa_judge derive; do
     failure_case "F3_$stage" "$stage" 1 1 no || return 1
-    has "$FX/stdout" '=== qwen3.5 27B FP8 전 트랙 3회 레인 종료 (판정 실패 1건) ===' || return 1
+    has "$FX/stdout" '=== qwen3.5 27B FP8 full 레인 종료 (판정 실패 1건) ===' || return 1
   done
   for stage in nlu functionchat taubench multimodal functionchat_judge koffvqa_judge derive; do
     for code in 3 130; do
@@ -193,7 +195,7 @@ f3() {
 
 f4() {
   fixture F4
-  printf 'RESUME_FROM=r2:multimodal\nKRETA_RESUME=1\n' >> "$FX/orchestration/lanes/full.conf"
+  printf 'FULL_RESUME_FROM=r2:multimodal\nFULL_KRETA_RESUME=1\n' >> "$FX/orchestration/models/fixture.conf"
   mkdir -p "$FX/results/FiXtUrE_model/20261015_full_r2/language/functionchat"
   printf 'FiXtUrE_model\n' > "$FX/model_dir"
   run_lane 1
@@ -295,7 +297,7 @@ f5() {
   all_calls 1 2 3 | sed '/_judge$/d; / derive$/d' > "$FX/expected_calls"
   diff -u "$FX/expected_calls" "$FX/calls" || return 1
   fixture F5_derive_resume
-  printf 'RESUME_FROM=r3:derive\n' >> "$FX/orchestration/lanes/full.conf"
+  printf 'FULL_RESUME_FROM=r3:derive\n' >> "$FX/orchestration/models/fixture.conf"
   run_lane
   # 4b: explicit derive resume without saved judge files must fail, not silently skip.
   expect_rc 2 && [ ! -e "$FX/calls" ] &&
@@ -305,14 +307,14 @@ f5() {
 f6() {
   local setting count=0
   # 4a: reject invalid full timeout pairs before activation/preflight.
-  for setting in UNKNOWN=x KRETA_WORKERS=9 KRETA_WORKERS=0 KRETA_RESUME=2 \
-    RESUME_FROM=r0:x RESUME_FROM=r4:nlu RESUME_FROM=r2:unknown RESUME_FROM=r2:nlu:extra \
-    AGENT_TASK_TIMEOUT=120 AGENT_TASK_TIMEOUT=300 AGENT_TASK_TIMEOUT=x \
-    AGENT_REQUEST_TIMEOUT=900 AGENT_REQUEST_TIMEOUT=0 AGENT_REQUEST_TIMEOUT=x \
-    REPS=0 REPS=-1 REPS=x STOP_LABEL=; do
+  for setting in UNKNOWN=x FULL_KRETA_WORKERS=9 FULL_KRETA_WORKERS=0 FULL_KRETA_RESUME=2 \
+    FULL_RESUME_FROM=r0:x FULL_RESUME_FROM=r4:nlu FULL_RESUME_FROM=r2:unknown FULL_RESUME_FROM=r2:nlu:extra \
+    FULL_AGENT_TASK_TIMEOUT=120 FULL_AGENT_TASK_TIMEOUT=300 FULL_AGENT_TASK_TIMEOUT=x \
+    FULL_AGENT_REQUEST_TIMEOUT=900 FULL_AGENT_REQUEST_TIMEOUT=0 FULL_AGENT_REQUEST_TIMEOUT=x \
+    FULL_REPS=0 FULL_REPS=-1 FULL_REPS=x DISPLAY=; do
     count=$((count + 1))
     fixture "F6_$count"
-    printf '%s\n' "$setting" >> "$FX/orchestration/lanes/full.conf"
+    printf '%s\n' "$setting" >> "$FX/orchestration/models/fixture.conf"
     run_lane
     expect_rc 2 && [ ! -e "$FX/calls" ] && [ ! -e "$FX/preflight" ] || return 1
   done
@@ -321,7 +323,7 @@ f6() {
 f7() {
   # 4a: conf overrides must reach both consuming stages, not just dry-run text.
   fixture F7
-  printf 'REPS=1\nAGENT_REQUEST_TIMEOUT=350\nAGENT_TASK_TIMEOUT=1000\n' >> "$FX/orchestration/lanes/full.conf"
+  printf 'FULL_REPS=1\nFULL_AGENT_REQUEST_TIMEOUT=350\nFULL_AGENT_TASK_TIMEOUT=1000\n' >> "$FX/orchestration/models/fixture.conf"
   run_lane
   expect_rc 0 || return 1
   local dir
@@ -338,7 +340,7 @@ put_judge_outputs() {
 f8() {
   # 4b: resume invokes derive exactly once for that repetition, without rerunning judge.
   fixture F8_last
-  printf 'RESUME_FROM=r3:derive\n' >> "$FX/orchestration/lanes/full.conf"
+  printf 'FULL_RESUME_FROM=r3:derive\n' >> "$FX/orchestration/models/fixture.conf"
   put_judge_outputs 3
   run_lane
   expect_rc 0 || return 1
@@ -346,7 +348,7 @@ f8() {
   diff -u "$FX/expected_calls" "$FX/calls" || return 1
   check_stage_argv 20261015_full_r3 derive || return 1
   fixture F8_continue
-  printf 'RESUME_FROM=r1:derive\n' >> "$FX/orchestration/lanes/full.conf"
+  printf 'FULL_RESUME_FROM=r1:derive\n' >> "$FX/orchestration/models/fixture.conf"
   put_judge_outputs 1
   run_lane
   expect_rc 0 || return 1
@@ -354,7 +356,7 @@ f8() {
   diff -u "$FX/expected_calls" "$FX/calls" || return 1
   # Later repetitions must still gate derive on judge rc 0, even with resume set.
   fixture F8_later_judge_failure
-  printf 'RESUME_FROM=r1:derive\n' >> "$FX/orchestration/lanes/full.conf"
+  printf 'FULL_RESUME_FROM=r1:derive\n' >> "$FX/orchestration/models/fixture.conf"
   put_judge_outputs 1
   set_rc 2 koffvqa_judge 1
   run_lane
@@ -369,7 +371,7 @@ f9() {
   local state dir
   for state in directory_only results_only summary_only results_directory summary_directory; do
     fixture "F9_$state"
-    printf 'RESUME_FROM=r1:derive\n' >> "$FX/orchestration/lanes/full.conf"
+    printf 'FULL_RESUME_FROM=r1:derive\n' >> "$FX/orchestration/models/fixture.conf"
     dir="$FX/results/fixture_model/20261015_full_r1/vision/multimodal/koffvqa_api_judge"
     mkdir -p "$dir"
     case "$state" in

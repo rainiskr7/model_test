@@ -37,7 +37,7 @@ class Owned:
         self.processes = []
         self.records = {}
 
-    def launch(self, script, name):
+    def launch(self, script, name, arguments=()):
         """Use the production nohup/perl/exec form with one declared sleep child."""
         marker = self.fixture.base / (name + ".child")
         script.parent.mkdir(parents=True, exist_ok=True)
@@ -45,7 +45,7 @@ class Owned:
         env = {"PATH": "/usr/bin:/bin", "CHILD_FILE": str(marker), "LC_ALL": "C"}
         with (self.fixture.base / (name + ".out")).open("w") as output:
             proc = subprocess.Popen(["/usr/bin/nohup", "/usr/bin/perl", "-e",
-                                     "setpgrp; exec @ARGV", "/bin/bash", str(script)],
+                                     "setpgrp; exec @ARGV", "/bin/bash", str(script), *arguments],
                                     env=env, cwd=self.fixture.base, stdin=subprocess.DEVNULL,
                                     stdout=output, stderr=subprocess.STDOUT)
         self.processes.append(proc)
