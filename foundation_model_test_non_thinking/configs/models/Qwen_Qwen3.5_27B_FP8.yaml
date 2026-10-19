@@ -6,6 +6,9 @@ model: qwen_qwen3.5_27b_fp8
 tokenizer_path: /home/rainis/Desktop/workplace/models/Qwen_Qwen3.5_27B_FP8
 class: vsm
 
+# KRETA 는 direct 모드(기존 12개 모델과 같은 조건). 위 notes 의 '앞단 export' 대신 키로 고정(2026-10-15).
+kreta_setting: direct
+
 endpoint:
   chat: http://127.0.0.1:18023/v1/chat/completions
   v1: http://127.0.0.1:18023/v1
@@ -33,3 +36,7 @@ backend_reference:
     → agent.native_tool_calling: true 로 전환 (텍스트 파서 모드와는 같은 축에서 비교 불가).
     실측 단일 스트림 8.05 tok/s (300토큰/37.3s). 60초 요청 타임아웃으로는 약 483토큰까지만
     생성되어 부족하다 — agent 트랙은 AGENT_REQUEST_TIMEOUT 250 권장.
+    2026-10-15 재서빙(aitopatom-337f, 192.168.0.7:18023, 키 OPENAI_API_KEY_7) — 사용자 확인:
+      --tool-call-parser qwen3_coder (qwen3.8 과 같은 파서)
+      생각 모드 없음 → reasoning-parser·enable_thinking 불필요. 기동 후 serving_audit.py 로
+      모델 목록·도구 호출·reasoning_content 부재를 확인한 뒤 KMMLU 6과목 진단 관문을 거친다.
