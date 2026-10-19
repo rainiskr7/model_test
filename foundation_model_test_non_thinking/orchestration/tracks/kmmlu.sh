@@ -1,4 +1,19 @@
 # Sourced by run_lane.sh; definitions only, using the common lane context.
+# Inputs (phases: README.md): LANE_TOKENIZER STOP_LABEL REPS NUM_CONCURRENT
+# REQUIRE_NOTHINK LM_EVAL_MODE SESSION MODEL TOK BASE_URL_CHAT LABEL HOST BASE_TS
+# BASE END_LABEL PREFIX; functions: bad log.
+track_export() { export NUM_CONCURRENT LM_EVAL_MODE; }
+
+track_pre_http() {
+  if [ "$REQUIRE_NOTHINK" = 1 ]; then
+    grep -q 'set enable_thinking = false' "$TOK/chat_template.jinja" || {
+      log "$PREFIX: 생각 끈 사본이 아니다 — $TOK"
+      return 1
+    }
+  fi
+  return 0
+}
+
 track_validate() {
   [ -n "$LANE_TOKENIZER" ] || bad 'required key: LANE_TOKENIZER'
   [ -n "$STOP_LABEL" ] || bad 'required key: STOP_LABEL'

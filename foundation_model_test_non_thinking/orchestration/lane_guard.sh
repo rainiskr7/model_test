@@ -194,7 +194,9 @@ while :; do
       log 'invalid lane row: expected six nonempty fields'; exit 4
     fi
     IFS='|' read -r name track model_conf hostname keyvar model <<< "$lane_row"
-    case "$track" in kmmlu|taubench_std4|full) ;; *) log 'invalid lane track'; exit 4 ;; esac
+    if ! [[ "$track" =~ ^[a-z0-9_]+$ ]] || [ ! -f "$HERE/tracks/$track.sh" ]; then
+      log 'invalid lane track'; exit 4
+    fi
     if ! [[ "$model_conf" =~ ^[a-z0-9_]+$ ]] || [ "$name" != "${model_conf}_${track}" ] ||
        [ -z "$hostname" ] || [ -z "$keyvar" ] || [ -z "$model" ]; then
       log 'invalid lane row: expected name|track|model_conf|hostname|keyvar|model'; exit 4

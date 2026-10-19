@@ -1,4 +1,10 @@
 # Sourced by run_lane.sh; definitions only, using the common lane context.
+# Inputs (phases: README.md): STOP_LABEL REPS AGENT_REQUEST_TIMEOUT FULL_AGENT_TASK_TIMEOUT
+# FULL_KRETA_WORKERS FULL_KRETA_RESUME FULL_RESUME_FROM MODEL BASE_URL_CHAT BASE_URL_V1
+# TAUBENCH_MAX_CONCURRENCY SESSION BASE PYTHONPATH LABEL HOST BASE_TS END_LABEL.
+# Functions: bad read_key log; results_model_dir is sourced locally at run time.
+track_secrets() { export TAUBENCH_USER_API_KEY="$(read_key TAUBENCH_USER_API_KEY)"; }
+
 full_stage_index() {
   # Map the public resume stage name to its execution order.
   case "$1" in

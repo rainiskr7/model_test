@@ -29,6 +29,8 @@ class Fixture:
         self.base = base
         self.orch = base / "orchestration"
         (self.orch / "lanes").mkdir(parents=True)
+        (self.orch / "tracks").mkdir()
+        (self.orch / "tracks/kmmlu.sh").write_text("# Synthetic registration; guard must not source.\n")
         shutil.copyfile(target, self.orch / "lane_guard.sh")
         helper = base / "shared/harness/harness_lib.sh"
         helper.parent.mkdir(parents=True)

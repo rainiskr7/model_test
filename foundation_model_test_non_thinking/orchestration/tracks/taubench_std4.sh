@@ -1,4 +1,10 @@
 # Sourced by run_lane.sh; definitions only, using the common lane context.
+# Inputs (phases: README.md): SESSION TAUBENCH_USER_MODEL TAUBENCH_TRIALS
+# AGENT_REQUEST_TIMEOUT TAUBENCH_MAX_CONCURRENCY MODEL BASE_URL_CHAT LABEL HOST
+# BASE END_LABEL; functions: read_key log.
+track_export() { export TAUBENCH_MAX_CONCURRENCY; }
+track_secrets() { export TAUBENCH_USER_API_KEY="$(read_key TAUBENCH_USER_API_KEY)"; }
+
 track_validate() { :; }
 
 track_dry_run() {

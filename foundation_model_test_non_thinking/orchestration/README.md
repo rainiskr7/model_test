@@ -26,8 +26,10 @@ nohup perl -e 'setpgrp; exec @ARGV' /bin/bash "$N/orchestration/lane_guard.sh" >
 5. 상태는 `logs/resume_orch/.lane_guard/<name>.state`, 로그는
    `logs/resume_orch/orchestrator.log`, 잠금은 `.lane_guard.lock`이다.
    `LANEGUARD_RUNTIME_DIR`로 런타임 디렉터리를 바꿀 수 있다.
-6. 진입은 `bash orchestration/lanes/<track>.sh <model_conf>`다. track은
-   `kmmlu`, `taubench_std4`, `full`이며 세 링크 모두 `../run_lane.sh`를 가리킨다.
+6. 진입은 `bash orchestration/lanes/<track>.sh <model_conf>`다. track은 실행 중인
+   체크아웃의 `tracks/<track>.sh` 파일로 등록한다. 이름은 `^[a-z0-9_]+$`이며 일반 파일과
+   일반 파일을 가리키는 링크만 인정한다. 현재 등록은 `kmmlu`, `taubench_std4`, `full`이고
+   진입 링크는 `../run_lane.sh`를 가리킨다. guard는 등록 파일의 존재만 확인하고 source하지 않는다.
    model_conf는 `^[a-z0-9_]+$`만 허용한다. `.conf`·`/`·추가 인자는 rc 2다.
    모델 설정은 `models/<model_conf>.conf`에 둔다. 런타임 이름은
    `<model_conf>_<track>`이며 상태 파일과 nohup 로그에 이 이름을 쓴다.
@@ -48,7 +50,8 @@ LANE_DRY_RUN=1 bash orchestration/lanes/kmmlu.sh qwenfp8
 
 설정은 활성화 전에 `.venv/bin/python -B -m orchestration.laneconf`로 해석한다.
 `--tracks-dir`는 실행 체크아웃의 `orchestration/tracks`이며 PYTHONPATH와 bytecode 금지는
-이 명령에만 적용한다. 트랙 진입 허용 목록은 이번 단계에서 그대로 유지한다.
+이 명령에만 적용한다. runner·guard·laneconf가 같은 체크아웃의 등록부를 사용한다.
+트랙별 export·키 읽기·잠금 뒤 검사 훅의 호출 순서와 입력은 [트랙 계약](tracks/README.md)을 따른다.
 Dry-run은 설정 해석, cd, venv 활성화, config loader까지만 진행하며 `.env`를 읽지 않는다.
 preflight, 로그 쓰기, harness/taubench 실행은 하지 않는다. `LANE_TOKENIZER`는
 harness 인자에만 쓰며 loader가 export한 `TOKENIZER`는 유지한다.
@@ -76,8 +79,8 @@ conf는 빈 줄/첫 칸의 `#` 주석과 `key=value`를 지원한다. 첫 `=` �
 공통 파서는 `orchestration/laneconf`이며 스모크도 같은 parse/resolve를 쓴다.
 모르는 키/인자와 설정 오류는 stderr `run_lane: <메시지>` 및 rc 2다.
 필수 공통 키는 DISPLAY, CONFIG, HOST_ENV, HOST_DEFAULT, KEYVAR다.
-선택 트랙의 `SESSION_KMMLU`·`SESSION_TAUBENCH_STD4`·`SESSION_FULL` 중 하나가
-반드시 있어야 한다. 없거나 비어 있으면 rc 2다. TRACK·SESSION·LABEL·PREFIX·
+선택 트랙의 `SESSION_<TRACK 대문자>` 키가 반드시 있어야 한다. 예를 들어
+`SESSION_KMMLU`, `SESSION_TAUBENCH_STD4`, `SESSION_FULL`이다. 없거나 비어 있으면 rc 2다. TRACK·SESSION·LABEL·PREFIX·
 STOP_LABEL·END_LABEL은 conf 키가 아니다. 네 로그 레이블은 모두
 `<DISPLAY> <track>`으로 조합한다. 따라서 5b부터 운영 로그 문구는 바뀐다.
 
@@ -87,7 +90,9 @@ std4 기본은 TAUBENCH_USER_MODEL=openrouter/openai/gpt-4.1-mini,
 TAUBENCH_TRIALS=4, TAUBENCH_MAX_CONCURRENCY=4, AGENT_REQUEST_TIMEOUT=300이다.
 호출 시 TAUBENCH_MODE=standard를 설정한다. full 옵션은 [README_full.md](README_full.md)를 따른다.
 
-선택 키에는 `KMMLU_`, `TAUBENCH_STD4_`, `FULL_` 접두를 붙일 수 있다.
+선택 키에는 등록된 트랙의 `<TRACK 대문자>_` 접두를 붙일 수 있다. 현재 예는
+`KMMLU_`, `TAUBENCH_STD4_`, `FULL_`이다. SESSION_*는 공통 키로 먼저 판정하며,
+접두가 겹치면 최장 일치한다. 등록 이름과 기존 키가 겹치는 경우도 [트랙 계약](tracks/README.md)에 설명한다.
 기본값 → 접두 없는 공통값 → 선택 트랙 접두 값 순으로 적용하며, 파일 안의
 공통값/접두 값 배치 순서와 무관하다. 같은 키·같은 범위의 중복은 같은 값이어도 rc 2다.
 메시지는 `duplicate key: <접두를 포함한 원래 키>`이며 비선택 트랙의 중복도 오류다.
@@ -131,7 +136,8 @@ INCONCLUSIVE 사유와 함께 pytest skip으로 표시한다. macOS lockf 결과
 
 guard 시험은 표준 라이브러리 패키지 `orchestration.tests.lane_guard_check`를
 `PYTHONPATH=N python3 -m`으로 실행한다. 운영 `lanes.conf`를 읽거나 복사하지
-않으며, 합성 conf와 임시 guard/helper 사본만 사용한다. 동결 시험을 import하지 않는다.
+않으며, 합성 conf·합성 `tracks/kmmlu.sh`와 임시 guard/helper 사본만 사용한다.
+등록 확인을 위해 합성 트랙 파일이 필요하지만 guard fixture에 venv나 laneconf는 필요하지 않다. 동결 시험을 import하지 않는다.
 기존 래퍼의 선택 인자 및 `LANEGUARD_TARGET`은 검사할 guard 파일 선택용으로 유지한다.
 
 합성 층은 fixture `bin/`의 `ps`/`pgrep`/`kill`이 `processes.json`만 읽는다.
@@ -186,3 +192,15 @@ fixture curl 어댑터로 200·500·다른 모델 응답을 재현하며 소켓�
 ```bash
 PYTHONDONTWRITEBYTECODE=1 bash tests/run_pytests.sh orchestration -q -s -k laneconf
 ```
+
+묶음 B 수용 시험(CB1 새 트랙 추가/제거·공통 파일 해시, CB2 하드코딩 검사, CB3
+HEAD byte 비교, CB4 입력 계약 음성 검증, CB5 lanes.conf와 loader 일치)은 다음과 같다.
+
+```bash
+bash tests/run_pytests.sh orchestration -q -s -k 'registry or track_contract or lanes_consistency'
+PYTHONDONTWRITEBYTECODE=1 bash tests/run_pytests.sh orchestration -q -s -k 'registry or track_contract or lanes_consistency'
+```
+
+CB3 기준은 묶음 B 시작 시 HEAD `587919d3ff568a08c94a59bd7c341506c0bd9bbe`로 고정한다.
+묶음 A의 결함 재현 기준은 유지한다. fixture 복사 시 소스의 `__pycache__`·`*.pyc`를
+제외하며, pytest 자체의 bytecode 쓰기 허용·차단 양쪽에서 확인한다.

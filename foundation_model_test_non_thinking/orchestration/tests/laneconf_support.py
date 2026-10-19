@@ -14,9 +14,9 @@ SAMPLE = ("CONFIG=qwen_qwen3.5_27b_fp8\nHOST_ENV=FIXTURE_HOST\n"
           "SESSION_KMMLU=fixture\nLANE_TOKENIZER=unused\n")
 
 
-def head_bytes(relative):
+def head_bytes(relative, revision=BASELINE_REVISION):
     """Read the original HEAD with Git's checkout-relative path syntax."""
-    return subprocess.run(["git", "show", f"{BASELINE_REVISION}:./{relative}"],
+    return subprocess.run(["git", "show", f"{revision}:./{relative}"],
                           cwd=REPO, check=True, capture_output=True).stdout
 
 
