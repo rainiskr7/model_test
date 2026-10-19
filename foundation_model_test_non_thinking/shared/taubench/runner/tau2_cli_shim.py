@@ -122,6 +122,56 @@ def _request_base(kwargs: dict) -> str | None:
     return None
 
 
+def _wrap_completion(original_completion, apply, constrained_base, candidate_model,
+                     removed, adjusted, counts):
+    """요청 주소별로 제약을 적용하고 호출자가 소유한 역할별 상태를 누적한다."""
+    def completion_with_serving_profile(*args, **kwargs):
+        base = _request_base(kwargs)
+        if base is None:
+            counts["base_unknown"] += 1
+            return original_completion(*args, **kwargs)
+        if base != constrained_base:
+            counts["unmatched"] += 1
+            return original_completion(*args, **kwargs)
+        counts["matched"] += 1
+        model = str(kwargs.get("model") or "")
+        role = "candidate" if (candidate_model and model == candidate_model) else "user"
+        before = deepcopy(kwargs)
+        # litellm 은 OpenAI 비표준 필드를 extra_body 로 받는다 → sdk=True.
+        apply(kwargs, sdk=True)
+        for name in before:
+            if name not in kwargs:
+                removed[role].add(name)
+        before_extra = before.get("extra_body") or {}
+        after_extra = kwargs.get("extra_body") or {}
+        for name in before_extra:
+            if name not in after_extra:
+                removed[role].add(name)
+        if before.get("max_tokens") != kwargs.get("max_tokens"):
+            adjusted[role].add("max_tokens")
+        if before_extra.get("skip_special_tokens") != after_extra.get("skip_special_tokens"):
+            adjusted[role].add("skip_special_tokens")
+        return original_completion(*args, **kwargs)
+
+    return completion_with_serving_profile
+
+
+def _record_payload(patched, constrained_base, candidate_model, counts, removed, adjusted):
+    """역할별 변경 사항을 정렬하고 기존 키 순서로 기록 본문을 조립한다."""
+    return {
+        "patched": patched,
+        "constrained_api_base": constrained_base or None,
+        "candidate_model": candidate_model or None,
+        # patched=True 는 함수를 갈아끼웠다는 뜻일 뿐이다. 후보 요청을
+        # 한 번이라도 실제로 매칭했는지는 이 카운터로만 알 수 있다.
+        "request_counts": counts,
+        "removed_params": sorted(removed["candidate"]),
+        "adjusted_params": sorted(adjusted["candidate"]),
+        "user_removed_params": sorted(removed["user"]),
+        "user_adjusted_params": sorted(adjusted["user"]),
+    }
+
+
 def main() -> None:
     constrained_base = _normalize_base(os.environ.get("TAUBENCH_CONSTRAINED_API_BASE", ""))
     candidate_model = (os.environ.get("TAUBENCH_CANDIDATE_MODEL") or "").strip()
@@ -139,37 +189,9 @@ def main() -> None:
         apply = _load_apply()
         from tau2.utils import llm_utils
 
-        original_completion = llm_utils.completion
-
-        def completion_with_serving_profile(*args, **kwargs):
-            base = _request_base(kwargs)
-            if base is None:
-                counts["base_unknown"] += 1
-                return original_completion(*args, **kwargs)
-            if base != constrained_base:
-                counts["unmatched"] += 1
-                return original_completion(*args, **kwargs)
-            counts["matched"] += 1
-            model = str(kwargs.get("model") or "")
-            role = "candidate" if (candidate_model and model == candidate_model) else "user"
-            before = deepcopy(kwargs)
-            # litellm 은 OpenAI 비표준 필드를 extra_body 로 받는다 → sdk=True.
-            apply(kwargs, sdk=True)
-            for name in before:
-                if name not in kwargs:
-                    removed[role].add(name)
-            before_extra = before.get("extra_body") or {}
-            after_extra = kwargs.get("extra_body") or {}
-            for name in before_extra:
-                if name not in after_extra:
-                    removed[role].add(name)
-            if before.get("max_tokens") != kwargs.get("max_tokens"):
-                adjusted[role].add("max_tokens")
-            if before_extra.get("skip_special_tokens") != after_extra.get("skip_special_tokens"):
-                adjusted[role].add("skip_special_tokens")
-            return original_completion(*args, **kwargs)
-
-        llm_utils.completion = completion_with_serving_profile
+        llm_utils.completion = _wrap_completion(
+            llm_utils.completion, apply, constrained_base, candidate_model, removed, adjusted, counts,
+        )
         patched = True
         print(
             f"[tau2-shim] {constrained_base} 로 가는 요청에 서빙 프로파일을 적용한다"
@@ -184,18 +206,7 @@ def main() -> None:
     finally:
         _write_record(
             out_path,
-            {
-                "patched": patched,
-                "constrained_api_base": constrained_base or None,
-                "candidate_model": candidate_model or None,
-                # patched=True 는 함수를 갈아끼웠다는 뜻일 뿐이다. 후보 요청을
-                # 한 번이라도 실제로 매칭했는지는 이 카운터로만 알 수 있다.
-                "request_counts": counts,
-                "removed_params": sorted(removed["candidate"]),
-                "adjusted_params": sorted(adjusted["candidate"]),
-                "user_removed_params": sorted(removed["user"]),
-                "user_adjusted_params": sorted(adjusted["user"]),
-            },
+            _record_payload(patched, constrained_base, candidate_model, counts, removed, adjusted),
         )
 
 

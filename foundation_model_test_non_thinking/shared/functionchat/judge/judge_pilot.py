@@ -229,7 +229,8 @@ def stratified_sample(
     return picked
 
 
-def main(argv: Optional[List[str]] = None) -> int:
+def _parse_args(argv):
+    """파일럿의 입력 경로와 판정 실행 옵션을 읽는다."""
     parser = argparse.ArgumentParser()
     parser.add_argument("--results-dir", required=True, type=Path)
     parser.add_argument("--out", required=True, type=Path)
@@ -241,19 +242,11 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser.add_argument("--api-key-env", default="TAUBENCH_USER_API_KEY")
     parser.add_argument("--timeout", type=float, default=120.0)
     parser.add_argument("--retries", type=int, default=3)
-    args = parser.parse_args(argv)
+    return parser.parse_args(argv)
 
-    api_key = os.environ.get(args.api_key_env)
-    if not api_key:
-        raise SystemExit(f"{args.api_key_env} 환경변수가 필요합니다 (값은 인자로 받지 않습니다).")
 
-    rubrics = load_rubrics(args.data_dir)
-    items = collect_items(args.results_dir)
-    sample = stratified_sample(items, args.per_type, args.seed)
-    models = [m.strip() for m in args.models.split(",") if m.strip()]
-    identity = ServedIdentity()
-    print(f"[judge-pilot] 대상 {len(items)}건 중 층화 표본 {len(sample)}건, 모델 {models}")
-
+def _judge_sample(sample, rubrics, models, api_key, args, identity):
+    """호출별 identity를 공유하며 표본을 반복 판정하고 진행 상황을 출력한다."""
     records = []
     for index, item in enumerate(sample, start=1):
         kind = str(item.get("type_of_output"))
@@ -274,7 +267,22 @@ def main(argv: Optional[List[str]] = None) -> int:
         records.append(entry)
         if index % 5 == 0 or index == len(sample):
             print(f"[judge-pilot] {index}/{len(sample)}")
+    return records
 
+
+def main(argv: Optional[List[str]] = None) -> int:
+    args = _parse_args(argv)
+    api_key = os.environ.get(args.api_key_env)
+    if not api_key:
+        raise SystemExit(f"{args.api_key_env} 환경변수가 필요합니다 (값은 인자로 받지 않습니다).")
+
+    rubrics = load_rubrics(args.data_dir)
+    items = collect_items(args.results_dir)
+    sample = stratified_sample(items, args.per_type, args.seed)
+    models = [m.strip() for m in args.models.split(",") if m.strip()]
+    identity = ServedIdentity()
+    print(f"[judge-pilot] 대상 {len(items)}건 중 층화 표본 {len(sample)}건, 모델 {models}")
+    records = _judge_sample(sample, rubrics, models, api_key, args, identity)
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(
         json.dumps(

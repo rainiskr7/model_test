@@ -57,12 +57,8 @@ def check_file(path, rel, model_name, schema):
     return failures, warnings
 
 
-def main(argv=None):
-    argv = sys.argv[1:] if argv is None else argv
-    session = Path(argv[0])
-    model_name = argv[1]
-    benches_dir = Path(argv[2])
-
+def _load_schema(benches_dir):
+    """지정 검색 경로에서 schema를 읽고 실패하면 legacy 검사로 돌아간다."""
     # schema-aware validation (Pydantic 기반 — _schema.py 가 있으면 활용)
     # 예외: 지정 폴더에 _schema가 없으면 legacy 검사로 돌아가는 계약을 유지한다.
     sys.path.insert(0, str(benches_dir))
@@ -73,19 +69,11 @@ def main(argv=None):
         print(f"[sanity] schema module 로드 실패 ({e}) — legacy 키 검사만")
         schema = None
 
-    failures = []
-    warnings = []
-    if not session.exists():
-        print(f"[sanity] WARN: session dir 없음 {session}")
-        return 0
+    return schema
 
-    for path in iter_result_files(session):
-        file_failures, file_warnings = check_file(
-            path, path.relative_to(session), model_name, schema,
-        )
-        failures.extend(file_failures)
-        warnings.extend(file_warnings)
 
+def _print_results(failures, warnings):
+    """비치명 경고를 먼저 출력하고 실패 여부에 따른 종료 코드를 반환한다."""
     if warnings:
         print(f"[sanity] {len(warnings)} 건의 비치명 경고:")
         for w in warnings:
@@ -98,6 +86,27 @@ def main(argv=None):
     else:
         print("[sanity] OK — 치명적 결과 없음")
         return 0
+
+
+def main(argv=None):
+    argv = sys.argv[1:] if argv is None else argv
+    session = Path(argv[0])
+    model_name = argv[1]
+    benches_dir = Path(argv[2])
+    schema = _load_schema(benches_dir)
+    failures = []
+    warnings = []
+    if not session.exists():
+        print(f"[sanity] WARN: session dir 없음 {session}")
+        return 0
+
+    for path in iter_result_files(session):
+        file_failures, file_warnings = check_file(
+            path, path.relative_to(session), model_name, schema,
+        )
+        failures.extend(file_failures)
+        warnings.extend(file_warnings)
+    return _print_results(failures, warnings)
 
 
 if __name__ == "__main__":
