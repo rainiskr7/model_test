@@ -135,7 +135,7 @@ full_dry_run() {
 
 full_stage_ready() {
   # Conditional judges inspect this session only; select newest workbook by mtime.
-  local stage=$1 candidate
+  local stage=$1 candidate judge_dir
   case "$stage" in
     functionchat_judge) [ -d "$RD/$TS/language/functionchat" ] ;;
     koffvqa_judge)
@@ -145,7 +145,15 @@ full_stage_ready() {
         if [ -z "$FULL_PREDFILE" ] || [ "$candidate" -nt "$FULL_PREDFILE" ]; then FULL_PREDFILE=$candidate; fi
       done
       [ -n "$FULL_PREDFILE" ] ;;
-    derive) [ "$FULL_KOFFVQA_RAN" = 1 ] ;;
+    derive)
+      if [ "$N" -eq "$FULL_RESUME_REP" ] && [ "$FULL_RESUME_INDEX" -eq 7 ]; then
+        judge_dir="$RD/$TS/vision/multimodal/koffvqa_api_judge"
+        if [ -f "$judge_dir/results.json" ] && [ -f "$judge_dir/summary.json" ]; then return 0; fi
+        log "[$TS] derive 재개 불가 — judge 산출 없음"
+        # Returning false here would turn this error into a successful condition skip.
+        exit 2
+      fi
+      [ "$FULL_KOFFVQA_RAN" = 1 ] ;;
     *) return 0 ;;
   esac
 }
@@ -170,7 +178,7 @@ full_run_stage() {
   full_invoke "$stage" >>"$BASE/logs/$TS/$stage.log" 2>&1
   rc=$?
   log "[$TS] $stage 종료 rc=$rc"
-  # derive only follows a judge that produced output (rc 0); a failed judge leaves nothing to derive.
+  # Normal flow derives after judge rc 0; explicit derive resume checks saved files instead.
   if [ "$stage" = koffvqa_judge ] && [ "$rc" -eq 0 ]; then FULL_KOFFVQA_RAN=1; fi
   if [ "$rc" -eq 3 ] || [ "$rc" -ge 129 ]; then exit "$rc"; fi
   [ "$rc" -ne 0 ] || return 0

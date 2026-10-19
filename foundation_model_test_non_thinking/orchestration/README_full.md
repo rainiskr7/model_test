@@ -12,7 +12,7 @@
 4. multimodal (`run_all.sh`)
 5. functionchat_judge: 이 세션의 `language/functionchat` 디렉터리가 있을 때
 6. koffvqa_judge: 이 세션의 `vision/multimodal/koffvqa/*_gen.xlsx` 중 수정 시각이 가장 최신인 파일이 있을 때
-7. derive: 이번 실행에서 이 세션의 koffvqa_judge를 실제 호출했을 때만
+7. derive: 이번 실행에서 이 세션의 koffvqa_judge가 rc 0으로 끝났을 때. `r<N>:derive` 재개 반복은 아래의 저장 산출 확인 규칙 적용
 
 KMMLU/harness와 taubench standard는 포함하지 않는다. 같은 mtime의 workbook은 셸 glob 순서에서 먼저 나온 파일을 선택한다. 모든 실행 단계에 `EVAL_TIMESTAMP`를 지정하고, stdout/stderr를 `logs/<TS>/<stage>.log`에 append한다. `logs/resume_orch/orchestrator.log`에는 단계 시작 명령과 종료 rc를 남긴다. 명령 로그의 judge 키는 `${TAUBENCH_USER_API_KEY}`로 가린다.
 
@@ -47,7 +47,7 @@ KRETA_RESUME=1
 
 r1의 7단계와 r2의 앞 3단계는 `skip (resume)` 로그만 남기고 건너뛴다. r2 multimodal에만 `KRETA_RESUME=1`이 들어가며 r3에는 들어가지 않는다. KRETA_RESUME=0이면 해당 단계도 새 KRETA 실행이다. 재개 지점이 다른 단계면 KRETA_RESUME=1을 설정해도 multimodal에 전달하지 않는다. RESUME_FROM이 지정된 실행은 명세대로 세션 존재 충돌 거부를 적용하지 않는다.
 
-`RESUME_FROM=rK:derive`는 유효하지만, 이번 실행에서 rK의 KOFFVQA judge를 호출하지 않았으므로 그 반복의 derive는 조건 불충족으로 skip한다. 판정부터 다시 진행하려면 `rK:koffvqa_judge`를 사용한다. 이는 명세의 “6이 실행됐을 때만 7 실행”을 그대로 적용한 동작이다.
+`RESUME_FROM=rK:derive`이면 rK의 `vision/multimodal/koffvqa_api_judge/results.json`과 `summary.json`이 둘 다 파일로 있을 때 judge를 다시 호출하지 않고 derive를 1회 실행한다. 하나라도 없거나 파일 대신 디렉터리이면 `[<TS>] derive 재개 불가 — judge 산출 없음`을 기록하고 rc 2로 즉시 종료한다. 파일 내용의 검증은 derive가 맡는다. 이후 반복은 기존대로 해당 반복의 judge가 rc 0으로 끝났을 때 derive를 호출한다. 판정부터 다시 진행하려면 `rK:koffvqa_judge`를 사용한다. dry-run은 파일 존재를 검사하지 않으며 기존 명령과 `SKIP=` 표시를 유지한다.
 
 ## 실패 정책
 

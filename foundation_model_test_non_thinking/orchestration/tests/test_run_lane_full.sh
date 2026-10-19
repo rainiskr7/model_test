@@ -282,7 +282,9 @@ f5() {
   fixture F5_derive_resume
   printf 'RESUME_FROM=r3:derive\n' >> "$FX/orchestration/lanes/full.conf"
   run_lane
-  expect_rc 0 && [ ! -e "$FX/calls" ] && has "$FX/stdout" 'derive skip (condition)'
+  # 4b: explicit derive resume without saved judge files must fail, not silently skip.
+  expect_rc 2 && [ ! -e "$FX/calls" ] &&
+    has "$FX/stdout" '[20261015_full_r3] derive 재개 불가 — judge 산출 없음'
 }
 
 f6() {
@@ -311,6 +313,66 @@ f7() {
   for dir in "$FX/dump/"*; do check_stage_env "$dir" 350 1000 || return 1; done
 }
 
+put_judge_outputs() {
+  local dir="$FX/results/fixture_model/20261015_full_r$1/vision/multimodal/koffvqa_api_judge"
+  mkdir -p "$dir"
+  printf '{}\n' > "$dir/results.json"
+  printf '{}\n' > "$dir/summary.json"
+}
+
+f8() {
+  # 4b: resume invokes derive exactly once for that repetition, without rerunning judge.
+  fixture F8_last
+  printf 'RESUME_FROM=r3:derive\n' >> "$FX/orchestration/lanes/full.conf"
+  put_judge_outputs 3
+  run_lane
+  expect_rc 0 || return 1
+  printf '20261015_full_r3 derive\n' > "$FX/expected_calls"
+  diff -u "$FX/expected_calls" "$FX/calls" || return 1
+  check_stage_argv 20261015_full_r3 derive || return 1
+  fixture F8_continue
+  printf 'RESUME_FROM=r1:derive\n' >> "$FX/orchestration/lanes/full.conf"
+  put_judge_outputs 1
+  run_lane
+  expect_rc 0 || return 1
+  { printf '20261015_full_r1 derive\n'; all_calls 2 3; } > "$FX/expected_calls"
+  diff -u "$FX/expected_calls" "$FX/calls" || return 1
+  # Later repetitions must still gate derive on judge rc 0, even with resume set.
+  fixture F8_later_judge_failure
+  printf 'RESUME_FROM=r1:derive\n' >> "$FX/orchestration/lanes/full.conf"
+  put_judge_outputs 1
+  set_rc 2 koffvqa_judge 1
+  run_lane
+  expect_rc 1 || return 1
+  { printf '20261015_full_r1 derive\n'; all_calls 2 3; } |
+    sed '/^20261015_full_r2 derive$/d' > "$FX/expected_calls"
+  diff -u "$FX/expected_calls" "$FX/calls"
+}
+
+f9() {
+  # 4b: both paths must be files; a directory or one saved artifact is insufficient.
+  local state dir
+  for state in directory_only results_only summary_only results_directory summary_directory; do
+    fixture "F9_$state"
+    printf 'RESUME_FROM=r1:derive\n' >> "$FX/orchestration/lanes/full.conf"
+    dir="$FX/results/fixture_model/20261015_full_r1/vision/multimodal/koffvqa_api_judge"
+    mkdir -p "$dir"
+    case "$state" in
+      results_only) touch "$dir/results.json" ;;
+      summary_only) touch "$dir/summary.json" ;;
+      results_directory) mkdir "$dir/results.json"; touch "$dir/summary.json" ;;
+      summary_directory) touch "$dir/results.json"; mkdir "$dir/summary.json" ;;
+    esac
+    # Dry-run remains descriptive and never checks whether judge artifacts exist.
+    run_lane 1
+    expect_rc 0 && [ "$(grep -c '^SKIP=' "$FX/stdout")" -eq 6 ] &&
+      [ ! -e "$FX/calls" ] && [ ! -e "$FX/preflight" ] || return 1
+    run_lane
+    expect_rc 2 && [ ! -e "$FX/calls" ] &&
+      has "$FX/stdout" '[20261015_full_r1] derive 재개 불가 — judge 산출 없음' || return 1
+  done
+}
+
 
 run_case() {
   if "$2"; then PASS=$((PASS + 1)); printf 'PASS %s\n' "$1"
@@ -323,5 +385,7 @@ run_case F4 f4
 run_case F5 f5
 run_case F6 f6
 run_case F7 f7
+run_case F8 f8
+run_case F9 f9
 printf 'SUMMARY {"pass":%s,"fail":%s,"inconclusive":0}\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]
