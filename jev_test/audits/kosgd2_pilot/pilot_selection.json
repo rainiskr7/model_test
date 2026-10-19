@@ -1,0 +1,847 @@
+{
+ "schema": "kosgd2_pilot_selection/1",
+ "seed": 20261019,
+ "python": "3.13.5",
+ "inputs": {
+  "dataset/kosgd/dialogues_001.json": "ede26f1819c71ea89a23aafba14ed47b10785e0a9f241ae696c0fdc83335b93e",
+  "dataset/kosgd/dialogues_002.json": "4517acec8c1517785c2010ada49ed832eae4bfa8e08aad1aa8f73a745a55b7e2",
+  "dataset/kosgd/dialogues_003.json": "d24376c1ea2579c5417ad9dd11b1c28ed6f694491db5e44f6c98716563dbd323",
+  "dataset/kosgd/dialogues_004.json": "548342ad4fd2602c830bb02fa3b91dc34eeb931fa242ae5a7cab36fc65c72585",
+  "dataset/kosgd/dialogues_005.json": "8a7706a56aba3fe25f2ccb1cc970894c960250248ac4d11415f13b8881b51037",
+  "dataset/kosgd/dialogues_006.json": "2afdaafb87866723b8dd336e167283914e0f6f34e499c632745f98dd04ec0228",
+  "dataset/kosgd/dialogues_007.json": "e5c603c31a6b048f459174f1cb80d128a64aadc312da601a1ab578af31bb5806",
+  "dataset/kosgd/dialogues_008.json": "825ff005b6c89c251675969ab02fb560d41cdb3d681842dfffe6784ea653cfd5",
+  "dataset/kosgd/dialogues_009.json": "5ba21cf77bc314dc3199290b774701d72ff12dde754548f152a7aa3db8099496",
+  "dataset/kosgd/dialogues_010.json": "89558bd6c8c87a66e05ec31537d58227527ef10d699fcd9c6d7e8a5357736516",
+  "dataset/kosgd/dialogues_011.json": "ff9678d7fe335e3887a91cc05804c1042d8efc08a4c70d12b8573a08307ec37a",
+  "dataset/kosgd/dialogues_012.json": "b3e0957d97e8ce5a7a6f3943c18acb0b0d8d18195bf02584c994db9a1b1be139",
+  "dataset/kosgd/dialogues_013.json": "6102ee0c63a8ff2273a4e653f046357fab60fc6d8e98f2cd78f531fe5c1bd5bc",
+  "dataset/kosgd/dialogues_014.json": "80e05bd4bd8bfc87fe8dd3d57fcb420d9860aa87b2659061566e6ae62f1d3980",
+  "dataset/kosgd/dialogues_015.json": "9752577c4b107ce143572ee02140708ef34cccd9923582d4b094b65d97c16cb1",
+  "dataset/kosgd/dialogues_016.json": "6717e82ac3a68c87f7945646b0b69769f1aaa475a53709b31988f9a9396e7b2d",
+  "dataset/kosgd/dialogues_017.json": "34782b165db39c0863c5ac4741b749c5a7b6ec669ac163156b8a88594e05a17d",
+  "dataset/kosgd/dialogues_018.json": "296fa392cf0ab86560d5ba21853abf3380bd7356e012de2b8fa8b00a5c8866dc",
+  "dataset/kosgd/dialogues_019.json": "a0986e7ebc11565dd9803b544cebddf514d1962baa0f49c016153e55e0e4c3bd",
+  "dataset/kosgd/dialogues_020.json": "f0f18e1762ffcd17701575ba0143d41846bb17c7faf60bcc7c24c68dcc9ec388",
+  "dataset/kosgd/dialogues_021.json": "b78aaf94d6dc56e8a63e45465039e9741fcef0d6042071b784a886bb24123403",
+  "dataset/kosgd/dialogues_022.json": "3c088f4eef8acf8680a01ba79e6c7b63d0faaf6ce66a706db58408c8e84b491e",
+  "dataset/kosgd/dialogues_023.json": "b7cd833cfe8b9179437f6c91850288dc88da1303ef67889cb002d75165361478",
+  "dataset/kosgd/dialogues_024.json": "ff227850ad547655f44c354681f699c620a710f0e486d33fc04a91fd78016012",
+  "dataset/kosgd/dialogues_025.json": "a37011d8e0248d5c989c036319606ff8918889c35534d0548e21d9c36f329e45",
+  "dataset/kosgd/dialogues_026.json": "d08975b0dbb073f2d001329dd1a252fb0ee72db5dbfae9df6258a9c3cad44374",
+  "dataset/kosgd/dialogues_027.json": "fa7e157754bd432a7a4f226ca746bd977975f08109fea8c3fe758fa1591c89e2",
+  "dataset/kosgd/dialogues_028.json": "c993e243925b744ad8824586020af27a27447339350271cb0fd72655776207bc",
+  "dataset/kosgd/dialogues_029.json": "af71c76cc139415365ec8886a1fe50ba5333d225776550358c6fed669f68290b",
+  "dataset/kosgd/dialogues_030.json": "2eb2d8fdae41e19eb569af8f131bac744867d5658240316037959938ba5b8d71",
+  "dataset/kosgd/dialogues_031.json": "bc4bc35822ddcf81394f07ed9238d3bdf47252ebfe6d2c710351d53959825777",
+  "dataset/kosgd/dialogues_032.json": "e993d0980cf428049edf684b07f3f984e818dc37ee090e3a5560dc6c5b2a6553",
+  "dataset/kosgd/dialogues_033.json": "a902fce4b9fc84c517d4050a3f2b562bd2ef5192482aa3fd6bba877da6c2979b",
+  "dataset/kosgd/dialogues_034.json": "1272ebefec696f6272ae149e74cc057888a9e30286e55a01b25f949e3167a655",
+  "audits/kosgd_audit/audit_result.json": "faf59e8c7e5385a0d6eecf1fbb23e98f901acae24f80ff1b8b041029346b3969",
+  "configs/t0/fixture_v1.json": "592b6da617e708d9e6e7f69c51f604e5b6b1d72d1ddf4799af16d62198e4bad2",
+  "audits/kosgd2_selection/selection.json": "52dcf7905c3bccb195f81d9c4802ac5525793852706dd8b36360f255064df192"
+ },
+ "selected_turns": [
+  {
+   "dialogue_id": "10_00000",
+   "turn_index": 4
+  },
+  {
+   "dialogue_id": "10_00035",
+   "turn_index": 0
+  },
+  {
+   "dialogue_id": "10_00112",
+   "turn_index": 0
+  },
+  {
+   "dialogue_id": "10_00121",
+   "turn_index": 0
+  },
+  {
+   "dialogue_id": "10_00123",
+   "turn_index": 0
+  },
+  {
+   "dialogue_id": "10_00125",
+   "turn_index": 2
+  },
+  {
+   "dialogue_id": "11_00010",
+   "turn_index": 2
+  },
+  {
+   "dialogue_id": "11_00039",
+   "turn_index": 10
+  },
+  {
+   "dialogue_id": "12_00004",
+   "turn_index": 10
+  },
+  {
+   "dialogue_id": "12_00043",
+   "turn_index": 14
+  },
+  {
+   "dialogue_id": "12_00061",
+   "turn_index": 4
+  },
+  {
+   "dialogue_id": "12_00067",
+   "turn_index": 6
+  },
+  {
+   "dialogue_id": "12_00102",
+   "turn_index": 16
+  },
+  {
+   "dialogue_id": "12_00105",
+   "turn_index": 6
+  },
+  {
+   "dialogue_id": "12_00124",
+   "turn_index": 18
+  },
+  {
+   "dialogue_id": "13_00053",
+   "turn_index": 0
+  },
+  {
+   "dialogue_id": "13_00072",
+   "turn_index": 6
+  },
+  {
+   "dialogue_id": "13_00079",
+   "turn_index": 14
+  },
+  {
+   "dialogue_id": "13_00086",
+   "turn_index": 8
+  },
+  {
+   "dialogue_id": "13_00099",
+   "turn_index": 0
+  },
+  {
+   "dialogue_id": "14_00000",
+   "turn_index": 10
+  },
+  {
+   "dialogue_id": "14_00009",
+   "turn_index": 10
+  },
+  {
+   "dialogue_id": "14_00016",
+   "turn_index": 2
+  },
+  {
+   "dialogue_id": "14_00025",
+   "turn_index": 4
+  },
+  {
+   "dialogue_id": "14_00089",
+   "turn_index": 0
+  },
+  {
+   "dialogue_id": "14_00126",
+   "turn_index": 0
+  },
+  {
+   "dialogue_id": "15_00012",
+   "turn_index": 20
+  },
+  {
+   "dialogue_id": "15_00049",
+   "turn_index": 2
+  },
+  {
+   "dialogue_id": "15_00054",
+   "turn_index": 6
+  },
+  {
+   "dialogue_id": "15_00073",
+   "turn_index": 8
+  },
+  {
+   "dialogue_id": "15_00108",
+   "turn_index": 10
+  },
+  {
+   "dialogue_id": "15_00114",
+   "turn_index": 28
+  },
+  {
+   "dialogue_id": "15_00121",
+   "turn_index": 18
+  },
+  {
+   "dialogue_id": "16_00080",
+   "turn_index": 26
+  },
+  {
+   "dialogue_id": "16_00092",
+   "turn_index": 14
+  },
+  {
+   "dialogue_id": "17_00029",
+   "turn_index": 22
+  },
+  {
+   "dialogue_id": "17_00042",
+   "turn_index": 0
+  },
+  {
+   "dialogue_id": "17_00072",
+   "turn_index": 8
+  },
+  {
+   "dialogue_id": "17_00111",
+   "turn_index": 12
+  },
+  {
+   "dialogue_id": "17_00124",
+   "turn_index": 6
+  },
+  {
+   "dialogue_id": "18_00001",
+   "turn_index": 8
+  },
+  {
+   "dialogue_id": "18_00023",
+   "turn_index": 18
+  },
+  {
+   "dialogue_id": "18_00040",
+   "turn_index": 18
+  },
+  {
+   "dialogue_id": "18_00069",
+   "turn_index": 4
+  },
+  {
+   "dialogue_id": "18_00074",
+   "turn_index": 8
+  },
+  {
+   "dialogue_id": "18_00099",
+   "turn_index": 4
+  },
+  {
+   "dialogue_id": "18_00110",
+   "turn_index": 14
+  },
+  {
+   "dialogue_id": "18_00119",
+   "turn_index": 8
+  },
+  {
+   "dialogue_id": "18_00127",
+   "turn_index": 18
+  },
+  {
+   "dialogue_id": "19_00011",
+   "turn_index": 10
+  },
+  {
+   "dialogue_id": "19_00048",
+   "turn_index": 24
+  },
+  {
+   "dialogue_id": "19_00102",
+   "turn_index": 18
+  },
+  {
+   "dialogue_id": "1_00000",
+   "turn_index": 6
+  },
+  {
+   "dialogue_id": "1_00003",
+   "turn_index": 18
+  },
+  {
+   "dialogue_id": "1_00015",
+   "turn_index": 2
+  },
+  {
+   "dialogue_id": "1_00020",
+   "turn_index": 2
+  },
+  {
+   "dialogue_id": "1_00030",
+   "turn_index": 0
+  },
+  {
+   "dialogue_id": "1_00064",
+   "turn_index": 4
+  },
+  {
+   "dialogue_id": "1_00115",
+   "turn_index": 2
+  },
+  {
+   "dialogue_id": "20_00034",
+   "turn_index": 22
+  },
+  {
+   "dialogue_id": "20_00046",
+   "turn_index": 2
+  },
+  {
+   "dialogue_id": "20_00074",
+   "turn_index": 16
+  },
+  {
+   "dialogue_id": "20_00093",
+   "turn_index": 10
+  },
+  {
+   "dialogue_id": "20_00104",
+   "turn_index": 0
+  },
+  {
+   "dialogue_id": "20_00112",
+   "turn_index": 12
+  },
+  {
+   "dialogue_id": "20_00116",
+   "turn_index": 10
+  },
+  {
+   "dialogue_id": "20_00122",
+   "turn_index": 14
+  },
+  {
+   "dialogue_id": "21_00004",
+   "turn_index": 10
+  },
+  {
+   "dialogue_id": "21_00039",
+   "turn_index": 16
+  },
+  {
+   "dialogue_id": "21_00054",
+   "turn_index": 6
+  },
+  {
+   "dialogue_id": "21_00064",
+   "turn_index": 16
+  },
+  {
+   "dialogue_id": "21_00065",
+   "turn_index": 4
+  },
+  {
+   "dialogue_id": "21_00071",
+   "turn_index": 2
+  },
+  {
+   "dialogue_id": "21_00076",
+   "turn_index": 12
+  },
+  {
+   "dialogue_id": "21_00082",
+   "turn_index": 12
+  },
+  {
+   "dialogue_id": "21_00087",
+   "turn_index": 10
+  },
+  {
+   "dialogue_id": "21_00091",
+   "turn_index": 8
+  },
+  {
+   "dialogue_id": "22_00042",
+   "turn_index": 0
+  },
+  {
+   "dialogue_id": "22_00087",
+   "turn_index": 12
+  },
+  {
+   "dialogue_id": "22_00093",
+   "turn_index": 22
+  },
+  {
+   "dialogue_id": "22_00119",
+   "turn_index": 0
+  },
+  {
+   "dialogue_id": "23_00003",
+   "turn_index": 2
+  },
+  {
+   "dialogue_id": "23_00015",
+   "turn_index": 22
+  },
+  {
+   "dialogue_id": "23_00020",
+   "turn_index": 10
+  },
+  {
+   "dialogue_id": "23_00033",
+   "turn_index": 14
+  },
+  {
+   "dialogue_id": "23_00055",
+   "turn_index": 24
+  },
+  {
+   "dialogue_id": "23_00090",
+   "turn_index": 10
+  },
+  {
+   "dialogue_id": "23_00097",
+   "turn_index": 16
+  },
+  {
+   "dialogue_id": "23_00101",
+   "turn_index": 2
+  },
+  {
+   "dialogue_id": "23_00108",
+   "turn_index": 14
+  },
+  {
+   "dialogue_id": "24_00000",
+   "turn_index": 20
+  },
+  {
+   "dialogue_id": "24_00004",
+   "turn_index": 22
+  },
+  {
+   "dialogue_id": "24_00015",
+   "turn_index": 8
+  },
+  {
+   "dialogue_id": "24_00022",
+   "turn_index": 16
+  },
+  {
+   "dialogue_id": "24_00030",
+   "turn_index": 18
+  },
+  {
+   "dialogue_id": "24_00045",
+   "turn_index": 12
+  },
+  {
+   "dialogue_id": "24_00069",
+   "turn_index": 2
+  },
+  {
+   "dialogue_id": "24_00072",
+   "turn_index": 6
+  },
+  {
+   "dialogue_id": "24_00075",
+   "turn_index": 10
+  },
+  {
+   "dialogue_id": "24_00091",
+   "turn_index": 16
+  },
+  {
+   "dialogue_id": "24_00111",
+   "turn_index": 6
+  },
+  {
+   "dialogue_id": "25_00010",
+   "turn_index": 20
+  },
+  {
+   "dialogue_id": "25_00016",
+   "turn_index": 28
+  },
+  {
+   "dialogue_id": "25_00021",
+   "turn_index": 0
+  },
+  {
+   "dialogue_id": "25_00052",
+   "turn_index": 12
+  },
+  {
+   "dialogue_id": "25_00055",
+   "turn_index": 8
+  },
+  {
+   "dialogue_id": "25_00064",
+   "turn_index": 2
+  },
+  {
+   "dialogue_id": "25_00091",
+   "turn_index": 16
+  },
+  {
+   "dialogue_id": "25_00097",
+   "turn_index": 10
+  },
+  {
+   "dialogue_id": "25_00121",
+   "turn_index": 34
+  },
+  {
+   "dialogue_id": "26_00048",
+   "turn_index": 4
+  },
+  {
+   "dialogue_id": "26_00072",
+   "turn_index": 16
+  },
+  {
+   "dialogue_id": "26_00096",
+   "turn_index": 22
+  },
+  {
+   "dialogue_id": "26_00118",
+   "turn_index": 14
+  },
+  {
+   "dialogue_id": "27_00005",
+   "turn_index": 16
+  },
+  {
+   "dialogue_id": "27_00078",
+   "turn_index": 18
+  },
+  {
+   "dialogue_id": "27_00086",
+   "turn_index": 26
+  },
+  {
+   "dialogue_id": "28_00043",
+   "turn_index": 18
+  },
+  {
+   "dialogue_id": "28_00093",
+   "turn_index": 0
+  },
+  {
+   "dialogue_id": "28_00123",
+   "turn_index": 0
+  },
+  {
+   "dialogue_id": "29_00032",
+   "turn_index": 20
+  },
+  {
+   "dialogue_id": "29_00036",
+   "turn_index": 10
+  },
+  {
+   "dialogue_id": "29_00070",
+   "turn_index": 8
+  },
+  {
+   "dialogue_id": "29_00079",
+   "turn_index": 10
+  },
+  {
+   "dialogue_id": "29_00105",
+   "turn_index": 12
+  },
+  {
+   "dialogue_id": "2_00001",
+   "turn_index": 2
+  },
+  {
+   "dialogue_id": "2_00033",
+   "turn_index": 0
+  },
+  {
+   "dialogue_id": "2_00036",
+   "turn_index": 2
+  },
+  {
+   "dialogue_id": "2_00082",
+   "turn_index": 12
+  },
+  {
+   "dialogue_id": "2_00085",
+   "turn_index": 4
+  },
+  {
+   "dialogue_id": "2_00115",
+   "turn_index": 4
+  },
+  {
+   "dialogue_id": "30_00017",
+   "turn_index": 20
+  },
+  {
+   "dialogue_id": "30_00024",
+   "turn_index": 20
+  },
+  {
+   "dialogue_id": "30_00065",
+   "turn_index": 4
+  },
+  {
+   "dialogue_id": "30_00074",
+   "turn_index": 12
+  },
+  {
+   "dialogue_id": "30_00090",
+   "turn_index": 20
+  },
+  {
+   "dialogue_id": "30_00099",
+   "turn_index": 2
+  },
+  {
+   "dialogue_id": "31_00014",
+   "turn_index": 20
+  },
+  {
+   "dialogue_id": "31_00054",
+   "turn_index": 0
+  },
+  {
+   "dialogue_id": "31_00121",
+   "turn_index": 8
+  },
+  {
+   "dialogue_id": "31_00124",
+   "turn_index": 18
+  },
+  {
+   "dialogue_id": "32_00028",
+   "turn_index": 0
+  },
+  {
+   "dialogue_id": "32_00052",
+   "turn_index": 4
+  },
+  {
+   "dialogue_id": "32_00095",
+   "turn_index": 6
+  },
+  {
+   "dialogue_id": "32_00121",
+   "turn_index": 26
+  },
+  {
+   "dialogue_id": "33_00002",
+   "turn_index": 12
+  },
+  {
+   "dialogue_id": "33_00024",
+   "turn_index": 6
+  },
+  {
+   "dialogue_id": "33_00026",
+   "turn_index": 16
+  },
+  {
+   "dialogue_id": "33_00047",
+   "turn_index": 0
+  },
+  {
+   "dialogue_id": "33_00063",
+   "turn_index": 4
+  },
+  {
+   "dialogue_id": "33_00079",
+   "turn_index": 14
+  },
+  {
+   "dialogue_id": "33_00093",
+   "turn_index": 4
+  },
+  {
+   "dialogue_id": "33_00096",
+   "turn_index": 14
+  },
+  {
+   "dialogue_id": "34_00032",
+   "turn_index": 18
+  },
+  {
+   "dialogue_id": "34_00035",
+   "turn_index": 4
+  },
+  {
+   "dialogue_id": "34_00048",
+   "turn_index": 6
+  },
+  {
+   "dialogue_id": "3_00005",
+   "turn_index": 8
+  },
+  {
+   "dialogue_id": "3_00006",
+   "turn_index": 6
+  },
+  {
+   "dialogue_id": "3_00011",
+   "turn_index": 4
+  },
+  {
+   "dialogue_id": "3_00031",
+   "turn_index": 2
+  },
+  {
+   "dialogue_id": "3_00063",
+   "turn_index": 8
+  },
+  {
+   "dialogue_id": "3_00073",
+   "turn_index": 8
+  },
+  {
+   "dialogue_id": "3_00076",
+   "turn_index": 6
+  },
+  {
+   "dialogue_id": "3_00085",
+   "turn_index": 4
+  },
+  {
+   "dialogue_id": "4_00007",
+   "turn_index": 8
+  },
+  {
+   "dialogue_id": "4_00026",
+   "turn_index": 22
+  },
+  {
+   "dialogue_id": "4_00046",
+   "turn_index": 2
+  },
+  {
+   "dialogue_id": "4_00053",
+   "turn_index": 2
+  },
+  {
+   "dialogue_id": "4_00066",
+   "turn_index": 0
+  },
+  {
+   "dialogue_id": "4_00103",
+   "turn_index": 0
+  },
+  {
+   "dialogue_id": "5_00007",
+   "turn_index": 0
+  },
+  {
+   "dialogue_id": "5_00011",
+   "turn_index": 2
+  },
+  {
+   "dialogue_id": "5_00059",
+   "turn_index": 4
+  },
+  {
+   "dialogue_id": "5_00065",
+   "turn_index": 6
+  },
+  {
+   "dialogue_id": "5_00085",
+   "turn_index": 12
+  },
+  {
+   "dialogue_id": "6_00004",
+   "turn_index": 8
+  },
+  {
+   "dialogue_id": "6_00005",
+   "turn_index": 0
+  },
+  {
+   "dialogue_id": "6_00016",
+   "turn_index": 14
+  },
+  {
+   "dialogue_id": "6_00070",
+   "turn_index": 6
+  },
+  {
+   "dialogue_id": "6_00073",
+   "turn_index": 18
+  },
+  {
+   "dialogue_id": "6_00087",
+   "turn_index": 2
+  },
+  {
+   "dialogue_id": "6_00101",
+   "turn_index": 12
+  },
+  {
+   "dialogue_id": "6_00119",
+   "turn_index": 4
+  },
+  {
+   "dialogue_id": "7_00001",
+   "turn_index": 4
+  },
+  {
+   "dialogue_id": "8_00053",
+   "turn_index": 0
+  },
+  {
+   "dialogue_id": "8_00057",
+   "turn_index": 2
+  },
+  {
+   "dialogue_id": "8_00064",
+   "turn_index": 12
+  },
+  {
+   "dialogue_id": "8_00068",
+   "turn_index": 6
+  },
+  {
+   "dialogue_id": "8_00083",
+   "turn_index": 0
+  },
+  {
+   "dialogue_id": "8_00102",
+   "turn_index": 4
+  },
+  {
+   "dialogue_id": "8_00113",
+   "turn_index": 6
+  },
+  {
+   "dialogue_id": "9_00007",
+   "turn_index": 8
+  },
+  {
+   "dialogue_id": "9_00017",
+   "turn_index": 6
+  },
+  {
+   "dialogue_id": "9_00026",
+   "turn_index": 6
+  },
+  {
+   "dialogue_id": "9_00027",
+   "turn_index": 4
+  },
+  {
+   "dialogue_id": "9_00039",
+   "turn_index": 0
+  },
+  {
+   "dialogue_id": "9_00064",
+   "turn_index": 4
+  },
+  {
+   "dialogue_id": "9_00080",
+   "turn_index": 8
+  },
+  {
+   "dialogue_id": "9_00106",
+   "turn_index": 6
+  },
+  {
+   "dialogue_id": "9_00117",
+   "turn_index": 4
+  }
+ ],
+ "selection_sha256": "00619472ad30a990b10433accd49642dd9ea47f02cc6d62c676853fc0c903fbb"
+}
