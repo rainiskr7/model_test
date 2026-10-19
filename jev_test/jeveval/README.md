@@ -1,4 +1,4 @@
-# jeveval — P1 작업 ⑥b-2·보정 12 기능 지도
+# jeveval — P1 계약 판 4 기능 지도
 
 P1_CONTRACT.md 보정 12와 ⑥b-2 R1–R8 기준으로 compare·archive·참조 구현 호출 층까지 구현했다.
 시험은 합성 fixture·tmp_path·가짜 참조 모듈·127.0.0.1 서버를 사용한다.
@@ -19,6 +19,7 @@ P1_CONTRACT.md 보정 12와 ⑥b-2 R1–R8 기준으로 compare·archive·참조
 - `io/models.py`: 중복 키 거부 YAML 로더와 ModelConfigError.errors.
 - `io/hashes.py`: 스트리밍 SHA-256·SHA256SUMS 대조·정렬된 Python 소스 해시·토크나이저 재검증.
 - `io/run_files.py`: 정규 JSON·fsync/원자 교체·존재/폴더 생성.
+- 판 4 `io/run_files.py`: read_bytes·copy_bytes로 원본 바이트를 보존하며 fsync 뒤 원자 복사한다.
 - `io/derived_stage.py`: 파생 단계 기록 읽기(DerivedStageFiles)와 final/빈 attempts/derived.json 쓰기 (판정은 run/derived_resume).
 - `types/contract.py`: Validated·B1Config·B1Call·B1Response의 frozen JsonRecord 자료형.
 - `types/scoring.py`: AnswerParse·F1Result·CalibResult·SlotJudgement·메모리 전용 Observation 자료형.
@@ -27,6 +28,7 @@ P1_CONTRACT.md 보정 12와 ⑥b-2 R1–R8 기준으로 compare·archive·참조
 - `contract/render.py`: 설정 키 순서의 state 문자열과 대상 끝 문자 위치 계산.
 - `contract/request.py`: 질문·선택지 순서 보존 요청, UTF-8 바이트·SHA-256·로컬 검증.
 - `contract/response.py`: JSON 중복 키 거부, 전역 사유 우선순위·누적 경고·원 답 반환·독립 usage 추출.
+- 판 4 응답: choice 구조·confidence 0–1은 오류 검사, confidence와 선택 확률의 차이는 통과 요청의 `confidence_differs` 경고다.
 - `contract/b1_response.py`: B1 로그확률 검증·독립 usage 추출·기록용 -inf 문자열 사본.
 - `contract/b1_prompt.py`: 설정 기반 문구·매개변수, 정렬된 선택지의 라벨 배정.
 - `score/labels.py`: LabelVocab(configs/datasets.yaml label_vocab) 으로 만든 전체 이름 등록표 rules()·gold(…, rules), 누락·타입 오류 거부 (어휘 상수 없음).
@@ -36,6 +38,7 @@ P1_CONTRACT.md 보정 12와 ⑥b-2 R1–R8 기준으로 compare·archive·참조
 - `score/answers.py`: systemone 원 확률 보존, B1 토큰 대조·softmax·동률·경고 처리.
 - `score/f1.py`: 출현 클래스 macro-F1과 support·예측 수·tp·재현율·정밀도.
 - `score/calibration.py`: 15 bin top-label ECE·one-hot Brier·clip log loss.
+- 판 4 ECE의 bin과 평균 확신은 `probs[answer]`이며 수락 점수의 confidence와 분리된다.
 - `score/population.py`: 질문·pooled·셋별 ok 코호트 점수, 질문별 경고 재계산과 scores/1 조립.
 - `score/compare.py`: C4 일치 검사, test/all_rows 공통 코호트와 compare/1 조립.
 - `score/bootstrap.py`: 시험 대표 처리율·공통 ok F1의 묶음 paired bootstrap, 고정 임계값과 95% CI.
@@ -99,8 +102,10 @@ P1_CONTRACT.md 보정 12와 ⑥b-2 R1–R8 기준으로 compare·archive·참조
 - `io/archive.py`: 전체 run 폴더/보존 입력 열거·결정적 tar.zst·sha/이름/길이 검증.
 - `io/reference.py`: 로컬 체크포인트·오프라인 환경(offline_environment, 토크나이저 로딩과 공용)·참조 소스의 읽기 전용 import·사본 source 폴더의 패키지 import(package_module).
 - `score/observations.py`: 성공 질문의 F1 관측·KoSGD 고정 칸·KorFin pooled 관측.
-- `run/cli.py`: run·threshold·score·certify·compare·archive 인자와 원문 없는 오류 출력.
+- `run/cli.py`: run(--offline)·replay·threshold·score·certify·compare·archive 인자와 원문 없는 오류 출력.
 - `run/cmd_run.py`: 설정 복원·check-config·인증 헤더·파생/전송 분기·gate 뒤 실행 조립.
+- `run/cmd_replay.py`: 출처·대상 선검사 후 replay.json 기록과 attempts 바이트 복사를 조립한다.
+- `run/replay_check.py`: fingerprint 허용 차이·attempts 파일 완결성·reason 형식의 순수 검사.
 - `run/cmd_threshold.py`: 봉인 전 dev 임계값 재계산·기록.
 - `run/cmd_score.py`: 봉인 확인·risk/scores/summary 조립과 순서 있는 쓰기.
 - `run/cmd_certify.py`: 봉인 (a)(b)(c) 재계산·시간대·mtime 경고.
@@ -174,6 +179,37 @@ seal fixture 여섯 경우는 실제 certify 경로를 통과하고, fixture의 
 
 ## 비교·보존 (⑥b-2)
 
+판 4 replay는 출처 복사만 수행하며 판정은 `run --offline`으로 한다. 예시의 source는
+모델 run 루트가 아닌 fingerprint가 있는 `A/<set>/<variant>` 폴더다.
+
+```sh
+python -m jeveval.run.cli replay --model configs/models/pplx_v1_1.yaml --task configs/tasks/kmhas.yaml --stage dev --run-id r2 --source-run-dir results/pplx_v1_1/r1/A/kmhas/default --reason "판 4 재판정"
+python -m jeveval.run.cli run --model configs/models/pplx_v1_1.yaml --task configs/tasks/kmhas.yaml --stage dev --run-id r2 --offline
+python -m jeveval.run.cli threshold --run-dir results/pplx_v1_1/r2/A/kmhas/default
+python -m jeveval.run.cli replay --model configs/models/pplx_v1_1.yaml --task configs/tasks/kmhas.yaml --stage test --run-id r2 --source-run-dir results/pplx_v1_1/r1/A/kmhas/default
+python -m jeveval.run.cli run --model configs/models/pplx_v1_1.yaml --task configs/tasks/kmhas.yaml --stage test --run-id r2 --offline
+```
+
+offline은 인증·전송 없이 원래 attempts를 현재 코드로 판정하지만 데이터·토크나이저와
+길이 측정은 필요하다. `--base-url` 동시 지정은 거부한다. 전체 계획의 resume 검사를 유지하며
+모든 호출을 복구할 수 없는 논리 요청은 final 없이 `n_deferred`로 센다. `n_sent`는 0이다.
+후속 일반 run은 같은 run_id에 실제 `--base-url`을 주어 남은 호출·예산만 전송한다.
+부분 test의 `ok`는 명령 성공일 뿐 단계 완료가 아니며 score/compare/archive/파생은 거부된다.
+최초 test 진입의 dev/threshold 봉인은 유지한다. final 순서는 복구분→전송분일 수 있다.
+
+replay는 빈 출처·끝 줄 경고·설정 호환 실패·기존 대상 final을 쓰기 전에 거부한다.
+같은 출처·해시·reason의 복사 재실행만 허용하며 copied_at을 보존한다. metadata 기록 뒤
+복사 중단은 같은 명령으로 복구한다. offline 이후에는 replay 대신 run으로 재개한다.
+separate 모델의 KoSGD actions_only는 full 완료 뒤 기존 파생 run을 사용한다.
+source의 code/env/run_id/started_at 차이는 허용하지만 나머지 fingerprint는 동일해야 한다.
+reason은 200자 이하 한 줄이며 원문·인증정보를 적지 않는다. 전송 관측은 재사용하되
+실패율·지연 모집단은 새 final로 계산한다. 자세한 규칙은 계약 §5-5c다.
+
+판 4 이력(10-19): 기존 지도·명령 설명을 확장했다. 이전 CLI 목록은
+run·threshold·score·certify·compare·archive였고, 보존 목록은 fingerprint files와
+fingerprint.json·attempts/final이었다. 새 복사 출처를 보존하려고 replay.json을 추가한다.
+짝 시험은 test_cmd_replay·test_replay_check, CLI 경계는 test_cli_replay가 담당한다.
+
 ```sh
 python -m jeveval.run.cli compare --run-dirs results/model1/r1/A/kmhas/default results/model2/r1/A/kmhas/default --compare-id c1
 python -m jeveval.run.cli archive --run-id r1 --results results --archive-root archive
@@ -189,7 +225,7 @@ compare는 모든 run의 fingerprint·dev/test(FC는 extra) 완료·threshold id
 
 archive는 run_id 아래 모든 모델/셋/판의 완료와 threshold·seal·scores·risk를 요구한다.
 어느 폴더에든 archive.json 또는 목적 tar가 있으면 다른 archive-root로도 재실행을 거부한다.
-보존 목록은 각 fingerprint의 files, fingerprint.json, 각 단계의 attempts/final이다.
+보존 목록은 각 fingerprint의 files, fingerprint.json, 각 단계의 attempts/final과 존재하는 replay.json이다.
 여기에는 모델/task/b1/list/split YAML·JSON, datasets.yaml, rules.yaml, SHA256SUMS가 포함된다.
 PAX tar의 이름 정렬·mtime/uid/gid 0·uname/gname 빈 문자열·mode 0644를 고정한다.
 archive.json의 archive는 저장소 상대 경로다. verify_archive는 추출 없이 sha·이름·길이를 대조한다.

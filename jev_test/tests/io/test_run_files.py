@@ -81,3 +81,41 @@ def test_invalid_json_read(tmp_path, body):
     path.write_text(body)
     with pytest.raises(ValueError):
         run_files.read_json(path)
+
+
+def test_copy_preserves_bytes_and_fsync_order(tmp_path, monkeypatch):
+    src, dst = tmp_path / "source", tmp_path / "target"
+    payload = b"\xff\x00 \r\n{\"unsorted\":  1}\n"
+    src.write_bytes(payload)
+    dst.write_bytes(b"old")
+    events, sync, swap = [], run_files.os.fsync, run_files.os.replace
+    def fsync(fd):
+        assert dst.read_bytes() == b"old"
+        events.append("fsync")
+        sync(fd)
+    def replace(source, destination):
+        assert source.parent == dst.parent and source.read_bytes() == payload
+        assert events == ["fsync"] and dst.read_bytes() == b"old"
+        events.append("replace")
+        swap(source, destination)
+    monkeypatch.setattr(run_files.os, "fsync", fsync)
+    monkeypatch.setattr(run_files.os, "replace", replace)
+    run_files.copy_bytes(src, dst)
+    assert run_files.read_bytes(dst) == run_files.read_bytes(src) == payload
+    assert events == ["fsync", "replace"]
+
+
+@pytest.mark.parametrize("step", ["fsync", "replace", "parent", "source"])
+def test_copy_failure_preserves_files(tmp_path, monkeypatch, step):
+    src, dst = tmp_path / "source", tmp_path / "target"
+    src.write_bytes(b"new")
+    dst.write_bytes(b"old")
+    if step in ("fsync", "replace"):
+        def fail(*args):
+            raise OSError("synthetic")
+        monkeypatch.setattr(run_files.os, step, fail)
+    with pytest.raises(OSError):
+        run_files.copy_bytes(tmp_path / "absent" if step == "source" else src,
+                             tmp_path / "missing/target" if step == "parent" else dst)
+    assert src.read_bytes() == b"new" and dst.read_bytes() == b"old"
+    assert set(tmp_path.iterdir()) == {src, dst}

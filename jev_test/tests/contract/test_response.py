@@ -89,7 +89,7 @@ def test_stages_are_global_and_choice_pick_is_last():
     assert validate_response(json.dumps(raw), req).reason == "choice_values"
 
 
-@pytest.mark.parametrize("confidence", [None, True, "1", float("nan"), float("inf"), .99999999])
+@pytest.mark.parametrize("confidence", [None, True, "1", float("nan"), float("inf")])
 def test_bad_choice_confidence(confidence):
     req = Request("m", "s", {"q": {"type": "choice", "criteria": {"a": "a"}}})
     raw = {"answers": {"q": dict(type="choice", probabilities={"a": 1}, choice="a", confidence=confidence)}}
@@ -121,3 +121,31 @@ def test_read_usage_independent_of_answers(usage, expected):
     '{"usage":{"input_tokens":1,"input_tokens":2}}'])
 def test_read_usage_missing_or_unparseable(raw):
     assert read_usage(raw) == (None, [])
+
+
+@pytest.mark.parametrize("confidence,warnings", [(1, []), (1 - 5e-10, []),
+    (.99999999, ["confidence_differs"]), (0, ["confidence_differs"])])
+def test_choice_confidence_difference(confidence, warnings):
+    req = Request("m", "s", {"q": {"type": "choice", "criteria": {"a": "a"}}})
+    raw = {"answers": {"q": dict(type="choice", probabilities={"a": 1}, choice="a", confidence=confidence)}}
+    result = validate_response(json.dumps(raw), req)
+    assert result.reason is None and result.warnings == warnings
+
+
+@pytest.mark.parametrize("confidence", [-1e-10, 1 + 1e-10, -1, 1.2])
+def test_choice_confidence_range(confidence):
+    req = Request("m", "s", {"q": {"type": "choice", "criteria": {"a": "a", "b": "b"}}})
+    raw = {"answers": {"q": dict(type="choice", probabilities={"a": 0, "b": 1},
+                                 choice="a" if confidence < 0 else "b", confidence=confidence)}}
+    result = validate_response(json.dumps(raw), req)
+    assert result.reason == "choice_pick" and result.warnings == []
+
+
+@pytest.mark.parametrize("invalid", [False, True])
+def test_confidence_warning_order_and_atomicity(invalid):
+    req = Request("m", "s", {"c": {"type": "choice", "criteria": {"a": "a"}}, "n": {"type": "noul"}})
+    raw = {"answers": {"c": dict(type="choice", probabilities={"a": 1}, choice="a", confidence=.2),
+                       "n": dict(type="noul", noul=-1 if invalid else .9)}, "usage": {"input_tokens": True}}
+    result = validate_response(json.dumps(raw), req)
+    assert result.reason == ("noul_value" if invalid else None)
+    assert result.warnings == ["extra_keys", "usage_input_tokens_invalid"] + ([] if invalid else ["confidence_differs"])

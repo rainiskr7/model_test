@@ -68,3 +68,4 @@ class RunSummary(JsonRecord):
     n_sent: int
     n_recovered: int
     by_status: dict[str, int]
+    n_deferred: int = 0

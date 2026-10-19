@@ -73,6 +73,8 @@ def entries_for(root, contexts):
         paths.append(ctx.directory / "fingerprint.json")
         for stage in ("dev", "test", "extra"):
             folder = ctx.directory / stage
+            if (folder / "replay.json").exists():
+                paths.append(folder / "replay.json")
             if stage != "extra" or folder.exists() or ctx.task.set == "fc_call_decision":
                 paths.extend(folder / f"{name}.jsonl" for name in ("attempts", "final"))
         for path in paths:

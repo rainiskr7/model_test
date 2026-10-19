@@ -25,3 +25,9 @@ def test_call_plan_is_memory_only():
     assert not isinstance(plan, JsonRecord) and plan.body == b"{}"
     with pytest.raises(FrozenInstanceError):
         plan.body = b"changed"
+
+
+def test_deferred_summary_roundtrip():
+    summary = RunSummary(5, 1, 2, 0, 1, {"ok": 1}, 3)
+    assert summary.n_deferred == 3
+    assert RunSummary.from_dict(summary.to_dict()) == summary

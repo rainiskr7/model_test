@@ -59,8 +59,7 @@ def _type_reason(answers, questions, warnings):
 def _choice_pick(answer):
     choice, confidence = answer.get("choice"), answer.get("confidence")
     return (isinstance(choice, str) and choice in answer["probabilities"]
-            and _finite(confidence)
-            and abs(confidence - answer["probabilities"][choice]) <= 1e-9)
+            and _probability(confidence))
 
 
 def _value_reason(answers, questions):
@@ -80,6 +79,14 @@ def _value_reason(answers, questions):
     if any(not _choice_pick(answer) for answer, _ in choices):
         return "choice_pick"
     return None
+
+
+def _confidence_warnings(answers, questions, warnings):
+    """통과한 요청에만 확신과 선택 확률의 차이를 기록한다 (§3-1 판 4)."""
+    if any(q["type"] == "choice" and abs(answers[qid]["confidence"] -
+           answers[qid]["probabilities"][answers[qid]["choice"]]) > 1e-9
+           for qid, q in questions.items()):
+        _warn(warnings, "confidence_differs")
 
 
 def validate_response(raw: str | bytes, request: Request) -> Validated:
@@ -104,6 +111,8 @@ def validate_response(raw: str | bytes, request: Request) -> Validated:
     reason = _type_reason(answers, request.questions, warnings)
     if reason is None:
         reason = _value_reason(answers, request.questions)
+    if reason is None:
+        _confidence_warnings(answers, request.questions, warnings)
     return Validated(reason, warnings, answers if reason is None else None)
 
 

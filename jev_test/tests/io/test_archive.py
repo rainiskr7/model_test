@@ -65,3 +65,26 @@ def test_unsafe_member_rejected_before_creation(tmp_path, name):
     with pytest.raises(ValueError):
         build_archive({name: tmp_path / "missing"}, tmp_path / "out.zst")
     assert not (tmp_path / "out.zst").exists()
+
+
+def test_entries_include_optional_replay_metadata(tmp_path):
+    from jeveval.io.archive import entries_for
+    from jeveval.run import context
+    from tests.run.cli_support import Harness
+    h = Harness(tmp_path)
+    ctx = context.configuration(h.root, h.args["model"], h.args["task"])
+    from dataclasses import replace
+    fp = context.fingerprint(ctx, "r1", "now")
+    ctx = replace(ctx, directory=h.directory, fingerprint=fp)
+    h.directory.mkdir(parents=True)
+    (h.directory / "fingerprint.json").write_text("{}")
+    for stage in ("dev", "test"):
+        folder = h.directory / stage
+        folder.mkdir()
+        for name in ("attempts", "final"):
+            (folder / (name + ".jsonl")).write_bytes(b"")
+    before = entries_for(h.root, [ctx])
+    marker = h.directory / "dev/replay.json"
+    marker.write_text("{}")
+    after = entries_for(h.root, [ctx])
+    assert set(after) - set(before) == {marker.relative_to(h.root).as_posix()}

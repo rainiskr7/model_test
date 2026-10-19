@@ -28,7 +28,7 @@ def test_retries_bytes_wait_fsync_order_and_headers(tmp_path, env, monkeypatch):
     monkeypatch.setattr(records, "append_record", append)
     summary = h.run(headers={"Authorization": "secret"}, timeout=17)
     assert summary.to_dict() == dict(n_logical=1, n_skipped_final=0, n_calls=1,
-        n_sent=3, n_recovered=0, by_status={"ok": 1})
+        n_sent=3, n_recovered=0, by_status={"ok": 1}, n_deferred=0)
     assert h.waits == [7, 2]
     assert h.sent == [("http://127.0.0.1:1/v1/systemone", env.plan.body, 17,
                        {"Authorization": "secret"})] * 3
@@ -99,7 +99,7 @@ def test_empty_stage_and_invalid_arguments(tmp_path, env):
         assert not (tmp_path / "dev/attempts.jsonl").exists()
     summary = h.run(items=[])
     assert summary.to_dict() == dict(n_logical=0, n_skipped_final=0, n_calls=0,
-        n_sent=0, n_recovered=0, by_status={})
+        n_sent=0, n_recovered=0, by_status={}, n_deferred=0)
     assert (tmp_path / "dev/final.jsonl").read_bytes() == b""
     assert (tmp_path / "dev/attempts.jsonl").read_bytes() == b""
 

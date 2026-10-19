@@ -141,3 +141,13 @@ P0-B1: null/빈 해시 목록은 미확정으로 거부한다. user는 하나이
 ../foundation_model_test_non_thinking/.venv/bin/python -I -c 'import runpy, sys; from pathlib import Path; sys.path.insert(0, str(Path.cwd())); runpy.run_module("jeveval.run.item_summary", run_name="__main__")' --rules configs/splits/rules.yaml --root . --tasks configs/tasks --splits configs/splits --task all
 ```
 
+
+판 4 변경 기록(10-19): 이전 기록은 보존하고 다음 규칙을 추가한다.
+
+- choice confidence는 모델 고유 수락 확신이다. 유한·0–1 구조는 choice_pick 오류, 선택 확률과 1e-9 초과 차이는 통과 요청에만 confidence_differs 경고다. T0도 최종 통과 때만 경고를 합친다.
+- ECE는 probs[answer]를 bin·평균 확신에 사용하며 s_i의 min confidence는 유지한다. 같은 코호트의 Brier/log loss 계산식은 불변이다.
+- replay는 검사 후 출처 바이트 복사와 replay/1 metadata만 기록한다. run --offline이 전체 계획 검사 뒤 복구 가능한 논리 요청만 판정하며 나머지는 n_deferred다.
+- offline의 post는 거부 함수, 인증 헤더는 빈 객체다. T0·누락 설정·길이 측정·fingerprint·gate 검사를 유지한다. test 일부 완료는 채점/비교/보존/파생할 수 없다.
+- replay의 final 존재 거부를 우선한다(계획 2판 C6와 충돌). 멱등 복사는 offline 전에만 가능하며 원 copied_at·reason을 보존한다. 다음 전송은 일반 run으로 재개한다.
+- 원 시각·토큰을 재사용해도 실패율·지연 모집단은 새 final에서 계산한다. 파생 판 final의 derived_from은 새 run 경로로 바뀌므로 C3는 출처 치환·threshold dev 해시 제외를 적용한다.
+- audits/replay_20261019의 C2/C3/C4 도구는 원문 없는 집계만 출력하며 실제 데이터 실행은 별도 작업이다. 기존 audits는 수정하지 않는다.

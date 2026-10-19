@@ -26,6 +26,7 @@ def test_f1_and_calibration_fixtures_through_qstats():
         assert result.macro_f1 == case["expected"]["macro_f1"]
         assert result.classes == case["expected"]["class_stats"]
     for kind, case in fixture("calibration.json")["questions"].items():
+        kind = case.get("type", kind)
         pairs = [(ParsedAnswer(kind, r["answer"], r["probs"], r["confidence"]), r["gold"])
                  for r in case["observations"]]
         result = qstats("q", "success", kind, pairs, 0)

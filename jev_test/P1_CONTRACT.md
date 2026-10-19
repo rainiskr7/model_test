@@ -1,7 +1,7 @@
 # P1 계약 — 결정 모델 평가 코드의 입출력·채점·기록 규칙
 
-작성 2026-10-13 · **판 3** (판 2 의 미정 필드 6곳을 채움 — Codex·grok 반박 반영) · 상태: 구현 중 (작업 ① 끝)
-상위 문서: [`JEV_TEST_PLAN.md`](JEV_TEST_PLAN.md) 개정 13. 이 문서와 계획이 다르면 계획이 기준이고, 이 문서를 고친다.
+작성 2026-10-13 · **판 4** (10-19: 확신·보정 분리와 replay/offline; 이전 판의 변경 사유는 §11 보존) · 상태: 구현 중
+상위 문서: [`JEV_TEST_PLAN.md`](JEV_TEST_PLAN.md) 개정 14. 이 문서와 계획이 다르면 계획이 기준이고, 이 문서를 고친다.
 범위: **첫 실행 = A 묶음 + B1** (계획 §7). B·C·T2·WorkflowEvals·B2 는 이 판에서 정하지 않는다. **score 질문은 이 판의 범위 밖**이다 (A 묶음에 없다) — 응답 검증기(§3-1)·채점은 score 를 만나면 `NotImplementedError` 로 멈추고, task yaml 검사기(§1-1)는 오류 목록에 넣는다.
 
 이 문서는 코드를 쓰는 사람(Codex)이 **추측 없이** 구현할 수 있게 하는 것이 목적이다. 여기 없는 결정이 필요하면 구현하지 말고 `SPEC_AMBIGUOUS: <절> <내용>` 으로 보고한다.
@@ -117,10 +117,11 @@ JSON 파싱은 **중복 키 거부**(`object_pairs_hook`), `bool` 은 숫자로 
 | 4 | noul: `noul` 유한 실수, 0 ≤ p ≤ 1 | `noul_value` |
 | 5 | choice: `probabilities` 키 == 선택지 ID 집합 | `choice_keys` |
 | 6 | choice: 값 유한·0–1, \|합 − 1\| ≤ 선택지 수 × 5e-5 + 1e-9 | `choice_values` |
-| 7 | choice: `choice` ∈ 선택지, \|`confidence` − `probabilities[choice]`\| ≤ 1e-9 | `choice_pick` |
+| 7 | choice: `choice` ∈ 선택지, `confidence` 유한 실수·0–1 (bool 제외) | `choice_pick` |
 
 - 최상위·답 객체의 **추가 키는 허용**하고 `extra_keys` 경고로만 남긴다 (`model`·`id`·`usage`·`provider` 등). `usage` 가 있고 null 이 아니면 객체여야 하고 `input_tokens` 는 정수(bool 제외)여야 한다 — 아니면 경고 `usage_input_tokens_invalid` (`usage` 가 없거나 null 이면 경고 없음). 경고는 중복을 빼고 처음 나온 순서로, 검증 실패(사유 코드)여도 그때까지 모은 경고를 함께 돌려준다 (판 3 보정 4).
 - 검증은 요청 단위로 전부 아니면 전무다 — 질문 하나라도 실패하면 그 요청은 `error`, 나머지 질문 값도 채점에 쓰지 않는다 (§7-3).
+- 판 4: **통과 요청에만** choice의 `abs(confidence - probabilities[choice]) > 1e-9`이면 `confidence_differs` 경고를 한 번 남긴다. 상태는 바꾸지 않는다. 실패 요청에는 이 경고를 남기지 않는다. 경고 순서는 `extra_keys` → `usage_input_tokens_invalid` → `confidence_differs`(검증기) → `choice_not_argmax`(파서) → `length_mismatch`(outcome), 중복 제거다.
 
 ### 3-2. 답과 확신 → `ParsedAnswer` (계획 §4-1·§4-2, 판 3)
 **클래스 ID 는 항상 문자열**이다: noul 은 `"true"`/`"false"`, choice 는 선택지 ID. 답·정답·확률표 키가 같은 문자열을 쓴다 (bool 을 쓰지 않는다 — `probs[answer]` 가 그대로 된다).
@@ -132,7 +133,7 @@ JSON 파싱은 **중복 키 거부**(`object_pairs_hook`), `bool` 은 숫자로 
 | B1 choice | 재정규화한 라벨 분포의 argmax, **동률이면 라벨 순서 앞** → 대응표로 선택지 ID | 재정규화 분포를 선택지 ID 키로 | 그 답의 확률 |
 | B1 noul | `"true"` iff p ≥ 0.5 (p = 대응표에서 `true` 인 라벨의 재정규화 확률) — **라벨 순서로 동률을 깨지 않는다** (사용자 결정 10-13, 계획 개정 13) | `{"true": p, "false": 1 − p}` | max(p, 1 − p) |
 
-- **질문 확신은 `confidence`** 다 (계획 §4-1 출력 계약 — 사용자 결정). choice 에서 `probs[answer] < max(probs) − 1e-9` 이면 경고 `choice_not_argmax` 를 그 호출에 남기고 상태는 바꾸지 않는다 (Clef 는 반올림 전 argmax 라 반올림 후 동률은 걸리지 않는다).
+- **질문 확신은 `confidence`** 다 (모델 고유 정의 — Clef·B1은 p[choice], pplx는 `(p[choice] - 1/n)/(1 - 1/n)`을 0–1로 자른 값; 계획 §4-1 출력 계약 — 사용자 결정). 보정(§7-1)의 축은 `probs[answer]`다. choice 에서 `probs[answer] < max(probs) − 1e-9` 이면 경고 `choice_not_argmax` 를 그 호출에 남기고 상태는 바꾸지 않는다 (Clef 는 반올림 전 argmax 라 반올림 후 동률은 걸리지 않는다).
 - B1 검사: 모든 라벨 토큰이 `top_logprobs` 안에 유한값으로 있어야 한다 (≤ −9999 는 빠진 것). 하나라도 빠지면 그 호출은 `error/b1_missing_label`.
 - B1 토큰 대조 (판 3 보정 3): `top_logprobs` 원소 `{token, logprob}` 의 `token.strip()` 이 라벨 문자열과 **정확히 같으면** 그 라벨이다. 라벨이 아닌 토큰은 무시한다 (`allowed_token_ids` 가 막으므로 원래 없다 — 있으면 경고 `b1_extra_token`). 같은 라벨이 둘 이상이면 logprob 가 큰 것 하나를 쓰고 경고 `b1_duplicate_label`. 재정규화 = 라벨 logprob 의 softmax (최댓값을 빼고 exp).
 - 재정규화는 **B1 후보 분포에만** 한다.
@@ -186,6 +187,7 @@ jev_test/results/<safe_model>/<run_id>/A/<set>/<variant>/
 ├─ threshold.json      # 커밋 — dev/final.jsonl 만으로 만든다 (§5-7)
 ├─ test/  seal.json (커밋) · attempts.jsonl · final.jsonl (커밋 안 함)
 ├─ extra/ attempts.jsonl · final.jsonl          # 커밋 안 함 — 묶음 대표가 아닌 행 (FunctionChat 만, §6-1)
+├─ <stage>/replay.json  # 커밋 — 출처 복사 시에만 (§5-5c)
 ├─ scores.json         # 커밋 (집계만, 문항 텍스트 없음, §7-6)
 ├─ risk.json           # 커밋 (§7-4)
 └─ summary.json        # 커밋 — evalcommon 호환 요약 (§8-3)
@@ -221,6 +223,7 @@ jev_test/results/_compare/<compare_id>/A/<set>/<variant>/compare.json   # 커밋
 4. 파일 끝 줄이 JSON 이 아니면(쓰다 끊김) 그 줄만 버리고 경고. 중간 줄이 깨졌으면 거부.
 5. 줄마다 flush + fsync. final 줄은 그 논리 요청의 모든 attempts 줄 뒤에.
 6. 시험 단계 resume 은 `test/seal.json` 의 `threshold_sha256` 이 지금 `threshold.json` 과 같아야 한다. 다르면 거부 (§5-7).
+7. 판 4 offline 뒤 일반 run 재개는 final 줄 순서가 복구분 → 전송분이 될 수 있다. 완료는 줄 순서가 아닌 전체 ID 집합으로 대조한다. 원 attempts의 시각·세션은 수정하지 않는다.
 
 ### 5-5b. 작업 ④ 세부 — client 한 번의 시도 · 기록 파일 (판 3 보정 9, 10-13 Claude)
 - **client 는 한 번만 보낸다.** 재시도·대기·terminal 판정·상태 결합은 `run/executor` (⑤). client 결과 = `AttemptResult(started_at, ended_at, latency_ms, http_status, retry_after, transport_error, response_raw)` (메모리 전용). `http_status` 는 모든 HTTP 응답 코드(4xx·5xx 포함 — 예외로 바꾸지 않는다), 연결·시간 초과면 None. `retry_after` = 응답 `Retry-After` 머리글 원문 문자열 또는 None. `transport_error` = `"timeout"` (소켓 시간 초과) 또는 `"transport:<예외 클래스 이름>"` (예외 메시지는 담지 않는다), 응답이 있으면 None. `response_raw` = 본문을 UTF-8 strict 로 읽은 문자열, 못 읽으면 `{"b64": <표준 base64>}`, 응답이 없으면 `""`.
@@ -242,6 +245,24 @@ jev_test/results/_compare/<compare_id>/A/<set>/<variant>/compare.json   # 커밋
   - 재시도 예산 5회는 **기록된 시도** 기준이다. 보낸 뒤 기록 fsync 전에 프로세스가 죽으면 실제 전송이 한 번 더 될 수 있다 — 한계로 적는다 (결정 기록: 가정 = 중단은 드물다, 다시 볼 조건 = P0·P3 에서 중단이 잦으면 '시도 시작' 기록을 먼저 쓴다).
   - (⑤b 확인 중 명확화, 10-13) B1 의 `top_logprobs_raw` 는 200 응답을 `read_b1_response` 가 통과시키면 `parse_b1` 결과와 무관하게 남긴다 (`b1_missing_label` 이어도 — 어느 라벨이 빠졌는지 진단용). `bad_body`·200 밖 응답은 null.
   - ⑤ 로 넘김: 200 밖의 2xx·1xx(103 포함)·3xx → `error/http_<code>` 재시도 없음 · `Retry-After` 해석(초 정수만, 그 밖은 기본 대기) · 같은 최악 상태 B1 호출들의 사유 선택 · 422 길이 거부 판별(P0).
+
+### 5-5c. replay(출처 복사)·run --offline(재판정) — 판 4
+
+`replay --model <yaml> --task <yaml> --stage <dev|test|extra> --run-id <새> --source-run-dir <기존 …/A/set/variant> [--results results] [--reason <한 줄>]`은 출처 attempts만 복사한다. **기존 코드의 resume이 아니라 새 run에서 현재 코드로 재판정하기 위한 출처 복사**다. 임계값은 새 dev에서만 정하며 test 숫자를 보고 규칙을 고르지 않는다. 10-19 결정 시점 pplx test 점수는 산출된 적 없다(Claude 확인 — test 는 전부 error 로 끝나 채점되지 않았다).
+
+1. 저장소 안 source/target 경로와 식별자를 검사한다. 같은 폴더·같은 run_id는 거부한다. 파생 판(separate 모델의 actions_only)은 거부하며 full의 같은 단계 완료 후 기존 `run`으로 만든다.
+2. source fingerprint와 현재 fingerprint의 `model, set, variant, files, tokenizer, encoder, external, dataset_verified, inputs(run_id 제외)`는 같아야 한다. `schema`·키 집합도 검사한다. 허용 차이는 `code_sha256, env, run_id, started_at`뿐이다. 이전 코드를 요구하는 `context.restore`로 출처를 복원하지 않는다.
+3. 출처 attempts는 존재하고 비어 있지 않으며 JSONL 읽기 경고가 없어야 한다(끝 줄 복구 없음). 논리 요청이 미완료인 것은 허용한다. 전체 계획에 대한 `check_resume`가 요청 해시·ID·연속 번호·예산을 검사한다.
+4. 대상 final은 있으면 항상 거부한다. 대상 attempts도 원칙적으로 없어야 한다. 같은 replay metadata와 출처 해시가 있고 attempts가 없거나 같은 바이트인 경우에만 복사를 재실행한다. 기존 대상 fingerprint가 있다면 현재 입력과 같아야 한다. 출처·reason 변경은 거부한다.
+5. reason은 선택적인 200자 이하 한 줄이며 제어 문자는 거부한다. 원문·인증정보를 적지 않는다. **모든 입력 검사 후** 단계 폴더 → replay.json → attempts 원자 복사 순서로 쓴다. I/O 장애로 marker만 남으면 같은 명령으로 복구한다. 재실행은 기존 copied_at을 보존한다.
+
+`replay.json` = `{schema:"replay/1", source_run_dir: 저장소 상대 경로, source_run_id, source_code_sha256, source_env, source_fingerprint_sha256, source_attempts_sha256, source_attempts_nbytes, copied_at, reason}`. 응답 원문·판정 건수는 넣지 않는다. source의 started_at은 source fingerprint 해시로 식별한다. archive는 존재하는 단계의 replay.json도 보존한다(비공개 archive에는 attempts/final 원문이 포함된다).
+
+재판정은 `run --offline`: `--base-url`과 동시 지정은 거부한다. 메모리 cfg의 URL만 `http://replay.invalid`로 바꾸고 `missing_for_run`·원 YAML의 T0 증거 검사를 유지한다. 인증 헤더는 `{}`, post는 예외 함수다. 데이터·토크나이저·길이 측정·현재 fingerprint가 필요하며 더미 URL은 YAML/fingerprint에 저장하지 않는다.
+
+executor는 **전체 계획으로 기존 resume 검사**를 한 뒤, 논리 요청의 모든 호출이 로컬 오류 또는 terminal/예산 소진으로 복구 가능할 때만 final을 쓴다. 그 밖은 전송 없이 `n_deferred`로 세며 final을 쓰지 않는다. RunSummary의 `n_deferred`는 이번 호출에서 미룬 논리 요청 수이고 저장 레코드 필드는 아니다. 일반 run 재개는 기존 final을 건너뛰고 남은 호출·재시도 예산만 전송한다.
+
+순서: dev 복사 → `run --offline --stage dev` → `threshold` → test 복사 → `run --offline --stage test` (FC extra는 test 완료 뒤). threshold·seal·risk·scores는 복사하지 않는다. 부분 test는 봉인된 미완료 단계이며 score/compare/archive/파생은 전체 ID 완료 전 거부한다. `ok`는 이번 명령 성공이지 셋 완료가 아니다. final 생성 뒤 replay 재실행은 거부하고, 이후 재개에는 run을 쓴다(계획 2판 §1-5와 C6 충돌의 보수적 처리).
 
 ### 5-6. 비공개 보존 (커밋하지 않는 재현 자료)
 - 실행이 끝나면 `jev_test/archive/<run_id>.tar.zst` (git 제외) 를 만든다: `dev/`·`test/`·`extra/` 의 `attempts.jsonl`·`final.jsonl` · 쓰인 task yaml · 목록 · 분할 파일 · `b1.yaml` · 입력 데이터 파일 해시 목록 + 그 아카이브의 sha256 을 `fingerprint.json` 에 기록.
@@ -341,7 +362,7 @@ jev_test/results/_compare/<compare_id>/A/<set>/<variant>/compare.json   # 커밋
 | KLUE-MRC | noul 1 | — | 2클래스 macro-F1 | 그 질문 |
 
 - macro-F1 의 클래스 = **정답 또는 예측에 한 번이라도 나온 클래스**. 둘 다에 없는 클래스는 넣지 않는다. 클래스별 support·tp·재현율·정밀도를 함께 낸다 (계획 §4-1 "클래스별 재현율"). 분모가 0 인 재현율·정밀도는 `{num: 0, den: 0}` 로 두고 값을 만들지 않는다.
-- ECE: 15 등폭 bin `[0,1/15), …, [14/15, 1]` (마지막 닫힘), top-label (`confidence` 대 `answer == gold`). bin 은 **빈 것도 포함해 15개 모두** `{index, lo, hi, n, acc, conf}` (빈 bin 의 acc·conf 는 null). bin 의 n 합 == 그 질문의 채점 수.
+- ECE: 15 등폭 bin `[0,1/15), …, [14/15, 1]` (마지막 닫힘), top-label (`probs[answer]` 대 `answer == gold`). bin 은 **빈 것도 포함해 15개 모두** `{index, lo, hi, n, acc, conf}` (빈 bin 의 acc·conf 는 null). bin 의 n 합 == 그 질문의 채점 수.
 - Brier: 확률표 전체에 대한 one-hot 제곱합의 평균 (noul 은 2클래스라 $2(p-y)^2$ 와 같다). log loss: $-\log \mathrm{clip}(p_{\rm gold}, 10^{-12}, 1)$.
 - 선택지 수가 다른 질문끼리 보정 지표를 평균하지 않는다.
 - 채점 수가 0 인 질문: `accuracy = {0, 0}`, `macro_f1`·`ece`·`brier`·`log_loss` null, bin 15개는 n 0·acc/conf null (판 3 보정).
@@ -428,6 +449,7 @@ QStats = {role, type, n_scored, n_missing, accuracy: {num, den}, macro_f1 | null
   - 그 밖의 셋: `{}`.
 - 점수는 **임계값과 무관한 `ok` 코호트**의 값이다 (수락 집합의 점수는 `risk.json`). 이름으로 둘을 섞지 않는다.
 - `Cost` = `{n_logical, n_calls, n_attempts, n_retries, failure: {num: 상태 error 인 논리 요청, den: n_logical}, latency_ms: {population: "logical_ok", n, p50, p95, n_excluded_resumed}, input_tokens: {sum, n_calls_missing_usage, n_missing_on_200}, derived_from: str | null}`.
+- 판 4 replay 비용: 전송 관측(시각·토큰)은 복사된 attempts를 재사용하고, **실패율·지연 모집단은 재판정 final로 다시 계산**한다. 따라서 원 run의 전체 cost와 같다는 보장은 없다. 파생 판 비용 0 규칙은 유지한다.
   - 백분위: 정렬한 값에서 위치 $(n-1)p$ 의 선형 보간 (numpy 기본과 같다). $n = 0$ 이면 p50·p95 null.
   - 지연 = 논리 요청의 **완료 지연** = 마지막 terminal 시도 `ended_at` − 첫 시도 `started_at` (재시도·대기 포함, B1 은 호출 전부). 그 요청의 시도에 `session_id` 가 둘 이상이면(resume 으로 갈림) 지연에서 빼고 `n_excluded_resumed` 로 센다 — **`ok` 요청 중에서만** 센다 (모집단이 `logical_ok`; 작업 ⑥ 에서 `ok` 아닌 resume 요청 fixture 추가).
   - 입력 토큰 (판 3 보정 2): 호출마다 **마지막 terminal 시도**의 `response_raw` 를 JSON 으로 읽어 `usage.input_tokens` (B1 은 vLLM `usage.prompt_tokens`) 가 **정수(bool 제외)** 이면 응답 코드와 무관하게 `sum` 에 더하고, 아니면(terminal 시도 없음 · 본문 못 읽음 · usage 없음 · 정수 아님) `n_calls_missing_usage` 로 센다. 모든 호출은 둘 중 정확히 하나에 든다 (`sum` 에 든 호출 수 + `n_calls_missing_usage` == `n_calls`). `sum` 은 **하한**이다. `n_missing_on_200` = 그중 terminal 이 200 인 호출 수 (서버가 usage 를 안 주는 경우를 실패와 따로 보이게).
@@ -453,6 +475,7 @@ QStats = {role, type, n_scored, n_missing, accuracy: {num, den}, macro_f1 | null
 
 ### 8-1. 규칙
 - **파일 하나 = 기능 하나.** 첫머리 docstring 에 "무엇 · 입력 · 출력 · 이 계약의 몇 절". 그 파일만 열어도 고칠 수 있게.
+- 판 4 모듈: `run/cmd_replay.py`는 복사 명령 조립·쓰기 순서, `run/replay_check.py`는 순수 fingerprint/파일 완결 검사, `io/run_files.py`는 바이트 읽기·원자 복사다. offline 항목 미룸은 기존 `run/executor.py`가 소유한다.
 - **작게**: 파일 ≤ 200 줄, 함수 ≤ 50 줄 정도.
 - **입출력은 정해진 곳에만**: 파일 읽기 `io/` (설정·데이터·분할·레코드·경로 제한 `paths.py`), 네트워크 `client/`. 나머지(`contract/`·`data/`·`score/`·`types/`·`t0/`)는 순수 함수 — 이미 읽은 객체를 받는다. `run/` 은 `io/`·`client/` 를 부르되 직접 파일을 열지 않는다. **명시 특례** (보정 10-17): `run/summary.py` 의 `reranker_test/evalcommon` 소스 로딩(§8-6 M), `run/cmd_run._headers`·`run/t0_server` 의 인증 환경변수 조회(값은 설정 밖), `run/layout.py`·`run/context.py`·`run/fingerprint.py`·`run/cmd_archive.py` 의 경로 정규화 `resolve()`(파일 내용을 읽지 않음)·CLI 의 `Path.cwd()`. 그 밖의 `run/` 직접 파일 조회(glob·stat·환경 설정)는 `io/` 로 옮긴다 (10-17 이행: `run/item_summary.py` glob → `io.hashes.glob_files`, `run/encoders` 토크나이저 로딩 → `io/tokenizers`).
 - **모듈 사이는 `types/` 의 dataclass 만** (§8-5 필드). 명령 공유 문맥은 `RunContext`·`StageData`(`types/context.py`). **명명된 직렬화 예외** (보정 10-17): 파일 스키마 객체 `risk/1`·`scores/1`·`compare/1`·`fingerprint/1` 은 조립 함수 → 명령 → 쓰기(또는 `summary`) 사이에서 dict 로 오간다; `cli` 의 명령 결과 JSON 도 dict. **경계 규칙은 jeveval 이 만든 도메인 값에 적용**하며 다음은 예외(보정 10-17 재감사): ① 검증 전 원시 설정 객체(yaml/json → `contract/` 검사기) ② `schema` 키를 가진 파일 스키마 객체 전부(risk/1·scores/1·compare/1·fingerprint/1·threshold·seal/1·archive·t0_*)와 그 조립에 들어가는 통계·메타데이터 dict ③ 외부 경계 인자(HTTP 본문·headers·토크나이저/참조 라이브러리 인자·evalcommon 결과) ④ 이름 → callable/설명 등록표(라벨 규칙·선택지 목록·task lists) ⑤ `cli` 결과 JSON. 그 밖의 dict·SimpleNamespace 경계는 위반.
@@ -595,11 +618,11 @@ PoolResult(group_ids: list[str], allocation: dict[str, int])          # data/poo
 | fixture | 확인 |
 |---|---|
 | `render/*.json` → 기대 state 문자열·요청 바이트·sha256 · **`target_end_char`** (판 3) | §2 직렬화 바이트 고정 · 대상 끝 위치 (KoSGD 는 catalog 앞, FunctionChat 은 tools 앞) |
-| `responses/valid_*`, `invalid_*` (사유 코드마다 1개 이상, 중복 키·bool·추가 키 포함) | §3-1 — 반올림 있는/없는 응답 둘 다 통과. 합 0.9999 응답을 재정규화하지 않는다 |
-| `answers/*.json` (판 3) | §3-2 — noul p=0.5 → `"true"` · choice `confidence` 그대로 · `choice_not_argmax` 경고 (확률표 최댓값보다 작은 `choice`) · Clef 동률(0.5/0.5, `choice`=B) 은 경고 없음 |
+| `responses/valid_*`, `invalid_*` (사유 코드마다 1개 이상, 중복 키·bool·추가 키 포함; 판 4: `valid_choice_confidence_differs`·`invalid_choice_confidence_range`) | §3-1 — 반올림 있는/없는 응답 둘 다 통과. 합 0.9999 응답을 재정규화하지 않는다 |
+| `answers/*.json` (판 3; 판 4 `pplx_margin`) | §3-2 — noul p=0.5 → `"true"` · choice `confidence` 그대로 · `choice_not_argmax` 경고 (확률표 최댓값보다 작은 `choice`) · Clef 동률(0.5/0.5, `choice`=B) 은 경고 없음 |
 | `scoring/kosgd_slots.json` | 정답 0·1·2개, 같은 값 두 칸, 순서만 틀림, Codex 반례(고정 칸 정답 기준 Brier 1.9602) · **판 3**: 서비스가 다른 같은 이름 의도, 카탈로그 순 ≠ 사전순, 직전 정답 ≠ 현재 정답 |
 | `scoring/f1_classes.json` | 미출현 클래스 제외 규칙 · 클래스별 recall `{num, den}` · 분모 0 |
-| `scoring/calibration.json` (판 3) | ECE 15 bin 빈 것 포함 (n 합 == 채점 수) · noul Brier = 2(p−y)² · log loss clip |
+| `scoring/calibration.json` (판 4: confidence와 무관) (판 3) | ECE 15 bin 빈 것 포함 (n 합 == 채점 수) · noul Brier = 2(p−y)² · log loss clip |
 | `scoring/risk_cases.json` | U(6,600)=1.964% · U(0,150)=1.977% · U(1,150)=3.123% · U(0,252)=1.18% · U(0,86) · $n_{\min}$ · $b_{\rm flip}$ · 네 상태 + 플래그 |
 | `scoring/threshold_cases.json` (판 3) | 규칙 재계산 == `by_tau` · NO_THRESHOLD 는 `t_star`·`n_accepted`·`k_errors` null · 같은 점수 묶음째 · 시험 기록을 바꿔도 t\* 불변 · 묶음 단위 n_denom (FunctionChat 개발 21 묶음 대표 — 행 606 이 아님) |
 | `scoring/missing_mask.json` (판 3) | MISSING 인 저확신 성공 질문이 $s_i$ 의 min 에 남는다 · `"false"`·`"NONE"` 은 MISSING 이 아니다 · 빈 마스크 요청은 분모에서 빠지고 `n_empty_mask` 에 센다 |
@@ -618,6 +641,9 @@ PoolResult(group_ids: list[str], allocation: dict[str, int])          # data/poo
 ---
 
 ## 10. P0 에서 확인해 이 문서를 고칠 것
+
+- 10-19 pplx v1.1 confidence 정의 확인(Claude 실측 — HF 사본 autojev/model.py:130 과 실응답 4,825개 대조): 선택 확률의 우연 대비 여유 `(p - 1/n)/(1 - 1/n)`을 0–1로 자른 값. 수락 점수에는 API confidence를 유지하고 ECE만 선택 확률로 분리한다.
+- 다음 작업: 보조 지표 `min p[choice]` 기준 처리율 한 줄. scores/summary 스키마 변경이므로 이번 판 구현에서는 추가하지 않는다.
 
 **10-13 확인 — B1 (Qwen3.8-27B BF16, aitopatom-22c3 GPUStack, 스모크 7 task × dev 3 = 129 호출)** — 값은 `configs/models/b1_qwen3_8_27b.yaml`:
 - 서버 vLLM **0.28.0** (계획의 0.19.0 과 다름). `--max-logprobs 64`·`--logprobs-mode processed_logprobs` **필수** — 없을 때 실측: 선택지 39 개 칸 `400 max allowed: 20`, raw 모드라 top_logprobs 에 `<|im_end|>` 가 끼어 라벨 누락 9/123. 넣은 뒤 129/129 ok, 라벨 아닌 토큰 0, 뽑힌 토큰 129/129 라벨.
@@ -649,3 +675,5 @@ PoolResult(group_ids: list[str], allocation: dict[str, int])          # data/poo
 - 판 3 보정 12 (10-13, 사용자 결정): plain_text state 의 앞뒤 공백 제거 — B1 템플릿 trim 과 결정 모델 입력을 같은 글자로. fixture `render/plain_text.json` 기대값 갱신.
 - 동결 근거 기록 (10-14, Claude — Codex 반박 "동결 선후관계 증거" 에 대한 확인): 문구 동결 커밋 `919cb70` (10-13 18:53 KST) 이 B1 이 평가 풀 문항을 처음 받은 스모크 (`run_20261013T144808…Z` = 10-13 23:48 KST, 이후 3회·FP8 1회, 모두 7 task × dev 앞 3개) 보다 앞선다. 보정 12 (`51ded41`, 10-14 01:11 KST) 는 그 스모크 뒤의 직렬화 변경이지만, 그 전에 B1 이 받은 dev 앞 3개 (7 task 모두, 앞 10개로 넓혀도) 중 state 앞뒤 공백이 있는 항목은 0 개 — 보정 12 전후로 B1 에 보낸 문자열은 같다 (dev 전체로는 KOTE 10개에 공백이 있으나 보정 12 전에 보내지 않았다). 변경 사유는 정확도가 아니라 템플릿 trim 과 결정 모델 입력의 글자 일치 (§4-6 열거 사유 '스키마 한계' 에 가깝다). 결정: 분할을 폐기하지 않는다. 다시 볼 조건: 보정 12 전 B1 기록에서 공백이 있는 state 가 발견되면. FunctionChat 은 10-14 실서버 e2e 로 606 행 전부를 B1 이 받았다 — 이후 FunctionChat 문구를 바꾸면 그 셋은 '탐색적' (계획 §4-6).
 - 판 3 보정 13 (10-14, T0 설계 — Claude 초안 → Codex 반박 11건 전부 수용): §8-7. 규칙 H·I 를 허용폭 측정에 한해 보정 — 공개 진입점과 배치 1 결과가 바이트까지 같을 때만 참조 구현 하위 함수 조합으로 배치를 바꾼다 (Clef·v1 은 공개 진입점이 요청 하나씩이라 배치 변동을 달리 잴 수 없다). 결정 기록 — 가정: 하위 함수 조합이 배치 1 에서 공개 진입점과 같으면 배치 k 에서도 참조 구현의 산술이다 · 이유: 계획 §3 의 허용폭 정의(배치 구성만 바꾼 변동)를 지키려면 필요 · 다시 볼 조건: 배치 1 동일성 검사가 실패하거나 참조 저장소가 배치 API 를 공개하면.
+
+- 판 4 (10-19): 사용자 결정(3안), Codex·grok 검토에 따라 API confidence 수락 점수와 선택 확률 ECE를 분리. pplx choice를 거부하던 값 일치 오류를 통과 요청 경고로 바꾸고 구조·범위 오류는 유지한다. 이전 판 3 머리의 설명은 ‘판 2의 미정 필드 6곳을 채움 — Codex·grok 반박 반영’이었다. 이전 §3-1 규칙 7: `choice` ∈ 선택지, |`confidence` − `probabilities[choice]`| ≤ 1e-9 → `choice_pick`; 이전 ECE 표현: top-label (`confidence` 대 `answer == gold`). 이를 현행 규칙으로 대체한 사유는 두 필드의 모델 정의가 다르기 때문이다. 기존 ‘질문 확신은 confidence’ 결정은 유지한다. 1판 반박 11건을 반영해 replay를 출처 복사와 run --offline으로 분리하고 전체 resume 검사·게이트를 보존했다. 부분 test의 미완료 의미, 파생 판의 출처 경로 정규화, 비용 모집단 재계산, 쓰기 전 검사와 짝 시험을 명시했다. 기존 감사 증거는 수정하지 않고 audits/replay_20261019에 원문 없는 감사 도구를 추가한다. T0 confidence 대조는 아직 범위 밖이며 경고 전달 범위는 Validated까지다.

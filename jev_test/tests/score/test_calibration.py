@@ -14,6 +14,7 @@ from jeveval.types import ParsedAnswer
 def test_existing_fixture():
     path = Path(__file__).parents[1] / "fixtures/scoring/calibration.json"
     for kind, case in json.loads(path.read_text())["questions"].items():
+        kind = case.get("type", kind)
         rows = case["observations"]
         parsed = [ParsedAnswer(kind, r["answer"], r["probs"], r["confidence"]) for r in rows]
         gold = [r["gold"] for r in rows]
@@ -46,13 +47,16 @@ def test_different_observation_keys_are_allowed():
     assert result.ece == result.brier == result.log_loss == 0
 
 
-def test_parser_to_calibration_uses_reported_confidence_not_maximum():
-    answer = dict(type="choice", choice="b", probabilities={"a": .8, "b": .2}, confidence=.2)
+def test_parser_to_calibration_uses_selected_probability_independent_of_confidence():
+    answer = dict(type="choice", choice="b", probabilities={"a": .8, "b": .2}, confidence=.05)
     parsed = parse_systemone(answer, "choice").parsed
     result = calibrate([parsed], ["b"])
     assert result.ece == pytest.approx(.8)
     assert result.bins[3]["n"] == 1
     assert result.brier == pytest.approx(1.28)
+    for confidence in (0, .3, 1):
+        answer["confidence"] = confidence
+        assert calibrate([parse_systemone(answer, "choice").parsed], ["b"]) == result
 
 
 def test_all_bin_boundaries_are_left_closed():

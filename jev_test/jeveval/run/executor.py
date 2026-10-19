@@ -53,10 +53,15 @@ def _execute_call(plan, history, *, cfg, measurer, post, sleep, session_id,
     return call_record(plan, history, length, cfg, policy.max_attempts), sent, int(recovered)
 
 
+def _recoverable(plan, history, max_attempts):
+    return bool(plan.local_errors or history and
+                (history[-1].terminal or len(history) == max_attempts))
+
+
 def run_stage(*, items: list[Item], task: TaskSpec, cfg: ModelConfig,
               b1_config: B1Config | None, measurer, run_dir, stage, post, sleep,
               session_id: str, policy: RetryPolicy, headers: dict | None = None,
-              timeout: float = 600) -> RunSummary:
+              timeout: float = 600, offline: bool = False) -> RunSummary:
     """prepare_stage 통과가 전제다. 재시도 예산·대기는 policy(configs/policy.yaml). 반환은 RunSummary만."""
     final_file, attempt_file = final_path(run_dir, stage), attempts_path(run_dir, stage)
     if cfg.base_url is None:
@@ -72,11 +77,14 @@ def run_stage(*, items: list[Item], task: TaskSpec, cfg: ModelConfig,
     completed, history = {f.logical_id for f in finals}, defaultdict(list)
     for attempt in attempts:
         history[attempt.call_id].append(attempt)
-    skipped = n_calls = n_sent = n_recovered = 0
+    skipped = n_calls = n_sent = n_recovered = n_deferred = 0
     statuses = Counter()
     for logical_id, plans in grouped:
         if logical_id in completed:
             skipped += 1
+            continue
+        if offline and not all(_recoverable(p, history[p.call_id], policy.max_attempts) for p in plans):
+            n_deferred += 1
             continue
         calls = []
         for plan in plans:
@@ -90,4 +98,4 @@ def run_stage(*, items: list[Item], task: TaskSpec, cfg: ModelConfig,
         final = final_record(logical_id, plans, calls)
         records.append_record(final_file, final)
         statuses[final.status] += 1
-    return RunSummary(len(items), skipped, n_calls, n_sent, n_recovered, dict(statuses))
+    return RunSummary(len(items), skipped, n_calls, n_sent, n_recovered, dict(statuses), n_deferred)

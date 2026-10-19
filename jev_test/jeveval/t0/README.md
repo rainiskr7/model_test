@@ -24,10 +24,15 @@
 순서를 정렬하지 않는다. model 별칭은 봉투 해시만 바꾼다. 설정 해시는 t0를 제외하고
 재귀 키 정렬한 compact JSON이다. 각 출력은 입력 객체를 변경하지 않는다.
 
-응답 검증은 전역 type → noul → choice 키/값/pick → score 키/값/legend/confidence/score
+응답 검증은 전역 type → noul → choice 키/값/pick(구조·confidence 범위) → score 키/값/legend/confidence/score
 순서다. 파싱·봉투·질문 ID는 그보다 앞이다. score 오류도 bool·비유한값을 거부한다.
 `epsilon_r=None`은 정상 응답에서도 unknown_rounding이며 확정 계약 위반보다 후순위다.
 반올림 확률은 재정규화하지 않는다. 비교에는 검증된 Validated만 전달한다.
+
+판 4(10-19): 이전 choice 키/값/pick 중 confidence 값 일치 오류를 분리했다.
+최종 요청이 통과할 때만 표준 검증기의 `confidence_differs`를 중복 없이 전파한다.
+REASONS와 score confidence 규칙은 유지한다. 경고 보존 범위는 Validated까지이며
+judge 출력 전파·choice confidence 서버–참조 대조는 범위 밖이다(pplx 참조 실행 가능 시 재검토).
 
 반복 번호는 0..repeats-1 (configs/t0/tolerance_v1.yaml, 기본 5). Clef/Flash/v1 배치는 1·4·8, v1.1 대상 위치는
 1질문 위치0, 8질문 위치0/7, 17질문 위치0/7/8/15/16이다. 이 목록의 모든 반복과

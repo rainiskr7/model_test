@@ -65,3 +65,31 @@ def test_envelope_warnings_before_bad_answers():
 def test_bad_rounding_parameter(response_fixture, epsilon):
     with pytest.raises(ValueError):
         validate_response(json.dumps(response_fixture["valid"]), response_fixture["questions"], epsilon)
+
+
+@pytest.mark.parametrize("invalid", [False, True])
+def test_confidence_warnings_only_on_valid_request(response_fixture, invalid):
+    body, questions = response_fixture["valid"], response_fixture["questions"]
+    for qid, question in questions.items():
+        if question["type"] == "choice":
+            body["answers"][qid]["confidence"] = .123
+    body["usage"] = {"input_tokens": True}
+    if invalid:
+        body["answers"]["grade"]["legend"]["0"] = "wrong"
+    result = validate_response(json.dumps(body), questions, 5e-5)
+    assert result.warnings == ["extra_keys", "usage_input_tokens_invalid"] + ([] if invalid else ["confidence_differs"])
+    assert bool(result.reason) == invalid
+
+
+def test_reasons_unchanged():
+    from jeveval.t0.response import REASONS
+    assert REASONS == ("type_mismatch", "noul_value", "choice_keys", "choice_values", "choice_pick",
+                       "score_keys", "score_values", "score_legend", "score_confidence", "score_value", "unknown_rounding")
+
+
+@pytest.mark.parametrize("noul", [-1, .8])
+def test_multi_question_warning_equality(noul):
+    questions = {"c": {"type": "choice", "criteria": {"a": "a"}}, "n": {"type": "noul"}}
+    raw = json.dumps({"answers": {"c": dict(type="choice", choice="a", confidence=.2,
+                                            probabilities={"a": 1}), "n": dict(type="noul", noul=noul)}})
+    assert validate_response(raw, questions, 0) == standard(raw, Request("m", "s", questions))

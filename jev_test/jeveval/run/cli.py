@@ -4,7 +4,7 @@ import argparse
 import json
 from pathlib import Path
 
-from jeveval.run import cmd_archive, cmd_certify, cmd_compare, cmd_run, cmd_score, cmd_threshold, cmd_t0
+from jeveval.run import cmd_archive, cmd_certify, cmd_compare, cmd_replay, cmd_run, cmd_score, cmd_threshold, cmd_t0
 
 
 def main(argv=None):
@@ -18,6 +18,13 @@ def main(argv=None):
     run.add_argument("--base-url")
     run.add_argument("--results", default="results")
     run.add_argument("--check-config", action="store_true")
+    run.add_argument("--offline", action="store_true")
+    replay = commands.add_parser("replay")
+    for field in ("model", "task", "run-id", "source-run-dir"):
+        replay.add_argument("--" + field, required=True)
+    replay.add_argument("--stage", choices=("dev", "test", "extra"), required=True)
+    replay.add_argument("--results", default="results")
+    replay.add_argument("--reason")
     for name in ("threshold", "score", "certify"):
         commands.add_parser(name).add_argument("--run-dir", required=True)
     compare = commands.add_parser("compare")
@@ -32,7 +39,8 @@ def main(argv=None):
     args = vars(parser.parse_args(argv))
     command = args.pop("command")
     handler = {"run": cmd_run, "threshold": cmd_threshold, "score": cmd_score,
-               "certify": cmd_certify, "compare": cmd_compare, "archive": cmd_archive, "t0": cmd_t0}[command]
+               "certify": cmd_certify, "compare": cmd_compare, "archive": cmd_archive,
+               "replay": cmd_replay, "t0": cmd_t0}[command]
     try:
         result = handler.run(root=Path.cwd(), **args)
     except Exception:

@@ -9,17 +9,17 @@ def _bins(parsed, gold):
     bins = []
     for index in range(15):
         lo, hi = index / 15, (index + 1) / 15
-        members = [(p, g) for p, g in zip(parsed, gold) if lo <= p.confidence
-                   and (p.confidence < hi or index == 14 and p.confidence == 1)]
+        members = [(p, g) for p, g in zip(parsed, gold) if lo <= p.probs[p.answer]
+                   and (p.probs[p.answer] < hi or index == 14 and p.probs[p.answer] == 1)]
         n = len(members)
         acc = sum(p.answer == g for p, g in members) / n if n else None
-        conf = math.fsum(p.confidence for p, _ in members) / n if n else None
+        conf = math.fsum(p.probs[p.answer] for p, _ in members) / n if n else None
         bins.append(dict(index=index, lo=lo, hi=hi, n=n, acc=acc, conf=conf))
     return bins
 
 
 def calibrate(parsed: list[ParsedAnswer], gold: list[str]) -> CalibResult:
-    """모집단 구성은 호출자 책임이며 관측마다 선택지 ID가 달라도 허용한다."""
+    """보정 축은 선택한 답의 확률; 수락 점수는 ParsedAnswer.confidence (score/tasks)."""
     if len(parsed) != len(gold):
         raise ValueError("parsed and gold lengths differ")
     if any(g not in p.probs for p, g in zip(parsed, gold)):

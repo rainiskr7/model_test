@@ -1,0 +1,1 @@
+판 4 replay 감사: python -I로 c2_validate_pplx.py <results_root> <run_id>, c3_compare_runs.py <old_model_run_root> <new_model_run_root>, c4_summarize.py <model_run_root> <source_model_run_root> 실행; JSON 집계·차이 파일명만 출력하며 원문·예외 본문은 출력하지 않는다(실데이터 실행은 Claude 담당).

@@ -65,18 +65,20 @@ def _types(answers, questions, warnings):
 
 
 def _values(answers, questions, epsilon_r):
-    reasons = []
+    reasons, warnings = [], []
     for qid, question in questions.items():
         if question["type"] == "score":
             reason = _score_reason(answers[qid], question, epsilon_r)
         else:
             raw = json.dumps({"answers": {qid: answers[qid]}})
-            reason = validate_standard(raw, Request("t0", "t0", {qid: question})).reason
+            result = validate_standard(raw, Request("t0", "t0", {qid: question}))
+            reason = result.reason
+            warnings.extend(w for w in result.warnings if w not in warnings)
         if reason:
             reasons.append(reason)
     if epsilon_r is None:
         reasons.append("unknown_rounding")
-    return min(reasons, key=REASONS.index) if reasons else None
+    return (min(reasons, key=REASONS.index) if reasons else None), warnings
 
 
 def validate_response(raw, questions, epsilon_r):
@@ -100,5 +102,7 @@ def validate_response(raw, questions, epsilon_r):
         return Validated("qid_mismatch", warnings, None)
     reason = _types(answers, questions, warnings)
     if reason is None:
-        reason = _values(answers, questions, epsilon_r)
+        reason, value_warnings = _values(answers, questions, epsilon_r)
+        if reason is None:
+            warnings.extend(w for w in value_warnings if w not in warnings)
     return Validated(reason, warnings, answers if reason is None else None)

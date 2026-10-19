@@ -185,3 +185,15 @@ def test_length_mismatch_compares_explicit_usage_sum(env, make_attempt, usage, w
     assert call.status == "ok" and call.length.usage_tokens == 26
     assert ("length_mismatch" in call.warnings) is warning
     assert call.usage == {"input_tokens": usage}
+
+
+def test_confidence_differs_is_ok_and_ordered(env, make_attempt):
+    from jeveval.types import Request
+    plan = replace(env.plan, request=Request("m", "s", {"q": {"type": "choice", "criteria": {"a": "a", "b": "b"}}}),
+                   question_ids=["q"], question_types={"q": "choice"})
+    raw = json.dumps({"answers": {"q": dict(type="choice", choice="b", confidence=.05,
+                                            probabilities={"a": .8, "b": .2})}, "usage": {"input_tokens": 999}})
+    call = call_record(plan, [make_attempt(plan, response_raw=raw)], env.length, env.cfg, env.policy.max_attempts)
+    assert call.status == "ok" and call.reason is None
+    assert call.warnings == ["extra_keys", "confidence_differs", "choice_not_argmax", "length_mismatch"]
+    assert call.answers_parsed["q"].confidence == .05

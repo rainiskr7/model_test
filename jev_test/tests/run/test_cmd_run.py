@@ -107,3 +107,40 @@ def test_separate_actions_only_uses_derived_writer_without_auth(tmp_path, monkey
     assert calls == [("resume", True, 1), ("gate",), ("resume", False, 1),
                      ("write", h.directory, "dev", provenance, 1)]
     assert len(h.sent) == sent
+
+
+def test_offline_without_auth_uses_dummy_url_and_refuses_post(h, monkeypatch):
+    monkeypatch.delenv("JEV_TEST_KEY")
+    result = h.run("dev", offline=True)
+    assert result["n_sent"] == 0 and result["n_deferred"] == 1 and not h.sent
+    assert "replay.invalid" not in (h.directory / "fingerprint.json").read_text()
+    with pytest.raises(RuntimeError, match="offline run must not send"):
+        cmd_run._refuse()
+
+
+def test_offline_conflict_before_any_write(h):
+    before = output_files(h.root)
+    with pytest.raises(ValueError, match="mutually exclusive"):
+        h.run("dev", offline=True, base_url="http://localhost:1")
+    assert output_files(h.root) == before and not h.sent
+
+
+def test_offline_keeps_t0_and_missing_config_checks(h, monkeypatch):
+    calls = []
+    def reject(root, path):
+        calls.append(path)
+        raise ValueError("T0 rejected")
+    monkeypatch.setattr(cmd_run.t0, "verify_for_run", reject)
+    before = output_files(h.root)
+    with pytest.raises(ValueError, match="T0 rejected"):
+        h.run("dev", offline=True)
+    assert calls and output_files(h.root) == before
+    from jeveval.io.config import read_yaml
+    path = h.root / h.args["model"]
+    cfg = read_yaml(path)
+    cfg["tokenizer"]["files_sha256"] = {}
+    put_yaml(path, cfg)
+    before = output_files(h.root)
+    with pytest.raises(ValueError, match="incomplete run configuration"):
+        h.run("dev", offline=True)
+    assert output_files(h.root) == before

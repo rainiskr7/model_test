@@ -24,12 +24,12 @@ def calibration_reference(rows):
     bins = []
     for i in range(15):
         lo, hi = i / 15, (i + 1) / 15
-        members = [r for r in rows if lo <= r['confidence'] and
-                   (r['confidence'] < hi or i == 14 and r['confidence'] == 1)]
+        members = [r for r in rows if lo <= r['probs'][r['answer']] and
+                   (r['probs'][r['answer']] < hi or i == 14 and r['probs'][r['answer']] == 1)]
         n = len(members)
         bins.append(dict(index=i, lo=lo, hi=hi, n=n,
                          acc=sum(r['answer'] == r['gold'] for r in members)/n if n else None,
-                         conf=math.fsum(r['confidence'] for r in members)/n if n else None))
+                         conf=math.fsum(r['probs'][r['answer']] for r in members)/n if n else None))
     n = len(rows)
     ece = sum(b['n'] * abs(b['acc'] - b['conf']) for b in bins if b['n'])/n if n else None
     brier = math.fsum(p*p - 2*p*(k == r['gold']) + (k == r['gold'])

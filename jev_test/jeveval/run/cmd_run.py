@@ -51,9 +51,18 @@ def _headers(cfg):
     return {"Authorization": "Bearer " + value}
 
 
+def _refuse(*args, **kwargs):
+    raise RuntimeError("offline run must not send")
+
+
 def run(*, root, model, task, stage, run_id, base_url=None, results="results",
-        check_config=False, measurer=None, post=None):
+        check_config=False, measurer=None, post=None, offline=False):
+    if offline and base_url is not None:
+        raise ValueError("offline and base_url are mutually exclusive")
     ctx = context.configuration(root, model, task, base_url)
+    if offline:
+        ctx = replace(ctx, cfg=replace(ctx.cfg, base_url="http://replay.invalid"))
+        post = _refuse
     directory = result_dir(inside(ctx.root, results), ctx.cfg.id,
                            run_id, ctx.task.set, ctx.task.variant)
     # stage 이름과 셋별 extra 지원은 check-config에서도 검사한다.
@@ -67,7 +76,7 @@ def run(*, root, model, task, stage, run_id, base_url=None, results="results",
         raise ValueError("incomplete run configuration")
     t0.verify_for_run(ctx.root, ctx.model_path)
     derived = ctx.task.variant == "actions_only" and ctx.cfg.question_scoring == "separate"
-    headers = {} if derived else _headers(ctx.cfg)
+    headers = {} if derived or offline else _headers(ctx.cfg)
     if not derived and measurer is None:
         measurer = measurer_for(ctx.cfg)
     items = stage_inputs.load_items(root=ctx.root, task_path=ctx.task_path, stage=stage)
@@ -89,5 +98,5 @@ def run(*, root, model, task, stage, run_id, base_url=None, results="results",
         return dict(ok=True, derived=True, n_logical=len(finals), warnings=warnings)
     summary = executor.run_stage(items=items, task=ctx.task, cfg=ctx.cfg, b1_config=ctx.b1,
         measurer=measurer, run_dir=directory, stage=stage, post=http.post if post is None else post,
-        sleep=time.sleep, session_id=str(uuid4()), policy=ctx.policy, headers=headers)
+        sleep=time.sleep, session_id=str(uuid4()), policy=ctx.policy, headers=headers, offline=offline)
     return dict(ok=True, **summary.to_dict(), warnings=warnings)

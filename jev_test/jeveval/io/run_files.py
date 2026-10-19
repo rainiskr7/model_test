@@ -28,7 +28,21 @@ def json_bytes(obj) -> bytes:
 
 def write_json(path, obj):
     """같은 폴더의 임시 파일을 fsync한 뒤 교체한다. 부모 폴더는 만들지 않는다."""
-    payload, path = json_bytes(obj), Path(path)
+    _write_bytes(path, json_bytes(obj))
+
+
+def read_bytes(path) -> bytes:
+    """직렬화나 복구 없이 파일의 원본 바이트를 읽는다."""
+    return Path(path).read_bytes()
+
+
+def copy_bytes(src, dst):
+    """원본 바이트를 임시 파일 fsync 뒤 원자 교체한다. 부모는 호출자가 만든다."""
+    _write_bytes(dst, read_bytes(src))
+
+
+def _write_bytes(path, payload):
+    path = Path(path)
     temporary = None
     try:
         with tempfile.NamedTemporaryFile(dir=path.parent, prefix=f".{path.name}.",
