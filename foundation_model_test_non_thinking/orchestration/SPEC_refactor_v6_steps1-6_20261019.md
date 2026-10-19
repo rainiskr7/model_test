@@ -146,7 +146,7 @@ HEAD 복사본(`git archive`)과 작업 트리를 **연속으로** 돌려 산출
 | 조각 | 커밋 | C 결과 | 기록(의도된 차이) |
 |---|---|---|---|
 | 1 | (커밋 SHA 는 git log) | C1.1 PASS(새 시험 61 PASS/0 FAIL/0 INCONCLUSIVE, 미끼 T=0·종료 0·로그 0회) · C1.2 PASS(HEAD 사본 root=800009 → 수정 후 root=없음) · C1.3 PASS(논리·물리 경로 식별, STOP→3회 CONT) · C1.4 PASS(shared/harness·configs/tests diff 0, runner_checks N==T) · C1.5 PASS(동결 suite 수정 전후 모두 25 PASS) | guard 식별 범위가 자기 lanes 디렉터리(논리·물리 경로)로 좁아짐. 다른 체크아웃·상대경로 기동은 더 이상 식별 안 함(README 에 정규 절대경로 기동 규칙). 191행 미지원 감지가 파일명 경계 검사로 바뀜(qwen35fp8 검사에 qwen35fp8_full 안 걸림). 10-19 A 실행 |
-| 2 | | | |
+| 2 | (git log) | C2.1 PASS(합동 902 수집·900 passed·2 skipped; 트랙별 합 902, node ID 집합 동일·중복 0, passed 합 900·skipped 2) · C2.2 PASS(conftest 2개·동결 diff 0) · C2.3 PASS(/tmp 에서 902) · C2.4 PASS(pythonpath = . 하나) · 셸 묶음 run_shell_tests.sh: guard 60 PASS, 등가성 103, full 6, run_full_eval 11(+1 INCONCLUSIVE 기존), harness 러너 35(+2 INCONCLUSIVE 기존) | 새 파일 pytest.ini·tests/run_pytests.sh·tests/run_shell_tests.sh. 부수: guard 시험 C1.2 '수정 전' 검사는 HEAD 가 수정 후 코드와 같으면 건너뜀(1단계 커밋 뒤 FAIL 1 이 나서 A 가 고침). 10-19 A 실행 |
 | 3 | | | |
 | 4a | | | |
 | 4b | | | |

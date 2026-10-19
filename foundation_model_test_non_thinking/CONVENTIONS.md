@@ -160,6 +160,8 @@ wrapper 전체에 `PYTHONPATH`를 export하지 않고 upstream 호출에도 붙�
 
 ## 13. 시험
 
+`bash tests/run_pytests.sh`로 전체 Python 시험을 실행하며, 선택 트랙 이름과 pytest 옵션을 뒤에 붙일 수 있다(셸 시험은 `bash tests/run_shell_tests.sh`로 별도 실행).
+
 - 시험도 정식 패키지의 절대 import를 쓴다. 신선한 모듈이 필요하면 `conftest`의 fresh import fixture를 쓴다(`shared/nlu/tests/conftest.py`, `shared/multimodal/tests/conftest.py`). 대상 모듈 하나만 `sys.modules`에서 빼고 import하며, 종료 시 기존 캐시와 부모 패키지 속성을 복원한다. 형제 모듈 캐시를 함께 지우지 않는다.
 - 자식 프로세스는 `PYTHONPATH=N` + `-m`으로 실행한다. 파일 로더는 외부 배치 파일(`gpustack_custom`)·upstream 코드·동결 시험에만 허용한다. 잔여 허용 목록은 다음과 같다(줄 번호는 R6 조각 7 감사 기준).
   - `shared/agent/tests/_agent_fakes.py`: 외부 배치 gpustack_custom 러너 파일 로더·검색 경로.

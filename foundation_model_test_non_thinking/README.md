@@ -339,6 +339,8 @@ foundation_model_test_non_thinking/
 
 KMMLU·taubench std4 같은 단일 트랙 재측정은 `orchestration/lanes/<이름>.sh` 로, 절차는 `orchestration/README.md`.
 
+`bash tests/run_pytests.sh`로 전체 Python 시험을 실행하며, 선택 트랙 이름과 pytest 옵션을 뒤에 붙일 수 있다(예: `bash tests/run_pytests.sh nlu -q`).
+
 모든 트랙 보고서는 N 루트에서 `python3 -m reports.report_<track>_tracks`로 실행한다(예: `python3 -m reports.report_harness_tracks`). `--base`는 결과 위치만 지정하며 기본값은 이 저장소다. 채점 코드는 실행 중인 저장소의 패키지를 쓴다. 저장소 밖 cwd에서는 N의 절대 경로를 `PYTHONPATH="$N${PYTHONPATH:+:$PYTHONPATH}"`로 명령 앞에 붙인다. 자세한 예는 [`reports/README.md`](reports/README.md)를 따른다.
 
 ---

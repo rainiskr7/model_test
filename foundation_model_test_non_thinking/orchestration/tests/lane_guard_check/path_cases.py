@@ -6,7 +6,14 @@ from orchestration.tests.lane_guard_check.model_cases import process
 
 def regression_case(repo, root, target, old, report):
     decoy = root / "outside/orchestration/lanes/qwen38.sh"
-    for label, code, expected in (("before", old, "800009"), ("after", target, "없음")):
+    # The pre-fix FAIL was demonstrated once before commit 8dd8b82. Once HEAD
+    # carries the fix, only the isolation PASS remains a meaningful regression check.
+    cases = [("after", target, "없음")]
+    if old.read_bytes() != target.read_bytes():
+        cases.insert(0, ("before", old, "800009"))
+    else:
+        print("NOTE C1.2 before-check skipped: HEAD guard == target", flush=True)
+    for label, code, expected in cases:
         f = Fixture(repo, root / ("regression_" + label), code)
         f.table({"800009": process(f"/bin/bash {decoy}")})
         f.cycle()
