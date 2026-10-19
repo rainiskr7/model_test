@@ -295,38 +295,49 @@ def validate_summary(summary: dict) -> tuple:
     return failures, warnings
 
 
+def _load_raw_artifacts(results_dir):
+    """원시 산출물을 선언 순서로 읽으며 필수 파일 누락은 즉시 전파한다."""
+    raw = {}
+    for name in RAW_DATASETS:
+        path = results_dir / f"{name}.json"
+        if path.exists():
+            raw[name] = _load(path)
+        elif name in REQUIRED_DATASETS:
+            raise FileNotFoundError(f"required raw artifact missing: {path}")
+    return raw
+
+
+def _print_scores(summary):
+    """데이터셋별 점수와 총점을 순서대로 출력한다."""
+    for name, entry in summary["by_dataset"].items():
+        accuracy = (
+            "n/a (measured=0)" if entry["accuracy"] is None
+            else f"{entry['accuracy']:.6f}"
+        )
+        print(
+            f"[functionchat-scoring] {name}: {entry['passed']}/{entry['measured']} "
+            f"accuracy={accuracy}"
+        )
+    overall = summary["overall"]
+    accuracy = (
+        "n/a (measured=0)" if overall["accuracy"] is None
+        else f"{overall['accuracy']:.6f}"
+    )
+    print(
+        f"[functionchat-scoring] overall: {overall['passed']}/{overall['measured']} "
+        f"accuracy={accuracy}; "
+        f"not_measured={summary['not_measured']['total_items']}"
+    )
+
+
 def main(argv: List[str] = None) -> int:
     try:
         args = parse_args(argv)
         results_dir = _results_dir(args)
-        raw = {}
-        for name in RAW_DATASETS:
-            path = results_dir / f"{name}.json"
-            if path.exists():
-                raw[name] = _load(path)
-            elif name in REQUIRED_DATASETS:
-                raise FileNotFoundError(f"required raw artifact missing: {path}")
+        raw = _load_raw_artifacts(results_dir)
         coverage = _load(results_dir / "coverage.json")
         summary = build_summary(raw, coverage, args.track)
-        for name, entry in summary["by_dataset"].items():
-            accuracy = (
-                "n/a (measured=0)" if entry["accuracy"] is None
-                else f"{entry['accuracy']:.6f}"
-            )
-            print(
-                f"[functionchat-scoring] {name}: {entry['passed']}/{entry['measured']} "
-                f"accuracy={accuracy}"
-            )
-        overall = summary["overall"]
-        accuracy = (
-            "n/a (measured=0)" if overall["accuracy"] is None
-            else f"{overall['accuracy']:.6f}"
-        )
-        print(
-            f"[functionchat-scoring] overall: {overall['passed']}/{overall['measured']} "
-            f"accuracy={accuracy}; "
-            f"not_measured={summary['not_measured']['total_items']}"
-        )
+        _print_scores(summary)
         failures, warnings = validate_summary(summary)
         for warning in warnings:
             print(f"[functionchat-scoring] WARN: {warning}", file=sys.stderr)

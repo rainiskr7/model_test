@@ -362,6 +362,39 @@ def parse_args(argv=None):
     return parser.parse_args(argv)
 
 
+def _check_summary(stored_summary, summary, failures) -> int:
+    """저장된 요약과의 차이를 먼저 판정하고 일치하면 검증 결과를 반환한다."""
+    differences = _json_differences(stored_summary, summary)
+    if differences:
+        _print_differences(differences)
+        return 1
+    if failures:
+        print(
+            f"{PREFIX} CHECK summary.json matches computed summary "
+            "but validation failed"
+        )
+        return 3
+    print(f"{PREFIX} CHECK summary.json matches computed summary")
+    return 0
+
+
+def _save_summary(results_dir, summary, failures, dry_run) -> int:
+    """거부된 요약은 sidecar로 쓰고 정상 요약은 sidecar 삭제 후 저장한다."""
+    if failures:
+        if not dry_run:
+            invalid_out = results_dir / "summary.invalid.json"
+            _write_json_atomic(invalid_out, summary)
+            print(f"{PREFIX} wrote {invalid_out}")
+        return 1
+    if not dry_run:
+        out = results_dir / "summary.json"
+        invalid_out = results_dir / "summary.invalid.json"
+        invalid_out.unlink(missing_ok=True)
+        _write_json_atomic(out, summary)
+        print(f"{PREFIX} wrote {out}")
+    return 0
+
+
 def main(argv=None) -> int:
     try:
         args = parse_args(argv)
@@ -386,31 +419,8 @@ def main(argv=None) -> int:
             for failure in failures:
                 print(f"{PREFIX} FAIL {failure}")
         if args.check:
-            differences = _json_differences(stored_summary, summary)
-            if differences:
-                _print_differences(differences)
-                return 1
-            if failures:
-                print(
-                    f"{PREFIX} CHECK summary.json matches computed summary "
-                    "but validation failed"
-                )
-                return 3
-            print(f"{PREFIX} CHECK summary.json matches computed summary")
-            return 0
-        if failures:
-            if not args.dry_run:
-                invalid_out = results_dir / "summary.invalid.json"
-                _write_json_atomic(invalid_out, summary)
-                print(f"{PREFIX} wrote {invalid_out}")
-            return 1
-        if not args.dry_run:
-            out = results_dir / "summary.json"
-            invalid_out = results_dir / "summary.invalid.json"
-            invalid_out.unlink(missing_ok=True)
-            _write_json_atomic(out, summary)
-            print(f"{PREFIX} wrote {out}")
-        return 0
+            return _check_summary(stored_summary, summary, failures)
+        return _save_summary(results_dir, summary, failures, args.dry_run)
     except Exception as exc:
         print(f"{PREFIX} error: {type(exc).__name__}: {exc}", file=sys.stderr)
         return 2
