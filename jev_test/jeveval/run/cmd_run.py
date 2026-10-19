@@ -6,6 +6,7 @@ import os
 import time
 from uuid import uuid4
 
+from jeveval.contract.stages import supports_extra
 from jeveval.client import http
 from jeveval.contract.model_config import missing_for_run
 from jeveval.io import derived_stage, records, run_files, t0
@@ -67,7 +68,7 @@ def run(*, root, model, task, stage, run_id, base_url=None, results="results",
                            run_id, ctx.task.set, ctx.task.variant)
     # stage 이름과 셋별 extra 지원은 check-config에서도 검사한다.
     stage_inputs.final_path(directory, stage)
-    if stage == "extra" and ctx.task.set != "fc_call_decision":
+    if stage == "extra" and not supports_extra(ctx.task.set):
         raise ValueError("extra only supported for FunctionChat")
     missing = missing_for_run(ctx.cfg, ctx.b1.labels)
     if check_config:

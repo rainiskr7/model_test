@@ -2,6 +2,7 @@
 
 from pathlib import Path
 
+from jeveval.contract.stages import stage_names
 from jeveval.io import records, run_files
 from jeveval.data.split import check_split_plan
 from jeveval.io.hashes import sha256_file
@@ -50,7 +51,7 @@ def read(root, run_dir):
         _json(root, directory, name, artifacts, hashes, errors)
     fp = artifacts.get("fingerprint.json", {})
     plan = _expected(root, fp, errors) if fp else None
-    names = ("dev", "test", "extra") if fp.get("set") == "fc_call_decision" else ("dev", "test")
+    names = stage_names(fp.get("set"))
     for stage in names:
         for kind in ("replay", "derived"):
             _json(root, directory, f"{stage}/{kind}.json", artifacts, hashes, errors)

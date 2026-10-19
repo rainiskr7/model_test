@@ -1,5 +1,6 @@
 """무엇: 단일 실행 채점 명령 · 입력: 완료 단계·봉인 · 출력: risk/scores/summary · 계약 §7."""
 
+from jeveval.contract.stages import stage_names
 from jeveval.io.set_config import entry
 from jeveval.io import records, run_files
 from jeveval.io.hashes import sha256_file
@@ -19,7 +20,7 @@ def run(*, root, run_dir):
     directory = ctx.directory
     if not run_files.exists(directory / "test/seal.json") or check_seal(directory):
         raise ValueError("valid seal required")
-    names = ("dev", "test", "extra") if ctx.task.set == "fc_call_decision" else ("dev", "test")
+    names = stage_names(ctx.task.set)
     stages = {name: context.stage(ctx, name) for name in names}
     warnings = [w for data in stages.values() for w in data.warnings]
     threshold = run_files.read_json(directory / "threshold.json", ThresholdFile)

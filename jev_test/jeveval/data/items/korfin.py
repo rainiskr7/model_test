@@ -1,7 +1,7 @@
 """무엇: KorFin SRC 항목 · 입력: SID 행·분할·task·목록 · 출력: aspect 질문 Item · 계약 §6-2."""
 
 from jeveval.data.items.common import assemble, fields, questions
-from jeveval.types import Item, SourceRow, SplitPlan, TaskSpec
+from jeveval.types import Item, ItemFields, SourceRow, SplitPlan, TaskSpec
 
 
 def _bindings(rows):
@@ -19,7 +19,7 @@ def _bindings(rows):
 def build_items(rows: list[SourceRow], plan: SplitPlan, task: TaskSpec,
                 lists: dict, rules: dict) -> dict[str, list[Item]]:
     """SRC의 SID 원본 순서대로 질문·정답을 연결하고 미포함 aspect를 표시한다."""
-    def make(selected, bucket):
+    def make(selected, bucket) -> ItemFields:
         bindings = _bindings(selected)
         text = selected[0].fields["SRC"]
         bound = questions(selected, task, lists, bindings=bindings, rules=rules)

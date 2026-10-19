@@ -1,6 +1,6 @@
 # 결정 모델(Jev 계열) 평가 계획
 
-작성 2026-10-12 · 개정 15 (10-19) · 상태: **계획 — P1 코드 작업 ① 끝** (계약 [`P1_CONTRACT.md`](P1_CONTRACT.md) 판 5)
+작성 2026-10-12 · 개정 15 / 판 5 보정 3 (10-19) · 현행 규칙 통합·동작 불변 리팩터. 운영 수용·파일럿·실험 동결은 별도이며 계약 P1_CONTRACT.md를 함께 따른다.
 데이터셋 목록의 기준(SSOT): [`configs/datasets.yaml`](configs/datasets.yaml) + [`configs/sets/`](configs/sets/) (보정 1; 기존 단일 파일 표기는 역사 기록으로 보존)
 
 ---
@@ -79,7 +79,7 @@ Jev(TypeSafe AI, 2026-09-15 early access)가 처음 내놓은 형식을 오픈�
 
 ## 3. 시험 트랙
 
-개정 15 kosgd2 문구·진단·기대치는 문서 끝 「§3 KoSGD」 추가 명세에 있다.
+kosgd2 문구·진단·기대치와 overlay 위치는 이 절의 §3-a를 따른다. (판 5 보정 3)
 
 ### T0 · 서빙 게이트 — "우리 서버가 개발사와 같은 확률을 내는가"
 
@@ -173,6 +173,37 @@ LBox 법조항 분류(276) · FunctionChat 도구 선택(100) · KoBBQ 사회적
 - 워밍업 횟수 · 요청당/질문당 분모 · 실패·재시도 시간 고정. prefix/radix cache 상태 기록 (pplx 는 꺼짐). 동시성 ≤ 8.
 - 공개 지연 수치(Clef 209ms · Clef-Flash 38.8ms)는 Cloudflare 인프라 기준이라 GB10 과 비교하지 않는다 — 모델 간 배수만 본다.
 
+### 3-a. kosgd2와 셋 설정 격리
+
+family=kosgd를 공유하되 set/경로/분할/실행 ID는 kosgd2로 구분한다. 옛 task·split·lists는
+바이트 그대로 보존한다. 수정 사유는 **지시가 두 가지로 읽힘**이다. “두 번째 작업”은
+앞서 고른 작업을 다시 고르는 지시로도 읽힐 수 있다. 모델 정답률을 높이는 것이 수정
+사유가 아니다. 중복 279건과 유일 정답 일치 211건 등의 기존 출력 패턴은 **사후 관측**이다.
+행동 noul 8개 어려움은 모델·데이터 한계로 두며, kosgd2로 처리율이 크게 오르리라 기대하지 않는다.
+
+W1 ongoing_2: “고객의 이번 발화와 관련된 서비스에서 지금 진행 중인 작업이 서로 다른
+서비스에서 둘인 경우, catalog 의 서비스 순서에서 뒤에 있는 서비스의 작업은? 진행 중인
+작업이 하나이거나 없으면 NONE.” ongoing_1과 행동 10개는 그대로다.
+진단 ongoing_two: “고객의 이번 발화와 관련된 서비스에서 지금 진행 중인 작업이 서로 다른
+서비스에서 둘인가?” true: “서로 다른 두 서비스에서 각각 작업이 진행 중이다” / false:
+“진행 중인 작업이 하나이거나 없다”. 성공 10·진단 3·입력 13문항이다. 정답 규칙은 완전한
+서비스/의도 ID를 중복 제거하고 catalog 범위·최대 2개를 검증한 뒤 개수가 2인지 판정한다.
+동일 서비스의 서로 다른 두 의도와 W1 문구의 관계는 미정이다. 그런 자료가 발견되면
+문구 적합성 감사는 INCOMPLETE로 멈추며 임의로 gold를 바꾸지 않는다.
+
+(판 5)
+
+kosgd2의 dataset·split 규칙·임시 primary_variant=full은 configs/sets/kosgd2.yaml에 둔다.
+공용 두 파일은 0906d42 바이트로 복원하고 기존 task·split·lists·b1·policy도 동결한다.
+기존 셋은 자기 공용 설정과 소유 task만 조회한다. 전체 카탈로그 명령과 T0 가족 풀 합집합은 명시적 예외다.
+기존 task 추정은 고정된 7개 경로로 제한한다. 오류가 난 overlay를 읽고 제외 대상을 계산하지 않는다.
+
+(판 5 보정 1)
+
+overlay는 필수 schema/id/tasks/dataset/split_rules와 선택 analysis만 허용한다. family는 공용 대표와 일치하고 set 정체성은 별칭 그대로 유지한다. primary_variant=full은 감사 전 임시값이다. 기존 공용 동결 파일과 Item·요청·split·보고 metadata·fingerprint files는 무관한 overlay/task에 영향받지 않는다. T0 가족 풀 합집합과 all 명령은 전체 검증 예외다. 상세 키·task 소유·경로 규칙은 계약 §1-1a·§1-2a를 따른다. (판 5 보정 1·보정 2)
+
+extra 실행 범위는 원 셋 fc_call_decision만이다. overlay·가족 별칭으로 확장하지 않으며 도구 지표의 의미 분기도 바꾸지 않는다. 당시 단계 해석을 결합하는 별도 개정 없이 현재 split_rules.extra를 역사 run에 적용하지 않는다. (판 5 보정 3)
+
 ## 4. 채점 규칙
 
 ### 4-1. 지표
@@ -196,7 +227,7 @@ LBox 법조항 분류(276) · FunctionChat 도구 선택(100) · KoBBQ 사회적
 
 ### 4-2. 위험 고정 처리율 — 정의
 
-개정 15 질문 단위 보조 지표와 등록 절차는 문서 끝 「§4-2 보조 지표」에 있다.
+질문 단위 보조 지표와 등록은 이 절의 §4-2a를 따른다. (판 5 보정 3)
 
 요청 $i$ 의 성공 판정 질문 집합 $J_i$, 질문별 확률 $p_{ij}$, 채점 마스크 $M_i \subseteq J_i$ (정답이 있는 질문):
 
@@ -232,6 +263,24 @@ LBox 법조항 분류(276) · FunctionChat 도구 선택(100) · KoBBQ 사회적
 - 시험에서 MEETS 를 받아도 수락된 요청의 클래스·서비스·질문 수 분포와 클래스별 위험을 함께 낸다 (쉬운 클래스만 처리했는지 보이게).
 - **진단 질문의 수락 내 오류율**: 성공 판정에서 뺀 질문(KoSGD AFFIRM_INTENT·NEGATE_INTENT 등)도 수락된 요청 안에서 틀린 비율을 함께 낸다 — 특히 NEGATE_INTENT(제안된 작업 거절)를 놓치면 원하지 않는 작업이 실행될 **수 있다** — 이 평가는 실제 실행을 보지 않으므로 측정한 피해가 아니다. 해당 턴: NEGATE_INTENT 78/3,000 = 2.6% · AFFIRM_INTENT 68/3,000 = 2.3% (겹침 0. 개정 11 의 "146 = 4.9%" 는 둘을 더한 값이었다).
 
+### 4-2a. 질문 단위 보조 지표와 등록
+
+question_risk/1의 공용 셋·역사 분석은 exploratory다. 성공 질문과 진단 질문은 별도 표이며,
+KoSGD 두 칸은 하나의 단위, KorFin aspect_k는 존재할 때의 k번째 aspect다. 논리 요청의
+valid를 상속하고 부분 성공 호출을 구제하지 않는다. 분모는 해당 질문이 존재하고 gold가
+있는 대표 묶음 수이며 무효도 남긴다. MISSING·미존재·false·NONE은 따로 센다.
+확신은 ParsedAnswer.confidence(칸은 min), 손실은 답 오류(칸은 순서 무관 묶음 오류),
+임계값 선택은 기존 dev 규칙과 τ=0.01/0.02/0.05다. 질문별 주변적 단측 95% CP 상한이며
+동시 보장이 아니다. 모든 보고 모델·셋·판·질문·τ가 주장 범위다. 질문을 골라 전체 결론으로 쓰지 않는다.
+
+(판 5; 등록 적용 범위는 보정 2)
+
+등록은 kosgd2 overlay.analysis → 첫 fingerprint의 manifest/task/code SHA → dev → 일반 threshold →
+question-threshold → question_seal → 주 seal → test 적용 순서다. 공용 셋/역사 분석은 exploratory,
+등록 사슬 손상은 수치 비공개다. 두 seal 사이 중단은 손상으로 거부하고 사후 복구하지 않는다.
+
+등록 선언 overlay의 threshold 누락은 test 진입을 거부한다. 빈 파일을 포함해 test 증거가 하나라도 있으면 새 등록을 거부하며, 두 seal 사이 중단·삭제·교체는 손상이다. 현재 run은 context.completed, 역사 분석은 verified_complete만 허용한다. 주 certify는 주 지표 봉인만 인증한다. 세부 schema와 dev 재계산·t_star 적용은 계약 §7-4b를 따른다. (판 5 보정 2)
+
 ### 4-3. 표본 나누기
 
 - **인증 모집단 (개정 12)**: 셋마다 동결한 **평가 풀의 묶음 균등 분포**다. 위험 상한은 "이 풀에서 묶음을 하나 무작위로 고르고 그 대표 요청을 냈을 때의 오류율" 에 대한 것이고, 미래 요청 일반이나 행 균등 분포에 대한 것이 아니다.
@@ -260,13 +309,44 @@ LBox 법조항 분류(276) · FunctionChat 도구 선택(100) · KoBBQ 사회적
 
 ### 4-6. 문구·라벨 체계 동결 절차
 
-개정 15의 풀 밖 1회 파일럿과 새 분할 절차는 문서 끝 「§4-6 적용」에 있다.
+풀 밖 1회 파일럿·선정·D1a 경계는 이 절의 §4-6a를 따른다. (판 5 보정 3)
 
 - 질문 문구 · 선택지 설명 · 행동/감정 목록 · 직렬화 · 분할 ID · §4-2 의 임계값 규칙 · §4-1 출력 계약 · B1 라벨 대응표를 **평가 풀 문항으로 모델을 처음 돌리기 전에** `configs/tasks/*.yaml` 로 커밋하고 해시를 C5 재현 지문에 넣는다. `tasks/` 커밋 시각이 `results/` 의 어떤 파일보다 앞서야 한다.
 - **동결 경계**: P0 의 서빙 검증(T0 fixture, 길이·메모리·속도, B1 진입 조건)은 **합성 fixture 와 평가 풀 밖 문항**으로만 하므로 동결 전에 해도 된다. 평가 풀 문항이 모델에 들어가는 순간부터는 동결 후다.
 - 문구는 **데이터 빈도와 업무 정의**로만 정한다. 수정 사유는 열거형만 허용: 지시가 두 가지로 읽힘 · 정답이 선택지에 없음 · 사전 등록한 빈도 바닥 · 스키마 한계(choice ≤255, score 2–10). "모델이 틀렸다" 는 사유가 아니다. 빈도 표는 라벨만 읽는 스크립트로 만들고, 그 스크립트에 모델 호출이 없어야 한다.
 - 모델 출력이 생긴 뒤 문구를 바꾸면 그 분할은 폐기하고 남은 풀에서 다시 나눈다. 남은 풀이 없는 셋(FunctionChat 606 전부 사용, KorSTS·BoolQ·Belebele 등)은 다시 나누지 않고 **그 셋의 결과를 '탐색적' 으로 표시**한다. 시험 표본을 개발로 옮기지 않는다.
 - **이미 본 것의 기록**: KoSGD 행동 목록(11종), `NONE` 비율, AFFIRM_INTENT·NEGATE_INTENT 를 진단으로 내린 근거(양성 68·78)는 10-12 에 시험 표본을 포함한 3,000 턴 전체의 라벨 집계로 정했다 (모델 출력은 보지 않았다). 그래서 감사의 '목록 밖 0 건' 은 독립 증거가 아니다. 진단 강등에 쓴 '빈도 바닥' 도 사전 등록이 아니었다 — 이 결정은 사후 결정으로 기록한다. 이후 시험 표본 라벨을 다시 보고 질문을 추가하지 않는다.
+
+### 4-6a. 파일럿·선정·D1a의 현행 경계
+
+파일럿은 옛 풀 3,000 대화(새 풀 밖)에서 seed 20261019로 200대화 각 1 USER 턴을 뽑는다.
+두 모델(pplx·B1)은 같은 표본을 받는다. 분모는 모델마다 200이며 무효 응답은 통과로
+치지 않는다. 두 모델 각각 중복 비율 ≤5% **그리고** 무효 비율 ≤5%일 때만 W1을 동결한다.
+아니면 멈추고 사용자에게 알린다. seed·표본·문구를 바꾸어 재시도하지 않는다. 정답률은
+보지 않는다. 이 게이트는 반복 응답과 유효성 진단일 뿐 정확도 향상이나 인증 증거가 아니다.
+
+(판 5)
+
+파일럿 RNG 호출 순서: 옛 풀 유일 대화 3,000 ID 정렬 → Random(20261019).sample(...,200) →
+선택 ID 재정렬 → 같은 RNG로 각 대화 USER index 오름차순 목록에서 choice 한 번.
+T0/새 풀과 충돌하면 재표집하지 않고 거부한다. Python 버전과 입력/선정 해시를 기록한다.
+파일럿 선정 CLI의 실행과 실데이터 감사 실행은 Claude가 수행한다. 이번 구현자는 합성 fixture만 실행한다.
+
+(판 5 보정 2)
+
+새 선정: 모든 대화를 dialogue_id 정렬 → 옛 selected_turns의 dialogue_id 전체 제외 →
+USER 턴 없는 대화 제외(건수 기록) → random.Random(20261019)로 정렬 순서대로 각 대화의
+USER index 목록에서 choice 한 번. selection에는 ID·건수·배제 목록 해시만 쓴다.
+
+선정은 T0 대화에도 rng.choice를 소비한 뒤 그 대화를 결과에서만 제외한다. 다른 대화의 대표 턴을 유지하되, 같은 seed/fraction으로 재분할해도 개별 dev/test 소속 불변을 주장하지 않는다. 제외 파일의 다른 턴도 거부한다. (판 5 보정 1)
+
+사용자 승인 D1=A를 기록한다. 249f096의 selection 1,200/dev240/test960/26_00068 제외는 이미
+반영된 상태이며 이번에 변경하지 않는다. 앞선 1,201 보존본 문장은 당시 이력으로 남긴다.
+T0 실행·노출이 확인되면 재검토한다. 계약 판 5 보정 2가 감사 증거 등급과 등록 파일 스키마를 정의한다.
+
+보정 전 선정 명령과 1,201 산출물 설명은 §12의 이력이다. 재현 도구의 --t0-fixture 필수·기존 출력 덮어쓰기 거부는 유지하되 이번 리팩터에서는 실데이터 선정·분할을 재생성하지 않는다. D1=A 승인과 실제 T0 노출 검증은 별개다. T0는 가족 전체 풀 합집합을 제외하며 필요한 split이나 풀 밖 후보가 없으면 거부한다. (판 5 보정 1·보정 2)
+
+파일럿은 DialoguePrefix → kosgd_requests.build → Request의 라벨 없는 입구를 쓴다. reader는 speaker/utterance만 투영하고 gold·baseline을 계산하지 않는다. 원 JSON에 라벨이 있어도 선정·요청·응답 판정에 사용하지 않는다. 논리 ID/manifest/응답 SHA·부분 B1·200 분모와 10/11 경계는 계약 §8-1b를 따른다. 자동 전송·재시도는 제공하지 않는다. (판 5 보정 2)
 
 ## 5. 규모 (모델 하나 기준, 대략)
 
@@ -308,7 +388,7 @@ LBox 법조항 분류(276) · FunctionChat 도구 선택(100) · KoBBQ 사회적
 
 ### 7-1. KoSGD 감사 v3 — 사전 등록 규칙 (10-13, 실행 전)
 
-kosgd2 감사 v5/실전 바이트 v4는 문서 끝 「§7-1 감사 및 단계 종료」에 추가 등록한다.
+아래 v3는 당시 실행 기록이다. 현행 감사 v4의 kosgd/kosgd2 프로필과 후보 규칙은 §7-1a를 따른다. (판 5 보정 3)
 
 라벨만 읽는다. 모델 호출 없음. 스크립트는 Codex 작성 → Claude 검토·실행 (실행 위치 세션 폴더, 보존본 `audits/audit_v3/` — `audits/README.md`). 대상은 10-12 에 뽑은 3,000 턴(seed 20261012, `kosgd_audit/audit_result.json`)이고, R6 만 KoSGD test 의 USER 턴 전부를 쓴다.
 
@@ -332,6 +412,23 @@ kosgd2 감사 v5/실전 바이트 v4는 문서 끝 「§7-1 감사 및 단계 �
 
 **다음 감사부터 적용할 규칙 (개정 12)**: 위 대체 규칙은 실패 원인을 따지지 않는다 — R5(행동 라벨 범위)·R7(행동 정답 연결)은 행동판에도 해당하므로, 그것이 실패하면 행동판은 대체제가 아니다. 앞으로는 **판마다 그 판에 해당하는 R2v3·R4·R5·R6·R7 을 모두 통과한 판만** 주 지표 후보가 되고, 전체판이 후보면 전체판, 아니면 행동판, 둘 다 아니면 멈춘다. 동결 때 문구를 다듬어 감사를 다시 돌리면 이 규칙을 쓴다.
 
+### 7-1a. 현행 감사·보고·단계 종료
+
+종전 v4/v5는 audit_v4의 kosgd/kosgd2 프로필로 통합한다. full R6만 적용하며 actions_only R5는
+act 범위만 적용한다. full 우선, 아니면 적용 규칙을 통과한 actions_only, 둘 다 아니면 중단한다.
+수용 C2에서 full이 아니면 상태를 그대로 보고 사용자에게 중단한다. 측정용 설정의 전송 INCOMPLETE는
+서빙 뒤 재감사 대상으로 남으며 인코더 길이 PASS를 전송 완료로 바꾸지 않는다. kosgd는 사후 감사다.
+
+(판 5 보정 2)
+
+계약 §2-2a의 원 schema 독립 재구성·동결 task·선정/split/T0/RNG 검사와 모델별 길이/호출 SHA를 사용한다. 동결 3모델의 계획/executor post/독립 envelope SHA와 측정용 3모델의 byte_evidence=INCOMPLETE를 구별한다. separate actions_only의 hypothetical_direct는 실제 전송 증거가 아니다. 6모델 실제 인코더의 논리 최대 길이·8192 초과·모델 limit 초과를 기록한다. (판 5 보정 2)
+
+v3 여섯+새 일곱 주입은 지정 규칙의 FAIL을 확인하고 kosgd ongoing_two만 N/A다. 같은 서비스 두 의도는 kosgd2 full에서 INCOMPLETE다. 외부 oracle 1,200/1,200 및 소스 SHA 대조는 Claude의 별도 수용이며 합성 시험이 대신하지 않는다. (판 5 보정 2)
+
+역사 집계는 현재 code/files와 비교하지 않고, Item 재구성에는 동결 입력과 호출 SHA를 요구한다. summary의 run_id/비주판 부재 예외와 파생 actions_only 역사 재구성 거부는 계약 §5-1b를 따른다. 보고서는 검증 완료/미완/손상을 나누고 희소 support<30·공통 오류 교집합·정확한 compare ID를 표시한다. 계약 §7-6a의 task/split/lists 감사 연결과 새 파일 출력만 허용한다. (판 5·보정 2)
+
+Phase A/B 오프라인 구현 종료는 W1 파일럿 게이트·최종 primary·실험 동결·모델 실행 완료가 아니다. 등록 봉인·파일럿 응답·실데이터 감사·서빙 후 전송 증거는 해당 운영 단계에서 확인한다. (판 5 보정 2)
+
 ## 8. 수용 조건
 
 - **C1** `pytest jev_test/tests` 통과 — 세 갈래로 나눈다.
@@ -342,6 +439,16 @@ kosgd2 감사 v5/실전 바이트 v4는 문서 끝 「§7-1 감사 및 단계 �
 - **C3** T0 공개 수치 회귀 — 선택한 Decision Index 벤치에서 공개 수치와의 차이가 P0 기준 이내 (키트 commit · edition 고정).
 - **C4** 코호트 무결성 — 같은 논리 문항 ID 집합이 모든 모델에 요청됐고, 논리 요청 수 = ok + 실패 상태 합, 두 코호트 표가 모두 생성.
 - **C5** 재현 지문 — 모든 결과에 모델 sha · 이미지 digest/의존성 버전 · 데이터 revision · 프롬프트 hash. 저장된 분포로 다시 채점한 값이 요약과 일치, 지문이 다른 결과를 resume 이 거부, 개발/시험·학습/평가 묶음 중복 0 건.
+
+### 8-a. 보정 3 리팩터 수용과 운영 순서
+
+기존 시험 nodeid 삭제·이름 변경·새 skip/xfail·수집 오류 0, 전체 pytest와 계약 §8-1 크기/경계를 유지한다. 문서 원문 보존은 순서·중복을 포함한 정확 바이트 비교이며 현행 규칙 반영은 CONTRACT_MAP.md의 21행을 별도로 대조한다. NOTES는 기록이고 현행 규칙은 계약 본문이다. 영향 지도는 jeveval/IMPACT.md다. (판 5 보정 3)
+
+공개 실행기 sink 예외·복구·offline 미룸, pyarrow 차단 고정 여섯 시험, 6셋 Item/요청 바이트, 단계 판정 단일 소유 AST를 검증한다. C6은 합성 현재/역사 run의 history/report/score/archive/compare 단계·판정·분모를 d41e8b9 고정값과 비교한다. 실제 데이터·기존 run·독립 감사 계산·T0 fixture·공용 동결 설정은 바꾸지 않는다. (판 5 보정 3)
+
+Claude 운영 순서는 새 run 재채점(원본 B1 main_20261016T173256·pplx main_20261018T143611 → 회귀 기준 main_20261019T110043), 감사 원본을 history/<set>.d41e8b9.json으로 보존 후 v4 재감사, KLUE question-risk, 새 파일 report다. kosgd 역사 호출은 이전 9개+새 run 3개를 명시한다. 직접 판 final 39개와 파생 출처 치환 결과·threshold/scores/risk/summary를 비교하고 새 threshold 연결 SHA를 재검산한다. pplx KoSGD test는 470 복구·1,930 미룸을 확인한다. report 허용 차이는 run_id/code_sha256/started_at/replay 출처/감사 script 해시뿐이다. (판 5 보정 3)
+
+감사 per_variant/models/호출 SHA/injections를 대조하고 kosgd의 이전 역사 결과와 새 3개 연결(B1 PASS, pplx 1,070 INCOMPLETE)을 구분한다. 원문 누출 전수 검사·B 중재는 별도다. 구현자는 재채점·실데이터 감사 재실행·커밋을 하지 않는다. 재채점에 쓰는 최종 jeveval 소스 해시를 확정한 뒤 코드를 고치면 수용 증거를 다시 만든다. (판 5 보정 3)
 
 ## 9. 폴더 구조 (예정)
 
@@ -388,7 +495,7 @@ jev_test/
 
 ## 12. 검토 이력 (요약)
 
-개정 15 변경 이유와 수용 증거는 문서 끝 「§12 개정 15 이력」에 보존한다.
+이 절은 당시 검토·실행 이력이다. 현행 본문에 반영한 규칙의 원문과 대체 사유를 아래 원문 보존 블록 및 CONTRACT_MAP.md에 남긴다. (판 5 보정 3)
 
 - Codex 반박 4회(10-12): logprob 라벨 방식 · STS 반올림 제거 · 보정 계약 / pplx SGLang 지원 누락 정정 · T0 를 확률 대조 중심으로 / 리랭커 트랙 유예 / 데이터셋 재편 (FunctionChat 정답 단서, 러너 모델 이름 제한, 동적 질문 생성 — 모두 직접 확인).
 - grok 반박 1회(10-12, 다른 계열): WorkflowEvals 를 보조로, 위험 고정 처리율, (case, policy) 단위, 번역기에서 Qwen 제외, C 를 중복 확인 함수로 — Codex 와 핵심 결론 일치.
@@ -408,16 +515,59 @@ jev_test/
 
 - 개정 14 (10-19): pplx v1.1 choice confidence가 p[choice] 자체가 아니라 우연 대비 여유라는 원인을 확인(Claude 실측 10-19: 요청 2,676건·choice 답 4,825개 전부 이 규칙 하나로 거부, 수식 일치 1e-16). Codex·grok의 같은 근거를 검토한 사용자 결정은 3안: API confidence로 수락하고 p[answer]로 보정한다. 이전 출력 계약의 ‘confidence(= 그 choice의 반올림 확률)’와 §4-2의 ‘API confidence (= 그 choice의 확률)’ 표현은 Clef에는 맞지만 모델 공통 정의가 아니므로 대체한다. 이전 수식의 min max p 표기도 실제 동결 계산인 min confidence로 명확히 했으며 계산은 바꾸지 않는다. 검증기의 값 일치는 경고로, 구조·범위는 오류로 분리. 1판 반박 요지: 부분 items가 resume 검사를 깨므로 전체 계획을 유지하고 offline 미룸을 executor에 둔다; 복사와 재판정 분리·검사 후 쓰기·파생 출처 정규화·cost 재집계·T0 통과 때만 경고 보존. 임계값은 새 dev에서만 정한다. 테스트 이후 규칙 선택은 금지하며 기존 검토 이력과 감사 기록은 보존한다.
 
-## 출처 (10-12 직접 확인)
+### 원문 보존 — 기존 본문 3행 (기준 커밋 d41e8b9)
 
-- [Cloudflare/clef](https://huggingface.co/Cloudflare/clef) · [clef-flash](https://huggingface.co/Cloudflare/clef-flash) · [Cloudflare 블로그](https://blog.cloudflare.com/clef-decision-models/)
-- [pplx-decider-v1.1-27b](https://huggingface.co/perplexity-ai/pplx-decider-v1.1-27b) · [v1](https://huggingface.co/perplexity-ai/pplx-decider-v1-27b) — `decision_config.json`, `server.py`, `evaluation/*.json`, `training/data-manifest.json`
-- [SGLang PR #42645](https://github.com/sgl-project/sglang/pull/42645) · Docker Hub `lmsysorg/sglang` `dev-clef` / `dev-cu13-clef`
-- [Decision Index](https://github.com/apolinario/decision-index) · [WorkflowEvals](https://github.com/typesafe-ai/WorkflowEvals) (`core/providers.py:33`)
-- 데이터셋별 출처·sha 는 `configs/datasets.yaml`
-- [Jev (AI model) — Wikipedia](https://en.wikipedia.org/wiki/Jev_(AI_model))
+아래는 당시 원문이며 현행 규칙은 본문과 CONTRACT_MAP.md를 따른다.
 
+````markdown
+작성 2026-10-12 · 개정 15 (10-19) · 상태: **계획 — P1 코드 작업 ① 끝** (계약 [`P1_CONTRACT.md`](P1_CONTRACT.md) 판 5)
+````
 
+### 원문 보존 — 기존 본문 82행 (기준 커밋 d41e8b9)
+
+아래는 당시 원문이며 현행 규칙은 본문과 CONTRACT_MAP.md를 따른다.
+
+````markdown
+개정 15 kosgd2 문구·진단·기대치는 문서 끝 「§3 KoSGD」 추가 명세에 있다.
+````
+
+### 원문 보존 — 기존 본문 199행 (기준 커밋 d41e8b9)
+
+아래는 당시 원문이며 현행 규칙은 본문과 CONTRACT_MAP.md를 따른다.
+
+````markdown
+개정 15 질문 단위 보조 지표와 등록 절차는 문서 끝 「§4-2 보조 지표」에 있다.
+````
+
+### 원문 보존 — 기존 본문 263행 (기준 커밋 d41e8b9)
+
+아래는 당시 원문이며 현행 규칙은 본문과 CONTRACT_MAP.md를 따른다.
+
+````markdown
+개정 15의 풀 밖 1회 파일럿과 새 분할 절차는 문서 끝 「§4-6 적용」에 있다.
+````
+
+### 원문 보존 — 기존 본문 311행 (기준 커밋 d41e8b9)
+
+아래는 당시 원문이며 현행 규칙은 본문과 CONTRACT_MAP.md를 따른다.
+
+````markdown
+kosgd2 감사 v5/실전 바이트 v4는 문서 끝 「§7-1 감사 및 단계 종료」에 추가 등록한다.
+````
+
+### 원문 보존 — 기존 본문 391행 (기준 커밋 d41e8b9)
+
+아래는 당시 원문이며 현행 규칙은 본문과 CONTRACT_MAP.md를 따른다.
+
+````markdown
+개정 15 변경 이유와 수용 증거는 문서 끝 「§12 개정 15 이력」에 보존한다.
+````
+
+### 원문 보존 — 개정 15 적용 명세 — Phase A / Phase B (2026-10-19) (기준 커밋 d41e8b9)
+
+아래는 당시 원문이며 현행 규칙은 본문과 CONTRACT_MAP.md를 따른다.
+
+````markdown
 ## 개정 15 적용 명세 — Phase A / Phase B (2026-10-19)
 
 이 절은 기존 §3·§4-2·§4-6·§7-1·§12의 개정 15 추가 사항이다. 기존 문장과
@@ -500,6 +650,13 @@ C6은 identity/seal/해시/중복·여분 ID/절단/제외 풀/출력 경로/원
 B 중재 대상은 W1·5%/5% 게이트·희소30·family 설계다. 구현자는 커밋·B 중재를 수행하지 않는다.
 
 
+````
+
+### 원문 보존 — 개정 15 보정 1 — overlay 격리·D1a (2026-10-19) (기준 커밋 d41e8b9)
+
+아래는 당시 원문이며 현행 규칙은 본문과 CONTRACT_MAP.md를 따른다.
+
+````markdown
 ## 개정 15 보정 1 — overlay 격리·D1a (2026-10-19)
 
 ### §3 새 셋 위치
@@ -539,6 +696,13 @@ C4 재선정·재분할·oracle·T0, C5 원본 및 10-19 대비 재판정, C6 �
 실데이터 재생성·C3/C4/C5·B 중재·재판정·서버 복귀 실행은 Claude가 수행한다. 구현 통과를 이들의 통과로 대신하지 않는다.
 보정 1 테스트는 합성 데이터만 사용하며, 기존 selection/split을 수정하거나 새 규칙에 맞는 것으로 취급하지 않는다.
 
+````
+
+### 원문 보존 — 개정 15 보정 2 — 오프라인 구현 범위와 수용 (2026-10-19) (기준 커밋 d41e8b9)
+
+아래는 당시 원문이며 현행 규칙은 본문과 CONTRACT_MAP.md를 따른다.
+
+````markdown
 ## 개정 15 보정 2 — 오프라인 구현 범위와 수용 (2026-10-19)
 
 사용자 승인 D1=A를 기록한다. 249f096의 selection 1,200/dev240/test960/26_00068 제외는 이미
@@ -565,3 +729,13 @@ C5 200 논리 분모/10·11 경계/부족/부분 B1/정답 미접근/결과 격�
 C7 네트워크 거부와 보호 파일 SHA/목록 보존. C2/C3 실데이터·B 중재는 구현 시험 통과와 구별한다.
 오프라인 CLOSE는 W1 게이트 통과나 kosgd2 실험 동결을 뜻하지 않는다. 그 단계는 동일 표본의
 파일럿 모델 응답과 기존 개정 15 게이트 판정 이후다. 정확도 관찰·재시도는 허용하지 않는다.
+````
+
+## 출처 (10-12 직접 확인)
+
+- [Cloudflare/clef](https://huggingface.co/Cloudflare/clef) · [clef-flash](https://huggingface.co/Cloudflare/clef-flash) · [Cloudflare 블로그](https://blog.cloudflare.com/clef-decision-models/)
+- [pplx-decider-v1.1-27b](https://huggingface.co/perplexity-ai/pplx-decider-v1.1-27b) · [v1](https://huggingface.co/perplexity-ai/pplx-decider-v1-27b) — `decision_config.json`, `server.py`, `evaluation/*.json`, `training/data-manifest.json`
+- [SGLang PR #42645](https://github.com/sgl-project/sglang/pull/42645) · Docker Hub `lmsysorg/sglang` `dev-clef` / `dev-cu13-clef`
+- [Decision Index](https://github.com/apolinario/decision-index) · [WorkflowEvals](https://github.com/typesafe-ai/WorkflowEvals) (`core/providers.py:33`)
+- 데이터셋별 출처·sha 는 `configs/datasets.yaml`
+- [Jev (AI model) — Wikipedia](https://en.wikipedia.org/wiki/Jev_(AI_model))

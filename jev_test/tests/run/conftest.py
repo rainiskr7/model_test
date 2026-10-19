@@ -65,11 +65,10 @@ def b1_raw():
     return wrap
 
 
-from tests.run.cli_support import Harness
-
-
 @pytest.fixture
 def h(tmp_path, monkeypatch):
+    from tests.run.cli_support import Harness
+
     result = Harness(tmp_path)
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("JEV_TEST_KEY", "private-test-key")

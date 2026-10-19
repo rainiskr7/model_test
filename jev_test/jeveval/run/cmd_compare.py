@@ -1,5 +1,6 @@
 """무엇: 모델 횡단 비교 조립 · 입력: 완료 run 폴더 · 출력: compare.json · 계약 §8-6 L·⑥b-2."""
 
+from jeveval.contract.stages import stage_names, supports_extra
 from jeveval.io.set_config import entry
 from jeveval.io import run_files
 from jeveval.io.paths import inside
@@ -40,8 +41,8 @@ def _result(contexts, stages, thresholds):
     bootstrap = dict(coverage={"0.02": coverage_diff(rows,
         {m: t.by_tau["0.02"].t_star for m, t in thresholds.items()}, seed=seed, set_name=set_name)},
         f1={"test": _f1(stages, ("test",), seed, set_name)})
-    if set_name == "fc_call_decision":
-        bootstrap["f1"]["all_rows"] = _f1(stages, ("dev", "test", "extra"), seed, set_name)
+    if supports_extra(set_name):
+        bootstrap["f1"]["all_rows"] = _f1(stages, stage_names(set_name), seed, set_name)
     return compare_file(models=contexts, set=set_name, variant=variant, cohort_ids=cohort,
         per_model_population=populations, bootstrap=bootstrap,
         t0_status={m: ctx.cfg.t0["status"] for m, ctx in contexts.items()})

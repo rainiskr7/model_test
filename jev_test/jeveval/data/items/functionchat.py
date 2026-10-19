@@ -3,7 +3,7 @@
 from copy import deepcopy
 
 from jeveval.data.items.common import assemble, fields, questions
-from jeveval.types import Item, SourceRow, SplitPlan, TaskSpec
+from jeveval.types import Item, ItemFields, SourceRow, SplitPlan, TaskSpec
 
 
 def _sentence(lists):
@@ -38,7 +38,7 @@ def _state_and_options(row, lists):
 def build_items(rows: list[SourceRow], plan: SplitPlan, task: TaskSpec,
                 lists: dict, rules: dict) -> dict[str, list[Item]]:
     """정규화된 한 입력에서 state와 도구 선택지를 만들며 원본을 변경하지 않는다."""
-    def make(selected, bucket):
+    def make(selected, bucket) -> ItemFields:
         state, options = _state_and_options(selected[0], lists)
         return fields(state, questions(selected, task, lists, options, rules=rules))
 

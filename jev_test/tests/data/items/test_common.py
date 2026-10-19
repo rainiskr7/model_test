@@ -51,13 +51,14 @@ def test_conflict_flags_reject_invalid_label_types(field, value):
 def test_summary_shape_counts_and_field_detachment():
     question = bound()
     content = fields("PRIVATE", [question], stratum="small", flags=["warning:a", "warning:b"], baseline={})
-    value = replace(item(), **content)
+    value = replace(item(), state_fields=content.state_fields, questions=content.questions,
+                    meta=content.meta, baseline=content.baseline)
     result = summarize({"dev": [value], "test": []})
     assert result == {"dev": dict(n=1, questions={"ready": dict(role="success", type="noul",
         n_options=2, gold={"MISSING": 0, "true": 1, "false": 0})}, flags={"warning": 1},
         stratum={"small": 1}, baseline=1),
         "test": dict(n=0, questions={}, flags={}, stratum=None, baseline=0)}
-    assert "PRIVATE" not in str(result) and content["questions"][0] is not question
+    assert "PRIVATE" not in str(result) and content.questions[0] is not question
     other = replace(value, questions=[replace(question, role="diagnostic")])
     with pytest.raises(ValueError, match="^inconsistent question summary shape$"):
         summarize({"dev": [value, other]})

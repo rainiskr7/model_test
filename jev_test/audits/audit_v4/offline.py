@@ -20,7 +20,7 @@ def guard():
 def capture(plan, cfg):
     """실제 executor의 post 인자를 포착한다. 기록 쓰기는 메모리 sink로 대체한다."""
     from dataclasses import replace
-    from jeveval.run.executor import _execute_call
+    from jeveval.run.executor import execute_call
     from jeveval.types import AttemptResult, LengthInfo, RetryPolicy
     class Measure:
         def measure(self, p):
@@ -29,10 +29,10 @@ def capture(plan, cfg):
     def post(url, body, timeout, headers=None):
         bodies.append(body)
         return AttemptResult("2026-10-19T00:00:00Z", "2026-10-19T00:00:00Z", 0., 400, None, None, "{}")
-    with patch("jeveval.io.records.append_record"):
-        _execute_call(plan, [], cfg=replace(cfg, base_url="http://offline.invalid"), measurer=Measure(),
-                      post=post, sleep=refuse, session_id="audit", headers={}, timeout=1,
-                      policy=RetryPolicy(1, [], []), path=None)
+    captured = []
+    execute_call(plan, [], cfg=replace(cfg, base_url="http://offline.invalid"), measurer=Measure(),
+                 post=post, sleep=refuse, session_id="audit", headers={}, timeout=1,
+                 policy=RetryPolicy(1, [], []), record=captured.append)
     if len(bodies) != 1:
         raise ValueError("executor did not hand off one body")
     return bodies[0]

@@ -1,6 +1,6 @@
 # P1 계약 — 결정 모델 평가 코드의 입출력·채점·기록 규칙
 
-작성 2026-10-13 · **판 5** (10-19: Phase A 추가; 판 4 설명 보존: 확신·보정 분리와 replay/offline; 이전 판의 변경 사유는 §11 보존) · 상태: 구현 중
+작성 2026-10-13 · **판 5 보정 3** (10-19: 현행 규칙 통합·동작 불변 리팩터) · 운영 수용은 별도. 이전 원문은 §11에 보존한다.
 상위 문서: [`JEV_TEST_PLAN.md`](JEV_TEST_PLAN.md) 개정 15. 이 문서와 계획이 다르면 계획이 기준이고, 이 문서를 고친다.
 범위: **첫 실행 = A 묶음 + B1** (계획 §7). B·C·T2·WorkflowEvals·B2 는 이 판에서 정하지 않는다. **score 질문은 이 판의 범위 밖**이다 (A 묶음에 없다) — 응답 검증기(§3-1)·채점은 score 를 만나면 `NotImplementedError` 로 멈추고, task yaml 검사기(§1-1)는 오류 목록에 넣는다.
 
@@ -30,7 +30,7 @@
 
 ### 1-1. `configs/tasks/<set>.yaml` 스키마 (셋마다 하나, 동결 대상)
 
-판 5 가족/별칭 추가 계약은 문서 끝의 「§1-1 가족 디스패치」에 있다.
+셋 가족·overlay·primary의 현행 규칙은 이 절의 §1-1a를 따른다. (판 5 보정 3)
 
 ```yaml
 set: kosgd                     # datasets.yaml 의 id
@@ -62,10 +62,65 @@ group_key: dialogue_id         # §6 묶음 키 규칙 이름
 - `configs/tasks/b1.yaml`: B1 시스템 문구 · 사용자 문구 틀 · 라벨 문자열 62개 순서 · 생성 매개변수 (§2-5).
 - yaml 은 **중복 키를 거부하는 로더**로 읽는다 (`datasets.yaml` 에서 실제로 중복이 있었다 — 10-13 고침).
 
+#### 1-1a. 셋 가족과 설정 격리
+
+datasets 항목의 family 기본값은 set ID이며 splits/rules의 같은 선언과 일치해야 한다.
+별칭은 가족 대표의 reader·builder·어휘를 공유한다. SourceRow.set, Item.set, logical_id,
+경로와 fingerprint는 별칭 set을 유지한다. 가족은 Item.meta에 추가하지 않고 호출자가
+score에 전달한다. LabelVocab는 kosgd/kmhas/kote_escalation 대표 어휘를 공유한다.
+T0 공개 별칭 kosgd2를 허용하되 동일 가족 모든 분할의 풀 합집합을 제외한다.
+
+(판 5)
+
+공용 `configs/datasets.yaml`과 `configs/splits/rules.yaml`은 0906d42 바이트로 복원한다.
+기존 실행 셋은 두 파일의 ID 교집합이다. 새 셋은 `configs/sets/<id>.yaml`에 등록한다.
+최상위 키는 schema=set_overlay/1, id, tasks, dataset, split_rules 다섯 개가 필수이고 선택 analysis만 허용한다. 그 밖의 키는 금지한다. (판 5 보정 2)
+파일 stem=id=dataset.id이며 공용 어느 쪽의 ID도 재정의할 수 없다. dataset의 중첩 id는 금지한다.
+dataset.family와 split_rules.family는 같은 공용 가족 대표여야 한다. split_rules의 seed/dev_fraction 등
+전역 키와 최상위 lists는 금지한다. 셋 전용 목록은 이번 보정에서 지원하지 않는다.
+tasks는 configs/tasks 아래의 고유 YAML 파일명 목록이며 실제 TaskSpec.set이 id와 같아야 한다.
+map.primary_variant는 필수이고 선언한 task의 고유 variant 중 하나여야 한다.
+
+`entry(root, set_id)`는 공용 셋이면 overlay 디렉터리에 접근하지 않고, 새 셋이면 자기 overlay만 읽는다.
+`catalog(root)`는 공용 실행 셋과 모든 overlay를 검증한다. 기존 Item·요청·split·primary·보고 metadata·
+fingerprint files·역사 재구성은 관계없는 overlay/task의 존재·오류와 무관하다.
+예외는 두 가지다: T0의 가족 풀 합집합 제외와 `--set all`/`--task all` 전체 카탈로그 명령이다.
+all 명령은 모든 설정·대상 결과·직렬화를 먼저 검증하며 입력 오류가 있으면 파일을 쓰거나 결과를 출력하지 않는다.
+이 보장은 파일시스템 장애에 대한 다중 파일 트랜잭션을 뜻하지 않는다.
+
+primary 추정은 공용 map을 우선한다. 없으면 `io/set_tasks.BASE_TASKS`에 고정한 기존 7개 소유 경로 중
+해당 셋의 task만 읽는다. overlay 선언을 읽어 glob에서 제외하는 방식은 잘못된 overlay 격리와 충돌하므로
+사용하지 않는다. 미등록 공용 셋에 primary 선언도 소유 task도 없으면 SPEC_AMBIGUOUS로 거부한다.
+
+공용 동결 목록은 두 공용 파일, b1.yaml, policy.yaml, configs/tasks/lists/*.json의 경로 집합과 바이트,
+기존 셋 task 7개와 split 6개다. tests/fixtures/shared_config.sha256에 0906d42 기준을 고정한다.
+새 셋 때문에 이들을 고치지 않는다. 변경이 필요하면 기존 replay를 깨는 별도 개정으로 취급한다.
+
+(판 5 보정 1; analysis 예외는 보정 2)
+
 ### 1-2. 동결 해시
 fingerprint 에는 **파일별** sha256 을 넣는다: 쓰인 task yaml 들 · 목록 json 들 · `b1.yaml` · 분할 파일 · 입력 데이터 파일 해시 목록 · **인코더 규칙** `encoder: {rule: <모델 yaml 의 규칙 이름>, sha256: <규칙 본문 해시>}` (판 3 — 호출 기록이 아니라 여기에 둔다, §4-3).
 
 ---
+
+#### 1-2a. 동결 의존성과 과거 실행
+
+기존 셋 fingerprint의 파일 집합은 그대로다. overlay 셋은 기존 공용 입력 외에 자기 overlay,
+선언한 task 전부, pool.path 선정 파일, pool.exclude가 참조하는 파일을 추가한다.
+원본 파일의 검증은 해당 dataset/<set>/SHA256SUMS와 실제 바이트 대조를 유지한다.
+어휘는 공용 가족 대표에서만 읽는다. overlay의 실행 task는 선언 목록에 있어야 한다.
+파생 full/actions_only는 같은 overlay 의존성 집합을 비교한다. 역사 overlay Item 재구성은 이 추가 경로의
+저장 해시가 빠졌거나 현재 바이트가 달라도 거부하며, 해당 fingerprint.files 전체를 대조한다.
+공용 셋의 과거 역사 읽기에 이 추가 동결 검사를 소급 적용하지 않는다.
+공용 바이트 복원은 replay 선검사 회복의 조건이다. code_sha256가 다른 기존 run의 restore/resume은 여전히 거부한다.
+
+(판 5 보정 1)
+
+`code_sha256` 경로는 root 기준 POSIX 상대 경로(`jeveval/...`)로 고정한다. 상대 tokenizer.path도 root 기준이다. path가 있는데 해시 목록이 null/빈 경우는 검증 불가로 거부한다.
+
+(기존 NOTES의 경로·검증 규칙을 통합, 판 5 보정 3)
+
+현재 실행 restore/resume은 현재 fingerprint의 엄격한 비교를 유지한다. 역사 집계 읽기는 현재 code_sha256·공용 files와 비교하지 않는다(§5-1b). 역사 Item 재구성은 task/split/lists/데이터 manifest·호출 SHA를 검증하고, overlay에는 저장된 추가 의존성 전체 검사를 적용한다. 이 세 경계를 합치지 않는다. (판 5 보정 3)
 
 ## 2. 요청 계약
 
@@ -74,7 +129,7 @@ fingerprint 에는 **파일별** sha256 을 넣는다: 쓰인 task yaml 들 · �
 
 ### 2-2. state 는 항상 문자열
 
-판 5 감사 v4의 실행 명세는 문서 끝 「§2-2 감사 v4 명세」에 있다.
+감사 v4의 현행 실행·증거 등급은 이 절의 §2-2a를 따른다. (판 5 보정 3)
 - 이유: 모델마다 객체 state 를 렌더링하는 방식이 다르거나(Clef 는 키 정렬) 알 수 없다(pplx). 문자열로 보내면 **모든 모델이 같은 글자를 같은 순서로** 받는다. 계획 §1 도 state 를 "문자열 또는 JSON" 으로 허용한다.
 - `json_string`: 내부 객체를 `keys` 순서로 `json.dumps(obj, ensure_ascii=False, separators=(",", ":"))`. `plain_text`: 원문의 **앞뒤 공백을 지운 것** (`str.strip()` — 판 3 보정 12, 10-13). 문장 안쪽 공백·줄바꿈은 그대로. 이유: B1(Qwen) chat 템플릿이 메시지에 `|trim` 을 걸어 B1 만 공백 없는 문장을 받았다 — 모든 모델이 같은 글자를 받게 한다. 실측(10-13): 앞뒤 공백이 있는 원문은 KOTE 74 (평가 풀 30)·K-MHaS 0·KorFin 0, 지운 뒤 서로 다른 묶음의 원문이 같아지는 경우 0 (분할·누출 영향 없음, 분할 파일 그대로), 지우면 빈 문장 0 — 빈 문장이 되면 멈춘다. `target_end_char` = 지운 문자열의 길이. `Item.state_fields` 는 원문 그대로 두고 렌더에서 지운다.
 - **render 의 출력** (판 3) = `Rendered(state: str, target_end_char: int)`. `target_end_char` = state 문자열 안에서 대상 발화가 끝나는 **문자 위치(끝 다음 칸, 0부터)**:
@@ -90,6 +145,53 @@ fingerprint 에는 **파일별** sha256 을 넣는다: 쓰인 task yaml 들 · �
 | KLUE-MRC | json_string | `context`, `question` | `question` |
 
 - 감사 v3 는 state 를 객체로 다뤘다(R4 가 dict·키를 검사, R7 이 `진행중_1/2` 를 하드코딩). 그래서 동결 때 **감사 v4** 를 따로 만든다: 실제 전송 문자열을 다시 파싱해 독립 원본과 비교하고, 길이는 서버 인코더 입력으로 잰다. 감사 v3 코드는 고치지 않는다 (보존본).
+
+#### 2-2a. 감사 v4와 증거 등급
+
+1. catalog·질문 객체를 원 schema와 동결 task에서 독립 재구성해 실제 요청 바이트와 대조한다.
+   요청 간 동일성만으로 PASS하지 않는다. 순서·criteria·ID·역할 연결을 함께 검사한다.
+2. dialogue 키 집합은 speaker/utterance뿐이며 첫 턴부터 대상 USER까지 위치별 원문과 같아야 한다.
+   frame/state/services 부재, 전체 기대 ID·개수·중복·누락도 검사한다.
+3. systemone request_bytes 및 B1 chat_bytes/messages/라벨 대응 모두 실제 호출 해시와 대조한다.
+4. Clef 결합 인코더·pplx 질문별 인코더·B1 chat template 경로에서 전체 입력을 측정한다.
+   kosgd2 full 13질문과 actions_only의 해당 질문을 판별 최종 구성으로 검사한다. 8,192 초과 0건이며 diagnostic 추가도 재감사 대상이다.
+5. ongoing_two는 독립 oracle로 service/intent 집합을 만들고 비교한다. 오류 주입을 검출해야 한다.
+   입력/스크립트/문구/토크나이저 해시와 분모를 기록하며 미실행·누락은 INCOMPLETE, 위반은 FAIL이다.
+
+(판 5; 길이 적용 범위는 보정 2에 따라 아래와 같이 구분)
+
+`audits/audit_v4/run.py --set kosgd|kosgd2` 하나를 사용한다. 종전 “kosgd2 감사 v5”는
+별도 실행판이 아닌 v4의 kosgd2 프로필로 정정한다. 독립 경로는 jeveval을 import하지 않으며
+원 schema에서 catalog/두 lists를 검증하고 249f096 task의 ID/label/role/type/options 및
+문구 바이트 해시를 고정한다. 원본 선정·split 대표·옛 풀/T0 제외/RNG를 별도로 확인한다.
+
+pplx_v1_1/B1 BF16/B1 FP8은 계획 body, executor에 주입한 무네트워크 post의 body,
+독립 envelope의 세 SHA를 비교한다. B1의 모든 생성 매개변수·messages·토큰 ID·label_map을
+포함한다. Clef/Clef-Flash/pplx_v1은 served_name 측정용 자리 표시를 쓰며
+measurement_config=true, byte_evidence=INCOMPLETE다. 이 셋의 최종 전송 증거는 서빙 후 별도
+출력 경로로 재감사해야 한다. 길이는 6모델 모두 실제 인코더를 사용하고 모델별 프로세스로 격리한다.
+R2v3 분모/백분위는 논리 요청별 최대 길이(Clef 결합, pplx/B1 질문별 최대)이며 >8192가 0이어야 한다.
+모델 limit 초과도 별도 집계한다. 별도 판을 전송하지 않는 separate actions_only는
+hypothetical_direct로 표기한다. 그 해시는 직접 호출 가정의 일치성이지 과거 전송 증거가 아니다.
+
+R5 full은 의도 범위·최대2·act11종, actions_only는 act11종이다. kosgd2 full에서 같은 서비스의
+서로 다른 두 의도는 INCOMPLETE다. R6는 full에만 적용한다. 스캔은 KoSGD test USER 전체,
+분모는 INFORM_INTENT가 있는 (턴,frame), 형식 이상도 남기며 95% 경계, 분모0 INCOMPLETE다.
+이웃 USER 통계는 판정에 쓰지 않는다. R7은 고정 칸과 문자열 true/false를 ID/type/role/label까지
+대조한다. v3 여섯+새 일곱 오류 주입을 지정 규칙 FAIL로 검증하며 kosgd ongoing_two만 N/A다.
+기본 후보는 적용 R2v3/R4/R5/R6/R7 및 동결된 3모델 v4_hash를 통과한 판 중 full 우선이다.
+측정용 모델의 INCOMPLETE 전송 증거는 이 후보의 요구 범위 밖이며 최종 서빙 완료로 읽지 않는다.
+
+kosgd는 사후 감사이며 --history-run을 반복 지정해 저장 call SHA와 대조한다. 저장 run 부재,
+부분 기록, full 출처가 필요한 파생 판은 INCOMPLETE이고 과거 결과를 바꾸지 않는다.
+JSON은 집계·ID·해시만 담으며 stdout/stderr에 원문 예외를 전달하지 않는다.
+입력 목록과 토크나이저 해시, 감사 Python 소스(out/cache 제외) 및 jeveval code SHA를 기록한다.
+독립 oracle의 외부 스크립트 API는 이 계약에 정의되지 않았다. 실데이터 1,200/1,200 및 oracle
+소스 SHA 대조는 Claude의 별도 수용 증거이며 합성 시험 통과로 대체하지 않는다.
+
+(판 5 보정 2)
+
+v3의 10-13 결과·6종 주입은 당시 증거로 보존한다. v4의 13종 주입과 새 문구·원본 독립 검증을 대신하지 않는다. 일반 후보 규칙은 full 우선/fallback이지만, 보정 2의 이번 수용에서는 full이 아니면 상태를 보고 사용자에게 중단한다. 오프라인 구현 종료를 감사 실데이터 수용·최종 서빙 완료로 읽지 않는다. (판 5 보정 2)
 
 ### 2-3. 질문
 - 질문 ID·순서·instructions: task yaml 그대로 (펼친 질문은 §1-1). instructions 는 비우지 않는다.
@@ -185,7 +287,7 @@ JSON 파싱은 **중복 키 거부**(`object_pairs_hook`), `bool` 은 숫자로 
 
 ### 5-1. 위치 (판 3: 개발·시험 기록을 나눈다)
 
-판 5 보고/질문 위험 파일과 역사 읽기는 문서 끝 §5-1·§5-1b 추가 계약을 따른다.
+공개 보고·질문 위험 산출물은 §5-1a, 역사 읽기는 §5-1b를 따른다. (판 5 보정 3)
 ```
 jev_test/results/<safe_model>/<run_id>/A/<set>/<variant>/
 ├─ fingerprint.json    # 커밋
@@ -200,6 +302,45 @@ jev_test/results/<safe_model>/<run_id>/A/<set>/<variant>/
 jev_test/results/_compare/<compare_id>/A/<set>/<variant>/compare.json   # 커밋 — 모델 횡단 (공통 코호트·bootstrap, §7-6)
 ```
 `attempts.jsonl`·`final.jsonl` 은 `.gitignore` (데이터 라이선스 — 재배포 금지). 요청 원문은 저장하지 않는다 — 분할 파일 + task yaml + 입력 데이터로 다시 만들고 `request_sha256` 으로 대조한다. **커밋되는 파일에는 문항 원문·정답 원문·원문에서 온 묶음 키 문자열이 들어가지 않는다** (ID·해시·숫자만 — §9 표식 검사).
+
+### 5-1a. 추가 공개 산출물
+
+- `results/_report/<run_id>.md`: 검증 통계·ID·해시·고정 문구만 커밋.
+- `<run>/question_risk.json`: question_risk/1, 탐색적 질문별 집계·등록 manifest 해시.
+- `configs/analysis/question_risk_v1.yaml`: 질문 손실·분모·실패·τ·주장 범위의 등록 정책.
+- `question_threshold.json`, `test/question_seal.json`: 등록 overlay의 첫 test 전 별도 봉인 증거(§7-4b). (판 5 보정 2)
+
+Item/final은 재구성 메모리에서만 사용한다. 공개 출력에 원문, 원문 묶음 키, 원문 정답,
+자유 경로·reason·예외 메시지를 전달하지 않는다. 논리 ID는 내부 결합에만 사용하고 보고서는 집계한다.
+
+(판 5; 등록 산출물은 보정 2)
+
+### 5-1b. 역사 읽기
+
+현재 code_sha256·공용 files와 비교하지 않는다. fingerprint의 저장 code_sha256/started_at을
+출처로 표시한다. read-only io/history와 순수 run/history_check를 통해 세 상태를 구분한다.
+
+- verified_complete: fingerprint 스키마/디렉터리/inputs identity, threshold/risk/scores identity,
+  seal 존재, threshold 바이트 해시 및 존재하는 dev final 해시, risk.threshold_sha256 연결,
+  dev/test(FC는 extra 포함)의 기대 대표 ID 전체 일치와 정상 기록.
+- incomplete: 파일 누락, 기대 집합의 진부분집합, 끝 줄 절단/줄바꿈 경고, 기대 분할 해시 확인 불가.
+  단계별 expected/finalized/pending·상태 분포를 표시한다. 기대 미확인 수량은 unknown이다.
+- damaged: identity/해시 불일치, 중복·여분 ID, 중간 손상, 잘못된 스키마. 수치를 내지 않는다.
+
+분모는 fingerprint.files에 저장된 해당 split의 SHA가 현재 파일과 같을 때만 사용한다.
+summary는 기존 evalcommon 형식에 model/benchmark가 있으나 run_id는 없으며 비주판에는 없다.
+따라서 존재할 때 model/benchmark 및 run_id(있을 때)를 검사하며 run_id를 새로 꾸며 넣지 않는다.
+summary 없이도 다른 필수 증거가 충족되면 완료로 분류한다. 이것은 2판 A-2의 identity 요구를
+기존 스키마에 적용할 때의 명시적 한계다. request 원기록 재계산 없이 점수 자체의 진실성을 인증하지 않는다.
+
+분해/질문 위험을 위한 역사 Item은 동결 task·split·lists·데이터 manifest와 재구성 호출 해시가
+일치해야 한다. 데이터 부재면 분해는 불가로 표시한다. 역사 파생 actions_only 재구성은
+출처 full 입력 검증 정책이 미정이므로 거부한다. 원래 산출물의 역사 집계 읽기는 허용한다.
+역사 파일을 수정하거나 현재 fingerprint/resume/replay의 비교를 완화하지 않는다.
+
+(판 5)
+
+역사 단계 목록은 저장 fingerprint의 set 정체성만 사용한다. fc_call_decision은 dev/test/extra, 그 밖은 dev/test이며 현재 rules·overlay의 존재나 extra 값으로 과거 단계를 다시 정하지 않는다. fingerprint 부재·손상은 기존 incomplete/damaged 판정 경로를 유지한다. (판 5 보정 3)
 
 ### 5-2. 식별자 세 단계
 - `logical_id` = `<set>:<group_id>:<item_id>` (§6).
@@ -270,8 +411,33 @@ executor는 **전체 계획으로 기존 resume 검사**를 한 뒤, 논리 요�
 
 순서: dev 복사 → `run --offline --stage dev` → `threshold` → test 복사 → `run --offline --stage test` (FC extra는 test 완료 뒤). threshold·seal·risk·scores는 복사하지 않는다. 부분 test는 봉인된 미완료 단계이며 score/compare/archive/파생은 전체 ID 완료 전 거부한다. `ok`는 이번 명령 성공이지 셋 완료가 아니다. final 생성 뒤 replay 재실행은 거부하고, 이후 재개에는 run을 쓴다(계획 2판 §1-5와 C6 충돌의 보수적 처리).
 
+#### 5-5d. 재판정 관측과 출처의 범위
+
+- replay는 검사 후 출처 바이트 복사와 replay/1 metadata만 기록한다. run --offline이 전체 계획 검사 뒤 복구 가능한 논리 요청만 판정하며 나머지는 n_deferred다.
+- offline의 post는 거부 함수, 인증 헤더는 빈 객체다. T0·누락 설정·길이 측정·fingerprint·gate 검사를 유지한다. test 일부 완료는 채점/비교/보존/파생할 수 없다.
+- replay의 final 존재 거부를 우선한다(계획 2판 C6와 충돌). 멱등 복사는 offline 전에만 가능하며 원 copied_at·reason을 보존한다. 다음 전송은 일반 run으로 재개한다.
+- 원 시각·토큰을 재사용해도 실패율·지연 모집단은 새 final에서 계산한다. 파생 판 final의 derived_from은 새 run 경로로 바뀌므로 C3는 출처 치환·threshold dev 해시 제외를 적용한다.
+- audits/replay_20261019의 C2/C3/C4 도구는 원문 없는 집계만 출력하며 실제 데이터 실행은 별도 작업이다. 기존 audits는 수정하지 않는다.
+
+(판 4 기록의 현행 규칙을 통합, 판 5 보정 3)
+
+보정 3 운영 재채점은 원본 B1 main_20261016T173256·pplx main_20261018T143611의 attempts를 새 run으로 복사한다. main_20261019T110043은 회귀 비교 기준이다. 파생 actions_only는 새 full로부터 만들며, source/target files·요청 SHA 비교를 완화하지 않는다. (판 5 보정 3)
+
+#### 5-5e. 실행·파생·기록 예산
+
+`run_stage` 전에는 반드시 `gate.prepare_stage`를 호출한다. 실행기는 tail 복구·fingerprint·seal을 하지 않는다. 모든 항목(완료 항목 포함)의 계획과 기존 시도를 먼저 대조하고, 통과 후 빈 기록 파일 생성→측정→post→attempt fsync→대기/다음 호출→final fsync 순서다. 부모 폴더는 gate가 만든다.
+반환은 **RunSummary만**이다. records 읽기 경고는 재반환하지 않으며 gate의 경고를 호출자가 보존한다. `n_calls`는 이번에 처리한 호출 수(로컬 오류·복구 포함, 완료 final skip 제외), `by_status`는 이번에 쓴 final만 센다. `session_id`는 호출자가 프로세스별 UUID4를 한 번 만들어 전달하고 재개 프로세스에서는 새 값으로 바꾼다.
+non-terminal 재개는 잠 없이 다음 기록 번호로 전송한다. 기록 k 다음 전송(k+1)이 fsync 전에 중단되면 재개는 **같은 k+1**을 사용한다. 실제 전송 1회 추가가 가능한 기록 예산의 한계이며 cost는 미기록 전송을 관측할 수 없다. 5회째 non-terminal 복구는 과거 attempts를 고치지 않는다.
+`derive_stage(full_finals, items_full, action_qids, derived_from)`는 완료 ID 집합을 대조한다. 파생 호출의 attempts·usage·length는 원본 관측값을 유지하며, 논리 상태는 제거된 B1 호출의 오류도 보존한다. 호출자가 separate 모델·같은 단계의 전체판을 선택하고 파생 판 자체의 gate/threshold/seal을 적용한다(⑥b).
+`io.derived_stage.write_derived_stage`도 gate 통과 뒤 호출한다. 출처가 일치하는 final 접두 기록은 이어 쓰고, 변경/중복/실제 attempts는 쓰기 전에 거부한다. `derived.json`을 final append 전에 기록하므로 중단 후 재개가 가능하다. 빈 단계도 final·빈 attempts·출처 파일이 생긴다.
+⑥a-2a cost는 `<stage>/derived.json`에서 전달받은 `derived_from`으로 파생을 판별하고 **모든 수치 0·p50/p95 null**을 적용한다. 남긴 CallRecord의 attempts/usage를 비용으로 합산하지 않는다. population/risk는 보존된 final 상태와 파생 Item을 사용한다.
+
+(기존 구현 기록의 현행 규칙을 통합, 판 5 보정 3)
+
+read_stage_finals는 (records, warnings)를 반환한다. extra 진입은 test 대표 완료와 존재하는 seal의 정합성을 검사하는 기존 gate 규칙을 유지하며, score/compare/archive는 별도로 유효한 seal을 요구한다. gate의 선검사는 단일 실행자 기준이고 외부 동시 변경의 트랜잭션 격리를 제공하지 않는다. fixture의 봉인 전 첫 진입과 설치된 seal의 resume 기대값은 구분한다. (기존 구현 기록, 판 5 보정 3)
+
 ### 5-6. 비공개 보존 (커밋하지 않는 재현 자료)
-- 실행이 끝나면 `jev_test/archive/<run_id>.tar.zst` (git 제외) 를 만든다: `dev/`·`test/`·`extra/` 의 `attempts.jsonl`·`final.jsonl` · 쓰인 task yaml · 목록 · 분할 파일 · `b1.yaml` · 입력 데이터 파일 해시 목록 + 그 아카이브의 sha256 을 `fingerprint.json` 에 기록.
+- 실행 종료 후 `archive/<run_id>.tar.zst`에 완료 run의 입력·attempts/final·존재하는 replay 출처를 비공개 보존한다. 아카이브 SHA·목록은 별도 `archive.json`에 기록한다. fingerprint는 불변 실행 입력만 담는다(§8-6 F). (판 5 보정 3: 기존 본문 정정 통합)
 - 입력 데이터 자체는 `jev_test/dataset/<set>/` (git 제외)에 고정 revision 으로 두고, 파일별 sha256 을 `dataset/<set>/SHA256SUMS` 로 남긴다. 재채점은 아카이브 + 같은 해시의 데이터로 한다.
 - 이 자료가 사라지면 재채점은 불가능하다 — 해시는 변경을 알려 줄 뿐 복구하지 못한다. 보관 위치는 이 Mac 의 작업 폴더 하나뿐이라는 한계를 결과에 적는다.
 
@@ -329,9 +495,15 @@ executor는 **전체 계획으로 기존 resume 검사**를 한 뒤, 논리 요�
 - FunctionChat 만 (`datasets.yaml` 의 "606행 F1·처리율은 기술 통계"). 다른 셋은 대표만 돌린다.
 - extra 는 임계값·인증에 쓰지 않는다. 시험 단계 뒤에 돌리고, `scores.json` 의 `all_rows` 모집단(dev 대표 + test 대표 + extra)에만 쓴다.
 
+#### 6-1a. 단계 판정의 단일 소유자
+
+`contract/stages.stage_names(set_name)`은 fc_call_decision에만 dev/test/extra, 그 밖에는 dev/test를 반환한다. `supports_extra`는 같은 목록에서 판정한다. split 생성의 기존 extra 플래그 조건과 FunctionChat builder의 allow_extra는 유지한다. overlay·가족 별칭의 extra 실행은 미지원이다. 확장하려면 역사 fingerprint에 당시 단계 해석을 결합하는 별도 개정이 먼저 필요하다. context.stage의 직접 비지원 extra 진입도 읽기 전에 거부한다. (판 5 보정 3)
+
+FunctionChat 도구 지표·관측·bootstrap 의미 분기는 이 소유와 별개이며 변경하지 않는다. 기존 archive의 잔존 extra 폴더 보존 조건과 빈 단계 의미도 유지한다. (판 5 보정 3)
+
 ### 6-2. 항목 만들기 순서 (판 3)
 
-kosgd2 선정·exclude는 문서 끝 §6-2 추가 계약을 따른다.
+kosgd2 선정·exclude·이미 반영된 D1a의 현행 규칙은 이 절의 §6-2a를 따른다. (판 5 보정 3)
 `io/sources/<set>.py` (원본 → `SourceRow` 목록) → `data/grouping.py` (`SourceRow` 목록 + 묶음 규칙 → `{row_id: group_id}`, **전체 행을 본 뒤에** 정한다 — FunctionChat 연결요소) → `data/items/<set>.py` (`SourceRow` 들 + `group_id` + `TaskSpec` + 목록 + `SplitPlan.diagnostic_demotions` → `Item`, 순수).
 - `Item` 을 만들 때 **질문을 펼치고 질문마다 정답을 붙인다** (`BoundQuestion.gold`). 정답은 `score/labels.py` 의 등록 규칙 `label_rule(rows, binding) -> str | None` 이 만든다 — `binding` 은 펼친 질문의 재료 (`{k, ASPECT}` 등, 정적 질문은 `{}`).
 - KOTE 강등 감정은 이때 `role = diagnostic` 으로 바꾼다.
@@ -354,11 +526,37 @@ kosgd2 선정·exclude는 문서 끝 §6-2 추가 계약을 따른다.
 
 ---
 
+#### 6-2a. kosgd2 선정·T0 동결 경계
+
+선정은 개정 15 절차 그대로다: ID 정렬·옛 대화 제외·USER 없는 대화 제외·seed 20261019의
+연속 choice. 저장 ID 이외 발화·라벨 원문은 출력하지 않는다. fixed_selection.exclude의
+path/field/by=dialogue_id는 로더가 읽고 순수 pool이 교집합 0을 검증한다. 다른 턴도 거부한다.
+make_splits는 전역 seed=20261012/dev_fraction=0.2를 유지한다.
+ongoing_two gold는 완전한 service/intent ID를 중복 제거한 fixed_gold의 비NONE 개수가 2인가다.
+UNKNOWN/3개는 거부하며 기존 ongoing_slot_1/2의 의미는 그대로다.
+
+(판 5)
+
+kosgd2 항목과 기존 규칙은 configs/sets/kosgd2.yaml로 이동한다. task 두 개·문구·라벨 의미와 T0 fixture는 보존한다.
+pool.exclude에 `{path: configs/t0/fixture_v1.json, field: cases, by: state_ref}`를 추가한다.
+state_ref의 KoSGD/kosgd2 참조는 row_id의 # 앞 대화 ID로 해석하므로 다른 턴도 제외된다.
+선정은 옛 풀 대화를 먼저 제외한 뒤 ID 정렬 순서대로 모든 USER 보유 후보에서 rng.choice를 한 번씩 소비한다.
+T0 대화도 RNG를 소비한 다음 결과에서만 제거한다. 따라서 나머지 대화의 대표 턴은 유지된다.
+fixture 또는 참조 원본 대화가 없거나 T0 대화가 옛 풀과 겹치면 거부한다.
+사유는 frozen_boundary_t0_out_of_pool(동결 경계 — T0 fixture의 풀 밖 조건)이며 정답률과 무관하다.
+선정 산출물에는 T0 fixture SHA와 제외 건수를 추가한다. 분할 생성도 같은 제외 집합을 읽고 pool이 교집합을 거부한다.
+
+(판 5 보정 1)
+
+기준 249f096에서 selection은 이미 1,200대화이고 split은 dev 240/test 960이며 26_00068은 제외되어 있다. 이번 리팩터는 selection/split/task/T0 fixture를 변경하거나 재생성하지 않는다. 1,201대화 보존본·재생성 예정이라는 문장은 당시 이력이다. 나머지 대표 턴 보존과 dev/test 소속 보존은 다르며, 같은 seed/fraction 재분할이 개별 소속 보존을 뜻하지 않는다. (판 5 보정 2)
+
+D1=A는 사용자 승인(10-19)이며 T0 실행·노출 검증 완료를 뜻하지 않는다. T0 실행·노출이 드러나면 동결 경계를 재검토한다. T0는 동일 가족 평가 풀 전체의 합집합을 제외하고 필요한 가족 split이 없거나 풀 밖 후보가 없으면 거부한다. 임의 합성 대체·재표집으로 풀 밖 조건을 완화하지 않는다. (판 5·보정 1·보정 2)
+
 ## 7. 채점
 
 ### 7-1. 셋별 적용표
 
-kosgd2의 성공10/진단3 역할은 문서 끝 §7-1 추가 계약을 따른다.
+kosgd2 full은 성공 10·진단 3, actions_only는 성공 8·진단 2다. 진단은 성공 손실과 min confidence에서 제외되지만 요청 유효성·길이·비용에는 영향을 준다. (판 5)
 요청 오류 $\ell_i$ = 성공 질문 중 **정답이 있는 것**($M_i$) 하나라도 틀림 (KoSGD 칸 예외). 확신 $s_i = \min_{j \in J_i}$ 질문 `confidence` (**성공 질문 전체** — 정답 유무와 무관). $v_i = 1$ iff 상태 `ok`.
 
 | 셋 (판) | 성공 질문 | 진단 | 질문별 F1 | 보정 |
@@ -417,6 +615,43 @@ kosgd2의 성공10/진단3 역할은 문서 끝 §7-1 추가 계약을 따른다
 - `b_flip` 은 MEETS 일 때만, 아니면 null. NO_THRESHOLD 면 `t_star`·`test.n_accepted`·`k_errors`·`U` 는 null, `coverage = {num: 0, den: n_denom}`.
 - 판 2 의 `test.groups/n/k` · `accepted_mix: {분포}` 는 위 필드로 바꾼다.
 
+### 7-4b. 질문 단위 위험과 등록
+
+QuestionOutcome는 요청 identity/stage/status/valid와 question_id/role/label/qtype/gold/answer/
+confidence/wrong/present/length_max/meta를 담는다. FinalRecord+Item에서 생성하며 요청 valid를 상속한다.
+KoSGD는 ongoing_bundle 하나로 min confidence와 judge_slots 오류를 사용한다. 부분 MISSING은 거부,
+동시 MISSING은 해당 분모 제외. KorFin aspect_k는 위치별로 따로 계산하고 미존재도 기록한다.
+분모는 존재하고 gold 있는 묶음 전체(무효 포함); false/NONE은 MISSING이 아니다.
+threshold.select 및 CP/n_min 상태 경계를 재사용한다. risk_cell 전체의 Item 가정은 사용하지 않는다.
+주 표와 diagnostic 표를 분리하고 τ마다 t_star/n_accepted/k_errors/U/status/coverage를 기록한다.
+claims는 per_question_marginal, confidence_level=0.95, simultaneous=false. 질문을 골라 전체 결론으로 쓰지 않는다.
+
+(판 5)
+
+overlay는 선택적 최상위 `analysis: configs/analysis/<name>.yaml`을 허용한다.
+SetEntry.analysis와 evidence_paths가 manifest를 첫 fingerprint에 넣으며 task·구현 code SHA도
+기존 fingerprint가 결합한다. 공용 셋에는 선언을 추가하지 않으며 항상 exploratory다.
+전역 v1 기본 정책은 유지하고 overlay의 v2만 registered를 선언한다.
+
+순서: dev 완료 → 일반 threshold → question-threshold → 첫 test 진입.
+question_threshold/1은 identity·fingerprint SHA·manifest 경로/SHA·dev final SHA·질문/τ 집합·
+by_question t_star를 기록한다. 기존 파일을 덮어쓰지 않는다. test 아래 seal/question_seal/
+attempts/final/derived/replay 중 하나라도 있으면 빈 파일도 시작으로 보아 새 등록을 거부한다.
+등록을 선언한 overlay의 test는 question_threshold가 없으면 거부한다(누락을 조용히 탐색적으로 내리지 않음).
+
+모든 선검사 후 question_seal을 주 seal보다 먼저 쓴다. 둘 사이 중단, 주 seal 삭제,
+질문 seal 삭제·교체·다른 실행 복사는 손상이며 사후 봉인으로 복구하지 않는다.
+현재 run 질문 위험은 registered/exploratory/registration_damaged를 구분한다. registered는
+봉인된 threshold 파일의 t_star를 적용하며 dev 재계산이 같아야 한다. 손상은 수치를 쓰지 않는다.
+report도 같은 순수 사슬 검사와 독립 재계산을 사용한다. 주 certify는 주 지표 봉인만 인증하며
+질문 지위와 별개다. 역사 --history는 exploratory이고 기존 question_risk 파일 덮어쓰기를 거부한다.
+이는 파일 소유자가 모든 증거를 함께 위조하는 공격의 암호학적 방지가 아니다. 신뢰 경계는
+동결 커밋과 최초 fingerprint 보존이며 timestamp 하나로 등록 선후를 증명하지 않는다.
+
+(판 5 보정 2)
+
+manifest 경로와 실제 SHA를 기록한다. 현재 run은 context.completed, 역사 분석은 verified_complete 역사만 허용한다. 공용 셋과 역사 분석의 exploratory, 유효한 overlay 사슬의 registered, 손상 사슬의 registration_damaged를 구분한다. 등록 선언 셋의 threshold 누락을 exploratory로 낮추지 않는다. Phase A의 “항상 exploratory”와 “증거 없으면 exploratory”는 당시 미등록 범위의 설명이다. (판 5·보정 2)
+
 ### 7-5. 임계값 (`threshold.json`, 판 3)
 ```
 {schema: "threshold/1", model, set, variant, run_id,
@@ -431,7 +666,7 @@ kosgd2의 성공10/진단3 역할은 문서 끝 §7-1 추가 계약을 따른다
 
 ### 7-6. 점수 (`scores.json` = `ScoreTable`) 와 비교 (`compare.json`) — 판 3
 
-판 5 공개 보고 규칙은 문서 끝 §7-6 추가 계약을 따른다.
+공개 보고와 감사 증거 연결 규칙은 이 절의 §7-6a를 따른다. (판 5 보정 3)
 비율은 전부 `{num, den}` 으로 적는다 (채점 코호트 분모와 처리율 분모가 섞이지 않게). 값(소수)은 보고서가 계산한다.
 
 ```
@@ -470,6 +705,44 @@ QStats = {role, type, n_scored, n_missing, accuracy: {num, den}, macro_f1 | null
   - 공통 코호트는 비교 모델 전부(B1 포함)가 `ok` 인 시험 `logical_id` 의 정확한 교집합. ID 목록은 정렬해 해시만 적는다.
   - bootstrap (§7-7) 결과.
 
+#### 7-6a. 공개 보고와 감사 연결
+
+검증 완료 주 지표의 MEETS만 인증. 나머지는 관측이며 손상은 사유만, 미완은 단계 수량만 낸다.
+U는 표시만 소수 4자리이며 판정은 저장 status를 사용한다. 질문 acc/F1/ECE(p[answer])·양성
+support/predicted/tp를 낸다. support<30은 희소 양성 해석 제한 주석이며 역할·점수는 불변이다.
+KoSGD 유형 우선순위는 중복 > 동수 다른 집합 대체 > 진상위집합 추가 > 진부분집합 누락 > 기타.
+그리드는 정답 서로 다른 비NONE 수 × 예측 비NONE 칸 수, 중복 일치는 유일 정답과 같은 값이다.
+공통 오류는 동일 셋/판/단계의 유효 ID 교집합이며 교집합 크기와 양쪽 제외 수를 함께 낸다.
+compare는 정확한 사용자 지정 ID와 모델·셋·판으로만 연결한다(run 귀속은 증명 불가).
+coverage CI는 τ=0.02 전체 test 대표 분모, F1 CI는 공통 ok 코호트다.
+
+(판 5)
+
+보고 renderer는 Report.audit_notes만 받으며 파일을 조회하지 않는다. 감사 입력의 task/split/lists
+SHA가 보고 run과 같을 때만 요약하며 불일치는 “감사 증거 연결 불가”다. 새 보고서는 기존 파일을 덮어쓰지 않는다.
+
+(판 5 보정 2)
+
+보고는 감사의 고정 경로 out/<set>.json만 읽는다. 역사로 이동한 감사 파일을 자동 탐색하지 않으며, 사후 호출 연결은 model/variant/run_id가 맞는 저장 호출 대조를 요구한다. 감사 source SHA가 바뀌면 script 출처도 바뀐다. 보정 3 운영은 재채점 → 감사 및 새 run 연결 검증 → KLUE question-risk → 새 파일 report 순서다. 기존 보고서·감사 증거를 덮어쓰지 않는다. (판 5 보정 3)
+
+#### 7-6b. 채점 호출자의 입력·모집단 경계
+
+score/tasks는 KoSGD 한 칸만 MISSING이면 상태와 무관하게 거부하고, 두 칸 모두 MISSING이면 묶음을 마스크에서 뺀다.
+score/threshold의 호출자는 dev_complete를 통과한 dev 결과와 원본 바이트 sha256·nbytes를 넘긴다. certify의 현행 검사·쓰기 규칙은 §8-6 E를 따른다.
+score/risk도 완료된 dev/test 대표 집합을 받는다. stage·중복 대표·Item ID·threshold/dev 집계를 대조하고 시험으로 임계값을 다시 고르지 않는다.
+위험의 세부 분포도 빈 마스크를 제외한다. 길이 미측정 로컬 오류는 unmeasured에 세며 다섯 칸 sampled 합은 test.n_denom이다. valid 요청에는 측정 길이가 필요하다.
+n_min은 (1-tau)**n <= 0.05를 Fraction으로 비교한다. b_flip은 MEETS에서만 쓰며 바꿀 정답이 없는 k=n 입력은 ValueError다.
+risk_file은 세 tau의 RiskCell을 일반 JSON dict로 복사한다. cost_by_stage는 Cost 객체를 유지하며 ScoreTable.to_dict()/io.run_files.json_bytes가 중첩 값을 직렬화한다.
+cost 호출자는 완료 final과 연결된 시도, 명시적 kind(b1/systemone), 단계 derived.json의 출처를 전달한다. 토큰은 CallRecord.usage가 아닌 마지막 terminal의 원문에서 읽고 미측정 호출도 missing에 센다.
+
+⑥a-2b population 호출자는 test 대표 또는 FunctionChat dev+test+extra를 골라 outcomes/finals를 넘긴다. 두 ID 집합은 같아야 하며 Item은 빈 공통 코호트에도 질문 틀을 남기도록 상위 집합을 허용한다. outcome을 final/Item에서 재계산해 대조한다. 요청 오류와 KoSGD 묶음 정답은 칸별 고정 정답 점수와 분리한다. 칸 없는 행동판 set_specific은 {}다. 질문 경고는 ok ParsedAnswer의 answer/probs에서 다시 세며 정답 MISSING도 경고 집계에는 남는다.
+qstats의 tool은 동결 FunctionChat 도구 질문 ID다. population은 fc:tool 라벨로도 이를 식별한다. KorFin은 관측을 먼저 합쳐 pooled.aspect를 계산하고 aspect_not_in_text.wrong도 {num,den}으로 남긴다.
+compare 호출자는 check_comparable로 분할/task sha와 시험 ID 집합을 확인한 뒤 common_cohort(..., "test")를 사용한다. FunctionChat 전체 행 F1에는 common_cohort(..., "all_rows")를 별도로 쓴다. compare_file의 공통 Population은 test 기준이며 bootstrap 결과는 별도 전달한다. ID 해시는 정렬 ID를 LF로 연결한 UTF-8 바이트(끝 LF 없음)의 SHA-256이다.
+F1 입력은 gold 있는 ok Observation만 만든다. KoSGD gold는 고정 칸 정답, KorFin pooled 관측은 question_id="aspect"로 바꾸되 요청당 여러 관측을 유지한다. f1_diff는 전달된 코호트·질문의 관측을 묶음 단위로 재표집하며 모델별 정답/관측 다중집합이 다르면 거부한다. coverage_diff는 같은 시험 대표 ID·묶음·마스크를 요구하고 빈 마스크만 제거한다. 실패는 수락 0, NO_THRESHOLD도 수락 0이다.
+bootstrap 반환은 {models, n_groups, reps, pairs}; F1은 question_id도 포함한다. pairs의 각 셀은 {models: [a,b], estimate: a-b, ci95: [lo,hi], n_defined}이며 모델·묶음은 정렬한다. 95% 백분위는 비용 백분위와 같은 (n-1)p 선형 보간이다. 정의되지 않는 빈 모집단의 estimate/CI는 null이며, 정의되지 않은 반복을 버려 조건부 CI로 만들지 않는다.
+
+(기존 구현 기록의 현행 규칙을 통합, 판 5 보정 3)
+
 ### 7-7. 통계 설정
 - 모델 간 차이: 묶음 단위 paired bootstrap, 2,000 회, `random.Random(f"{seed}:boot:{set}")`, 임계값은 고정(다시 고르지 않는다). 처리율·F1 차이에만.
   - 인증 처리율 차이: 시험 묶음 대표.
@@ -487,7 +760,7 @@ QStats = {role, type, n_scored, n_missing, accuracy: {num, den}, macro_f1 | null
 
 ### 8-1. 규칙
 
-판 5 모듈/CLI 추가 목록은 문서 끝 §8-1 추가 계약에 있다.
+추가 모듈·CLI·공개 실행기와 ItemFields 경계는 이 절의 §8-1a를 따른다. (판 5 보정 3)
 - **파일 하나 = 기능 하나.** 첫머리 docstring 에 "무엇 · 입력 · 출력 · 이 계약의 몇 절". 그 파일만 열어도 고칠 수 있게.
 - 판 4 모듈: `run/cmd_replay.py`는 복사 명령 조립·쓰기 순서, `run/replay_check.py`는 순수 fingerprint/파일 완결 검사, `io/run_files.py`는 바이트 읽기·원자 복사다. offline 항목 미룸은 기존 `run/executor.py`가 소유한다.
 - **작게**: 파일 ≤ 200 줄, 함수 ≤ 50 줄 정도.
@@ -497,6 +770,78 @@ QStats = {role, type, n_scored, n_missing, accuracy: {num, den}, macro_f1 | null
 - **기능마다 짝 테스트** `tests/<폴더>/test_<파일>.py` + 경계마다 통합 테스트 하나. GPU·서버 없이 fixture 로 돈다. 한 기능을 고치면 그 단위 테스트와 해당 경계 통합 테스트를 같이 돌린다. 명령 모듈(`run/cmd_*.py`)도 짝 테스트를 둔다 — 검증·분기·쓰기 순서가 있으므로 통합 테스트로 갈음하지 않는다; 순수 조립만 하는 `run/cli.py` 는 통합 테스트(`tests/run/test_cli_*.py`)로 갈음한다. 공개 함수가 있는 `__init__.py` 는 `tests/<폴더>/test_init.py` 가 짝이다. 같은 패키지 안 상대 import 는 허용하며 의존 방향은 모듈 그래프(`io/score/data/contract/types/t0/client` 에서 `run` import 0)로 검사한다.
 - **설정은 코드 밖**: 문구·선택지·라벨·재시도·cap 은 yaml. 코드에 박지 않는다. 라벨 **어휘**(KoSGD act·K-MHaS·KOTE 목록)도 yaml 이 단일 출처이고 코드의 정답 규칙 등록표는 그 어휘로 만든다 (10-17 이행: 재시도 `configs/policy.yaml`, 라벨 어휘 `configs/datasets.yaml` 의 `label_vocab`, T0 허용폭 `configs/t0/tolerance_v1.yaml`). yaml 로 옮긴 값은 fingerprint(`run/fingerprint.py` 파일 목록 또는 T0 chain) 에 넣는다. FunctionChat 정규화 문장도 `configs/tasks/lists/functionchat_normalization.json` (10-17). **설정이 아닌 상수**(계획·프로토콜·구현이 정함, 코드에 둔다): 길이 구간 4096/8192/16384 · timeout 600초 · choice 255 · ECE 15 bin · bootstrap 2,000 · 위험 95% · τ 집합 · T0 8/17 질문 배치 · B1 누락 로그확률 −9999 · CLOSE=GOODBYE+THANK_YOU · 경계 빌더 filler/탐색 상한 · 인코더 무제한 sentinel · 반올림 자리 상한 16 · 수치 오차 rel_tol 1e-12.
 - **`jeveval/README.md` 기능 지도**: 파일마다 한 줄 + 의존 방향 `run → client/io → score/data/contract/t0 → types` (거꾸로 금지; `t0/` 는 §8-7 T-b 의 순수 층). 기능을 옮기거나 나누는 커밋은 지도를 같이 고친다.
+
+#### 8-1a. 추가 경계와 CLI
+
+types/history·report·QuestionOutcome를 경계로 사용한다. io/history·history_inputs·report_inputs·analysis는
+파일 읽기, io/report_markdown은 Report→문자열, run_files.write_text는 원자 쓰기다.
+run/history_check는 순수 증거 검사, history_stage는 재구성 검증, cmd_report·cmd_question_risk는 조립이다.
+score/report_tables·report_extras·kosgd_decompose·question_outcomes·question_risk는 순수 계산이다.
+파일 schema/그 조립 통계 dict 예외는 기존 §8-1과 같고 보고 도메인은 frozen dataclass다.
+CLI: report --run-id ID --models ID... [--results DIR] [--compare-id ID...] [--note-unrun ID...] [--out FILE.md]
+및 question-risk --run-dir DIR [--history]. 모델 호출·원본 수정은 하지 않는다.
+
+(판 5)
+
+SetEntry는 types/set_config.py의 frozen dataclass다. io/set_config.py는 entry/catalog/evidence_paths,
+contract/set_overlay.py는 순수 스키마 검사, io/set_tasks.py는 소유 task·primary 경계를 맡는다.
+data/exclusions.py는 순수 대화 ID 해석이며 io/sources/kosgd.py가 제외 파일을 읽는다.
+reader 호출자는 이미 읽은 SetEntry를 전달해 checked_family에서 설정을 중복으로 읽지 않는다.
+원시 cfg를 직접 받는 하위 reader의 독립 합성 시험에서는 기존 공용 datasets 대조를 유지한다.
+make_splits의 --rules 및 --datasets, item_summary의 --rules/--datasets는 사용자 지정 공용 경로를 받으며
+root 아래 configs/sets에서 overlay를 찾는다. 모든 overlay 내부 경로는 root 기준이다.
+선정 CLI는 --t0-fixture가 필수이며 기존 출력 덮어쓰기는 거부한다. 실행 예시는 계획 보정 절을 따른다.
+
+(판 5 보정 1)
+
+파일 I/O는 io, 순수 질문 선택/적용은 score, 등록 검사/봉인 조립은 run을 따른다. (판 5 보정 2)
+
+`execute_call(plan, history, *, cfg, measurer, post, sleep, session_id, headers, timeout, policy, record)`는 검증된 history를 받는다. post → record 정상 반환 → history 추가 → terminal/대기 순서다. 영속 sink의 flush·fsync는 sink 책임이며 run_stage는 호출 시점의 records.append_record를 partial로 전달한다. record 예외는 그대로 전파하고 로컬 오류·복구에서는 record를 부르지 않는다. 전체 resume 검사와 offline 논리 요청 전체 미룸은 run_stage가 소유한다. (판 5 보정 3)
+
+내부 `ItemFields(state_fields, questions, meta, baseline)`는 frozen dataclass이며 fields는 기존 deepcopy를 보존한다. assemble은 기존 Item 필드를 명시적으로 생성하고 Item에 새 중첩 필드를 넣지 않는다. T0와 라벨 없는 파일럿 입구는 이 변경을 통과하지 않는다. (판 5 보정 3)
+
+#### 8-1b. 라벨 없는 파일럿
+
+라벨 없는 DialoguePrefix(frozen) → data/items/kosgd_requests.build → Request가 파일럿 입구다.
+reader는 speaker/utterance만 투영하며 gold/baseline을 계산하지 않는다. 원 JSON의 라벨 바이트가
+같은 파일에 존재할 수는 있으나 투영·선정·요청·응답 판정에서 사용하지 않는다.
+ID는 kosgd2_pilot:<dialogue_id>:<turn_index>이며 정식 split 대표를 가장하지 않는다.
+
+파일럿 모델은 pplx_v1_1/B1 BF16, 질문은 kosgd2 full 13개다. 동일 200 논리 ID를 요구한다.
+중복/여분 ID는 거부하고 누락 논리 요청 또는 B1 호출 누락은 INCOMPLETE다. 명시된 호출의 HTTP
+비200/검증 실패/응답 null은 무효이며 B1 하나라도 실패하면 논리 요청 전체 무효다.
+유효 요청의 두 비NONE 칸이 같으면 중복이다. 모델별 중복≤10 및 무효≤10일 때만 PASS다.
+manifest는 선택/task/model/b1/lists/요청 SHA를 묶는다. 원응답 입력은 모델→논리 기록 목록이며
+각 기록은 logical_id와 calls, 각 call은 call_id/request_sha256/http_status/raw다.
+게이트는 원 manifest를 보존하고 출력에 응답 SHA 및 completed_manifest를 함께 남긴다.
+자동 전송/재시도 기능은 제공하지 않는다.
+
+(판 5 보정 2)
+
+파일럿 RNG 호출 순서: 옛 풀 유일 대화 3,000 ID 정렬 → Random(20261019).sample(...,200) →
+선택 ID 재정렬 → 같은 RNG로 각 대화 USER index 오름차순 목록에서 choice 한 번.
+T0/새 풀과 충돌하면 재표집하지 않고 거부한다. Python 버전과 입력/선정 해시를 기록한다.
+파일럿 선정 CLI의 실행과 실데이터 감사 실행은 Claude가 수행한다. 이번 구현자는 합성 fixture만 실행한다.
+
+두 모델 각각 중복≤10 및 무효≤10인 한 번의 게이트만 허용한다. 실패하면 사용자에게 알리고 멈추며 seed·표본·문구를 바꿔 재시도하지 않는다. 정확도 관찰·튜닝을 하지 않는다. (판 5 보정 2)
+
+#### 8-1c. 타입·구현 기록에서 통합한 현행 세부 규칙
+
+모든 dataclass는 frozen이다. 내부 list/dict까지 불변인 것은 아니다. JsonRecord의 from_dict는 중첩 타입을 복원하고 별칭 없는 사본을 만들며 알 수 없는 필드·필수 필드 누락·비선택 필드의 null·잘못된 타입·NaN/Infinity를 거부한다.
+B1Response는 메모리 로그확률의 -inf를 JSON 왕복 때만 "-inf"로 인코딩하고 복원한다. CallRecord.top_logprobs_raw에는 storable_top_logprobs가 만든 사본을 넣는다.
+ThresholdFile은 by_tau 키와 값의 tau가 같은지도 검사한다. 요청·응답·채점 도메인 검사는 contract/score, 순수 상태 결합은 run/outcome, 전송·기록 순서 제어는 executor의 책임이다.
+
+load_taskspec은 TaskSpec을 반환하며 오류 목록은 TaskSpecError.errors에 담는다. task yaml의 score 질문은 기존대로 오류 목록이며 NotImplementedError로 바꾸지 않는다.
+per_item_questions의 충돌 검사는 k 상한 없이 앞자리 0 없는 양의 정수를 대조한다. 실제 질문 펼치기와 중복 재검사는 data/expand가 수행한다. 무상한 패턴 충돌은 taskspec이 검사한다.
+Request가 봉투 구조를 보장하고 build_request가 질문 ID 중복을 거부한다. systemone criteria는 options 순서를 보존하며 B1만 코드포인트 순서로 라벨을 배정한다.
+usage 없음/null은 usage_input_tokens_invalid 경고를 내지 않는다. 추가 봉투 키 경고는 별도다. 응답 검증 실패 시 answers는 None이며, 그때까지 수집한 경고는 중복 없이 보존한다.
+B1 allowed_token_ids는 client가 채운다. calibrate의 모집단 구성은 호출자 책임이다. client는 재시도·terminal·상태 결합을 결정하지 않는다. 본문 수신 오류는 HTTP 코드와 함께 남긴다. headers는 전송에만 사용하고 Content-Type 덮어쓰기·머리글 값의 예외 메시지 노출을 막는다.
+missing_for_run의 B1 라벨 인자는 b1.yaml에서 읽어 전달한다. 생략하면 incomplete로 판정한다.
+timeout은 소켓 단위이며 총 소요 시간 상한이 아니다. clock.utc_now()는 aware datetime을 돌려준다.
+resume은 append 전에 repair_tail을 호출해야 한다. read_attempts/read_finals는 파일을 바꾸지 않는다. 재시도 5회는 기록된 시도 기준이다. 전송 뒤 fsync 전에 중단되면 실제 전송이 더 일어날 수 있다.
+call_record는 상한에 이른 non-terminal도 재전송 없이 복구하며, 상한 초과·기록 연결 불일치는 거부한다.
+
+plan_calls·length·policy·outcome·resume_check·derive는 순수 함수다. 과거 NOTES의 “systemone 측정 NotImplementedError”는 당시 구현 상태다. 현행 길이는 §2-2a와 모델별 인코더 규칙을 따른다. (판 5 보정 3)
 
 ### 8-2. 구성
 ```
@@ -627,9 +972,17 @@ PoolResult(group_ids: list[str], allocation: dict[str, int])          # data/poo
 - (T-i) **본시험 연결**: 도구는 모델 yaml 을 쓰지 않는다. 순서 — T0 판정 확정 → 사람이 `t0: {status, record: {path, sha256}}` 를 yaml 에 반영 → **그 모델의 본시험 첫 fingerprint 전에** 동결 (dev 시작 뒤 바꾸면 resume·score 복원이 거부된다). `run` 은 `t0.status == passed` 일 때 record 파일 존재·sha 일치·`t0.json.status == PASS`·`config_sha256` 이 지금 yaml (t0 제외) 과 같음을 확인하고, 아니면 거부한다. `passed` 가 아니면 지금처럼 실행은 하되 summary·compare 가 표시한다.
 - (T-j) **외부 코드 지문** (Codex 10-14): `fingerprint.external = {저장소 루트(model_test) 상대 경로: sha}` 를 `files` 와 따로 — 지금은 `reranker_test/evalcommon/schema.py`. `fingerprint.env = {python, numpy, scipy, zstandard, pyyaml 버전}`. archive 는 외부 파일을 `_external/<경로>` 이름으로 넣는다 (`inside` 검사를 느슨하게 하지 않는다).
 
+#### 8-7a. 로컬 측정과 항목 검증의 세부 경계
+
+P0-B1: null/빈 해시 목록은 미확정으로 거부한다. user는 하나이며 state 접두사·trim 뒤 본문의 유일성을 검사하고 앞 공백만큼 state 범위·대상 끝을 보정한다. 전부 공백 state·state로 끝나는 user·state까지 침범하는 뒤쪽 trim은 거부한다. offsets는 start 비감소·0 ≤ start ≤ end를 요구하며 겹침·반복을 허용하고 대상 문자를 덮는 마지막 토큰 다음 번호를 반환한다. state 시작 경계를 가로지르는 음수 상대 offset은 ValueError이며 임의로 자르지 않는다.
+
+작업 ③b: 반박 반영 R1–R6 구현. extra 의미 검사는 구성원 소속을 검사한다. 라벨 변경 감지는 fingerprint 입력 해시 검사로 남긴다. 정답 규칙은 누락을 MISSING으로 대체하지 않는다. 요약은 dev/test/extra별이며 noul 선택지 수는 2, flag 접두별 항목 수를 센다.
+
+(기존 NOTES의 현행 규칙을 통합, 판 5 보정 3)
+
 ## 9. 최소 fixture (`tests/fixtures/`, 코드보다 먼저)
 
-판 5 역사/질문/가족 fixture는 문서 끝 §9 추가 표에 있다.
+역사·질문·가족·overlay의 추가 fixture와 리팩터 경계 검증은 이 절의 §9a를 따른다. (판 5 보정 3)
 
 | fixture | 확인 |
 |---|---|
@@ -656,6 +1009,29 @@ PoolResult(group_ids: list[str], allocation: dict[str, int])          # data/poo
 
 ---
 
+### 9a. 추가 fixture와 수용 경계
+
+| 범위 | 기계 확인 |
+|---|---|
+| history/report | identity·seal·연결 해시·중복·여분·절단·원문 canary·입력 무변경·경로 탈출 |
+| question risk | 같은 KLUE의 상태/마스크/confidence/ID/분할이면 핵심 6필드 동치; NO_THRESHOLD·0수락·동률·무효·MISSING·가변 |
+| kosgd2 | family·reader stamp·bundle/by_service·동명 다른 서비스·중복 frame·미지/3의도·exclude 다른 턴 |
+| 보존 | 0906d42 기존 kosgd task/split/모든 lists 해시 고정 |
+
+(판 5)
+
+기존 nodeid를 유지하고 공용 kosgd2 가정은 overlay fixture로 이행한다. 공용 파일은 실저장소의 동결 목록과 대조한다.
+경계 시험은 재정의·중첩 id·family/stem·전역 키·lists·task set·primary 오류, 단일 셋 격리,
+all 무출력·무쓰기, overlay 의존성 해시와 역사 변조 거부, D1a의 RNG 소비·다른 턴 제외·T0 풀 밖 참조를 포함한다.
+
+(판 5 보정 1)
+
+보정 2는 감사 독립성·13종 주입·공통 입력 변조·등록 사슬 복사/삭제/중단·200 파일럿 논리 분모와 10/11 경계·라벨 미접근·연결된 감사 줄·보호 파일 SHA/네트워크 거부를 검증한다. 합성 시험은 외부 oracle의 실데이터 1,200/1,200·모델 응답 게이트·서빙 후 전송 감사를 대신하지 않는다. (판 5 보정 2)
+
+보정 3은 기존 nodeid/skip/xfail을 보존한다. pyarrow 차단 하위 프로세스의 고정 여섯 파일은 test_policy/test_outcome/test_plan_calls/test_length/test_derive/test_layout이며 pytest·PyYAML은 허용한다. 공개 실행기의 sink 예외·복구·fsync 순서, 6셋 Item/systemone/B1 바이트, 현재/역사 단계와 history/report/score/archive/compare의 판정·분모를 합성 기준값과 비교한다. (판 5 보정 3)
+
+구현 종료는 오프라인 구현 검토만 뜻한다. 재채점·실데이터 감사·B 중재·W1 파일럿·최종 primary 확정·실험 동결 완료는 별도 운영 수용이며, 이전 판의 C1~C7 번호와 이번 수용 번호는 판별로 구분한다. (판 5 보정 2·보정 3)
+
 ## 10. P0 에서 확인해 이 문서를 고칠 것
 
 - 10-19 pplx v1.1 confidence 정의 확인(Claude 실측 — HF 사본 autojev/model.py:130 과 실응답 4,825개 대조): 선택 확률의 우연 대비 여유 `(p - 1/n)/(1 - 1/n)`을 0–1로 자른 값. 수락 점수에는 API confidence를 유지하고 ECE만 선택 확률로 분리한다.
@@ -675,7 +1051,7 @@ PoolResult(group_ids: list[str], allocation: dict[str, int])          # data/poo
 
 ## 11. 판 이력
 
-판 5 변경 사유는 문서 끝 §11 판 5 이력에 보존한다.
+아래 이력은 당시의 범위·실행 상태를 보존한다. 현행 규칙을 과거 run에 소급하지 않으며, 원문 보존 블록은 현재 실행 지시가 아니다. 현행 위치와 대체 사유는 CONTRACT_MAP.md를 따른다. (판 5 보정 3)
 
 - 판 1 (10-13): 초안.
 - 판 2 (10-13): Codex 반박 반영 — 잘림 판정 경계 오류(ℓ = L_m 오판, 발화 시작이 아니라 끝 위치) · state 키 이름을 datasets.yaml 로 · 감사 v4 필요 · noul criteria 명시 · 422 원인 분리 · 상태와 사유 분리 · 비공개 보존 · FunctionChat 도구 macro-F1 제외(정답 도구 25/100, 모든 행 6선택지) · KoSGD 칸 보정은 고정 칸 정답 · B1 선택지에 ID · 세 단계 식별자 · terminal 응답 복구 · 판 파생 · 설정 스키마 · 평가 풀 추출 · 코호트 · 검증기 문법 · score 범위 밖 · 원리적 부족은 플래그 · evalcommon 호환 · 상태기계 소유 · 작업 순서. yaml `label_source` 중복 키 수정.
@@ -697,6 +1073,100 @@ PoolResult(group_ids: list[str], allocation: dict[str, int])          # data/poo
 - 판 4 (10-19): 사용자 결정(3안), Codex·grok 검토에 따라 API confidence 수락 점수와 선택 확률 ECE를 분리. pplx choice를 거부하던 값 일치 오류를 통과 요청 경고로 바꾸고 구조·범위 오류는 유지한다. 이전 판 3 머리의 설명은 ‘판 2의 미정 필드 6곳을 채움 — Codex·grok 반박 반영’이었다. 이전 §3-1 규칙 7: `choice` ∈ 선택지, |`confidence` − `probabilities[choice]`| ≤ 1e-9 → `choice_pick`; 이전 ECE 표현: top-label (`confidence` 대 `answer == gold`). 이를 현행 규칙으로 대체한 사유는 두 필드의 모델 정의가 다르기 때문이다. 기존 ‘질문 확신은 confidence’ 결정은 유지한다. 1판 반박 11건을 반영해 replay를 출처 복사와 run --offline으로 분리하고 전체 resume 검사·게이트를 보존했다. 부분 test의 미완료 의미, 파생 판의 출처 경로 정규화, 비용 모집단 재계산, 쓰기 전 검사와 짝 시험을 명시했다. 기존 감사 증거는 수정하지 않고 audits/replay_20261019에 원문 없는 감사 도구를 추가한다. T0 confidence 대조는 아직 범위 밖이며 경고 전달 범위는 Validated까지다.
 
 
+
+### 원문 보존 — 기존 본문 3행 (기준 커밋 d41e8b9)
+
+아래는 당시 원문이며 현행 규칙은 본문과 CONTRACT_MAP.md를 따른다.
+
+````markdown
+작성 2026-10-13 · **판 5** (10-19: Phase A 추가; 판 4 설명 보존: 확신·보정 분리와 replay/offline; 이전 판의 변경 사유는 §11 보존) · 상태: 구현 중
+````
+
+### 원문 보존 — 기존 본문 33행 (기준 커밋 d41e8b9)
+
+아래는 당시 원문이며 현행 규칙은 본문과 CONTRACT_MAP.md를 따른다.
+
+````markdown
+판 5 가족/별칭 추가 계약은 문서 끝의 「§1-1 가족 디스패치」에 있다.
+````
+
+### 원문 보존 — 기존 본문 77행 (기준 커밋 d41e8b9)
+
+아래는 당시 원문이며 현행 규칙은 본문과 CONTRACT_MAP.md를 따른다.
+
+````markdown
+판 5 감사 v4의 실행 명세는 문서 끝 「§2-2 감사 v4 명세」에 있다.
+````
+
+### 원문 보존 — 기존 본문 188행 (기준 커밋 d41e8b9)
+
+아래는 당시 원문이며 현행 규칙은 본문과 CONTRACT_MAP.md를 따른다.
+
+````markdown
+판 5 보고/질문 위험 파일과 역사 읽기는 문서 끝 §5-1·§5-1b 추가 계약을 따른다.
+````
+
+### 원문 보존 — 기존 본문 274행 (기준 커밋 d41e8b9)
+
+아래는 당시 원문이며 현행 규칙은 본문과 CONTRACT_MAP.md를 따른다.
+
+````markdown
+- 실행이 끝나면 `jev_test/archive/<run_id>.tar.zst` (git 제외) 를 만든다: `dev/`·`test/`·`extra/` 의 `attempts.jsonl`·`final.jsonl` · 쓰인 task yaml · 목록 · 분할 파일 · `b1.yaml` · 입력 데이터 파일 해시 목록 + 그 아카이브의 sha256 을 `fingerprint.json` 에 기록.
+````
+
+### 원문 보존 — 기존 본문 334행 (기준 커밋 d41e8b9)
+
+아래는 당시 원문이며 현행 규칙은 본문과 CONTRACT_MAP.md를 따른다.
+
+````markdown
+kosgd2 선정·exclude는 문서 끝 §6-2 추가 계약을 따른다.
+````
+
+### 원문 보존 — 기존 본문 361행 (기준 커밋 d41e8b9)
+
+아래는 당시 원문이며 현행 규칙은 본문과 CONTRACT_MAP.md를 따른다.
+
+````markdown
+kosgd2의 성공10/진단3 역할은 문서 끝 §7-1 추가 계약을 따른다.
+````
+
+### 원문 보존 — 기존 본문 434행 (기준 커밋 d41e8b9)
+
+아래는 당시 원문이며 현행 규칙은 본문과 CONTRACT_MAP.md를 따른다.
+
+````markdown
+판 5 공개 보고 규칙은 문서 끝 §7-6 추가 계약을 따른다.
+````
+
+### 원문 보존 — 기존 본문 490행 (기준 커밋 d41e8b9)
+
+아래는 당시 원문이며 현행 규칙은 본문과 CONTRACT_MAP.md를 따른다.
+
+````markdown
+판 5 모듈/CLI 추가 목록은 문서 끝 §8-1 추가 계약에 있다.
+````
+
+### 원문 보존 — 기존 본문 632행 (기준 커밋 d41e8b9)
+
+아래는 당시 원문이며 현행 규칙은 본문과 CONTRACT_MAP.md를 따른다.
+
+````markdown
+판 5 역사/질문/가족 fixture는 문서 끝 §9 추가 표에 있다.
+````
+
+### 원문 보존 — 기존 본문 678행 (기준 커밋 d41e8b9)
+
+아래는 당시 원문이며 현행 규칙은 본문과 CONTRACT_MAP.md를 따른다.
+
+````markdown
+판 5 변경 사유는 문서 끝 §11 판 5 이력에 보존한다.
+````
+
+### 원문 보존 — 판 5 추가 계약 — Phase A (2026-10-19) (기준 커밋 d41e8b9)
+
+아래는 당시 원문이며 현행 규칙은 본문과 CONTRACT_MAP.md를 따른다.
+
+````markdown
 ## 판 5 추가 계약 — Phase A (2026-10-19)
 
 기존 절의 문장은 역사 실행 규칙으로 보존하며 아래 명시적 추가 사항만 적용한다.
@@ -826,6 +1296,13 @@ CLI: report --run-id ID --models ID... [--results DIR] [--compare-id ID...] [--n
 등록 임계값 봉인·분할 동결은 Phase B로 남긴다. 기존 문서 문장과 감사 폴더는 당시 증거로 보존한다.
 
 
+````
+
+### 원문 보존 — 판 5 보정 1 — 셋 설정 격리와 T0 동결 경계 (2026-10-19) (기준 커밋 d41e8b9)
+
+아래는 당시 원문이며 현행 규칙은 본문과 CONTRACT_MAP.md를 따른다.
+
+````markdown
 ## 판 5 보정 1 — 셋 설정 격리와 T0 동결 경계 (2026-10-19)
 
 판 5 본문과 과거 증거는 보존한다. 아래 보정은 설정 위치·동결 의존성·kosgd2 선정 제외에 적용하며,
@@ -903,6 +1380,13 @@ all 무출력·무쓰기, overlay 의존성 해시와 역사 변조 거부, D1a�
 원인: 판 5에서 공용 설정에 새 셋을 추가해 기존 run의 files 지문이 바뀌었다. 공용 바이트를 복원하고
 새 셋의 의존성을 별도로 동결한다. 구현 단계에서 실데이터 산출물 재생성·재판정·서버 전송·커밋은 수행하지 않는다.
 
+````
+
+### 원문 보존 — 판 5 보정 2 — Phase B 오프라인 구현 (2026-10-19) (기준 커밋 d41e8b9)
+
+아래는 당시 원문이며 현행 규칙은 본문과 CONTRACT_MAP.md를 따른다.
+
+````markdown
 ## 판 5 보정 2 — Phase B 오프라인 구현 (2026-10-19)
 
 이 절은 보정 1 이후의 등록·감사·파일럿 도구 계약이다. 앞선 문장과 실행 이력은 보존하며
@@ -982,3 +1466,4 @@ manifest는 선택/task/model/b1/lists/요청 SHA를 묶는다. 원응답 입력
 각 기록은 logical_id와 calls, 각 call은 call_id/request_sha256/http_status/raw다.
 게이트는 원 manifest를 보존하고 출력에 응답 SHA 및 completed_manifest를 함께 남긴다.
 자동 전송/재시도 기능은 제공하지 않는다.
+````

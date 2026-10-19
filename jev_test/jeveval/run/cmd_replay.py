@@ -3,6 +3,7 @@
 from datetime import datetime, timezone
 from hashlib import sha256
 
+from jeveval.contract.stages import supports_extra
 from jeveval.io import records, run_files
 from jeveval.io.paths import identifier, inside
 from jeveval.run import context, replay_check, stage_inputs
@@ -72,7 +73,7 @@ def run(*, root, model, task, stage, run_id, source_run_dir, results="results", 
     source = inside(ctx.root, source_run_dir)
     if source == directory:
         raise ValueError("source must differ from target")
-    if stage == "extra" and ctx.task.set != "fc_call_decision":
+    if stage == "extra" and not supports_extra(ctx.task.set):
         raise ValueError("extra only supported for FunctionChat")
     if ctx.task.variant == "actions_only" and ctx.cfg.question_scoring == "separate":
         raise ValueError("derived variants cannot be replayed")

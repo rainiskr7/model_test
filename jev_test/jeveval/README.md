@@ -1,4 +1,4 @@
-# jeveval — P1 계약 판 4 기능 지도
+# jeveval — P1 계약 판 5 보정 3 기능 지도
 
 P1_CONTRACT.md 보정 12와 ⑥b-2 R1–R8 기준으로 compare·archive·참조 구현 호출 층까지 구현했다.
 시험은 합성 fixture·tmp_path·가짜 참조 모듈·127.0.0.1 서버를 사용한다.
@@ -8,7 +8,7 @@ P1_CONTRACT.md 보정 12와 ⑥b-2 R1–R8 기준으로 compare·archive·참조
 - `__init__.py`: 패키지 네임스페이스.
 - `types/__init__.py`: 기존 `from jeveval.types import X` 경로와 새 자료형 재수출.
 - `types/base.py`: JsonRecord, JSON 사본·중첩 dataclass 복원·타입 검사.
-- `types/specs.py`: SourceRow, BoundQuestion, Item, QuestionSpec, TaskSpec, SplitPlan, Groups, PoolResult.
+- `types/specs.py`: SourceRow, BoundQuestion, 내부 ItemFields, 기존 JSON 구조의 Item, QuestionSpec, TaskSpec, SplitPlan, Groups, PoolResult.
 - `types/results.py`: Rendered, ParsedAnswer, 호출별 LengthInfo.
 - `types/scores.py`: Threshold, ThresholdFile, RiskCell, QStats, Population, Cost, ScoreTable.
 - `types/records.py`: Request, 메모리 전용 AttemptResult, session_id를 포함한 AttemptRecord, CallRecord, FinalRecord.
@@ -24,6 +24,7 @@ P1_CONTRACT.md 보정 12와 ⑥b-2 R1–R8 기준으로 compare·archive·참조
 - `types/contract.py`: Validated·B1Config·B1Call·B1Response의 frozen JsonRecord 자료형.
 - `types/scoring.py`: AnswerParse·F1Result·CalibResult·SlotJudgement·메모리 전용 Observation 자료형.
 - `contract/__init__.py`: 계약 검사 네임스페이스.
+- `contract/stages.py`: set ID만으로 현재/역사 단계 목록을 정하는 순수 stage_names·supports_extra; extra는 원 FunctionChat만.
 - `contract/taskspec.py`: target_key·state 키 중복·정적/동적 질문·성공 질문·ID 충돌 검사.
 - `contract/render.py`: 설정 키 순서의 state 문자열과 대상 끝 문자 위치 계산.
 - `contract/request.py`: 질문·선택지 순서 보존 요청, UTF-8 바이트·SHA-256·로컬 검증.
@@ -66,7 +67,7 @@ P1_CONTRACT.md 보정 12와 ⑥b-2 R1–R8 기준으로 compare·archive·참조
 - `io/sources/korfin.py`: 원본 순서의 SID별 aspect 행 읽기.
 - `io/sources/klue_mrc.py`: is_impossible 양·음성 전체 행과 guid·source 읽기.
 - `data/expand.py`: 정적·항목별 질문 확장, 값의 중괄호 보존·ID 재검사·정답 소속 검사.
-- `data/items/common.py`: 분할 의미·묶음 대조, 단계별 조립·사본·라벨 충돌·원문 없는 요약.
+- `data/items/common.py`: 분할 의미·묶음 대조, deepcopy한 ItemFields에서 기존 Item을 명시 조립·라벨 충돌·원문 없는 요약.
 - `data/items/kosgd.py`: 두 판의 대화·카탈로그·정답·직전 USER 기준선.
 - `data/items/functionchat.py`: 시스템 문장 정규화·단일 도구 선택지 출처·대표/extra.
 - `data/items/kmhas.py`: 대표 문장·이름 라벨·묶음 라벨 충돌.
@@ -91,7 +92,7 @@ P1_CONTRACT.md 보정 12와 ⑥b-2 R1–R8 기준으로 compare·archive·참조
 - `io/policy.py`: policy.yaml 읽기·검사 위임.
 - `run/outcome.py`: 기록 연결·예산·길이 필수 검사, 독립 usage·답 변환·거부 우선·논리 상태 합성.
 - `run/resume_check.py`: 전체 계획·attempts·final ID·누적 예산을 첫 전송/쓰기 전에 대조하는 순수 검사.
-- `run/executor.py`: 주입 post/measurer/sleep으로 순차 실행·재시도·복구·attempts 뒤 final 기록·RunSummary.
+- `run/executor.py`: 공개 execute_call의 post→record 반환→history/대기 순서; run_stage의 영속 sink·전체 resume 검사·offline 요청 단위 미룸.
 - `run/derive.py`: 전체판 Item의 질문 ID 대조·행동 질문/호출 거르기·오류 상태와 관측값을 보존하는 독립 사본.
 - `run/fingerprint.py`: 원본/토크나이저 검증·설정/규칙/코드 해시 수집·started_at 제외 비교.
 - `run/stage_inputs.py`: 동결 설정과 검증된 원본에서 단계별 Item 복원·해당 단계 final과 경고 읽기.
@@ -125,7 +126,7 @@ data/items는 io·contract·run을 import하지 않는다. expand·items·labels
 contract·score는 서로 import하지 않으며 파일·네트워크·시계에 접근하지 않는다. score/bootstrap의 난수는 지역 random.Random(f"{seed}:boot:{set_name}")만 쓴다. data도 파일·네트워크·시계에 접근하지 않고, 난수는 계약의 문자열 seed로 만든 random.Random만 쓴다.
 run/encoders의 의존은 types·io.tokenizers·io.reference·io.run_files·run.length·표준 라이브러리로 제한한다(transformers 는 io/tokenizers 안에서만 import; Clef 규칙은 체크포인트 사본의 참조 모듈을 io.reference.source_module 로 읽는다). 로드는 HF_HUB_OFFLINE=1·TRANSFORMERS_OFFLINE=1, local_files_only=True·trust_remote_code=False다.
 
-세부 규칙·기존 시험 지도·이전 구현 결정은 [NOTES.md](NOTES.md)에 보존한다.
+현행 규칙은 [계약](../P1_CONTRACT.md), 당시 구현·시험 기록은 [NOTES.md](NOTES.md)에 보존한다. 변경별 소유·시험·운영 비용은 [IMPACT.md](IMPACT.md), 옛 규칙의 현행 위치와 원문 보존 근거는 [CONTRACT_MAP.md](../CONTRACT_MAP.md)를 따른다.
 
 ## 실행 명령
 
@@ -264,9 +265,11 @@ python -m jeveval.run.cli report --run-id RUN --models MODEL1 MODEL2 --compare-i
 python -m jeveval.run.cli question-risk --run-dir results/MODEL/RUN/A/SET/VARIANT --history
 ```
 
-Phase A의 질문 위험은 항상 exploratory다. summary는 현재 스키마에 run_id가 없으므로
-model/benchmark만 확인한다. 역사 파생 actions_only의 Item 재구성은 출처 정책 미정으로 거부한다.
-실제 kosgd2 데이터/선정/분할·파일럿·감사 v4/v5·등록 봉인·T0 fixture 재생성은 Phase B다.
+공용 셋·역사 질문 위험은 exploratory이고, overlay.analysis의 유효한 등록 사슬은 registered다.
+선언한 등록의 threshold 누락은 test를 거부하며 손상은 registration_damaged로 수치를 감춘다.
+summary의 model/benchmark와 존재하는 run_id를 검사하고 비주판 summary 부재는 허용한다.
+역사 파생 actions_only Item 재구성은 출처 정책 미정으로 거부한다. kosgd2 선정은 이미
+1,200/dev240/test960이며 이번에 재생성하지 않는다. v4 두 프로필의 실데이터 수용·파일럿·최종 동결은 별도다.
 
 추가·변경 모듈 지도(의존 방향은 기존 §8-1 그대로):
 

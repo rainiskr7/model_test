@@ -7,7 +7,7 @@ from jeveval.data.expand import expand_questions
 from jeveval.data.grouping import group_rows
 from jeveval.data.split import check_split_plan
 from jeveval.score.labels import gold
-from jeveval.types import Item
+from jeveval.types import Item, ItemFields
 
 
 def questions(rows, task, lists, item_options=None, bindings=(), *, rules):
@@ -16,10 +16,10 @@ def questions(rows, task, lists, item_options=None, bindings=(), *, rules):
                             lambda label, binding, options: gold(label, rows, binding, options, rules))
 
 
-def fields(state, bound, service=None, stratum=None, flags=(), baseline=None):
+def fields(state, bound, service=None, stratum=None, flags=(), baseline=None) -> ItemFields:
     """닫힌 meta와 원본에 별칭이 없는 항목 필드를 만든다."""
-    return deepcopy(dict(state_fields=state, questions=bound, baseline=baseline,
-                         meta=dict(service=service, stratum=stratum, flags=sorted(set(flags)))))
+    return deepcopy(ItemFields(state, bound,
+                    dict(service=service, stratum=stratum, flags=sorted(set(flags))), baseline))
 
 
 def _buckets(rows, plan, task):
@@ -65,7 +65,9 @@ def assemble(rows, plan, task, make, allow_extra=False):
             _, gid, iid = parts
             bucket = buckets[gid]
             selected = _selected(bucket, iid, task.group_key)
-            result[stage].append(Item(task.set, gid, iid, **make(selected, bucket)))
+            content = make(selected, bucket)
+            result[stage].append(Item(task.set, gid, iid, content.state_fields,
+                                      content.questions, content.meta, content.baseline))
     return result
 
 

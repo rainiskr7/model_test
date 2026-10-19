@@ -5,6 +5,7 @@ from copy import deepcopy
 import math
 import random
 
+from jeveval.contract.stages import supports_extra
 from jeveval.types import Groups, PoolResult, SourceRow, SplitPlan
 
 
@@ -83,7 +84,7 @@ def build_split_plan(rows: list[SourceRow], groups: Groups, pool: PoolResult,
     members = {g: sorted(groups.members[g]) for g in sorted(pool.group_ids)}
     conflicts = _label_conflicts(rows, groups, set_cfg.get("label_field"))
     extra = []
-    if set_name == "fc_call_decision" and set_cfg.get("extra", False):
+    if supports_extra(set_name) and set_cfg.get("extra", False):
         extra = sorted(f"{set_name}:{g}:{i}" for g, items in members.items()
                        for i in items if f"{set_name}:{g}:{i}" != representatives[g])
     notes = dict(n_rows=len(rows), n_groups_total=len(groups.members),

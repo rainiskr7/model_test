@@ -1,6 +1,7 @@
 """무엇: 순차 실행·resume 상태기계 · 입력: 항목·주입 전송/길이/잠 · 출력: RunSummary · 계약 §4–5·§8-6."""
 
 from collections import Counter, defaultdict
+from functools import partial
 
 from jeveval.client.attempt import to_attempt_record
 from jeveval.client.systemone import systemone_url
@@ -28,9 +29,13 @@ def _plans(items, task, cfg, b1_config):
     return grouped
 
 
-def _execute_call(plan, history, *, cfg, measurer, post, sleep, session_id,
-                  headers, timeout, policy, path):
-    """시도를 fsync한 뒤에만 대기/다음 호출로 진행하며 기록 예산을 누적한다."""
+def execute_call(plan, history, *, cfg, measurer, post, sleep, session_id,
+                 headers, timeout, policy, record):
+    """검증된 history를 받는다. sink의 정상 반환 뒤에만 history·대기를 진행한다.
+
+    영속 sink는 반환 전에 flush/fsync한다. 기록 예외는 그대로 전파하며,
+    전체 resume 검사와 offline 논리 요청 단위 미룸은 run_stage의 책임이다.
+    """
     if plan.local_errors:
         return call_record(plan, [], None, cfg, policy.max_attempts), 0, 0
     length = measurer.measure(plan)
@@ -45,7 +50,7 @@ def _execute_call(plan, history, *, cfg, measurer, post, sleep, session_id,
             attempt = to_attempt_record(result, call_id=plan.call_id, logical_id=plan.logical_id,
                 attempt=number, session_id=session_id, terminal=decision.terminal,
                 request_sha256=plan.request_sha256)
-            records.append_record(path, attempt)
+            record(attempt)
             history.append(attempt)
             if decision.terminal:
                 break
@@ -88,9 +93,10 @@ def run_stage(*, items: list[Item], task: TaskSpec, cfg: ModelConfig,
             continue
         calls = []
         for plan in plans:
-            call, sent, recovered = _execute_call(plan, history[plan.call_id], cfg=cfg,
+            call, sent, recovered = execute_call(plan, history[plan.call_id], cfg=cfg,
                 measurer=measurer, post=post, sleep=sleep, session_id=session_id,
-                headers=headers, timeout=timeout, policy=policy, path=attempt_file)
+                headers=headers, timeout=timeout, policy=policy,
+                record=partial(records.append_record, attempt_file))
             calls.append(call)
             n_calls += 1
             n_sent += sent

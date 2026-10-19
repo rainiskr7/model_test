@@ -26,6 +26,16 @@ class BoundQuestion(JsonRecord):
 
 
 @dataclass(frozen=True)
+class ItemFields:
+    """조립 전 내부 필드. Item의 JSON 구조에 중첩하지 않는다 (§6-2)."""
+
+    state_fields: dict | str
+    questions: list[BoundQuestion]
+    meta: dict
+    baseline: dict | None
+
+
+@dataclass(frozen=True)
 class Item(JsonRecord):
     set: str
     group_id: str

@@ -4,7 +4,7 @@ from jeveval.data.items.common import assemble, fields, questions
 from functools import partial
 
 from jeveval.score.labels import gold, ongoing_two
-from jeveval.types import Item, SourceRow, SplitPlan, TaskSpec
+from jeveval.types import Item, ItemFields, SourceRow, SplitPlan, TaskSpec
 
 
 def _catalog(lists):
@@ -30,7 +30,7 @@ def build_items(rows: list[SourceRow], plan: SplitPlan, task: TaskSpec,
     rules = {**rules, "ongoing_two": partial(ongoing_two,
              catalog_order=[key for key in options if key != "NONE"])}
 
-    def make(selected, bucket):
+    def make(selected, bucket) -> ItemFields:
         row = selected[0]
         state = dict(dialogue=row.fields["dialogue"], catalog=catalog)
         baseline = {"copy_prev": _previous(row, bucket, options, rules)}

@@ -3,7 +3,7 @@
 from dataclasses import replace
 
 from jeveval.data.items.common import assemble, conflict_flags, fields, questions
-from jeveval.types import Item, SourceRow, SplitPlan, TaskSpec
+from jeveval.types import Item, ItemFields, SourceRow, SplitPlan, TaskSpec
 
 
 def build_items(rows: list[SourceRow], plan: SplitPlan, task: TaskSpec,
@@ -13,7 +13,7 @@ def build_items(rows: list[SourceRow], plan: SplitPlan, task: TaskSpec,
     if not demotions <= {q.label for q in task.questions}:
         raise ValueError("demotion emotion has no question")
 
-    def make(selected, bucket):
+    def make(selected, bucket) -> ItemFields:
         bound = [replace(q, role="diagnostic") if q.label in demotions else q
                  for q in questions(selected, task, lists, rules=rules)]
         return fields(selected[0].fields["text"], bound,

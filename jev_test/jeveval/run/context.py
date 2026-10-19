@@ -3,6 +3,7 @@
 from dataclasses import replace
 from pathlib import Path
 
+from jeveval.contract.stages import stage_names
 from jeveval.contract.model_config import validate_model_config
 from jeveval.data.split import check_split_plan
 from jeveval.io import run_files
@@ -72,6 +73,8 @@ def check_identity(ctx, data):
 def stage(ctx, name) -> StageData:
     if ctx.directory is None:
         raise ValueError("context is not restored")
+    if name == "extra" and name not in stage_names(ctx.task.set):
+        raise ValueError("extra only supported for FunctionChat")
     finals, warnings = read_stage_finals(ctx.directory, name)
     ids = [f.logical_id for f in finals]
     expected = ctx.plan.extra if name == "extra" else [
@@ -95,7 +98,7 @@ def primary_variant(ctx):
 def completed(root, run_dir):
     """compare/archive 공통 선행: 불변 입력·단계 완료·threshold identity·봉인."""
     ctx = restore(root, run_dir)
-    names = ("dev", "test", "extra") if ctx.task.set == "fc_call_decision" else ("dev", "test")
+    names = stage_names(ctx.task.set)
     stages = {name: stage(ctx, name) for name in names}
     threshold = run_files.read_json(ctx.directory / "threshold.json", ThresholdFile)
     check_identity(ctx, threshold.to_dict())

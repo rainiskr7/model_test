@@ -83,6 +83,22 @@ def test_stage_returns_stage_data_with_matching_ids(h, restored):
     assert data.warnings == []
 
 
+def test_extra_unsupported_context_rejected_before_io(env, tmp_path, monkeypatch):
+    """직접 stage 진입에서도 비지원 extra를 읽기 전에 거부한다."""
+    from jeveval.types import SplitPlan
+    from tests.types.samples import records as samples
+
+    def forbidden(*args):
+        pytest.fail("unsupported stage reached records")
+
+    monkeypatch.setattr(context, "read_stage_finals", forbidden)
+    plan = next(value for value in samples() if isinstance(value, SplitPlan))
+    ctx = RunContext(tmp_path, tmp_path / "model.yaml", tmp_path / "task.yaml",
+                     env.cfg, env.task, plan, env.b1, env.policy, tmp_path / "synthetic-run")
+    with pytest.raises(ValueError, match="extra only supported for FunctionChat"):
+        context.stage(ctx, "extra")
+
+
 @pytest.mark.parametrize("mismatch", ["missing", "unexpected"])
 def test_stage_rejects_final_ids_outside_split(h, restored, mismatch):
     path = h.directory / "dev/final.jsonl"

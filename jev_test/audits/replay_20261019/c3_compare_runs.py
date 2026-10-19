@@ -7,6 +7,7 @@ import sys
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
+from jeveval.contract.stages import stage_names
 from jeveval.io import records, run_files
 from jeveval.io.paths import identifier
 
@@ -27,7 +28,7 @@ def compare_variant(old, new):
             return ["fingerprint.json"]
         identifier(a[key])
     old_id, new_id = identifier(a["run_id"]), identifier(b["run_id"])
-    stages = ("dev", "test", "extra") if a["set"] == "fc_call_decision" else ("dev", "test")
+    stages = stage_names(a["set"])
     derived = (old / "dev/derived.json").is_file()
     if derived != (new / "dev/derived.json").is_file():
         return ["dev/derived.json"]

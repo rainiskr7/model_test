@@ -4,6 +4,7 @@ import io
 from pathlib import Path, PurePosixPath
 import tarfile
 
+from jeveval.contract.stages import supports_extra
 from jeveval.io.hashes import sha256_file
 from jeveval.io.environment import external_path
 from jeveval.io.paths import identifier, inside
@@ -75,7 +76,7 @@ def entries_for(root, contexts):
             folder = ctx.directory / stage
             if (folder / "replay.json").exists():
                 paths.append(folder / "replay.json")
-            if stage != "extra" or folder.exists() or ctx.task.set == "fc_call_decision":
+            if stage != "extra" or folder.exists() or supports_extra(ctx.task.set):
                 paths.extend(folder / f"{name}.jsonl" for name in ("attempts", "final"))
         for path in paths:
             path = inside(root, path)

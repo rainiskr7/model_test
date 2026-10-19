@@ -1,7 +1,7 @@
 """무엇: 자료형 공개 이름 · 입력: 없음 · 출력: 재수출 · 계약 §8-5."""
 
 from .base import JsonRecord
-from .specs import BoundQuestion, Groups, Item, PoolResult, QuestionSpec, SourceRow, SplitPlan, TaskSpec
+from .specs import BoundQuestion, Groups, Item, ItemFields, PoolResult, QuestionSpec, SourceRow, SplitPlan, TaskSpec
 from .results import LengthInfo, ParsedAnswer, Rendered
 from .scores import Cost, Population, QStats, RiskCell, ScoreTable, Threshold, ThresholdFile
 from .records import AttemptRecord, AttemptResult, CallRecord, FinalRecord, Request
