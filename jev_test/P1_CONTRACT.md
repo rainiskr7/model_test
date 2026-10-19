@@ -882,6 +882,8 @@ fixture 또는 참조 원본 대화가 없거나 T0 대화가 옛 풀과 겹치�
 현재 커밋된 selection.json·kosgd2.json은 판 5의 1,201대화 산출물로 보존되어 있으며 새 규칙으로 재생성하기 전에는
 유효한 보정 1 산출물이라고 주장하지 않는다. 구현 시험은 합성 데이터로 RNG·선정·split·T0 합집합을 검증한다.
 
+> 보정 2 정정(10-19): 위 문장은 구현 당시의 역사 설명이다. 기준 249f096의 실제 selection은 이미 1,200대화이고 split은 dev 240/test 960이며 26_00068은 제외되어 있다. 이번 구현은 해당 파일을 변경하거나 재생성하지 않는다. D1 = A는 사용자 승인(10-19)으로 기록하며, T0 실행·노출이 드러나면 동결 경계를 재검토한다.
+
 ### §8-1 모듈과 CLI
 
 SetEntry는 types/set_config.py의 frozen dataclass다. io/set_config.py는 entry/catalog/evidence_paths,
@@ -900,3 +902,83 @@ root 아래 configs/sets에서 overlay를 찾는다. 모든 overlay 내부 경�
 all 무출력·무쓰기, overlay 의존성 해시와 역사 변조 거부, D1a의 RNG 소비·다른 턴 제외·T0 풀 밖 참조를 포함한다.
 원인: 판 5에서 공용 설정에 새 셋을 추가해 기존 run의 files 지문이 바뀌었다. 공용 바이트를 복원하고
 새 셋의 의존성을 별도로 동결한다. 구현 단계에서 실데이터 산출물 재생성·재판정·서버 전송·커밋은 수행하지 않는다.
+
+## 판 5 보정 2 — Phase B 오프라인 구현 (2026-10-19)
+
+이 절은 보정 1 이후의 등록·감사·파일럿 도구 계약이다. 앞선 문장과 실행 이력은 보존하며
+충돌하는 현재 동작은 이 절이 정정한다. D1=A(사용자 승인 10-19), 1,200대화/dev240/test960,
+26_00068 제외 상태를 유지한다. T0 실행·노출이 확인되면 동결 경계를 재검토한다.
+이번 구현 종료는 W1 파일럿 통과·실험 동결·모델 실행 완료를 뜻하지 않는다.
+
+### §2-2 감사 v4의 두 증거 등급
+
+`audits/audit_v4/run.py --set kosgd|kosgd2` 하나를 사용한다. 종전 “kosgd2 감사 v5”는
+별도 실행판이 아닌 v4의 kosgd2 프로필로 정정한다. 독립 경로는 jeveval을 import하지 않으며
+원 schema에서 catalog/두 lists를 검증하고 249f096 task의 ID/label/role/type/options 및
+문구 바이트 해시를 고정한다. 원본 선정·split 대표·옛 풀/T0 제외/RNG를 별도로 확인한다.
+
+pplx_v1_1/B1 BF16/B1 FP8은 계획 body, executor에 주입한 무네트워크 post의 body,
+독립 envelope의 세 SHA를 비교한다. B1의 모든 생성 매개변수·messages·토큰 ID·label_map을
+포함한다. Clef/Clef-Flash/pplx_v1은 served_name 측정용 자리 표시를 쓰며
+measurement_config=true, byte_evidence=INCOMPLETE다. 이 셋의 최종 전송 증거는 서빙 후 별도
+출력 경로로 재감사해야 한다. 길이는 6모델 모두 실제 인코더를 사용하고 모델별 프로세스로 격리한다.
+R2v3 분모/백분위는 논리 요청별 최대 길이(Clef 결합, pplx/B1 질문별 최대)이며 >8192가 0이어야 한다.
+모델 limit 초과도 별도 집계한다. 별도 판을 전송하지 않는 separate actions_only는
+hypothetical_direct로 표기한다. 그 해시는 직접 호출 가정의 일치성이지 과거 전송 증거가 아니다.
+
+R5 full은 의도 범위·최대2·act11종, actions_only는 act11종이다. kosgd2 full에서 같은 서비스의
+서로 다른 두 의도는 INCOMPLETE다. R6는 full에만 적용한다. 스캔은 KoSGD test USER 전체,
+분모는 INFORM_INTENT가 있는 (턴,frame), 형식 이상도 남기며 95% 경계, 분모0 INCOMPLETE다.
+이웃 USER 통계는 판정에 쓰지 않는다. R7은 고정 칸과 문자열 true/false를 ID/type/role/label까지
+대조한다. v3 여섯+새 일곱 오류 주입을 지정 규칙 FAIL로 검증하며 kosgd ongoing_two만 N/A다.
+기본 후보는 적용 R2v3/R4/R5/R6/R7 및 동결된 3모델 v4_hash를 통과한 판 중 full 우선이다.
+측정용 모델의 INCOMPLETE 전송 증거는 이 후보의 요구 범위 밖이며 최종 서빙 완료로 읽지 않는다.
+
+kosgd는 사후 감사이며 --history-run을 반복 지정해 저장 call SHA와 대조한다. 저장 run 부재,
+부분 기록, full 출처가 필요한 파생 판은 INCOMPLETE이고 과거 결과를 바꾸지 않는다.
+JSON은 집계·ID·해시만 담으며 stdout/stderr에 원문 예외를 전달하지 않는다.
+입력 목록과 토크나이저 해시, 감사 Python 소스(out/cache 제외) 및 jeveval code SHA를 기록한다.
+독립 oracle의 외부 스크립트 API는 이 계약에 정의되지 않았다. 실데이터 1,200/1,200 및 oracle
+소스 SHA 대조는 Claude의 별도 수용 증거이며 합성 시험 통과로 대체하지 않는다.
+
+### §7-4b 질문 단위 등록과 손상
+
+overlay는 선택적 최상위 `analysis: configs/analysis/<name>.yaml`을 허용한다.
+SetEntry.analysis와 evidence_paths가 manifest를 첫 fingerprint에 넣으며 task·구현 code SHA도
+기존 fingerprint가 결합한다. 공용 셋에는 선언을 추가하지 않으며 항상 exploratory다.
+전역 v1 기본 정책은 유지하고 overlay의 v2만 registered를 선언한다.
+
+순서: dev 완료 → 일반 threshold → question-threshold → 첫 test 진입.
+question_threshold/1은 identity·fingerprint SHA·manifest 경로/SHA·dev final SHA·질문/τ 집합·
+by_question t_star를 기록한다. 기존 파일을 덮어쓰지 않는다. test 아래 seal/question_seal/
+attempts/final/derived/replay 중 하나라도 있으면 빈 파일도 시작으로 보아 새 등록을 거부한다.
+등록을 선언한 overlay의 test는 question_threshold가 없으면 거부한다(누락을 조용히 탐색적으로 내리지 않음).
+
+모든 선검사 후 question_seal을 주 seal보다 먼저 쓴다. 둘 사이 중단, 주 seal 삭제,
+질문 seal 삭제·교체·다른 실행 복사는 손상이며 사후 봉인으로 복구하지 않는다.
+현재 run 질문 위험은 registered/exploratory/registration_damaged를 구분한다. registered는
+봉인된 threshold 파일의 t_star를 적용하며 dev 재계산이 같아야 한다. 손상은 수치를 쓰지 않는다.
+report도 같은 순수 사슬 검사와 독립 재계산을 사용한다. 주 certify는 주 지표 봉인만 인증하며
+질문 지위와 별개다. 역사 --history는 exploratory이고 기존 question_risk 파일 덮어쓰기를 거부한다.
+이는 파일 소유자가 모든 증거를 함께 위조하는 공격의 암호학적 방지가 아니다. 신뢰 경계는
+동결 커밋과 최초 fingerprint 보존이며 timestamp 하나로 등록 선후를 증명하지 않는다.
+
+### §8-1 경계 및 파일럿
+
+파일 I/O는 io, 순수 질문 선택/적용은 score, 등록 검사/봉인 조립은 run을 따른다.
+보고 renderer는 Report.audit_notes만 받으며 파일을 조회하지 않는다. 감사 입력의 task/split/lists
+SHA가 보고 run과 같을 때만 요약하며 불일치는 “감사 증거 연결 불가”다. 새 보고서는 기존 파일을 덮어쓰지 않는다.
+
+라벨 없는 DialoguePrefix(frozen) → data/items/kosgd_requests.build → Request가 파일럿 입구다.
+reader는 speaker/utterance만 투영하며 gold/baseline을 계산하지 않는다. 원 JSON의 라벨 바이트가
+같은 파일에 존재할 수는 있으나 투영·선정·요청·응답 판정에서 사용하지 않는다.
+ID는 kosgd2_pilot:<dialogue_id>:<turn_index>이며 정식 split 대표를 가장하지 않는다.
+
+파일럿 모델은 pplx_v1_1/B1 BF16, 질문은 kosgd2 full 13개다. 동일 200 논리 ID를 요구한다.
+중복/여분 ID는 거부하고 누락 논리 요청 또는 B1 호출 누락은 INCOMPLETE다. 명시된 호출의 HTTP
+비200/검증 실패/응답 null은 무효이며 B1 하나라도 실패하면 논리 요청 전체 무효다.
+유효 요청의 두 비NONE 칸이 같으면 중복이다. 모델별 중복≤10 및 무효≤10일 때만 PASS다.
+manifest는 선택/task/model/b1/lists/요청 SHA를 묶는다. 원응답 입력은 모델→논리 기록 목록이며
+각 기록은 logical_id와 calls, 각 call은 call_id/request_sha256/http_status/raw다.
+게이트는 원 manifest를 보존하고 출력에 응답 SHA 및 completed_manifest를 함께 남긴다.
+자동 전송/재시도 기능은 제공하지 않는다.

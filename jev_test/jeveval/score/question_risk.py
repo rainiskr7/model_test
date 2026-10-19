@@ -22,9 +22,8 @@ def counts(rows):
                 n_false=sum(r.gold == "false" for r in rows), n_none=sum(r.gold == "NONE" for r in rows))
 
 
-def cell(dev, test, tau):
-    threshold = select([_request(r) for r in dev], tau)
-    t = threshold.t_star
+def apply(test, tau, t):
+    """봉인된 임계값을 시험 관측에만 적용한다."""
     accepted = [r for r in test if t is not None and r.present and r.gold is not None and r.valid and r.confidence >= t]
     n, k = (None, None) if t is None else (len(accepted), sum(int(r.wrong) for r in accepted))
     u = None if t is None else risk.upper(k, n)
@@ -33,7 +32,17 @@ def cell(dev, test, tau):
                 coverage=dict(num=n or 0, den=counts(test)["n_denom"]))
 
 
-def calculate(dev, test):
+def cell(dev, test, tau):
+    return apply(test, tau, select([_request(r) for r in dev], tau).t_star)
+
+
+def thresholds(dev):
+    """개발 관측만으로 질문별 고정 τ의 임계값을 선택한다."""
+    return {qid: {tau: select([_request(r) for r in dev if r.question_id == qid], tau).t_star
+                  for tau in TAUS} for qid in sorted({r.question_id for r in dev})}
+
+
+def calculate(dev, test, frozen=None):
     """질문마다 하나의 대표만 허용하고 주/진단 표를 분리한다."""
     dev, test = align(dev, test)
     for name, rows in (("dev", dev), ("test", test)):
@@ -41,6 +50,8 @@ def calculate(dev, test):
         ids = [(r.logical_id, r.question_id) for r in rows]
         if any(r.stage != name for r in rows) or len(set(keys)) != len(keys) or len(set(ids)) != len(ids):
             raise ValueError("expected unique stage representatives per question")
+    if frozen is not None and set(frozen) != {r.question_id for r in [*dev, *test]}:
+        raise ValueError("registered question scope differs")
     tables = dict(questions={}, diagnostic={})
     for qid in sorted({r.question_id for r in [*dev, *test]}):
         development, trial = ([r for r in rows if r.question_id == qid] for rows in (dev, test))
@@ -48,5 +59,6 @@ def calculate(dev, test):
         table = tables["questions" if header.role == "success" else "diagnostic"]
         table[qid] = dict(role=header.role, label=header.label, type=header.qtype,
                          denominator=dict(dev=counts(development), test=counts(trial)),
-                         by_tau={tau: cell(development, trial, tau) for tau in TAUS})
+                         by_tau={tau: (cell(development, trial, tau) if frozen is None else
+                                      apply(trial, tau, frozen[qid][tau])) for tau in TAUS})
     return tables

@@ -37,7 +37,8 @@ def _variant(v):
                   "; ".join(f"{key}={n}" for key, n in d.errors.items()),
                   f"중복 중 유일 정답 일치: {d.duplicate_unique_match}", f"정답 수 × 예측 비NONE 칸 수: {d.grid}"]
     if v.supplementary:
-        lines += ["", "질문 단위(탐색적; 주 지표 인증과 별개)", *v.supplementary]
+        title = {"registered": "등록", "exploratory": "탐색적", "registration_damaged": "등록 손상"}[v.supplementary_status]
+        lines += ["", f"질문 단위({title}; 주 지표 인증과 별개)", *v.supplementary]
     return lines + [""]
 
 
@@ -52,7 +53,7 @@ def render(report):
     for c in report.comparisons:
         lines += ["", f"비교 {c.compare_id} {c.set_name}/{c.variant}",
                   "연결 근거: 모델·셋·변형 일치 및 사용자의 정확한 compare ID 지정. run 동일성은 파일로 검증할 수 없음.", *c.lines]
-    lines += ["", "미완·한계: 감사 v4 수행 증거 미확인(판 5 Phase A). 관측은 인증과 다르다.",
+    lines += ["", *(report.audit_notes or ["미완·한계: 감사 v4 수행 증거 미확인(판 5 Phase A). 관측은 인증과 다르다."]),
               "사용자가 지정한 미실행 모델: " + (", ".join(report.unrun) or "없음"),
               "판 4: API confidence 수락과 p[answer] 보정을 분리. 판 5: 역사 읽기·탐색적 질문 위험·kosgd2 사전 등록.", ""]
     return "\n".join(lines)

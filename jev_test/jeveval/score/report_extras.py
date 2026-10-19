@@ -34,9 +34,9 @@ def comparison(value, compare_id, models, set_name, variant):
 
 
 def supplementary(value):
-    if value.get("schema") != "question_risk/1" or value["registration"]["status"] != "exploratory":
+    if value.get("schema") != "question_risk/1" or value["registration"]["status"] not in ("exploratory", "registered"):
         raise ValueError("unsupported supplementary registration")
-    lines = ["registration.status=exploratory; 질문별 주변적 95% 상한, 동시 보장 아님"]
+    lines = [f"registration.status={value['registration']['status']}; 질문별 주변적 95% 상한, 동시 보장 아님"]
     for table in ("questions", "diagnostic"):
         for qid, stats in value[table].items():
             safe_id(qid)

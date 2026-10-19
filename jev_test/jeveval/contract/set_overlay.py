@@ -32,9 +32,12 @@ def task_names(value):
 
 def validate_overlay(value, stem, base_ids, base_families, tasks_on_disk) -> list[str]:
     """base_ids는 공용 양쪽 ID 합집합, base_families는 교집합의 대표 ID 집합이다."""
-    if not isinstance(value, dict) or set(value) != {"schema", "id", "tasks", "dataset", "split_rules"}:
+    if not isinstance(value, dict) or set(value) - {"analysis"} != {"schema", "id", "tasks", "dataset", "split_rules"}:
         return ["overlay requires exactly schema/id/tasks/dataset/split_rules"]
     errors = []
+    if "analysis" in value and (not isinstance(value["analysis"], str) or
+            re.fullmatch(r"configs/analysis/[A-Za-z0-9][A-Za-z0-9_-]*\.yaml", value["analysis"]) is None):
+        errors.append("analysis must name a confined analysis YAML")
     if value["schema"] != "set_overlay/1":
         errors.append("invalid overlay schema")
     if not _identifier(stem) or value["id"] != stem or stem in base_ids:

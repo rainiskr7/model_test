@@ -7,11 +7,12 @@ from jeveval.io.paths import inside
 MANIFEST = "configs/analysis/question_risk_v1.yaml"
 
 
-def policy(root):
-    """Phase A에서는 exploratory 이외 지위를 거부한다."""
-    path = inside(root, MANIFEST)
+def policy(root, name=MANIFEST):
+    """기본 v1은 유지하고 명시된 동결 manifest만 등록 정책으로 읽는다."""
+    path = inside(root, name)
     value = read_yaml(path)
-    if value.get("schema") != "question_risk_policy/1" or value.get("status") != "exploratory":
+    allowed = {"exploratory"} if name == MANIFEST else {"registered"}
+    if value.get("schema") != "question_risk_policy/1" or value.get("status") not in allowed:
         raise ValueError("unsupported analysis registration")
     expected = dict(loss="answer_not_equal_gold", confidence="ParsedAnswer.confidence",
         validity="inherit_logical_request", unit="group_representative",

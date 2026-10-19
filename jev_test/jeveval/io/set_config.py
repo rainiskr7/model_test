@@ -67,7 +67,7 @@ def _overlay(root, path, data, rules, ids):
     name = value["id"]
     return SetEntry(name, value["dataset"]["family"], deepcopy(value["dataset"]),
                     deepcopy(value["split_rules"]), Path(path).as_posix(),
-                    tuple("configs/tasks/" + n for n in value["tasks"]))
+                    tuple("configs/tasks/" + n for n in value["tasks"]), value.get("analysis"))
 
 
 def entry(root, set_id, *, datasets=DATASETS, rules=RULES) -> SetEntry:
@@ -99,6 +99,8 @@ def evidence_paths(selected) -> tuple[str, ...]:
         return ()
     pool = selected.split_rules.get("pool", {})
     paths = [selected.overlay_path, *selected.task_files]
+    if selected.analysis is not None:
+        paths.append(selected.analysis)
     if "path" in pool:
         paths.append(pool["path"])
     for rule in pool.get("exclude", []):

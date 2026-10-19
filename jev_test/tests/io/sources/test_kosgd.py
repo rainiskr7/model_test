@@ -66,3 +66,13 @@ def test_fixture_exclusion_uses_dialogue_and_requires_fixture_schema(tmp_path):
     path.write_text(json.dumps(data))
     with pytest.raises(ValueError, match="fixture"):
         read_exclusions(cfg, tmp_path)
+
+
+def test_read_prefixes_never_requires_annotation_fields(tmp_path):
+    import json
+    from jeveval.io.sources.kosgd import read_prefixes
+    path = tmp_path / "dialogues_001.json"
+    path.write_text(json.dumps([dict(dialogue_id="d", turns=[dict(speaker="USER", utterance="synthetic")])]))
+    result = read_prefixes(dict(dir=".", dialogues_glob="dialogues_*.json"), tmp_path,
+                           [dict(dialogue_id="d", turn_index=0)])
+    assert result[0].dialogue == (("USER", "synthetic"),)

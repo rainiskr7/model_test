@@ -4,7 +4,7 @@ import argparse
 import json
 from pathlib import Path
 
-from jeveval.run import cmd_report, cmd_question_risk, cmd_archive, cmd_certify, cmd_compare, cmd_replay, cmd_run, cmd_score, cmd_threshold, cmd_t0
+from jeveval.run import cmd_question_threshold, cmd_report, cmd_question_risk, cmd_archive, cmd_certify, cmd_compare, cmd_replay, cmd_run, cmd_score, cmd_threshold, cmd_t0
 
 
 def _report_commands(commands):
@@ -39,7 +39,7 @@ def main(argv=None):
     replay.add_argument("--stage", choices=("dev", "test", "extra"), required=True)
     replay.add_argument("--results", default="results")
     replay.add_argument("--reason")
-    for name in ("threshold", "score", "certify"):
+    for name in ("threshold", "question-threshold", "score", "certify"):
         commands.add_parser(name).add_argument("--run-dir", required=True)
     compare = commands.add_parser("compare")
     compare.add_argument("--run-dirs", nargs="+", required=True)
@@ -56,7 +56,7 @@ def main(argv=None):
     handler = {"run": cmd_run, "threshold": cmd_threshold, "score": cmd_score,
                "certify": cmd_certify, "compare": cmd_compare, "archive": cmd_archive,
                "replay": cmd_replay, "t0": cmd_t0, "report": cmd_report,
-               "question-risk": cmd_question_risk}[command]
+               "question-risk": cmd_question_risk, "question-threshold": cmd_question_threshold}[command]
     try:
         result = handler.run(root=Path.cwd(), **args)
     except Exception:

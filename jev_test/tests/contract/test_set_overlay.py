@@ -53,3 +53,18 @@ def test_overlay_rejects_boundary_attacks(attack):
 def test_task_names_rejects_types_and_reserved_file():
     for value in (None, {}, {"tasks": [None]}, {"tasks": ["b1.yaml"]}, {"tasks": "a.yaml"}):
         assert task_names(value) == []
+
+
+@pytest.mark.parametrize("path", [None, "../escape.yaml", "configs/tasks/task.yaml", "configs/analysis/../x.yaml"])
+def test_analysis_path_is_confined(path):
+    value = valid()
+    value["analysis"] = path
+    assert check(value)
+
+
+def test_analysis_is_only_optional_new_key():
+    value = valid()
+    value["analysis"] = "configs/analysis/question_risk_v2.yaml"
+    assert check(value) == []
+    value["another"] = True
+    assert check(value)

@@ -5,6 +5,7 @@ from pathlib import Path
 from jeveval.io import records, run_files
 from jeveval.io.hashes import sha256_file
 from jeveval.run.fingerprint import same_fingerprint
+from jeveval.run import question_gate
 from jeveval.run.seal import check_seal, write_seal
 from jeveval.run.stage_inputs import attempts_path, final_path, read_stage_finals
 from jeveval.score.threshold import dev_complete
@@ -41,11 +42,14 @@ def _check(run_dir, stage, fingerprint, plan):
     return warnings
 
 
-def prepare_stage(*, run_dir, stage, fingerprint: dict, plan: SplitPlan, now) -> list[str]:
+def prepare_stage(*, run_dir, stage, fingerprint: dict, plan: SplitPlan, now, root=None) -> list[str]:
     """검사 통과 후에만 fingerprint → 해당 단계 tail 복구 → 첫 시험 봉인 순으로 쓴다."""
     run_dir = Path(run_dir)
     try:
         warnings = _check(run_dir, stage, fingerprint, plan)
+        question_seal = question_gate.prepare(root, run_dir, fingerprint, now) if stage == "test" else None
+        if question_seal is not None:
+            run_files.json_bytes(question_seal)
         # JSON 직렬화 오류 역시 첫 파일 쓰기 전에 거부한다.
         run_files.json_bytes(fingerprint)
         run_files.json_bytes(dict(sealed_at=now))
@@ -56,6 +60,8 @@ def prepare_stage(*, run_dir, stage, fingerprint: dict, plan: SplitPlan, now) ->
         run_files.write_json(run_dir / "fingerprint.json", fingerprint)
     for path in (attempts_path(run_dir, stage), final_path(run_dir, stage)):
         warnings.extend(records.repair_tail(path))
+    if question_seal is not None:
+        run_files.write_json(run_dir / "test/question_seal.json", question_seal)
     if stage == "test" and not run_files.exists(run_dir / "test/seal.json"):
         write_seal(run_dir, now=now)
     return warnings

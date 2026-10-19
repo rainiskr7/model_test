@@ -338,3 +338,43 @@ overlay 파일 안의 경로는 root 기준이고 원본 파일은 기존 SHA256
 선언 tasks 전부를 fingerprint에 넣으므로 sibling variant 수정도 해당 overlay run의 replay를 거부한다.
 단일 셋 실행에서는 다른 overlay를 읽지 않는다. all 입력 오류 시 파일·부분 stdout을 남기지 않는다.
 원시 cfg만 받는 하위 reader의 합성 단위시험 호환을 유지하며 실제 명령은 SetEntry를 전달한다.
+
+## 판 5 보정 2 기능 지도 — 오프라인 감사·등록·파일럿
+
+앞선 “닫힌 5키 overlay” 설명은 보정 2에서 선택적 analysis 하나를 허용하도록 정정한다.
+공용 셋의 fingerprint 파일 집합과 v1 분석 정책은 그대로다. 모델 호출 없이 합성 시험으로 구현을 검증한다.
+
+| 파일 | 기능 |
+|---|---|
+| `types/set_config.py`, `contract/set_overlay.py`, `io/set_config.py` | 선택적 analysis 경로 검사·격리 조회·manifest 동결 경로 |
+| `io/analysis.py` | v1 기본값 유지, 명시된 등록 manifest 정책 검사 |
+| `io/question_registration.py` | 동결 overlay/manifest·threshold/seal·test 시작 증거 읽기 |
+| `run/question_registration.py` | identity/해시/범위/개발 재계산의 순수 등록 사슬 검사 |
+| `run/cmd_question_threshold.py` | dev 완료·일반 threshold 이후 질문 임계값 새 파일 생성 |
+| `run/question_gate.py`, `run/gate.py` | 쓰기 전 검사, 질문 seal을 주 seal보다 먼저 생성, 중단/손상 거부 |
+| `run/cmd_run.py`, `run/cli.py` | root 전달 및 question-threshold CLI 연결 |
+| `score/question_risk.py` | 개발 임계값 선택과 봉인된 임계값 적용 분리 |
+| `run/cmd_question_risk.py` | 등록/탐색/손상 산출물 조립, 역사 기존 파일 덮어쓰기 거부 |
+| `run/question_report.py` | 등록 표의 증거와 dev/test 수치 재계산 검증 |
+| `io/audit_evidence.py` | 보고 run과 감사 task/split/lists SHA 연결, 고정 안전 문구 |
+| `run/cmd_report.py` | 감사·등록 검증 조립, 기존 보고서 덮어쓰기 거부 |
+| `types/report.py`, `io/report_markdown.py`, `score/report_extras.py` | 등록 지위·감사 주석을 파일 조회 없이 표현 |
+| `types/kosgd_requests.py` | 라벨 없는 frozen DialoguePrefix |
+| `io/sources/kosgd.py` | read_prefixes로 speaker/utterance만 투영 |
+| `data/items/kosgd_requests.py` | 라벨·baseline 없는 파일럿 Request 구성 |
+| `configs/analysis/question_risk_v2.yaml`, `configs/sets/kosgd2.yaml` | kosgd2의 첫 fingerprint 전 질문 분석 등록 선언 |
+
+`question-threshold`는 현재 코드의 등록 overlay run에서만 실행한다. 공용 셋은 exploratory다.
+등록된 질문 표도 주 지표 certify와 별개다. 봉인된 run을 새 구현으로 resume하도록 비교를 완화하지 않는다.
+
+```sh
+python -m jeveval.run.cli threshold --run-dir results/MODEL/RUN/A/kosgd2/full
+python -m jeveval.run.cli question-threshold --run-dir results/MODEL/RUN/A/kosgd2/full
+# 이후 첫 test 진입 때 질문 seal → 주 seal 순서. 전송은 이번 작업 범위 밖이다.
+python -m jeveval.run.cli question-risk --run-dir results/MODEL/RUN/A/kosgd2/full
+python -m jeveval.run.cli report --run-id RUN --models MODEL --out results/_report/RUN.offline-v4.md
+```
+
+감사·파일럿 도구 지도와 실행 명령은 `audits/README.md`, 각 도구 폴더 README에 있다.
+`tests/run/registration_support.py`는 합성 등록 run, `tests/audits/pilot_support.py`는 라벨 없는
+3,000대화/200 요청과 원응답 fixture를 만든다. 각 신규 모듈의 짝 시험은 해당 tests 디렉터리에 있다.

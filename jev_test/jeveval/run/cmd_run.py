@@ -91,7 +91,7 @@ def run(*, root, model, task, stage, run_id, base_url=None, results="results",
         if check_resume(plans, attempts, existing, ctx.policy.max_attempts):
             raise ValueError("resume input mismatch")
     warnings = gate.prepare_stage(run_dir=directory, stage=stage,
-        fingerprint=ctx.fingerprint, plan=ctx.plan, now=stamp)
+        fingerprint=ctx.fingerprint, plan=ctx.plan, now=stamp, root=ctx.root)
     if derived:
         existing = derived_resume.resume_derived(directory, stage, finals, provenance)
         derived_stage.write_derived_stage(directory, stage, finals, provenance, existing)

@@ -74,3 +74,10 @@ def test_explicit_public_config_paths_keep_external_path_support(tmp_path):
     for name, old in (("data", "configs/datasets.yaml"), ("rules", "configs/splits/rules.yaml")):
         shutil.move(root / old, tmp_path / f"{name}.yaml")
     assert set_config.entry(root, h.set, datasets=tmp_path / "data.yaml", rules="../rules.yaml") == before
+
+
+def test_registered_overlay_manifest_is_evidence_without_changing_base():
+    selected = set_config.entry(REPO, "kosgd2")
+    assert selected.analysis == "configs/analysis/question_risk_v2.yaml"
+    assert selected.analysis in set_config.evidence_paths(selected)
+    assert set_config.entry(REPO, "kosgd").analysis is None

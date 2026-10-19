@@ -46,3 +46,31 @@ def read_exclusions(pool_cfg, root):
             raise ValueError("T0 exclusion requires fixture cases")
         excluded.update(dialogue_ids(data[rule["field"]], rule["by"]))
     return excluded
+
+
+def read_prefixes(source_cfg, root, selected):
+    """파일에 라벨이 있어도 speaker/utterance만 투영한다. 정답 reader는 호출하지 않는다."""
+    from jeveval.types.kosgd_requests import DialoguePrefix
+    wanted = {r["dialogue_id"]: r["turn_index"] for r in selected}
+    if len(wanted) != len(selected):
+        raise ValueError("duplicate pilot dialogue")
+    found, seen = {}, set()
+    paths = sorted((Path(root) / source_cfg["dir"]).glob(source_cfg["dialogues_glob"]))
+    for path in paths:
+        for d in json.loads(path.read_text(encoding="utf-8")):
+            did = d["dialogue_id"]
+            if did in seen:
+                raise ValueError("duplicate source dialogue")
+            seen.add(did)
+            if did not in wanted:
+                continue
+            index = wanted[did]
+            if type(index) is not int or not 0 <= index < len(d["turns"]):
+                raise ValueError("invalid pilot turn")
+            turns = tuple((t["speaker"], t["utterance"]) for t in d["turns"][:index + 1])
+            if turns[-1][0] != "USER" or any(type(s) is not str or type(u) is not str for s, u in turns):
+                raise ValueError("invalid pilot prefix")
+            found[did] = DialoguePrefix(did, index, turns)
+    if set(found) != set(wanted):
+        raise ValueError("pilot source incomplete")
+    return [found[r["dialogue_id"]] for r in selected]

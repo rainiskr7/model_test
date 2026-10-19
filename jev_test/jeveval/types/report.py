@@ -90,6 +90,7 @@ class ReportVariant:
     questions: list[ReportQuestion] = field(default_factory=list)
     decompositions: list[KosgdDecomposition] = field(default_factory=list)
     supplementary: list[str] = field(default_factory=list)
+    supplementary_status: str = "exploratory"
 
 
 @dataclass(frozen=True)
@@ -100,3 +101,4 @@ class Report:
     comparisons: list[ReportComparison]
     common_errors: list[CommonErrors]
     unrun: list[str]
+    audit_notes: list[str] = field(default_factory=list)

@@ -1,0 +1,20 @@
+schema: question_risk_policy/1
+status: registered
+loss: answer_not_equal_gold
+confidence: ParsedAnswer.confidence
+validity: inherit_logical_request
+unit: group_representative
+missing: exclude_only_this_question
+absent: exclude_and_count_separately
+invalid: retain_labelled_present_in_denominator
+taus: ['0.01', '0.02', '0.05']
+threshold: dev_risk_le_tau_over_two_max_coverage_tie_larger_t
+kosgd: two_slots_one_bundle_min_confidence_order_independent_loss
+korfin: aspect_k_position_conditional_on_presence
+diagnostic: separate_table
+claims:
+  scope: per_question_marginal
+  confidence_level: 0.95
+  simultaneous: false
+  family: all_reported_models_sets_variants_questions_taus
+  note: 질문을 골라 전체 결론으로 쓰지 않는다
