@@ -48,6 +48,8 @@ def _synthetic_json(root):
 
 
 def _synthetic_rules(root):
+    from tests.run.t0_support import add_datasets
+    add_datasets(root)
     sets = _synthetic_json(root)
     metadata = {b"huggingface": json.dumps({"info": {"features": {
         "label": {"feature": {"names": ["origin", "physical"]}}}}}).encode()}

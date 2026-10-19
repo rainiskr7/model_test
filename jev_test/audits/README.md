@@ -22,3 +22,17 @@
 감사 v4(실제 systemone/B1 바이트·독립 원본·세 encoder), v5(kosgd2 최종 13질문·두 판)는
 계약 판 5 명세만 등록했다. 스크립트 구현·복사·실행은 Phase B다. 기존 v3의 경로만 바꿔
 새 문항의 PASS 증거로 삼을 수 없다. 입력/스크립트 해시·완전한 분모·오류 주입을 함께 기록한다.
+
+## kosgd2_selection — 판 5 보정 1 재생성 절차
+
+기존 판 5 selection은 보존한다. 보정 1 D1a는 T0 fixture의 KoSGD 대화를 결과에서 제외하고,
+그 대화도 기존 순서대로 RNG choice를 소비해 나머지 대표 턴을 유지한다.
+`select_turns.py --source dataset/kosgd2 --excluded audits/kosgd_audit/audit_result.json
+--t0-fixture configs/t0/fixture_v1.json --out .work/kosgd2_selection.corrected.json`으로 별도 파일을 만든다.
+CLI는 --t0-fixture 누락·잘못된 fixture·참조 원본 부재·옛 풀 교집합·기존 출력 덮어쓰기를 거부한다.
+새 증거에는 t0_fixture_sha256, n_t0_excluded, exclusion_reason=frozen_boundary_t0_out_of_pool을 기록한다.
+
+**현재 상태: 실데이터 재생성 미실행.** 커밋된 selection.json 및 configs/splits/kosgd2.json은 아직 1,201대화다.
+Claude는 보정 selection이 기존 것에서 26_00068 하나만 제거했는지(나머지 1,200턴 동일) 검증한 뒤 반영하고,
+새 분할 pool1200/dev240/test960·gold oracle1200/1200·모든 T0 참조의 가족 풀 밖 여부를 검증한다.
+합성 시험 통과를 이 실데이터 검증의 증거로 쓰지 않는다. 기존 kosgd_audit 등 다른 감사 폴더는 수정하지 않는다.

@@ -2,6 +2,7 @@
 
 from jeveval.io.hashes import sha256_file
 from jeveval.io.paths import inside
+from jeveval.io.set_config import entry, evidence_paths
 
 
 def checked_task(root, history):
@@ -10,6 +11,10 @@ def checked_task(root, history):
     task = fp["inputs"]["task_path"]
     required = {task, f"configs/splits/{fp['set']}.json", f"dataset/{fp['set']}/SHA256SUMS"}
     required.update(name for name in fp["files"] if name.startswith("configs/tasks/lists/"))
+    selected = entry(root, fp["set"])
+    if selected.overlay_path:
+        required.update(evidence_paths(selected))
+        required.update(fp["files"])
     if not required <= fp["files"].keys():
         raise ValueError("historical item evidence unavailable")
     for name in required:

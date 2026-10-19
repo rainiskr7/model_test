@@ -1,0 +1,50 @@
+schema: set_overlay/1
+id: kosgd2
+tasks:
+- kosgd2_full.yaml
+- kosgd2_actions_only.yaml
+dataset:
+  id: kosgd2
+  family: kosgd
+  derived_from_set: kosgd
+  hf: chaeyeonn/KoSGD
+  split: test
+  sha: d725461
+  rows: 대화 4,201 (턴 84,594)
+  license: CC-BY-SA-4.0
+  selection: audits/kosgd2_selection/selection.json
+  reason: 지시가 두 가지로 읽힘; 중복 관측은 사후 관측이며 정답률 최적화 근거가 아님
+  pilot: 풀 밖 = 옛 kosgd 풀 포함; 200 대화 각 1턴, 1회 진단 게이트
+  map:
+    variants:
+      full:
+      - ongoing_1
+      - ongoing_2
+      - 행동_성공판정
+      - 행동_진단
+      - ongoing_two
+      actions_only:
+      - 행동_성공판정
+      - 행동_진단
+    primary_variant: full
+  tier: 1
+  group: A
+split_rules:
+  family: kosgd
+  source:
+    dir: dataset/kosgd2
+    dialogues_glob: dialogues_*.json
+    schema: extended_schema.json
+  unit: user_turn
+  group_key: dialogue_id
+  pool:
+    kind: fixed_selection
+    path: audits/kosgd2_selection/selection.json
+    field: selected_turns
+    exclude:
+    - path: audits/kosgd_audit/audit_result.json
+      field: selected_turns
+      by: dialogue_id
+    - path: configs/t0/fixture_v1.json
+      field: cases
+      by: state_ref

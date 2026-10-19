@@ -306,3 +306,35 @@ model/benchmark만 확인한다. 역사 파생 actions_only의 Item 재구성은
 - `audits/kosgd2_selection/select_turns.py`: 표준 라이브러리만 쓰는 결정적 새 풀 선정 CLI.
 - `run/history_statistics.py`: 역사 파일의 수치 타입·범위와 임계값 연결 검사.
 - `contract/label_vocab.py`: 어휘 등록 키는 가족 대표만 사용한다는 규칙 명시.
+
+## 판 5 보정 1 기능 지도 — 설정 격리
+
+앞선 판 5의 공용 datasets/rules kosgd2 등록 설명은 역사 기록이다. 보정 1에서 overlay로 이동했다.
+의존 방향은 `run → io → data/contract → types`이며 score·encoder·replay 비교 규칙은 그대로다.
+
+- `types/set_config.py`: frozen SetEntry(set_id·family·dataset·split_rules·overlay_path·task_files).
+- `contract/set_overlay.py`: 닫힌 5키·공용 ID 충돌·중첩 id·가족·task 소유·필수 primary 순수 검사.
+- `io/set_config.py`: 단일 entry 격리, 전체 catalog 검증, overlay 동결 evidence_paths.
+- `io/set_tasks.py`: 공용 7 task 소유 경로, 격리 primary 조회, overlay 실행 task 제한.
+- `data/exclusions.py`: 선정 dialogue_id와 T0 state_ref의 대화 단위 제외 해석.
+- `io/datasets.py`: 공용 객체만 재귀 조회·어휘 읽기; 전달받은 SetEntry로 family 일치 검사.
+- `io/sources/__init__.py`: SetEntry를 받아 재조회 없이 가족 reader에 연결.
+- `io/sources/kosgd.py`: 기존 선정 및 fixture 제외 파일 읽기; 순수 대화 ID 해석에 위임.
+- `io/t0_sources.py`: catalog 기준 가족 평가 풀 합집합; 단일 셋 격리의 명시적 예외.
+- `io/splits.py`: split_bytes로 직렬화 선검사 후 기존 바이트 형식으로 쓰기.
+- `io/report_inputs.py`: 같은 SetEntry·소유 task 규칙으로 family/primary metadata 조회.
+- `io/history_inputs.py`: 공용 역사 규칙 보존, overlay 추가 입력 및 저장 files 전체 해시 대조.
+- `run/stage_inputs.py`: entry와 선언 task를 검증하고 공용 어휘로 Item 복원.
+- `run/context.py`: 격리된 primary 조회에 위임; restore 비교 규칙 유지.
+- `run/fingerprint.py`: 기존 셋 파일 집합 보존, overlay·선언 tasks·선정·제외 증거 추가.
+- `run/cmd_run.py`: overlay 파생 판은 선언 tasks 전체의 동일 해시 집합을 비교.
+- `run/cmd_score.py`, `run/cmd_compare.py`: SetEntry의 family로 채점·비교 연결.
+- `run/make_splits.py`: 사용자 --rules/--datasets 유지, all 계획·직렬화 전부 검사한 뒤 쓰기.
+- `run/item_summary.py`: 사용자 경로 유지, all catalog·요약·JSON 전부 검사한 뒤 출력.
+- `audits/kosgd2_selection/select_turns.py`: --t0-fixture 필수, RNG 소비 후 결과 제외, fixture 해시 기록.
+
+공용 동결 경로·SHA는 tests/fixtures/shared_config.sha256에 있다. 새 전용 lists는 아직 지원하지 않는다.
+overlay 파일 안의 경로는 root 기준이고 원본 파일은 기존 SHA256SUMS로 검증한다.
+선언 tasks 전부를 fingerprint에 넣으므로 sibling variant 수정도 해당 overlay run의 replay를 거부한다.
+단일 셋 실행에서는 다른 overlay를 읽지 않는다. all 입력 오류 시 파일·부분 stdout을 남기지 않는다.
+원시 cfg만 받는 하위 reader의 합성 단위시험 호환을 유지하며 실제 명령은 SetEntry를 전달한다.

@@ -9,9 +9,9 @@ READERS = {"kosgd": kosgd, "fc_call_decision": functionchat, "kmhas": kmhas,
            "kote_escalation": kote, "korfin_asc": korfin, "klue_mrc_answerable": klue_mrc}
 
 
-def read_set_rows(set_name, set_cfg, root) -> list[SourceRow]:
+def read_set_rows(set_name, set_cfg, root, *, selected=None) -> list[SourceRow]:
     """KOTE에만 투표 설정을 전달하며 알 수 없는 셋은 거부한다."""
-    family = checked_family(set_name, set_cfg, root)
+    family = checked_family(set_name, set_cfg, root, selected)
     if family not in READERS:
         raise ValueError(f"unknown set: {set_name}")
     kwargs = {"votes_cfg": set_cfg["votes"]} if family == "kote_escalation" else {}

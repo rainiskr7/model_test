@@ -23,6 +23,8 @@ CASES = json.loads((REPO / "tests/fixtures/seal/cases.json").read_text())["cases
 @pytest.mark.parametrize("case", CASES, ids=lambda c: c["name"])
 def test_all_seal_fixtures_through_cli(tmp_path, monkeypatch, capsys, case):
     Harness(tmp_path)
+    put_yaml(tmp_path / "configs/datasets.yaml", {"sets": [{"id": "synthetic"}]})
+    put_yaml(tmp_path / "configs/splits/rules.yaml", {"sets": {"synthetic": {}}})
     task_path = "configs/tasks/synthetic.yaml"
     put_yaml(tmp_path / task_path, dict(set="synthetic", variant="full", state={"kind": "plain_text"},
         questions=[dict(id="ready", role="success", type="noul", instructions="ready?",

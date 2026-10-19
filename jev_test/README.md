@@ -18,3 +18,11 @@
 kosgd2 가족 디스패치와 선정 스크립트를 추가한다. 명령 예와 모듈 지도는
 [`jeveval/README.md`](jeveval/README.md)의 판 5 절에 있다. 데이터 생성·모델 호출·
 파일럿·감사 v4/v5·최종 동결은 Phase B이며 이번 구현에 포함하지 않는다.
+
+## 판 5 보정 1: 셋 전용 설정
+
+기존 셋의 공용 설정은 0906d42 바이트로 동결한다. 새 셋의 목록은
+[`configs/sets/`](configs/sets/)이며 kosgd2 항목·규칙·primary는 이곳으로 이동했다.
+조회 격리와 전체 카탈로그/T0 예외는 [계약 보정 1](P1_CONTRACT.md)에 명시했다.
+D1a는 T0 참조 대화를 선정 결과에서만 제외하고 RNG 소비를 보존한다.
+현재 kosgd2 selection/split은 보정 전 산출물이며 Claude의 실데이터 재생성이 필요하다.

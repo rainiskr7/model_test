@@ -1,7 +1,6 @@
 """무엇: 단일 실행 채점 명령 · 입력: 완료 단계·봉인 · 출력: risk/scores/summary · 계약 §7."""
 
-from jeveval.io.datasets import family
-from jeveval.io.config import read_yaml
+from jeveval.io.set_config import entry
 from jeveval.io import records, run_files
 from jeveval.io.hashes import sha256_file
 from jeveval.run import context
@@ -16,7 +15,7 @@ from jeveval.types import ThresholdFile
 
 def run(*, root, run_dir):
     ctx = context.restore(root, run_dir)
-    family_name = family(ctx.task.set, read_yaml(ctx.root / "configs/datasets.yaml"))
+    family_name = entry(ctx.root, ctx.task.set).family
     directory = ctx.directory
     if not run_files.exists(directory / "test/seal.json") or check_seal(directory):
         raise ValueError("valid seal required")

@@ -53,3 +53,16 @@ def test_exclusion_reader_validates_rule_and_collects_dialogue_ids(tmp_path):
     cfg["exclude"][0]["by"] = "turn_index"
     with pytest.raises(ValueError):
         read_exclusions(cfg, tmp_path)
+
+
+def test_fixture_exclusion_uses_dialogue_and_requires_fixture_schema(tmp_path):
+    from jeveval.io.sources.kosgd import read_exclusions
+    path = tmp_path / "fixture.json"
+    data = dict(schema="t0_fixture/1", cases=[dict(state_ref=dict(set="kosgd", row_id="reserved#24"))])
+    path.write_text(json.dumps(data))
+    cfg = {"exclude": [{"path": "fixture.json", "field": "cases", "by": "state_ref"}]}
+    assert read_exclusions(cfg, tmp_path) == {"reserved"}
+    data["schema"] = "wrong"
+    path.write_text(json.dumps(data))
+    with pytest.raises(ValueError, match="fixture"):
+        read_exclusions(cfg, tmp_path)

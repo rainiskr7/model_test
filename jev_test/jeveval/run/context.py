@@ -6,9 +6,9 @@ from pathlib import Path
 from jeveval.contract.model_config import validate_model_config
 from jeveval.data.split import check_split_plan
 from jeveval.io import run_files
-from jeveval.io.config import load_taskspec, read_yaml
-from jeveval.io.datasets import dataset_entry
-from jeveval.io.hashes import glob_files
+from jeveval.io.config import load_taskspec
+from jeveval.io.set_config import entry
+from jeveval.io.set_tasks import primary_variant as set_primary_variant
 from jeveval.io.models import load_model_config
 from jeveval.io.paths import identifier, inside
 from jeveval.io.policy import read_retry_policy
@@ -89,14 +89,7 @@ def stage(ctx, name) -> StageData:
 
 
 def primary_variant(ctx):
-    mapping = dataset_entry(read_yaml(ctx.root / "configs/datasets.yaml"), ctx.task.set).get("map", {})
-    if "primary_variant" in mapping:
-        return identifier(mapping["primary_variant"])
-    variants = {task.variant for path in glob_files(ctx.root / "configs/tasks", "*.yaml")
-                if path.stem != "b1" for task in [load_taskspec(path)] if task.set == ctx.task.set}
-    if len(variants) != 1:
-        raise ValueError("SPEC_AMBIGUOUS: primary variant")
-    return variants.pop()
+    return set_primary_variant(ctx.root, entry(ctx.root, ctx.task.set))
 
 
 def completed(root, run_dir):

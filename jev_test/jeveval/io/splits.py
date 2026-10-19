@@ -16,13 +16,18 @@ def _check_text(plan: SplitPlan) -> None:
         raise ValueError("Hangul is allowed only in diagnostic_demotions")
 
 
+def split_bytes(plan: SplitPlan) -> bytes:
+    """쓰기 전에 전체 분할의 직렬화도 검사할 수 있게 한다."""
+    _check_text(plan)
+    return (json.dumps(plan.to_dict(), ensure_ascii=False, indent=1, sort_keys=True) + "\n").encode("utf-8")
+
+
 def write_split_plan(plan: SplitPlan, path: str | Path) -> None:
     """보정 6의 정렬된 UTF-8 JSON과 LF 하나를 그대로 기록한다."""
-    _check_text(plan)
-    payload = json.dumps(plan.to_dict(), ensure_ascii=False, indent=1, sort_keys=True) + "\n"
+    payload = split_bytes(plan)
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_bytes(payload.encode("utf-8"))
+    path.write_bytes(payload)
 
 
 def read_split_plan(path: str | Path) -> SplitPlan:

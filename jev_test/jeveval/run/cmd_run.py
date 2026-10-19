@@ -22,7 +22,7 @@ def _common(fp):
     result = {key: fp[key] for key in ("encoder", "tokenizer", "code_sha256",
                                       "dataset_verified", "run_id", "model", "external", "env")}
     result["files"] = {path: digest for path, digest in fp["files"].items()
-                       if path != fp["inputs"]["task_path"]}
+                       if path != fp["inputs"]["task_path"] or f"configs/sets/{fp['set']}.yaml" in fp["files"]}
     return result
 
 

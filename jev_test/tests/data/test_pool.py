@@ -90,3 +90,12 @@ def test_fixed_selection_rejects_other_turn_of_excluded_dialogue():
         select_pool(groups, cfg, 1, "kosgd2", fixed=[{"dialogue_id": "new", "turn_index": 0}])
     with pytest.raises(ValueError, match="intersects"):
         select_pool(groups, cfg, 1, "kosgd2", fixed=[{"dialogue_id": "old", "turn_index": 2}], excluded={"old"})
+
+
+def test_t0_reserved_dialogue_rejected_even_for_other_turn():
+    groups = Groups({}, {"reserved": ["0", "24"], "new": ["0"]})
+    cfg = dict(kind="fixed_selection", exclude=[dict(path="fixture.json", field="cases", by="state_ref")])
+    with pytest.raises(ValueError, match="intersects"):
+        select_pool(groups, cfg, 1, "kosgd2", fixed=[dict(dialogue_id="reserved", turn_index=0)], excluded={"reserved"})
+    assert select_pool(groups, cfg, 1, "kosgd2", fixed=[dict(dialogue_id="new", turn_index=0)],
+                       excluded={"reserved"}).group_ids == ["new"]

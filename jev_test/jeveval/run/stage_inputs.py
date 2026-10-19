@@ -3,9 +3,11 @@
 from pathlib import Path
 
 from jeveval.data.items import functionchat, klue_mrc, kmhas, korfin, kosgd, kote
-from jeveval.io.config import load_taskspec, read_yaml
-from jeveval.io.datasets import checked_family, read_label_vocab
+from jeveval.io.config import load_taskspec
+from jeveval.io.datasets import read_label_vocab
 from jeveval.io.hashes import verify_dir
+from jeveval.io.set_config import entry
+from jeveval.io.set_tasks import require_task
 from jeveval.io.records import read_finals
 from jeveval.io.sources import read_set_rows
 from jeveval.io.splits import read_split_plan
@@ -32,13 +34,13 @@ def load_items(*, root, task_path, stage) -> list[Item]:
     task = load_taskspec(root / task_path)
     if verify_dir(root / "dataset" / task.set):
         raise ValueError("dataset hash mismatch")
-    rules = read_yaml(root / "configs/splits/rules.yaml")
-    family = checked_family(task.set, rules["sets"][task.set], root)
-    rows = read_set_rows(task.set, rules["sets"][task.set], root)
+    selected = entry(root, task.set)
+    require_task(root, selected, task_path)
+    rows = read_set_rows(task.set, selected.split_rules, root, selected=selected)
     plan = read_split_plan(root / "configs/splits" / f"{task.set}.json")
     lists = read_lists(root / "configs/tasks/lists")
     rules_ = label_rules(read_label_vocab(root / "configs/datasets.yaml"))
-    return BUILDERS[family].build_items(rows, plan, task, lists, rules_)[stage]
+    return BUILDERS[selected.family].build_items(rows, plan, task, lists, rules_)[stage]
 
 
 def final_path(run_dir, stage):

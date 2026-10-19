@@ -3,8 +3,8 @@
 from pathlib import Path
 
 from jeveval.io import run_files
-from jeveval.io.config import load_taskspec, read_yaml
-from jeveval.io.datasets import dataset_entry, family
+from jeveval.io.set_config import entry
+from jeveval.io.set_tasks import primary_variant
 from jeveval.io.paths import identifier, inside
 
 
@@ -15,15 +15,8 @@ def compare(root, results, compare_id, set_name, variant):
 
 
 def metadata(root, set_name, variant):
-    data = read_yaml(inside(root, "configs/datasets.yaml"))
-    primary = dataset_entry(data, set_name).get("map", {}).get("primary_variant")
-    if primary is None:
-        tasks = inside(root, "configs/tasks")
-        variants = {t.variant for p in tasks.glob("*.yaml") if p.stem != "b1"
-                    for t in [load_taskspec(p)] if t.set == set_name}
-        if len(variants) == 1:
-            primary = variants.pop()
-    return family(set_name, data), None if primary is None else primary == variant
+    selected = entry(root, set_name)
+    return selected.family, primary_variant(root, selected) == variant
 
 
 def output(root, path):

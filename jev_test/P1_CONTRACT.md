@@ -706,6 +706,7 @@ PoolResult(group_ids: list[str], allocation: dict[str, int])          # data/poo
 ### §1-1 가족 디스패치
 
 datasets 항목의 family 기본값은 set ID이며 splits/rules의 같은 선언과 일치해야 한다.
+(판 5 보정 1: kosgd2 항목·규칙은 overlay로 이동했다. 아래 선언 일치는 해당 SetEntry에 적용한다.)
 별칭은 가족 대표의 reader·builder·어휘를 공유한다. SourceRow.set, Item.set, logical_id,
 경로와 fingerprint는 별칭 set을 유지한다. 가족은 Item.meta에 추가하지 않고 호출자가
 score에 전달한다. LabelVocab는 kosgd/kmhas/kote_escalation 대표 어휘를 공유한다.
@@ -823,3 +824,79 @@ CLI: report --run-id ID --models ID... [--results DIR] [--compare-id ID...] [--n
 새 family dispatch로 셋 정체성과 공유 구현을 분리했다. 과거 결과는 역사 읽기로 분리하고,
 사후 질문 위험은 exploratory로만 낸다. 새 kosgd2 문구의 파일럿·v4/v5 감사·최종 primary_variant·
 등록 임계값 봉인·분할 동결은 Phase B로 남긴다. 기존 문서 문장과 감사 폴더는 당시 증거로 보존한다.
+
+
+## 판 5 보정 1 — 셋 설정 격리와 T0 동결 경계 (2026-10-19)
+
+판 5 본문과 과거 증거는 보존한다. 아래 보정은 설정 위치·동결 의존성·kosgd2 선정 제외에 적용하며,
+판 4 replay 허용 차이, same_fingerprint, restore, 채점·질문 위험·보고 정의는 바꾸지 않는다.
+
+### §1-1 셋 위치와 격리
+
+공용 `configs/datasets.yaml`과 `configs/splits/rules.yaml`은 0906d42 바이트로 복원한다.
+기존 실행 셋은 두 파일의 ID 교집합이다. 새 셋은 `configs/sets/<id>.yaml`에 등록한다.
+최상위 키는 schema=set_overlay/1, id, tasks, dataset, split_rules 다섯 개뿐이다.
+파일 stem=id=dataset.id이며 공용 어느 쪽의 ID도 재정의할 수 없다. dataset의 중첩 id는 금지한다.
+dataset.family와 split_rules.family는 같은 공용 가족 대표여야 한다. split_rules의 seed/dev_fraction 등
+전역 키와 최상위 lists는 금지한다. 셋 전용 목록은 이번 보정에서 지원하지 않는다.
+tasks는 configs/tasks 아래의 고유 YAML 파일명 목록이며 실제 TaskSpec.set이 id와 같아야 한다.
+map.primary_variant는 필수이고 선언한 task의 고유 variant 중 하나여야 한다.
+
+`entry(root, set_id)`는 공용 셋이면 overlay 디렉터리에 접근하지 않고, 새 셋이면 자기 overlay만 읽는다.
+`catalog(root)`는 공용 실행 셋과 모든 overlay를 검증한다. 기존 Item·요청·split·primary·보고 metadata·
+fingerprint files·역사 재구성은 관계없는 overlay/task의 존재·오류와 무관하다.
+예외는 두 가지다: T0의 가족 풀 합집합 제외와 `--set all`/`--task all` 전체 카탈로그 명령이다.
+all 명령은 모든 설정·대상 결과·직렬화를 먼저 검증하며 입력 오류가 있으면 파일을 쓰거나 결과를 출력하지 않는다.
+이 보장은 파일시스템 장애에 대한 다중 파일 트랜잭션을 뜻하지 않는다.
+
+primary 추정은 공용 map을 우선한다. 없으면 `io/set_tasks.BASE_TASKS`에 고정한 기존 7개 소유 경로 중
+해당 셋의 task만 읽는다. overlay 선언을 읽어 glob에서 제외하는 방식은 잘못된 overlay 격리와 충돌하므로
+사용하지 않는다. 미등록 공용 셋에 primary 선언도 소유 task도 없으면 SPEC_AMBIGUOUS로 거부한다.
+
+공용 동결 목록은 두 공용 파일, b1.yaml, policy.yaml, configs/tasks/lists/*.json의 경로 집합과 바이트,
+기존 셋 task 7개와 split 6개다. tests/fixtures/shared_config.sha256에 0906d42 기준을 고정한다.
+새 셋 때문에 이들을 고치지 않는다. 변경이 필요하면 기존 replay를 깨는 별도 개정으로 취급한다.
+
+### §1-2 overlay 동결 증거
+
+기존 셋 fingerprint의 파일 집합은 그대로다. overlay 셋은 기존 공용 입력 외에 자기 overlay,
+선언한 task 전부, pool.path 선정 파일, pool.exclude가 참조하는 파일을 추가한다.
+원본 파일의 검증은 해당 dataset/<set>/SHA256SUMS와 실제 바이트 대조를 유지한다.
+어휘는 공용 가족 대표에서만 읽는다. overlay의 실행 task는 선언 목록에 있어야 한다.
+파생 full/actions_only는 같은 overlay 의존성 집합을 비교한다. 역사 overlay Item 재구성은 이 추가 경로의
+저장 해시가 빠졌거나 현재 바이트가 달라도 거부하며, 해당 fingerprint.files 전체를 대조한다.
+공용 셋의 과거 역사 읽기에 이 추가 동결 검사를 소급 적용하지 않는다.
+공용 바이트 복원은 replay 선검사 회복의 조건이다. code_sha256가 다른 기존 run의 restore/resume은 여전히 거부한다.
+
+### §6-2 kosgd2: 결정 D1a
+
+kosgd2 항목과 기존 규칙은 configs/sets/kosgd2.yaml로 이동한다. task 두 개·문구·라벨 의미와 T0 fixture는 보존한다.
+pool.exclude에 `{path: configs/t0/fixture_v1.json, field: cases, by: state_ref}`를 추가한다.
+state_ref의 KoSGD/kosgd2 참조는 row_id의 # 앞 대화 ID로 해석하므로 다른 턴도 제외된다.
+선정은 옛 풀 대화를 먼저 제외한 뒤 ID 정렬 순서대로 모든 USER 보유 후보에서 rng.choice를 한 번씩 소비한다.
+T0 대화도 RNG를 소비한 다음 결과에서만 제거한다. 따라서 나머지 대화의 대표 턴은 유지된다.
+fixture 또는 참조 원본 대화가 없거나 T0 대화가 옛 풀과 겹치면 거부한다.
+사유는 frozen_boundary_t0_out_of_pool(동결 경계 — T0 fixture의 풀 밖 조건)이며 정답률과 무관하다.
+선정 산출물에는 T0 fixture SHA와 제외 건수를 추가한다. 분할 생성도 같은 제외 집합을 읽고 pool이 교집합을 거부한다.
+재생성 기대값은 26_00068만 제거한 1,200대화, dev 240/test 960이다. 원본 데이터가 필요한 검증은 Claude가 수행한다.
+현재 커밋된 selection.json·kosgd2.json은 판 5의 1,201대화 산출물로 보존되어 있으며 새 규칙으로 재생성하기 전에는
+유효한 보정 1 산출물이라고 주장하지 않는다. 구현 시험은 합성 데이터로 RNG·선정·split·T0 합집합을 검증한다.
+
+### §8-1 모듈과 CLI
+
+SetEntry는 types/set_config.py의 frozen dataclass다. io/set_config.py는 entry/catalog/evidence_paths,
+contract/set_overlay.py는 순수 스키마 검사, io/set_tasks.py는 소유 task·primary 경계를 맡는다.
+data/exclusions.py는 순수 대화 ID 해석이며 io/sources/kosgd.py가 제외 파일을 읽는다.
+reader 호출자는 이미 읽은 SetEntry를 전달해 checked_family에서 설정을 중복으로 읽지 않는다.
+원시 cfg를 직접 받는 하위 reader의 독립 합성 시험에서는 기존 공용 datasets 대조를 유지한다.
+make_splits의 --rules 및 --datasets, item_summary의 --rules/--datasets는 사용자 지정 공용 경로를 받으며
+root 아래 configs/sets에서 overlay를 찾는다. 모든 overlay 내부 경로는 root 기준이다.
+선정 CLI는 --t0-fixture가 필수이며 기존 출력 덮어쓰기는 거부한다. 실행 예시는 계획 보정 절을 따른다.
+
+### §9 시험과 §11 이력
+
+기존 nodeid를 유지하고 공용 kosgd2 가정은 overlay fixture로 이행한다. 공용 파일은 실저장소의 동결 목록과 대조한다.
+경계 시험은 재정의·중첩 id·family/stem·전역 키·lists·task set·primary 오류, 단일 셋 격리,
+all 무출력·무쓰기, overlay 의존성 해시와 역사 변조 거부, D1a의 RNG 소비·다른 턴 제외·T0 풀 밖 참조를 포함한다.
+원인: 판 5에서 공용 설정에 새 셋을 추가해 기존 run의 files 지문이 바뀌었다. 공용 바이트를 복원하고
+새 셋의 의존성을 별도로 동결한다. 구현 단계에서 실데이터 산출물 재생성·재판정·서버 전송·커밋은 수행하지 않는다.

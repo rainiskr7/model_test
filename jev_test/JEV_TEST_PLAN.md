@@ -1,7 +1,7 @@
 # 결정 모델(Jev 계열) 평가 계획
 
 작성 2026-10-12 · 개정 15 (10-19) · 상태: **계획 — P1 코드 작업 ① 끝** (계약 [`P1_CONTRACT.md`](P1_CONTRACT.md) 판 5)
-데이터셋 목록의 기준(SSOT): [`configs/datasets.yaml`](configs/datasets.yaml)
+데이터셋 목록의 기준(SSOT): [`configs/datasets.yaml`](configs/datasets.yaml) + [`configs/sets/`](configs/sets/) (보정 1; 기존 단일 파일 표기는 역사 기록으로 보존)
 
 ---
 
@@ -481,6 +481,7 @@ Phase A는 --registered 인자를 제공하지 않는다. 현재 run은 context.
 kosgd2의 13문항·두 판에 R2v3·R4·R5·R6·R7을 새 감사 v5로 수행한다. 기존 audit_v3는
 고치지 않는다. 판마다 해당 규칙을 모두 통과한 판만 후보이며 full 우선, 아니면
 행동판, 둘 다 아니면 중단한다. datasets의 primary_variant=full은 감사 전 임시값이다.
+(보정 1에서 이 값은 configs/sets/kosgd2.yaml의 dataset.map으로 이동했다.)
 감사 v4는 실제 전송 바이트·독립 원본·세 인코더를 비교한다(판 5 계약 §2-2 추가 명세).
 Phase A에서는 파일럿·감사 실행·실데이터 분할·T0 재생성·서버 호출을 하지 않는다.
 Phase A CLOSE는 구현 검토 종료만 의미하며 최종 주 지표 판과 실험 동결 완료를 뜻하지 않는다.
@@ -497,3 +498,41 @@ C1은 기존 node 삭제0·새 skip/xfail0·전체 pytest, C2/C3/C4 실데이터
 C5는 문서·manifest가 모델 호출 전에 커밋되었음을 외부 실행 기록과 함께 확인한다.
 C6은 identity/seal/해시/중복·여분 ID/절단/제외 풀/출력 경로/원문 canary 반례를 기계 검증한다.
 B 중재 대상은 W1·5%/5% 게이트·희소30·family 설계다. 구현자는 커밋·B 중재를 수행하지 않는다.
+
+
+## 개정 15 보정 1 — overlay 격리·D1a (2026-10-19)
+
+### §3 새 셋 위치
+
+kosgd2의 dataset·split 규칙·임시 primary_variant=full은 configs/sets/kosgd2.yaml에 둔다.
+공용 두 파일은 0906d42 바이트로 복원하고 기존 task·split·lists·b1·policy도 동결한다.
+기존 셋은 자기 공용 설정과 소유 task만 조회한다. 전체 카탈로그 명령과 T0 가족 풀 합집합은 명시적 예외다.
+기존 task 추정은 고정된 7개 경로로 제한한다. 오류가 난 overlay를 읽고 제외 대상을 계산하지 않는다.
+
+### §4-6 D1a 선정과 재생성
+
+사용자 결정 D1a: T0 fixture의 KoSGD 참조 대화(현재 26_00068)를 kosgd2 결과에서 제외한다.
+선정 RNG는 그 대화에도 기존대로 한 번 소비한다. 남은 1,200대화의 대표 턴은 이전 선정과 같아야 한다.
+분할은 같은 seed/fraction으로 다시 생성하므로 dev 240/test 960이며, 개별 dev/test 소속이 이전과 같다고 주장하지 않는다.
+이는 첫 모델 호출·최초 동결 전의 동결 경계 수정이며 사유는 frozen_boundary_t0_out_of_pool이다.
+T0 fixture·기존 kosgd 풀·감사 증거·질문 문구·라벨 규칙을 변경하지 않는다.
+
+앞선 선정 명령은 보정 전 역사 명령이다. 보정 1 명령은 아래와 같다(기존 출력은 덮어쓰지 않는다).
+
+```sh
+python audits/kosgd2_selection/select_turns.py --source dataset/kosgd2 --excluded audits/kosgd_audit/audit_result.json --t0-fixture configs/t0/fixture_v1.json --out .work/kosgd2_selection.corrected.json
+```
+
+Claude는 원본 데이터가 있는 작업 트리에서 결과를 검증한 뒤 selection.json에 반영하고,
+`python -m jeveval.run.make_splits --root . --rules configs/splits/rules.yaml --set kosgd2 --out .work/kosgd2_splits`
+로 재생성·검증한 split을 반영한다. 선정에서 T0 대화 하나만 빠지고 나머지 턴이 같은지, gold oracle 1200/1200,
+모든 fixture state_ref가 가족 합집합 밖인지 확인한다. 구현 단계의 커밋된 1,201대화 selection/split은 아직 보정 전 증거다.
+
+### §12 교훈·검증 범위
+
+공용 datasets/rules 변경은 기존 run 42개 변형의 replay files 비교를 깨뜨렸다. byte 복원은 선검사 회복 조건이며
+기존 run restore/resume을 허용하는 변경이 아니다. 새 run으로 원본 attempts를 replay하는 절차는 별도 실행 단계다.
+C1 전체 pytest·기존 node 삭제0·새 skip/xfail0, C2 공용 동결 목록, C3 실제 42변형 지문,
+C4 재선정·재분할·oracle·T0, C5 원본 및 10-19 대비 재판정, C6 공격 입력, C7 설정 의존성 격리를 구분한다.
+실데이터 재생성·C3/C4/C5·B 중재·재판정·서버 복귀 실행은 Claude가 수행한다. 구현 통과를 이들의 통과로 대신하지 않는다.
+보정 1 테스트는 합성 데이터만 사용하며, 기존 selection/split을 수정하거나 새 규칙에 맞는 것으로 취급하지 않는다.

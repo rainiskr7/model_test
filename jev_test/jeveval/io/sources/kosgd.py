@@ -36,14 +36,13 @@ def read_selection(pool_cfg: dict, root: Path) -> list[dict]:
 def read_exclusions(pool_cfg, root):
     """선정 제외 목록은 대화 ID로 읽는다. 다른 턴도 같은 제외 단위다."""
     from jeveval.io.paths import inside
+    from jeveval.data.exclusions import dialogue_ids
     excluded = set()
     for rule in pool_cfg.get("exclude", []):
-        if set(rule) != {"path", "field", "by"} or rule["by"] != "dialogue_id":
+        if set(rule) != {"path", "field", "by"} or rule["by"] not in {"dialogue_id", "state_ref"}:
             raise ValueError("invalid selection exclusion rule")
         data = json.loads(inside(root, rule["path"]).read_text(encoding="utf-8"))
-        for entry in data[rule["field"]]:
-            value = entry["dialogue_id"]
-            if not isinstance(value, str) or not value:
-                raise ValueError("invalid excluded dialogue ID")
-            excluded.add(value)
+        if rule["by"] == "state_ref" and (rule["field"] != "cases" or data.get("schema") != "t0_fixture/1"):
+            raise ValueError("T0 exclusion requires fixture cases")
+        excluded.update(dialogue_ids(data[rule["field"]], rule["by"]))
     return excluded

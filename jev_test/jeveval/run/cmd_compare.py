@@ -1,7 +1,6 @@
 """무엇: 모델 횡단 비교 조립 · 입력: 완료 run 폴더 · 출력: compare.json · 계약 §8-6 L·⑥b-2."""
 
-from jeveval.io.datasets import family
-from jeveval.io.config import read_yaml
+from jeveval.io.set_config import entry
 from jeveval.io import run_files
 from jeveval.io.paths import inside
 from jeveval.run import context
@@ -32,7 +31,7 @@ def _f1(stages, stage_names, seed, set_name):
 def _result(contexts, stages, thresholds):
     first = next(iter(contexts.values()))
     set_name, variant, seed = first.task.set, first.task.variant, first.plan.seed
-    family_name = family(set_name, read_yaml(first.root / "configs/datasets.yaml"))
+    family_name = entry(first.root, set_name).family
     rows = {m: data["test"].outcomes for m, data in stages.items()}
     cohort = common_cohort(rows)
     populations = {m: population(outcomes=[r for r in rows[m] if r.logical_id in cohort],

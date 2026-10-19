@@ -62,5 +62,6 @@ def test_alias_uses_family_vocabulary_without_new_vocab_field():
     from jeveval.io.datasets import dataset_entry, read_label_vocab
     path = Path(__file__).resolve().parents[2] / "configs/datasets.yaml"
     data = read_yaml(path)
-    assert "label_vocab" not in dataset_entry(data, "kosgd2")
+    from jeveval.io.set_config import entry
+    assert "label_vocab" not in entry(path.parents[1], "kosgd2").dataset
     assert read_label_vocab(path).kosgd_acts == dataset_entry(data, "kosgd")["label_vocab"]

@@ -41,9 +41,17 @@ def family(set_id, data):
     return identifier(dataset_entry(data, set_id).get("family", set_id))
 
 
-def checked_family(set_id, cfg, root):
+def checked_family(set_id, cfg, root, selected=None):
     """두 설정의 가족 선언을 대조한다. 별칭에는 datasets 선언이 필수다."""
     from pathlib import Path
+    if selected is None and (Path(root) / "configs/splits/rules.yaml").is_file():
+        from jeveval.io.set_config import entry
+        selected = entry(root, set_id)
+    if selected is not None:
+        if (selected.set_id != set_id or selected.split_rules != cfg
+                or selected.family != cfg.get("family", set_id)):
+            raise ValueError("dataset/rules family mismatch")
+        return selected.family
     path = Path(root) / "configs/datasets.yaml"
     declared = cfg.get("family", set_id)
     if path.exists():

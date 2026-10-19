@@ -5,6 +5,9 @@ from pathlib import Path
 from jeveval.io import environment, hashes
 from jeveval.io.config import load_taskspec
 from jeveval.io.models import load_model_config
+from jeveval.io.set_config import entry, evidence_paths
+from jeveval.io.set_tasks import require_task
+from jeveval.io.paths import inside
 from jeveval.run.encoders import ENCODERS
 
 
@@ -25,6 +28,9 @@ def build_fingerprint(*, root, run_id, model_cfg_path, task_path, set_name,
     paths = [task_path, root / "configs/tasks/b1.yaml", root / "configs/datasets.yaml", root / "configs/policy.yaml",
              root / "configs/splits" / f"{set_name}.json", root / "configs/splits/rules.yaml", model_path,
              dataset / "SHA256SUMS", *hashes.glob_files(root / "configs/tasks/lists", "*.json")]
+    selected = entry(root, set_name)
+    require_task(root, selected, task_path)
+    paths.extend(inside(root, name) for name in evidence_paths(selected))
     files = {p.relative_to(root).as_posix(): hashes.sha256_file(p) for p in sorted(set(paths))}
     rule, encoder = cfg.encoder["rule"], None
     if rule is not None:

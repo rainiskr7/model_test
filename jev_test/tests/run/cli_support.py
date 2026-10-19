@@ -8,7 +8,7 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 import yaml
 
-from jeveval.io.datasets import family
+from jeveval.io.set_config import entry
 from jeveval.io.config import read_yaml
 from jeveval.io.hashes import sha256_file
 from jeveval.io.splits import write_split_plan
@@ -27,7 +27,7 @@ def put_yaml(path, value):
 
 class Harness:
     def __init__(self, root, set_name="klue_mrc_answerable", variant="default", kind="systemone"):
-        self.family = family(set_name, read_yaml(REPO / "configs/datasets.yaml"))
+        self.family = entry(REPO, set_name).family
         self.root, self.set, self.variant, self.sent = root, set_name, variant, []
         root.mkdir(parents=True, exist_ok=True)
         add_external(root)
@@ -79,13 +79,23 @@ class Harness:
             extra = [f"{set_name}:2:3"]
         self.plan = SplitPlan(set_name, 1, {}, {}, groups, representatives, ["1"], ["2"], [], extra, {})
         write_split_plan(self.plan, root / f"configs/splits/{set_name}.json")
-        put_yaml(root / "configs/splits/rules.yaml", {"sets": {set_name: {**rules, "family": self.family}}})
+        self._write_configuration(root, set_name, rules)
+
+    def _write_configuration(self, root, set_name, rules):
         entries = label_entries()
-        if set_name not in {entry["id"] for entry in entries}:
-            entries.append({"id": set_name, "family": self.family})
-        for entry in entries:
-            if entry["id"] == set_name and self.family == "kosgd":
-                entry["map"] = {"primary_variant": "full"}
+        data = next((e for e in entries if e["id"] == set_name), {"id": set_name, "family": self.family})
+        if self.family == "kosgd":
+            data["map"] = {"primary_variant": "full"}
+        cfg = {**rules, "family": self.family}
+        if set_name != self.family:
+            put_yaml(root / "configs/splits/rules.yaml", {"sets": {self.family: {"family": self.family}}})
+            put_yaml(root / f"configs/sets/{set_name}.yaml", dict(schema="set_overlay/1", id=set_name,
+                     tasks=[f"{set_name}_full.yaml", f"{set_name}_actions_only.yaml"],
+                     dataset=data, split_rules=cfg))
+        else:
+            put_yaml(root / "configs/splits/rules.yaml", {"sets": {set_name: cfg}})
+            if data not in entries:
+                entries.append(data)
         put_yaml(root / "configs/datasets.yaml", {"sets": entries})
 
     def _write_model(self, root, kind):

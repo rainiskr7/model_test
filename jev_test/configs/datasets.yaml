@@ -64,26 +64,6 @@ korean_decisions:
     tier: 1
     group: A
 
-  # 개정 15: 별칭 경로/ID는 독립, 라벨 어휘는 가족 대표 kosgd에서 공유한다.
-  - id: kosgd2
-    family: kosgd
-    derived_from_set: kosgd
-    hf: chaeyeonn/KoSGD
-    split: test
-    sha: d725461
-    rows: "대화 4,201 (턴 84,594)"
-    license: CC-BY-SA-4.0
-    selection: audits/kosgd2_selection/selection.json
-    reason: "지시가 두 가지로 읽힘; 중복 관측은 사후 관측이며 정답률 최적화 근거가 아님"
-    pilot: "풀 밖 = 옛 kosgd 풀 포함; 200 대화 각 1턴, 1회 진단 게이트"
-    map:
-      variants:
-        full: [ongoing_1, ongoing_2, 행동_성공판정, 행동_진단, ongoing_two]
-        actions_only: [행동_성공판정, 행동_진단]
-      primary_variant: full  # 감사 전 임시. Phase B 감사 뒤 첫 fingerprint 전에 확정.
-    tier: 1
-    group: A
-
   - id: kmhas
     hf: jeanlee/kmhas_korean_hate_speech
     split: test
