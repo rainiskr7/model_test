@@ -5,9 +5,9 @@ import signal
 import subprocess
 import time
 
-from . import artifacts, http_preflight
-from .commands import command, prerequisites
-from .isolation import Unavailable
+from orchestration.smoke import artifacts, http_preflight
+from orchestration.smoke.commands import command, prerequisites
+from orchestration.smoke.isolation import Unavailable
 
 BOUNDS = {"harness": 2, "nlu": 2, "functionchat": 4, "taubench": 2, "multimodal": 4}
 

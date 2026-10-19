@@ -6,9 +6,10 @@ from pathlib import Path
 import re
 import sys
 
-from .configuration import TRACKS, configuration
-from .execution import run
-from .isolation import assemble, environment, outside
+from orchestration.laneconf import ConfigError
+from orchestration.smoke.configuration import TRACKS, configuration
+from orchestration.smoke.execution import run
+from orchestration.smoke.isolation import assemble, environment, outside
 
 
 def main():
@@ -26,6 +27,9 @@ def main():
         stamp = datetime.now(timezone.utc).strftime("smoke_%Y%m%d_%H%M%S_%f")
         ctx = configuration(root, base, environment(root, base, stamp), stamp, args.model_conf)
         summary = run(ctx, list(dict.fromkeys(args.tracks or TRACKS)))
+    except ConfigError as exc:
+        print(f"smoke: {exc}", file=sys.stderr)
+        return 2
     except Exception as exc:
         summary = dict(rc=77, status="INCONCLUSIVE", reason=str(exc),
                        base=str(base) if 'base' in locals() else None)

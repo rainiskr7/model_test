@@ -3,12 +3,20 @@
 Run from any cwd with Bash 3.2 or later:
 
 ```bash
-bash orchestration/smoke/run_smoke.sh qwen35fp8 --out /tmp/qwen35fp8-smoke.json
+N=/Users/rainis/Desktop/workspace/source/model_test/foundation_model_test_non_thinking
+bash "$N/orchestration/smoke/run_smoke.sh" qwen35fp8 --out /tmp/qwen35fp8-smoke.json
 ```
 
 Optional positional tracks are `harness nlu functionchat taubench multimodal`.
-The model conf is read literally from `orchestration/models`; HOST_ENV wins over
-HOST_DEFAULT. CONFIG is resolved by the existing config loader (including native
+The model conf uses the same `orchestration.laneconf` parser/resolver as the lane.
+It is read literally from `orchestration/models` using the kmmlu scope and the
+explicit root/orchestration/tracks directory; only the session requirement is
+skipped for smoke. HOST_ENV wins over HOST_DEFAULT when nonempty.
+Duplicate keys, even identical values or unselected scopes, are errors. Replace
+an existing assignment instead of appending an override. Whitespace and CR are
+preserved; only column-zero comments and matching outer quotes are recognized.
+Context records the resolved CONFIG and KEYVAR as well as endpoint and tokenizer.
+CONFIG is resolved by the existing config loader (including native
 tool calling and serving constraints). The selected KEYVAR is read from N/.env;
 its value is supplied only through the child environment / HTTP header.
 
@@ -44,11 +52,14 @@ INCONCLUSIVE; there is no download fallback. The multimodal request bound includ
 the current SDK's two retries; a larger SDK default is rejected as INCONCLUSIVE.
 
 Overall exit: any FAIL = 1; otherwise any INCONCLUSIVE = 77; otherwise 0.
-Malformed CLI arguments return 2. Missing setup prerequisites return 77.
+Malformed CLI arguments and model-conf ConfigError return 2. Configuration
+errors print `smoke: <message>` on stderr; the message body matches the lane
+(e.g. `duplicate key: HOST_DEFAULT`). No summary is written for ConfigError.
+Missing setup prerequisites return 77. HOST format validation remains smoke-only.
 
 ```bash
-bash orchestration/tests/test_smoke_offline.sh
-bash tests/run_pytests.sh orchestration -k smoke
+bash "$N/orchestration/tests/test_smoke_offline.sh"
+bash "$N/tests/run_pytests.sh" orchestration -k smoke
 ```
 
 The shell test uses a stdlib loopback HTTP server with synthetic credentials and

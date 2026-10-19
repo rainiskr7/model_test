@@ -36,6 +36,7 @@ def main():
     put(fx/'.env','OPENAI_API_KEY=fixture-one\nOPENAI_API_KEY_7=fixture-seven\nTAUBENCH_USER_API_KEY=fixture-user\n')
     (fx/'orchestration/lanes').mkdir(parents=True)
     (fx/'orchestration/run_lane.sh').symlink_to(orch/'run_lane.sh')
+    shutil.copytree(orch/'laneconf', fx/'orchestration/laneconf')
     # 5a: the common entry now sources track definitions from its fixture HERE.
     (fx/'orchestration/tracks').symlink_to(orch/'tracks',target_is_directory=True)
     stub='''#!/bin/bash

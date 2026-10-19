@@ -2,13 +2,14 @@
 from datetime import datetime, timezone
 import json
 import os
+import shutil
 from pathlib import Path
 import tempfile
 
-from .configuration import TRACKS, configuration
-from .execution import BOUNDS, run
-from .isolation import assemble, environment
-from .offline_server import start
+from orchestration.smoke.configuration import TRACKS, configuration
+from orchestration.smoke.execution import BOUNDS, run
+from orchestration.smoke.isolation import assemble, environment
+from orchestration.smoke.offline_server import start
 
 
 def fixture(root, host):
@@ -17,12 +18,14 @@ def fixture(root, host):
         (target / name).symlink_to(root / name, target_is_directory=True)
     models = target / "orchestration/models"
     models.mkdir(parents=True)
+    for package in ("laneconf", "tracks"):
+        shutil.copytree(root / "orchestration" / package, target / "orchestration" / package)
     tokenizer = target / "tokenizer"
     tokenizer.mkdir()
     (tokenizer / "chat_template.jinja").write_text("{% set enable_thinking = false %}")
     (models / "fixture.conf").write_text(
         f"CONFIG=qwen_qwen3.5_27b_fp8\nHOST_ENV=SMOKE_FIXTURE_HOST\nHOST_DEFAULT=invalid.invalid:1\n"
-        f"KEYVAR=FIXTURE_KEY\nLANE_TOKENIZER={tokenizer}\n")
+        f"KEYVAR=FIXTURE_KEY\nDISPLAY=fixture\nSESSION_KMMLU=fixture\nLANE_TOKENIZER={tokenizer}\n")
     (target / ".env").write_text("FIXTURE_KEY=synthetic-smoke-key\n")
     return target
 

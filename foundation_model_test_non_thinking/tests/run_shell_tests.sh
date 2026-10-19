@@ -9,6 +9,7 @@ for script in \
   orchestration/tests/test_lane_guard.sh \
   orchestration/tests/test_run_lane_equivalence.sh \
   orchestration/tests/test_run_lane_full.sh \
+  orchestration/tests/test_smoke_offline.sh \
   tests/test_run_full_eval.sh \
   shared/harness/tests/test_harness_runner.sh
 do

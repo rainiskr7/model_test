@@ -46,7 +46,10 @@ LANE_DRY_RUN=1 bash orchestration/lanes/kmmlu.sh qwen38
 LANE_DRY_RUN=1 bash orchestration/lanes/kmmlu.sh qwenfp8
 ```
 
-Dry-run은 cd, venv 활성화, config loader까지만 진행하며 `.env`를 읽지 않는다.
+설정은 활성화 전에 `.venv/bin/python -B -m orchestration.laneconf`로 해석한다.
+`--tracks-dir`는 실행 체크아웃의 `orchestration/tracks`이며 PYTHONPATH와 bytecode 금지는
+이 명령에만 적용한다. 트랙 진입 허용 목록은 이번 단계에서 그대로 유지한다.
+Dry-run은 설정 해석, cd, venv 활성화, config loader까지만 진행하며 `.env`를 읽지 않는다.
 preflight, 로그 쓰기, harness/taubench 실행은 하지 않는다. `LANE_TOKENIZER`는
 harness 인자에만 쓰며 loader가 export한 `TOKENIZER`는 유지한다.
 
@@ -66,8 +69,12 @@ rc 4로 끝난다. dry-run에서는 잠금 helper를 source하지 않고 잠금 
 정상이며 삭제할 필요가 없다. 경합 중 잠금 파일을 지우면 다른 inode가 생길 수 있으므로
 해제 수단으로 삭제하지 않는다.
 
-conf는 빈 줄/`#` 주석과 `key=value`를 지원한다. 값 양끝의 한 쌍 따옴표는
-제거하며 shell 확장이나 eval은 하지 않는다. 모르는 키/인자는 rc 2다.
+conf는 빈 줄/첫 칸의 `#` 주석과 `key=value`를 지원한다. 첫 `=` 뒤는 전부 값이다.
+값 양끝이 같은 종류의 따옴표이면 한 쌍만 제거하며 shell 확장이나 명령 실행은 하지 않는다.
+공백·CR을 제거하지 않고, 인라인 주석도 해석하지 않는다. 공백만 있는 줄과 들여쓴 주석은
+오류다. 마지막 줄은 개행이 없어도 읽는다. 명시적인 빈 값은 기본값을 덮어쓴다.
+공통 파서는 `orchestration/laneconf`이며 스모크도 같은 parse/resolve를 쓴다.
+모르는 키/인자와 설정 오류는 stderr `run_lane: <메시지>` 및 rc 2다.
 필수 공통 키는 DISPLAY, CONFIG, HOST_ENV, HOST_DEFAULT, KEYVAR다.
 선택 트랙의 `SESSION_KMMLU`·`SESSION_TAUBENCH_STD4`·`SESSION_FULL` 중 하나가
 반드시 있어야 한다. 없거나 비어 있으면 rc 2다. TRACK·SESSION·LABEL·PREFIX·
@@ -82,7 +89,9 @@ TAUBENCH_TRIALS=4, TAUBENCH_MAX_CONCURRENCY=4, AGENT_REQUEST_TIMEOUT=300이다.
 
 선택 키에는 `KMMLU_`, `TAUBENCH_STD4_`, `FULL_` 접두를 붙일 수 있다.
 기본값 → 접두 없는 공통값 → 선택 트랙 접두 값 순으로 적용하며, 파일 안의
-공통값/접두 값 배치 순서와 무관하다. 같은 키·같은 범위에서는 마지막 값이 우선이다.
+공통값/접두 값 배치 순서와 무관하다. 같은 키·같은 범위의 중복은 같은 값이어도 rc 2다.
+메시지는 `duplicate key: <접두를 포함한 원래 키>`이며 비선택 트랙의 중복도 오류다.
+옵션 변경 시 기존 줄을 교체하고 같은 키를 뒤에 추가하지 않는다.
 접두를 허용하는 키는 REPS, LANE_TOKENIZER, REQUIRE_NOTHINK, LM_EVAL_MODE,
 NUM_CONCURRENT, TAUBENCH_USER_MODEL, TAUBENCH_TRIALS, TAUBENCH_MAX_CONCURRENCY,
 AGENT_REQUEST_TIMEOUT, AGENT_TASK_TIMEOUT, KRETA_WORKERS, KRETA_RESUME, RESUME_FROM이다.
@@ -114,6 +123,7 @@ cmp shared/harness/tests/runner_checks.py ../foundation_model_test_thinking/shar
 
 HOST 잠금 시험은 임시 BASE와 합성 conf·curl·평가 스텁을 사용한다. 실제 flock/lockf로
 세 트랙의 경합, 같은 서버의 다른 포트 병행, 그룹 TERM 뒤 잠금 재획득을 검사한다.
+활성화 전 파서용 실제 Python과 laneconf 사본도 fixture에 준비하며 loader·평가 스텁은 유지한다.
 fixture가 만든 독립 프로세스 그룹과 평가 스텁이 기록한 PID만 신호·생존 확인 대상으로
 삼고, 전역 프로세스 탐색은 하지 않는다. 네이티브 도구나 신호 권한이 없으면 해당 검사는
 INCONCLUSIVE 사유와 함께 pytest skip으로 표시한다. macOS lockf 결과가 Linux flock의
@@ -167,3 +177,12 @@ T 시험을 실행해야 한다.
 5b 등가성 시험은 harness/taubench의 호출 argv·환경·세션 및 결과 경로·rc를 비교한다.
 DISPLAY 기반 orchestrator 로그 문구의 byte 비교는 제외하며 평가 자식의 로그 append 검사는 유지한다.
 fixture curl 어댑터로 200·500·다른 모델 응답을 재현하며 소켓을 열지 않는다.
+
+설정 통합 수용 시험은 다음으로 실행한다. CA1과 CA3의 기준은 묶음 A 시작 시 HEAD
+`4e4354e122844ba8423c906057064dae6fd3074c`로 고정한다. 이후 커밋에도 중복 결함 재현을
+유지하기 위한 기준이며 `git show`로 읽는다. CA3는 임시 경로 하나에 기준본/변경본을
+교대로 놓고 stdout·stderr bytes와 rc를 각각 비교한다. `-s` 출력에 증거 경로가 나온다.
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 bash tests/run_pytests.sh orchestration -q -s -k laneconf
+```

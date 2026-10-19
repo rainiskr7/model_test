@@ -13,7 +13,7 @@ import sys
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from . import artifacts, execution, http_preflight
+from orchestration.smoke import artifacts, execution, http_preflight
 
 
 def response(state, kind):
@@ -67,7 +67,7 @@ def invoke(ctx, track, argv, result):
 
 
 def exercise(root, state):
-    from .offline_checks import exercise as check
+    from orchestration.smoke.offline_checks import exercise as check
     # No sockets may connect, even if a third-party library ignores offline flags.
     with patch("socket.socket.connect", side_effect=AssertionError("network forbidden")):
         with patch("openai.OpenAI", side_effect=lambda **kw: client(state, **kw)):
@@ -79,7 +79,7 @@ def exercise(root, state):
 
 
 def main():
-    from .offline_checks import fixture
+    from orchestration.smoke.offline_checks import fixture
     root = fixture(Path(__file__).resolve().parents[2], "127.0.0.1:1")
     os.environ["SMOKE_FIXTURE_HOST"] = "127.0.0.1:1"
     state = SimpleNamespace(model="qwen_qwen3.5_27b_fp8", key="synthetic-smoke-key")

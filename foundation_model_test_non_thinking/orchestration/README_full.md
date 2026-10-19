@@ -49,7 +49,8 @@ flock/lockf 선택과 잠금 수명은 [레인 README](README.md)를 따른다.
 RESUME_FROM이 없으면 각 반복의 첫 단계 전에 결과 세션 경로가 이미 있는지 확인한다. 있으면 `세션 존재 — 재개는 RESUME_FROM`을 기록하고 rc 2로 중단한다. 결과 모델 디렉터리는 MODEL의 `/`, `-`, `:`를 `_`로 바꾼 뒤 `shared/results_dir.sh`의 `results_model_dir`로 기존 대소문자 철자를 재사용한다. 이 helper가 여러 casefold 일치를 발견하면 rc 2로 중단한다.
 
 선택 키는 접두 없는 공통값보다 FULL_ 접두 값이 우선한다(파일 배치 순서 무관).
-예를 들어 공용 모델 conf에 다음 두 줄을 지정한다.
+예를 들어 공용 모델 conf에 다음 두 값을 지정한다. 이미 있는 `FULL_KRETA_RESUME=0`은
+`=1`로 교체한다. 같은 키를 추가하면 중복 설정 오류(rc 2)다.
 
 ```ini
 FULL_RESUME_FROM=r2:multimodal
@@ -89,7 +90,8 @@ r1의 7단계와 r2의 앞 3단계는 `skip (resume)` 로그만 남기고 건너
 
 F1..F9는 temp에 orchestration을 복사해 실행한다. stub loader/러너/judge/derive/curl과 합성 키/결과만 사용하고 `env -i`, 외부 cwd에서 실행한다. 실제 `results_model_dir` helper는 복사해서 합성 results에 대해서만 호출한다. 네트워크 접근은 없다. 기대 파일은 `fixtures_full/dry_run.txt`이며 임시 BASE만 치환한다. 각 단계 argv/env/cwd/EVAL_TIMESTAMP, 로그 append, 최신 xlsx, 조건부 skip, 실패 누적, 모든 단계의 rc 3/130을 검증한다.
 
-등가성 시험 `test_run_lane_equivalence.sh`는 harness/taubench의 argv·환경·결과 경로를 비교하며, DISPLAY로 바뀐 orchestrator 로그 문구는 비교하지 않는다. 5b부터 fixture curl 어댑터가 200·500·다른 모델 응답을 재현하므로 소켓을 열지 않는다. `.venv`와 `configs` symlink는 기존 시험이 필요로 하는 읽기용 참조다. 실제 러너/결과/키를 사용하지 않는다.
+등가성 시험 `test_run_lane_equivalence.sh`는 harness/taubench의 argv·환경·결과 경로를 비교하며, DISPLAY로 바뀐 orchestrator 로그 문구는 비교하지 않는다. 5b부터 fixture curl 어댑터가 200·500·다른 모델 응답을 재현하므로 소켓을 열지 않는다. `.venv`와 `configs` symlink는 기존 시험이 필요로 하는 읽기용 참조다.
+활성화 전 파서 실행을 위해 fixture에 `orchestration/laneconf`도 복사한다. 실제 러너/결과/키를 사용하지 않는다.
 
 ```bash
 bash orchestration/tests/test_run_lane_equivalence.sh

@@ -1,7 +1,7 @@
 """Existing runner invocations and read-only prerequisite checks."""
 import subprocess
 
-from .isolation import Unavailable, copy_cache
+from orchestration.smoke.isolation import Unavailable, copy_cache
 
 
 def files(paths):

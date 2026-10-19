@@ -37,6 +37,8 @@ class Fixture:
         for directory in ('bin', '.venv/bin', 'shared/harness', 'orchestration/lanes', 'records', 'home'):
             (base / directory).mkdir(parents=True, exist_ok=True)
         shutil.copy2(REPO / 'orchestration/run_lane.sh', base / 'orchestration/run_lane.sh')
+        (base / '.venv/bin/python').symlink_to(sys.executable)
+        shutil.copytree(REPO / 'orchestration/laneconf', base / 'orchestration/laneconf')
         # 5a: keep sourced track definitions inside the isolated fixture BASE.
         shutil.copytree(REPO / 'orchestration/tracks', base / 'orchestration/tracks')
         shutil.copy2(REPO / 'shared/harness/harness_lib.sh', base / 'shared/harness/harness_lib.sh')

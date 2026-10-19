@@ -53,7 +53,8 @@ def test_scoped_settings_override_common_without_cross_track_leak(lane, scoped_f
     conf = lane.base / 'orchestration/models/sample.conf'
     common = 'REPS=2\nAGENT_REQUEST_TIMEOUT=310\n'
     scoped = 'FULL_REPS=1\nFULL_AGENT_REQUEST_TIMEOUT=350\nFULL_AGENT_TASK_TIMEOUT=1000\n'
-    conf.write_text(conf.read_text() + 'SESSION_FULL=full_session\n' +
+    # Replace the common value: duplicate assignments are now configuration errors.
+    conf.write_text(conf.read_text().replace('REPS=1\n', '') + 'SESSION_FULL=full_session\n' +
                     (scoped + common if scoped_first else common + scoped))
     kmmlu = run(lane, ['sample'])
     full = run(lane, ['sample'], 'full')
@@ -72,7 +73,8 @@ def test_unsupported_conf_keys_rejected(lane, setting):
 
 def test_literal_value_is_not_shell_evaluated(lane):
     conf = lane.base / 'orchestration/models/sample.conf'
-    conf.write_text(conf.read_text() + 'LANE_TOKENIZER="$(touch unexpected)"\n')
+    conf.write_text(conf.read_text().replace('LANE_TOKENIZER=unused\n',
+                                             'LANE_TOKENIZER="$(touch unexpected)"\n'))
     result = run(lane, ['sample'])
     assert result.returncode == 0 and '$(touch unexpected)' in result.stdout
     assert not (lane.base / 'unexpected').exists()

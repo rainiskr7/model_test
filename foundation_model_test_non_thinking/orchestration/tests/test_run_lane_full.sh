@@ -85,6 +85,7 @@ fixture() {
   mkdir -p "$FX/shared/harness"
   cp "$REPO/shared/harness/harness_lib.sh" "$FX/shared/harness/harness_lib.sh"
   ln -s "$PYTHON3" "$FX/bin/python3"
+  ln -s "$PYTHON3" "$FX/.venv/bin/python"
   printf 'export PATH="%s/bin:/usr/bin:/bin"\n' "$FX" > "$FX/.venv/bin/activate"
   printf 'fixture_model\n' > "$FX/model_dir"
   printf 'OPENAI_API_KEY_7=synthetic-model-key\nTAUBENCH_USER_API_KEY=synthetic-judge-key\n' > "$FX/.env"
@@ -115,6 +116,15 @@ exact() { grep -Fx -- "$2" "$1" >/dev/null; }
 absent() { ! grep -E -- "$2" "$1" >/dev/null; }
 expect_rc() { [ "$RC" -eq "$1" ] || { cat "$FX/stdout"; return 1; }; }
 set_rc() { printf '%s\n' "$3" > "$FX/rc/20261015_full_r$1.$2"; }
+set_config() {
+  # Contract change: replace a setting instead of appending a duplicate key.
+  local file="$FX/orchestration/models/fixture.conf" key=${1%%=*}
+  awk -v key="$key" -v entry="$1" '
+    index($0, key "=") == 1 { if (!found++) print entry; next }
+    { print }
+    END { if (!found) print entry }
+  ' "$file" > "$file.new" && mv "$file.new" "$file"
+}
 all_calls() {
   local rep stage
   for rep in "$@"; do
@@ -195,7 +205,8 @@ f3() {
 
 f4() {
   fixture F4
-  printf 'FULL_RESUME_FROM=r2:multimodal\nFULL_KRETA_RESUME=1\n' >> "$FX/orchestration/models/fixture.conf"
+  set_config FULL_RESUME_FROM=r2:multimodal
+  set_config FULL_KRETA_RESUME=1
   mkdir -p "$FX/results/FiXtUrE_model/20261015_full_r2/language/functionchat"
   printf 'FiXtUrE_model\n' > "$FX/model_dir"
   run_lane 1
@@ -304,8 +315,26 @@ f5() {
     has "$FX/stdout" '[20261015_full_r3] derive 재개 불가 — judge 산출 없음'
 }
 
+invalid_setting_message() {
+  case "$1" in
+    UNKNOWN=*) printf 'unknown key: UNKNOWN' ;;
+    FULL_KRETA_WORKERS=*) printf 'KRETA_WORKERS must be 1..4' ;;
+    FULL_KRETA_RESUME=*) printf 'KRETA_RESUME must be 0 or 1' ;;
+    FULL_RESUME_FROM=r4:nlu) printf 'RESUME_FROM exceeds REPS' ;;
+    FULL_RESUME_FROM=r2:unknown) printf 'invalid resume stage: unknown' ;;
+    FULL_RESUME_FROM=*) printf 'invalid RESUME_FROM' ;;
+    FULL_AGENT_REQUEST_TIMEOUT=0|FULL_AGENT_REQUEST_TIMEOUT=x)
+      printf 'AGENT_REQUEST_TIMEOUT must be a positive integer' ;;
+    FULL_AGENT_TASK_TIMEOUT=*|FULL_AGENT_REQUEST_TIMEOUT=900)
+      printf 'AGENT_TASK_TIMEOUT must be an integer greater than AGENT_REQUEST_TIMEOUT' ;;
+    FULL_REPS=*) printf 'REPS must be positive' ;;
+    DISPLAY=) printf 'required key: DISPLAY' ;;
+    *) return 1 ;;
+  esac
+}
+
 f6() {
-  local setting count=0
+  local setting message count=0
   # 4a: reject invalid full timeout pairs before activation/preflight.
   for setting in UNKNOWN=x FULL_KRETA_WORKERS=9 FULL_KRETA_WORKERS=0 FULL_KRETA_RESUME=2 \
     FULL_RESUME_FROM=r0:x FULL_RESUME_FROM=r4:nlu FULL_RESUME_FROM=r2:unknown FULL_RESUME_FROM=r2:nlu:extra \
@@ -314,16 +343,20 @@ f6() {
     FULL_REPS=0 FULL_REPS=-1 FULL_REPS=x DISPLAY=; do
     count=$((count + 1))
     fixture "F6_$count"
-    printf '%s\n' "$setting" >> "$FX/orchestration/models/fixture.conf"
+    set_config "$setting"
+    message=$(invalid_setting_message "$setting") || return 1
     run_lane
     expect_rc 2 && [ ! -e "$FX/calls" ] && [ ! -e "$FX/preflight" ] || return 1
+    exact "$FX/stdout" "run_lane: $message" || return 1
   done
 }
 
 f7() {
   # 4a: conf overrides must reach both consuming stages, not just dry-run text.
   fixture F7
-  printf 'FULL_REPS=1\nFULL_AGENT_REQUEST_TIMEOUT=350\nFULL_AGENT_TASK_TIMEOUT=1000\n' >> "$FX/orchestration/models/fixture.conf"
+  set_config FULL_REPS=1
+  set_config FULL_AGENT_REQUEST_TIMEOUT=350
+  set_config FULL_AGENT_TASK_TIMEOUT=1000
   run_lane
   expect_rc 0 || return 1
   local dir

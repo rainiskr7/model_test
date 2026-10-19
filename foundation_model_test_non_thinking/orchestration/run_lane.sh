@@ -11,59 +11,12 @@ lane=${model_conf}_${TRACK}
 HERE=$(cd "$(dirname "$0")/.." && pwd) || exit 2
 BASE=$(cd "$HERE/.." && pwd) || exit 2
 conf=$HERE/models/$model_conf.conf
-CONFIG= HOST_ENV= HOST_DEFAULT= KEYVAR= DISPLAY= LANE_TOKENIZER=
-SESSION_KMMLU= SESSION_TAUBENCH_STD4= SESSION_FULL=
-REPS=3 REQUIRE_NOTHINK=1 LM_EVAL_MODE=chat NUM_CONCURRENT=8
-TAUBENCH_USER_MODEL=openrouter/openai/gpt-4.1-mini
-TAUBENCH_TRIALS=4 TAUBENCH_MAX_CONCURRENCY=4 AGENT_REQUEST_TIMEOUT=300
-FULL_KRETA_WORKERS=4 FULL_KRETA_RESUME=0 FULL_RESUME_FROM=
-FULL_AGENT_TASK_TIMEOUT=900
-# A whitelist maps literal conf keys to variables; no shell evaluation.
-config_setting() {
-  local setting=$1 value=$2 scope=$3 pass=$4 variable
-  case "$setting" in
-    CONFIG|HOST_ENV|HOST_DEFAULT|KEYVAR|DISPLAY|SESSION_KMMLU|SESSION_TAUBENCH_STD4|SESSION_FULL)
-      [ "$scope" = common ] || bad "key cannot have track prefix: $setting"
-      variable=$setting ;;
-    REPS|LANE_TOKENIZER|REQUIRE_NOTHINK|LM_EVAL_MODE|NUM_CONCURRENT|TAUBENCH_USER_MODEL|TAUBENCH_TRIALS|TAUBENCH_MAX_CONCURRENCY|AGENT_REQUEST_TIMEOUT)
-      variable=$setting ;;
-    AGENT_TASK_TIMEOUT|KRETA_WORKERS|KRETA_RESUME|RESUME_FROM) variable=FULL_$setting ;;
-    *) bad "unknown key: $setting" ;;
-  esac
-  [ "$scope" != "$pass" ] || printf -v "$variable" '%s' "$value"
-}
-
-read_config() {
-  local pass=$1 line key value scope
-  while IFS= read -r line || [ -n "$line" ]; do
-    case "$line" in ''|\#*) continue ;; *=*) ;; *) bad "expected key=value: $line" ;; esac
-    key=${line%%=*}; value=${line#*=}; scope=common
-    # Optional enclosing quotes are literal delimiters, never shell evaluation.
-    case "$value" in \"*\") value=${value#\"}; value=${value%\"} ;; \'*\') value=${value#\'}; value=${value%\'} ;; esac
-    case "$key" in
-      KMMLU_*) scope=kmmlu; key=${key#KMMLU_} ;;
-      TAUBENCH_STD4_*) scope=taubench_std4; key=${key#TAUBENCH_STD4_} ;;
-      FULL_*) scope=full; key=${key#FULL_} ;;
-    esac
-    config_setting "$key" "$value" "$scope" "$pass"
-  done < "$conf"
-}
-[ -f "$conf" ] || bad "missing conf: $conf"
-read_config common
-read_config "$TRACK"
-for key in CONFIG HOST_ENV HOST_DEFAULT KEYVAR DISPLAY; do
-  [ -n "${!key}" ] || bad "required key: $key"
-done
-case "$TRACK" in
-  kmmlu) session_key=SESSION_KMMLU ;;
-  taubench_std4) session_key=SESSION_TAUBENCH_STD4 ;;
-  full) session_key=SESSION_FULL ;;
-esac
-SESSION=${!session_key}
-[ -n "$SESSION" ] || bad "required key: $session_key"
+# Parse before activation; these environment settings belong only to the CLI.
+lane_settings=$(PYTHONPATH="$BASE" PYTHONDONTWRITEBYTECODE=1 "$BASE/.venv/bin/python" -B \
+  -m orchestration.laneconf --tracks-dir "$HERE/tracks" "$conf" "$TRACK") || exit "$?"
+eval "$lane_settings"
 LABEL="$DISPLAY $TRACK" PREFIX="$DISPLAY $TRACK"
 STOP_LABEL="$DISPLAY $TRACK" END_LABEL="$DISPLAY $TRACK"
-case "$HOST_ENV:$KEYVAR" in *[!a-zA-Z0-9_:]*|[0-9]*|*:[0-9]*) bad 'invalid environment variable name' ;; esac
 source "$HERE/tracks/$TRACK.sh"
 track_validate
 cd "$BASE" || exit 1

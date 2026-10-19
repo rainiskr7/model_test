@@ -2,7 +2,7 @@
 import json
 from urllib.request import HTTPRedirectHandler, ProxyHandler, Request, build_opener
 
-from .artifacts import require
+from orchestration.smoke.artifacts import require
 
 
 class NoRedirect(HTTPRedirectHandler):
