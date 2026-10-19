@@ -77,7 +77,7 @@ HOST_ENV=DIFF_HOST
 HOST_DEFAULT=192.168.0.8:18023
 KEYVAR=OPENAI_API_KEY
 SESSION_TAUBENCH_STD4=tbstd4_20261011
-DISPLAY=diffusiongemma
+LANE_DISPLAY=diffusiongemma
 ''')
         original=(orch/'tests/legacy'/legacy).read_text()
         changed,n=re.subn(r'^BASE=.*$',lambda m:'BASE='+str(fx),original,flags=re.M)
@@ -139,7 +139,7 @@ DISPLAY=diffusiongemma
                     (artifact/ts).write_bytes(data)
             old,new=results
             check(f'{name}/{scenario} identical dump bytes',old[1]==new[1])
-            # 5b changes DISPLAY-based orchestrator messages; compare runner outputs only.
+            # 5b changes LANE_DISPLAY-based orchestrator messages; compare runner outputs only.
             check(f'{name}/{scenario} identical exit and log bytes',old[0]==new[0] and old[3]==new[3])
 
 try:

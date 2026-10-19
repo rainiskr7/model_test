@@ -14,7 +14,7 @@ root의 `orchestration/tracks`를 전달한다. 모듈 파일의 원본 경로�
 
 | 단계 | 호출 순서와 준비 상태 |
 | --- | --- |
-| P0 | 인자·트랙·설정 검증 → 기본 훅 정의 → 트랙 source → `track_validate` |
+| P0 | 인자·트랙·설정 검증 → 선택 훅 기본값 정의·필수 훅 unset → 트랙 source → 필수 훅 존재 검사 → `track_validate` |
 | P1 | BASE로 cd → venv 활성화 → MODEL_TEST_BASE export → `track_export` |
 | P2 | ORCH·HOST·TOK·BASE_TS 설정 → read_key 정의 → 비-dry-run일 때 OPENAI_API_KEY 읽기 → `track_secrets` |
 | P3 | log 정의 → endpoint override export → loader 실행·eval → dry-run이면 `track_dry_run` 후 종료 |
@@ -30,13 +30,13 @@ root의 `orchestration/tracks`를 전달한다. 모듈 파일의 원본 경로�
 <!-- input-variables:start -->
 | 변수 | 최초 사용 단계 | 의미 |
 | --- | --- | --- |
-| `CONFIG` `HOST_ENV` `HOST_DEFAULT` `KEYVAR` `DISPLAY` | P0 | 필수 공통 설정 |
+| `CONFIG` `HOST_ENV` `HOST_DEFAULT` `KEYVAR` `LANE_DISPLAY` | P0 | 필수 공통 설정 |
 | `LANE_TOKENIZER` `REPS` `REQUIRE_NOTHINK` `LM_EVAL_MODE` `NUM_CONCURRENT` | P0 | 해석된 선택 설정 |
 | `TAUBENCH_USER_MODEL` `TAUBENCH_TRIALS` `TAUBENCH_MAX_CONCURRENCY` `AGENT_REQUEST_TIMEOUT` | P0 | 사용자 모델·동시성·timeout 설정 |
 | `FULL_AGENT_TASK_TIMEOUT` `FULL_KRETA_WORKERS` `FULL_KRETA_RESUME` `FULL_RESUME_FROM` | P0 | 기존 내부 변수명으로 해석한 설정 |
 | `SESSION` | P0 | 선택 트랙 SESSION 키의 값; 트랙은 이 공통 이름을 사용 |
 | `TRACK` `BASE` `HERE` | P0 | 트랙 이름·코드 루트·orchestration 경로 |
-| `LABEL` `PREFIX` `STOP_LABEL` `END_LABEL` | P0 | DISPLAY와 트랙 이름으로 만든 레이블 |
+| `LABEL` `PREFIX` `STOP_LABEL` `END_LABEL` | P0 | LANE_DISPLAY와 트랙 이름으로 만든 레이블 |
 | `MODEL_TEST_BASE` | P1 | 평가 자식에 export한 BASE |
 | `ORCH` `HOST` `TOK` `BASE_TS` | P2 | 로그 경로·유효 endpoint host·lane tokenizer·SESSION 별칭 |
 | `OPENAI_API_KEY` | P2, 비-dry-run만 | 공통부가 KEYVAR로 읽은 모델 키 |
@@ -49,6 +49,8 @@ root의 `orchestration/tracks`를 전달한다. 모듈 파일의 원본 경로�
 SESSION 키는 등록된 이름에서 `SESSION_<TRACK 대문자>`로 생성한다. 공통값 다음 선택
 트랙의 `<TRACK 대문자>_` 접두 값을 적용한다. SESSION_*는 먼저 공통 키로 판정하며,
 접두가 겹치면 최장 일치한다(`a`와 `a_b`의 경우 `A_B_` 우선). 중복 키는 동일 값도 오류다.
+필수 공통 키 `LANE_DISPLAY` 자체는 트랙 접두보다 우선한다. `FULL_LANE_DISPLAY`처럼
+실제 트랙 접두를 붙인 형태는 여전히 금지한다.
 접두가 공통 키와 겹치는 새 이름은 기존 설정을 오류로 만들 수 있다. 예를 들어 `taubench`
 등록 후 명시적인 `TAUBENCH_USER_MODEL=x`는 `USER_MODEL` 미등록 키 오류(rc 2)가 된다.
 
@@ -61,9 +63,10 @@ SESSION 키는 등록된 이름에서 `SESSION_<TRACK 대문자>`로 생성한�
 | `log` | P3부터, 실제 로그 쓰기는 P4/P5에서 | ORCH/orchestrator.log에 append하고 stdout에도 출력 |
 
 선택 훅 `track_validate`, `track_export`, `track_secrets`, `track_pre_http`는 공통부의
-`:` 기본 함수가 있고 트랙 정의가 이를 덮는다. **필수 훅 `track_dry_run`, `track_run`은
-기본 함수가 `bad`(rc 2, "track <이름> defines no track_dry_run|track_run")** 라서 새 트랙
-파일이 빠뜨리면 조용히 성공하지 않고 바로 실패한다.
+`:` 기본 함수가 있고 트랙 정의가 이를 덮는다. **필수 훅 `track_dry_run`, `track_run`은 기본 함수가 없다.** source 전에 같은 이름의
+상속 함수를 unset하고, source 직후 두 함수의 존재를 검사한다. 하나라도 없으면
+`bad`(rc 2, "track <이름> defines no track_dry_run|track_run")로 끝난다.
+dry-run에서도 validate·활성화·키 읽기·잠금·preflight 전에 검사한다.
 기존 검증 훅은 오류 시 `bad`로 종료한다. export·secrets 훅은 기존 셸과 같이 반환값을
 별도 검사하지 않으므로 치명적 오류는 `bad` 또는 명시적 `exit`로 끝낸다.
 `track_pre_http`는 `track_pre_http || exit "$?"`로 호출한다. 실패 로그를 남긴 뒤

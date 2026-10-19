@@ -19,7 +19,8 @@ def test_cb1_demo_registration_and_removal_are_local(tmp_path):
     (fx.base / '.env').unlink()
     before = common_hashes(fx.orch)
     demo = fx.put('orchestration/tracks/demo.sh',
-                  'track_dry_run() { printf "DEMO SESSION=%s\\n" "$SESSION"; }\n')
+                  'track_dry_run() { printf "DEMO SESSION=%s\\n" "$SESSION"; }\n'
+                  'track_run() { :; }\n')  # CH4: both hooks are now required, including dry-run.
     (fx.orch / 'lanes/demo.sh').symlink_to('../run_lane.sh')
     fx.put('orchestration/models/sample.conf', SAMPLE + 'SESSION_DEMO=local_demo\n')
     lane = fx.lane('sample', 'demo')
@@ -86,8 +87,8 @@ def test_cb3_config_paths_match_bundle_b_head_bytes(tmp_path, track, change):
     base = SAMPLE + 'SESSION_FULL=full_fixture\n'
     cases = {
         'unknown': base + 'UNKNOWN=x\n', 'duplicate': base + 'HOST_DEFAULT=second\n',
-        'prefix': base + 'FULL_DISPLAY=x\n', 'empty': base.replace('DISPLAY=fixture', 'DISPLAY='),
-        'cr': base.replace('DISPLAY=fixture\n', 'DISPLAY="fixture"\r\n'),
+        'prefix': base + 'FULL_LANE_DISPLAY=x\n', 'empty': base.replace('LANE_DISPLAY=fixture', 'LANE_DISPLAY='),
+        'cr': base.replace('LANE_DISPLAY=fixture\n', 'LANE_DISPLAY="fixture"\r\n'),
         'no_lf': base.rstrip('\n'), 'equals': base.replace('LANE_TOKENIZER=unused', 'LANE_TOKENIZER=a=b'),
         'space': base + ' REPS=2\n',
     }
@@ -98,7 +99,13 @@ def test_cb3_config_paths_match_bundle_b_head_bytes(tmp_path, track, change):
         result = fx.lane('sample', track)
         fx.evidence('CB3/' + side, result)
         outputs.append((result.stdout, result.stderr, result.returncode))
-    assert outputs[0] == outputs[1]
+    if change in ('prefix', 'empty'):
+        # Only these diagnostic bytes intentionally change with the conf key.
+        message = 'key cannot have track prefix' if change == 'prefix' else 'required key'
+        assert outputs[0] == (b'', f'run_lane: {message}: DISPLAY\n'.encode(), 2)
+        assert outputs[1] == (b'', f'run_lane: {message}: LANE_DISPLAY\n'.encode(), 2)
+    else:
+        assert outputs[0] == outputs[1]
     assert outputs[1][2] == (2 if change in ('unknown', 'duplicate', 'prefix', 'empty', 'space') else 0)
 
 

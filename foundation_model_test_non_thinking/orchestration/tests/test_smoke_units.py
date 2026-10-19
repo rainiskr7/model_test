@@ -9,6 +9,7 @@ from types import SimpleNamespace
 import pytest
 
 from orchestration.smoke import artifacts, execution, memory_transport
+from orchestration.smoke.cleanup import remove_base
 from orchestration.smoke.configuration import Context, read_key
 from orchestration.smoke.isolation import environment, outside
 from orchestration.smoke.offline_checks import fixture
@@ -20,7 +21,7 @@ def test_real_runners_memory_transport(tmp_path):
     # Isolate third-party import-time HF cache settings from pytest collection.
     env = dict(os.environ, PYTHONPATH=str(ROOT), PYTHONDONTWRITEBYTECODE="1")
     proc = subprocess.run([str(ROOT / ".venv/bin/python"), "-B", "-m",
-                           "orchestration.smoke.memory_transport"],
+                           "orchestration.smoke.memory_transport", "--out", str(tmp_path / "memory-summary.json")],
                           cwd=tmp_path, env=env, capture_output=True, text=True)
     assert proc.returncode == 0, proc.stdout + proc.stderr
     reports = json.loads(Path(proc.stdout.splitlines()[-1]).read_text())
@@ -128,22 +129,25 @@ def test_raw_timeout_detected_even_with_rc_zero(monkeypatch, tmp_path):
 
 
 def test_cli_outside_cwd_missing_template_is_inconclusive(monkeypatch, tmp_path):
-    root = fixture(ROOT, "127.0.0.1:1")
-    monkeypatch.setenv("SMOKE_FIXTURE_HOST", "127.0.0.1:1")
-    (root / "tokenizer/chat_template.jinja").unlink()
-    shutil.copytree(ROOT / "orchestration/smoke", root / "orchestration/smoke")
-    output = tmp_path / "summary.json"
-    script = root / "orchestration/smoke/run_smoke.sh"
-    proc = subprocess.run(["bash", str(script), "fixture", "harness", "--out", str(output)],
-                          cwd=tmp_path, capture_output=True, text=True)
-    assert proc.returncode == 77, proc.stderr
-    summary = json.loads(proc.stdout)
-    assert summary == json.loads(output.read_text())
-    assert summary["tracks"][0]["status"] == "INCONCLUSIVE"
-    assert "synthetic-smoke-key" not in proc.stdout + proc.stderr
-    base = Path(summary["base"])
-    assert (base / "logs/smoke" / summary["timestamp"] / "harness.json").is_file()
-    assert not (base / ".env").exists()
+    with fixture(ROOT, "127.0.0.1:1") as root:
+        monkeypatch.setenv("SMOKE_FIXTURE_HOST", "127.0.0.1:1")
+        (root / "tokenizer/chat_template.jinja").unlink()
+        shutil.copytree(ROOT / "orchestration/smoke", root / "orchestration/smoke")
+        output = tmp_path / "summary.json"
+        script = root / "orchestration/smoke/run_smoke.sh"
+        proc = subprocess.run(["bash", str(script), "fixture", "harness", "--out", str(output)],
+                              cwd=tmp_path, capture_output=True, text=True)
+        assert proc.returncode == 77, proc.stderr
+        summary = json.loads(proc.stdout)
+        base = Path(summary["base"])
+        try:
+            assert summary == json.loads(output.read_text())
+            assert summary["tracks"][0]["status"] == "INCONCLUSIVE"
+            assert "synthetic-smoke-key" not in proc.stdout + proc.stderr
+            assert (base / "logs/smoke" / summary["timestamp"] / "harness.json").is_file()
+            assert not (base / ".env").exists()
+        finally:
+            remove_base(base, root, created=base)
 
 
 @pytest.mark.parametrize("args", [["qwen35fp8.conf"], ["qwen35fp8", "unknown"]])

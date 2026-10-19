@@ -64,7 +64,7 @@ def test_scoped_settings_override_common_without_cross_track_leak(lane, scoped_f
     assert 'AGENT_REQUEST_TIMEOUT=350 AGENT_TASK_TIMEOUT=1000' in full.stdout
 
 
-@pytest.mark.parametrize('setting', ['TRACK=full', 'SESSION=x', 'FULL_DISPLAY=x', 'FULL_UNKNOWN=x'])
+@pytest.mark.parametrize('setting', ['TRACK=full', 'SESSION=x', 'FULL_LANE_DISPLAY=x', 'FULL_UNKNOWN=x'])
 def test_unsupported_conf_keys_rejected(lane, setting):
     conf = lane.base / 'orchestration/models/sample.conf'
     conf.write_text(conf.read_text() + setting + '\n')

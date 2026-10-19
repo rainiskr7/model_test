@@ -57,8 +57,8 @@ def test_missing_track_dry_run_fails_instead_of_silent_success(tmp_path):
     assert result.stderr.endswith(b'run_lane: track demo defines no track_dry_run\n')
 
 
-def test_missing_track_run_fails_after_preflight_instead_of_silent_success(tmp_path):
-    """The real path reaches track_run only after lock + fake preflight; it must exit 2."""
+def test_missing_track_run_fails_before_preflight_and_lock(tmp_path):
+    """CH2: a missing hook must fail before the real path can acquire resources."""
     from orchestration.tests.host_lock_fixture import Fixture as LaneFixture
     fx = LaneFixture(tmp_path)
     try:
@@ -68,5 +68,7 @@ def test_missing_track_run_fails_after_preflight_instead_of_silent_success(tmp_p
                                 env=dict(fx.env, LANE_DRY_RUN='0'), capture_output=True)
         assert result.returncode == 2, result.stdout + result.stderr
         assert result.stderr.endswith(b'run_lane: track demo defines no track_run\n')
+        assert not (fx.base / 'preflights').exists()
+        assert not (fx.base / 'logs').exists()
     finally:
         fx.close()

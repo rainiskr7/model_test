@@ -1,13 +1,12 @@
 """Sequential runner execution, with bounded child process groups."""
 import json
-import os
-import signal
 import subprocess
 import time
 
 from orchestration.smoke import artifacts, http_preflight
 from orchestration.smoke.commands import command, prerequisites
 from orchestration.smoke.isolation import Unavailable
+from orchestration.smoke.processes import terminate
 
 BOUNDS = {"harness": 2, "nlu": 2, "functionchat": 4, "taubench": 2, "multimodal": 4}
 
@@ -25,13 +24,11 @@ def invoke(ctx, track, argv, result):
     try:
         output, _ = proc.communicate(timeout={"nlu": 620, "functionchat": 155, "multimodal": 150}[track])
     except subprocess.TimeoutExpired:
-        os.killpg(proc.pid, signal.SIGTERM)
-        try:
-            output, _ = proc.communicate(timeout=3)
-        except subprocess.TimeoutExpired:
-            os.killpg(proc.pid, signal.SIGKILL)
-            output, _ = proc.communicate()
+        output, _ = terminate(proc)
         result["timeout"] = True
+    except KeyboardInterrupt:
+        terminate(proc)
+        raise
     result["runner_rc"] = proc.returncode
     output = output.replace(ctx.env["OPENAI_API_KEY"], "<redacted>")
     (ctx.base / "logs/smoke" / ctx.stamp / (track + ".runner.log")).write_text(output)

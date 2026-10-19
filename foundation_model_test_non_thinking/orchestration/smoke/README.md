@@ -20,11 +20,21 @@ CONFIG is resolved by the existing config loader (including native
 tool calling and serving constraints). The selected KEYVAR is read from N/.env;
 its value is supplied only through the child environment / HTTP header.
 
-Every run retains a fresh `/tmp/serving-smoke-*` BASE. Detailed records are
+Every run creates a fresh `/tmp/serving-smoke-*` BASE (canonical `/private/tmp`
+on macOS). After all selected tracks PASS, BASE is removed unless `--keep` is set.
+FAIL, INCONCLUSIVE, timeout, and interruption retain BASE; Ctrl-C reaps the runner
+process group and returns 130. Configuration errors before tracks run remove BASE.
+Detailed records, when retained, are
 `B/logs/smoke/$T/<track>.json`, runner output is beside them, and artifacts are
 under B/results. stdout and optional `--out` contain a JSON summary including B.
-The output path must be outside N; its parent must already exist. Remove B when
-finished reviewing it. No production lane, lock, or evaluation session is opened.
+The summary's `base_kept` is false only after deletion succeeds (or no BASE was
+created). With false, `base` and relative artifact paths describe the completed run
+but no longer exist; use `--keep` to inspect them. Cleanup failure leaves
+`base_kept: true` and `cleanup_error`, without changing the serving verdict/rc.
+The output path must be outside N; its parent must already exist. A failure to
+write `--out` still raises an output error. No production lane, lock, or evaluation
+session is opened. Only the exact BASE created by this invocation is removed;
+linked inputs are never followed during removal.
 
 | Track | Scope | Selected input | Successful runner rc | HTTP upper bound |
 | --- | --- | --- | --- | --- |

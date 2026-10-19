@@ -1,8 +1,10 @@
 # full 트랙
 
-실행은 `bash orchestration/lanes/full.sh <model_conf>`다. 모델 설정은
+아래 예시의 `N`은 코드 루트의 정규 절대경로다(`N="$(pwd -P)"`는 코드 루트에서 설정).
+
+실행은 `bash "$N/orchestration/lanes/full.sh" <model_conf>`다. 모델 설정은
 `orchestration/models/<model_conf>.conf`이며 SESSION_FULL이 필수다. 예:
-`LANE_DRY_RUN=1 bash orchestration/lanes/full.sh qwen35fp8`.
+`LANE_DRY_RUN=1 bash "$N/orchestration/lanes/full.sh" qwen35fp8`.
 진입 링크는 `../run_lane.sh`를 가리키며 런타임 이름은 `qwen35fp8_full`이다.
 모델 인자 규칙·기동·로그 이름은 [레인 README](README.md)를 따른다.
 
@@ -26,7 +28,7 @@ KMMLU/harness와 taubench standard는 포함하지 않는다. 같은 mtime의 wo
 | --- | --- |
 | SESSION_FULL | full 결과 세션 접두, 필수 |
 | REPS | 양의 정수, 기본 3 |
-| DISPLAY | 공통 필수 표시명; 로그 레이블은 `<DISPLAY> full` |
+| LANE_DISPLAY | 공통 필수 표시명; 로그 레이블은 `<LANE_DISPLAY> full` |
 | KRETA_WORKERS | 1..4, 기본 4; multimodal에만 주입 |
 | KRETA_RESUME | 0 또는 1, 기본 0; 정확한 multimodal 재개 지점에만 1 주입 |
 | RESUME_FROM | 선택: `r<N>:<stage>`, N은 1..REPS |
@@ -90,7 +92,7 @@ r1의 7단계와 r2의 앞 3단계는 `skip (resume)` 로그만 남기고 건너
 
 F1..F9는 temp에 orchestration을 복사해 실행한다. stub loader/러너/judge/derive/curl과 합성 키/결과만 사용하고 `env -i`, 외부 cwd에서 실행한다. 실제 `results_model_dir` helper는 복사해서 합성 results에 대해서만 호출한다. 네트워크 접근은 없다. 기대 파일은 `fixtures_full/dry_run.txt`이며 임시 BASE만 치환한다. 각 단계 argv/env/cwd/EVAL_TIMESTAMP, 로그 append, 최신 xlsx, 조건부 skip, 실패 누적, 모든 단계의 rc 3/130을 검증한다.
 
-등가성 시험 `test_run_lane_equivalence.sh`는 harness/taubench의 argv·환경·결과 경로를 비교하며, DISPLAY로 바뀐 orchestrator 로그 문구는 비교하지 않는다. 5b부터 fixture curl 어댑터가 200·500·다른 모델 응답을 재현하므로 소켓을 열지 않는다. `.venv`와 `configs` symlink는 기존 시험이 필요로 하는 읽기용 참조다.
+등가성 시험 `test_run_lane_equivalence.sh`는 harness/taubench의 argv·환경·결과 경로를 비교하며, LANE_DISPLAY로 바뀐 orchestrator 로그 문구는 비교하지 않는다. 5b부터 fixture curl 어댑터가 200·500·다른 모델 응답을 재현하므로 소켓을 열지 않는다. `.venv`와 `configs` symlink는 기존 시험이 필요로 하는 읽기용 참조다.
 활성화 전 파서 실행을 위해 fixture에 `orchestration/laneconf`도 복사한다. 실제 러너/결과/키를 사용하지 않는다.
 
 ```bash
@@ -109,7 +111,7 @@ qwen35fp8_full|full|qwen35fp8|aitopatom-337f|OPENAI_API_KEY_7|qwen_qwen3.5_27b_f
 기동 전 dry-run으로 세션·재개 위치를 확인한다. 정규 절대경로 N에서 실행한다.
 
 ```bash
-LANE_DRY_RUN=1 bash orchestration/lanes/full.sh qwen35fp8
+LANE_DRY_RUN=1 bash "$N/orchestration/lanes/full.sh" qwen35fp8
 nohup perl -e 'setpgrp; exec @ARGV' /bin/bash "$N/orchestration/lanes/full.sh" qwen35fp8 >> "$N/logs/resume_orch/qwen35fp8_full.nohup.log" 2>&1 &
 ```
 

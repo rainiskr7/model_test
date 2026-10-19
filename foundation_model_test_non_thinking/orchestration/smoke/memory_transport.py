@@ -3,6 +3,7 @@
 Runs existing modules unchanged. Only network transports and subprocess launch
 are substituted; this does NOT count as the C6.1 HTTP integration check.
 """
+import argparse
 from contextlib import redirect_stderr, redirect_stdout
 import io
 import json
@@ -80,12 +81,15 @@ def exercise(root, state):
 
 def main():
     from orchestration.smoke.offline_checks import fixture
-    root = fixture(Path(__file__).resolve().parents[2], "127.0.0.1:1")
-    os.environ["SMOKE_FIXTURE_HOST"] = "127.0.0.1:1"
-    state = SimpleNamespace(model="qwen_qwen3.5_27b_fp8", key="synthetic-smoke-key")
-    reports = exercise(root, state)
-    output = root / "memory-summary.json"
-    output.write_text(json.dumps(reports, indent=2))
+    from orchestration.smoke.isolation import outside
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--out", required=True, type=Path)
+    output = outside(parser.parse_args().out, Path(__file__).resolve().parents[2])
+    with fixture(Path(__file__).resolve().parents[2], "127.0.0.1:1") as root:
+        with patch.dict(os.environ, {"SMOKE_FIXTURE_HOST": "127.0.0.1:1"}):
+            state = SimpleNamespace(model="qwen_qwen3.5_27b_fp8", key="synthetic-smoke-key")
+            reports = exercise(root, state)
+            output.write_text(json.dumps(reports, indent=2))
     print(output)
 
 

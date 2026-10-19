@@ -48,6 +48,7 @@ STUB
 set -u
 case "$1" in
   */configs/load_model_config.py)
+    env | LC_ALL=C sort > "$MODEL_TEST_BASE/loader.env"
     printf 'export MODEL=fixture/model\nexport BASE_URL_CHAT=%s\nexport BASE_URL_V1=%s\n' "$BASE_URL_CHAT_OVERRIDE" "$BASE_URL_V1_OVERRIDE"
     exit 0 ;;
   -m)
@@ -104,6 +105,7 @@ fixture() {
 run_lane() {
   # env -i plus only synthetic inherited pollution; cwd is outside the fake repo.
   (cd "$ARTIFACTS" && env -i HOME="$FX/home" PATH="$FX/bin:/usr/bin:/bin" LC_ALL=C \
+    DISPLAY=sentinel-x11 LANG=C.UTF-8 \
     PYTHONDONTWRITEBYTECODE=1 MODEL_TEST_BASE="$FX" LANE_DRY_RUN="${1:-0}" \
     AGENT_REQUEST_TIMEOUT=999 AGENT_TASK_TIMEOUT=9999 NUM_CONCURRENT=99 TAUBENCH_MODE=standard TAUBENCH_TRIALS=9 \
     TAUBENCH_MAX_CONCURRENCY=9 KRETA_WORKERS=9 KRETA_RESUME=1 \
@@ -180,7 +182,7 @@ failure_case() {
 }
 
 f3() {
-  # 5b: log labels now combine DISPLAY and the selected track.
+  # 5b: log labels now combine LANE_DISPLAY and the selected track.
   failure_case F3_nlu nlu 1 1 yes || return 1
   has "$FX/stdout" 'nlu 실패 — qwen3.5 27B FP8 full 레인 중단 (원인 확인 후 수동 재개)' || return 1
   failure_case F3_functionchat functionchat 2 2 yes || return 1
@@ -328,7 +330,7 @@ invalid_setting_message() {
     FULL_AGENT_TASK_TIMEOUT=*|FULL_AGENT_REQUEST_TIMEOUT=900)
       printf 'AGENT_TASK_TIMEOUT must be an integer greater than AGENT_REQUEST_TIMEOUT' ;;
     FULL_REPS=*) printf 'REPS must be positive' ;;
-    DISPLAY=) printf 'required key: DISPLAY' ;;
+    LANE_DISPLAY=) printf 'required key: LANE_DISPLAY' ;;
     *) return 1 ;;
   esac
 }
@@ -340,7 +342,7 @@ f6() {
     FULL_RESUME_FROM=r0:x FULL_RESUME_FROM=r4:nlu FULL_RESUME_FROM=r2:unknown FULL_RESUME_FROM=r2:nlu:extra \
     FULL_AGENT_TASK_TIMEOUT=120 FULL_AGENT_TASK_TIMEOUT=300 FULL_AGENT_TASK_TIMEOUT=x \
     FULL_AGENT_REQUEST_TIMEOUT=900 FULL_AGENT_REQUEST_TIMEOUT=0 FULL_AGENT_REQUEST_TIMEOUT=x \
-    FULL_REPS=0 FULL_REPS=-1 FULL_REPS=x DISPLAY=; do
+    FULL_REPS=0 FULL_REPS=-1 FULL_REPS=x LANE_DISPLAY=; do
     count=$((count + 1))
     fixture "F6_$count"
     set_config "$setting"
@@ -428,14 +430,60 @@ run_case() {
   if "$2"; then PASS=$((PASS + 1)); printf 'PASS %s\n' "$1"
   else FAIL=$((FAIL + 1)); printf 'FAIL %s (artifacts: %s)\n' "$1" "$FX"; fi
 }
-run_case F1 f1
-run_case F2 f2
-run_case F3 f3
-run_case F4 f4
-run_case F5 f5
-run_case F6 f6
-run_case F7 f7
-run_case F8 f8
-run_case F9 f9
+cd1() {
+  # The fixed pre-v8 tree must successfully execute before the sentinel can fail.
+  local side path expected file count verdict
+  for side in HEAD working; do
+    fixture "CD1_$side"
+    if [ "$side" = HEAD ]; then
+      for path in orchestration/run_lane.sh orchestration/models/qwen35fp8.conf; do
+        (cd "$REPO" && git show "015c3c5:./$path") > "$FX/$path" || return 1
+      done
+      cp "$FX/orchestration/models/qwen35fp8.conf" "$FX/orchestration/models/fixture.conf"
+      for file in "$FX/orchestration/laneconf/"*.py; do
+        path=orchestration/laneconf/$(basename "$file")
+        (cd "$REPO" && git show "015c3c5:./$path") > "$file" || return 1
+      done
+      expected='qwen3.5 27B FP8'
+    else expected=sentinel-x11; fi
+    set_config FULL_REPS=1
+    run_lane 1
+    expect_rc 0 && [ -f "$FX/loader.env" ] && [ ! -e "$FX/calls" ] || return 1
+    cp "$FX/loader.env" "$FX/loader-dry.env"
+    cp "$FX/stdout" "$FX/dry.stdout"
+    printf '%s\n' "$RC" > "$FX/dry.rc"
+    exact "$FX/loader-dry.env" "DISPLAY=$expected" || return 1
+    exact "$FX/loader-dry.env" 'LANG=C.UTF-8' || return 1
+    run_lane
+    expect_rc 0 || return 1
+    printf '%s\n' "$RC" > "$FX/run.rc"
+    count=0
+    for file in "$FX/dump/"*/env; do
+      [ -f "$file" ] || return 1
+      exact "$file" "DISPLAY=$expected" && exact "$file" 'LANG=C.UTF-8' || return 1
+      count=$((count + 1))
+    done
+    [ "$count" -eq 7 ] || return 1
+    exact "$FX/loader-dry.env" DISPLAY=sentinel-x11
+    verdict=$?
+    printf '%s\n' "$verdict" > "$FX/sentinel.rc"
+    if [ "$side" = HEAD ]; then [ "$verdict" -eq 1 ] || return 1
+    else [ "$verdict" -eq 0 ] || return 1; fi
+    printf 'CD1 %s execution_rc=0 sentinel_rc=%s evidence=%s\n' "$side" "$verdict" "$FX"
+  done
+}
+
+if [ "${1:-}" != --cd1 ]; then
+  run_case F1 f1
+  run_case F2 f2
+  run_case F3 f3
+  run_case F4 f4
+  run_case F5 f5
+  run_case F6 f6
+  run_case F7 f7
+  run_case F8 f8
+  run_case F9 f9
+fi
+run_case CD1 cd1
 printf 'SUMMARY {"pass":%s,"fail":%s,"inconclusive":0}\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]

@@ -337,7 +337,7 @@ foundation_model_test_non_thinking/
 └── README.md
 ```
 
-KMMLU·taubench std4 같은 단일 트랙 재측정은 `bash orchestration/lanes/<track>.sh <model_conf>`로(track: kmmlu·taubench_std4·full), 절차는 `orchestration/README.md`.
+코드 루트에서 `N="$(pwd -P)"`를 설정한다. KMMLU·taubench std4 같은 단일 트랙 재측정은 `bash "$N/orchestration/lanes/<track>.sh" <model_conf>`로(track: kmmlu·taubench_std4·full), 절차는 `orchestration/README.md`.
 
 `bash tests/run_pytests.sh`로 전체 Python 시험을 실행하며, 선택 트랙 이름과 pytest 옵션을 뒤에 붙일 수 있다(예: `bash tests/run_pytests.sh nlu -q`).
 

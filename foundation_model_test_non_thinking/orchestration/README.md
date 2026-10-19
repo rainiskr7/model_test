@@ -26,7 +26,7 @@ nohup perl -e 'setpgrp; exec @ARGV' /bin/bash "$N/orchestration/lane_guard.sh" >
 5. 상태는 `logs/resume_orch/.lane_guard/<name>.state`, 로그는
    `logs/resume_orch/orchestrator.log`, 잠금은 `.lane_guard.lock`이다.
    `LANEGUARD_RUNTIME_DIR`로 런타임 디렉터리를 바꿀 수 있다.
-6. 진입은 `bash orchestration/lanes/<track>.sh <model_conf>`다. track은 실행 중인
+6. 진입은 `bash "$N/orchestration/lanes/<track>.sh" <model_conf>`다. track은 실행 중인
    체크아웃의 `tracks/<track>.sh` 파일로 등록한다. 이름은 `^[a-z0-9_]+$`이며 일반 파일과
    일반 파일을 가리키는 링크만 인정한다. 현재 등록은 `kmmlu`, `taubench_std4`, `full`이고
    진입 링크는 `../run_lane.sh`를 가리킨다. guard는 등록 파일의 존재만 확인하고 source하지 않는다.
@@ -44,8 +44,8 @@ nohup perl -e 'setpgrp; exec @ARGV' /bin/bash "$N/orchestration/lane_guard.sh" >
 7. 실행 전 해석 결과를 확인한다.
 
 ```bash
-LANE_DRY_RUN=1 bash orchestration/lanes/kmmlu.sh qwen38
-LANE_DRY_RUN=1 bash orchestration/lanes/kmmlu.sh qwenfp8
+LANE_DRY_RUN=1 bash "$N/orchestration/lanes/kmmlu.sh" qwen38
+LANE_DRY_RUN=1 bash "$N/orchestration/lanes/kmmlu.sh" qwenfp8
 ```
 
 설정은 활성화 전에 `.venv/bin/python -B -m orchestration.laneconf`로 해석한다.
@@ -78,11 +78,13 @@ conf는 빈 줄/첫 칸의 `#` 주석과 `key=value`를 지원한다. 첫 `=` �
 오류다. 마지막 줄은 개행이 없어도 읽는다. 명시적인 빈 값은 기본값을 덮어쓴다.
 공통 파서는 `orchestration/laneconf`이며 스모크도 같은 parse/resolve를 쓴다.
 모르는 키/인자와 설정 오류는 stderr `run_lane: <메시지>` 및 rc 2다.
-필수 공통 키는 DISPLAY, CONFIG, HOST_ENV, HOST_DEFAULT, KEYVAR다.
+필수 공통 키는 LANE_DISPLAY, CONFIG, HOST_ENV, HOST_DEFAULT, KEYVAR다.
+옛 `DISPLAY` 키는 rc 2와 `key renamed: DISPLAY -> LANE_DISPLAY`로 거부한다.
+중복 키 오류는 파싱 단계에서 먼저 판정한다. 내부 HOST와 dry-run의 `HOST=`는 유지한다.
 선택 트랙의 `SESSION_<TRACK 대문자>` 키가 반드시 있어야 한다. 예를 들어
 `SESSION_KMMLU`, `SESSION_TAUBENCH_STD4`, `SESSION_FULL`이다. 없거나 비어 있으면 rc 2다. TRACK·SESSION·LABEL·PREFIX·
 STOP_LABEL·END_LABEL은 conf 키가 아니다. 네 로그 레이블은 모두
-`<DISPLAY> <track>`으로 조합한다. 따라서 5b부터 운영 로그 문구는 바뀐다.
+`<LANE_DISPLAY> <track>`으로 조합한다. 따라서 5b부터 운영 로그 문구는 바뀐다.
 
 kmmlu는 LANE_TOKENIZER도 필수이며 REPS=3, REQUIRE_NOTHINK=1,
 LM_EVAL_MODE=chat, NUM_CONCURRENT=8이 기본이다. NUM_CONCURRENT는 1..8이다.
@@ -100,7 +102,7 @@ TAUBENCH_TRIALS=4, TAUBENCH_MAX_CONCURRENCY=4, AGENT_REQUEST_TIMEOUT=300이다.
 접두를 허용하는 키는 REPS, LANE_TOKENIZER, REQUIRE_NOTHINK, LM_EVAL_MODE,
 NUM_CONCURRENT, TAUBENCH_USER_MODEL, TAUBENCH_TRIALS, TAUBENCH_MAX_CONCURRENCY,
 AGENT_REQUEST_TIMEOUT, AGENT_TASK_TIMEOUT, KRETA_WORKERS, KRETA_RESUME, RESUME_FROM이다.
-DISPLAY·접속 식별 키·SESSION_*에는 접두를 붙이지 않는다. 알 수 없는 키는
+LANE_DISPLAY·접속 식별 키·SESSION_*에는 접두를 붙이지 않는다. 알 수 없는 키는
 다른 트랙 접두가 붙어 있어도 rc 2다.
 
 `models/qwen35fp8.conf`는 KMMLU 세션 `kmmlu_nothink_20261015`와 full 세션
@@ -181,7 +183,7 @@ D8 아카이브 이동과 C4 manifest/상태 해시 확인은 A 담당이다. C2
 T 시험을 실행해야 한다.
 
 5b 등가성 시험은 harness/taubench의 호출 argv·환경·세션 및 결과 경로·rc를 비교한다.
-DISPLAY 기반 orchestrator 로그 문구의 byte 비교는 제외하며 평가 자식의 로그 append 검사는 유지한다.
+LANE_DISPLAY 기반 orchestrator 로그 문구의 byte 비교는 제외하며 평가 자식의 로그 append 검사는 유지한다.
 fixture curl 어댑터로 200·500·다른 모델 응답을 재현하며 소켓을 열지 않는다.
 
 설정 통합 수용 시험은 다음으로 실행한다. CA1과 CA3의 기준은 묶음 A 시작 시 HEAD

@@ -26,7 +26,7 @@ def test_defaults_empty_values_and_internal_destinations():
     assert 'KRETA_WORKERS' not in values
 
 
-@pytest.mark.parametrize('key', ['CONFIG', 'HOST_ENV', 'HOST_DEFAULT', 'KEYVAR', 'DISPLAY',
+@pytest.mark.parametrize('key', ['CONFIG', 'HOST_ENV', 'HOST_DEFAULT', 'KEYVAR', 'LANE_DISPLAY',
                                  'SESSION_KMMLU', 'SESSION_TAUBENCH_STD4', 'SESSION_FULL'])
 def test_track_prefix_forbidden_even_on_unselected_track(key):
     with pytest.raises(ConfigError) as error:

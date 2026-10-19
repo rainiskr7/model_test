@@ -16,17 +16,19 @@ conf=$HERE/models/$model_conf.conf
 lane_settings=$(PYTHONPATH="$BASE" PYTHONDONTWRITEBYTECODE=1 "$BASE/.venv/bin/python" -B \
   -m orchestration.laneconf --tracks-dir "$HERE/tracks" "$conf" "$TRACK") || exit "$?"
 eval "$lane_settings"
-LABEL="$DISPLAY $TRACK" PREFIX="$DISPLAY $TRACK"
-STOP_LABEL="$DISPLAY $TRACK" END_LABEL="$DISPLAY $TRACK"
+LABEL="$LANE_DISPLAY $TRACK" PREFIX="$LANE_DISPLAY $TRACK"
+STOP_LABEL="$LANE_DISPLAY $TRACK" END_LABEL="$LANE_DISPLAY $TRACK"
 # Optional hooks and their input phases are documented in tracks/README.md.
 track_validate() { :; }
 track_export() { :; }
 track_secrets() { :; }
 track_pre_http() { :; }
-# Required hooks fail loudly, so a track file that forgets them cannot "succeed" silently.
-track_dry_run() { bad "track $TRACK defines no track_dry_run"; }
-track_run() { bad "track $TRACK defines no track_run"; }
+# Inherited functions must not hide a missing required track hook.
+unset -f track_dry_run track_run
 source "$HERE/tracks/$TRACK.sh"
+for hook in track_dry_run track_run; do
+  builtin declare -F "$hook" >/dev/null || bad "track $TRACK defines no $hook"
+done
 track_validate
 cd "$BASE" || exit 1
 source "$BASE/.venv/bin/activate"

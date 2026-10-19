@@ -6,7 +6,7 @@ from orchestration.laneconf.schema import ConfigError, key_table
 
 def scoped_key(key, tracks):
     """Identify a session or the longest supplied track prefix."""
-    if not key.startswith("SESSION_"):
+    if key != "LANE_DISPLAY" and not key.startswith("SESSION_"):
         for track in sorted(tracks, key=lambda item: (-len(item), item)):
             prefix = track.upper() + "_"
             if key.startswith(prefix):
@@ -24,6 +24,8 @@ def resolve(entries, track, tracks, require_session=True):
     scoped = []
     for original, value in entries:
         scope, key = scoped_key(original, tracks)
+        if key == "DISPLAY":
+            raise ConfigError("key renamed: DISPLAY -> LANE_DISPLAY")
         if key not in table:
             raise ConfigError(f"unknown key: {key}")
         setting = table[key]

@@ -70,7 +70,7 @@ class Fixture:
     def lane(self, name, track, host='fixture.invalid:18023'):
         self.put('orchestration/models/' + name + '.conf', '\n'.join([
             'CONFIG=fixture', 'HOST_ENV=FIXTURE_HOST', 'HOST_DEFAULT=' + host, 'KEYVAR=FIXTURE_KEY',
-            'SESSION_' + track.upper() + '=' + name, 'DISPLAY=fixture', 'REPS=1', 'REQUIRE_NOTHINK=0', 'LANE_TOKENIZER=unused',
+            'SESSION_' + track.upper() + '=' + name, 'LANE_DISPLAY=fixture', 'REPS=1', 'REQUIRE_NOTHINK=0', 'LANE_TOKENIZER=unused',
         ]) + '\n')
         path = self.base / 'orchestration/lanes' / (track + '.sh')
         if not path.is_symlink():

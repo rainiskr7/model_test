@@ -10,12 +10,12 @@ from orchestration.tests.laneconf_support import Comparison, SAMPLE, assignments
     (' \t', 'expected key=value:  \t'),
     (SAMPLE + 'UNKNOWN=x\n', 'unknown key: UNKNOWN'),
     (SAMPLE + 'FULL_UNKNOWN=x\n', 'unknown key: UNKNOWN'),
-    (SAMPLE + 'FULL_DISPLAY=x\n', 'key cannot have track prefix: DISPLAY'),
+    (SAMPLE + 'FULL_LANE_DISPLAY=x\n', 'key cannot have track prefix: LANE_DISPLAY'),
     (SAMPLE + 'FULL_SESSION_KMMLU=x\n', 'key cannot have track prefix: SESSION_KMMLU'),
     (SAMPLE + ' REPS=2\n', 'unknown key:  REPS'),
     (SAMPLE + 'REPS =2\n', 'unknown key: REPS '),
     (SAMPLE.replace('CONFIG=qwen_qwen3.5_27b_fp8', 'CONFIG='), 'required key: CONFIG'),
-    (SAMPLE.replace('DISPLAY=fixture', 'DISPLAY='), 'required key: DISPLAY'),
+    (SAMPLE.replace('LANE_DISPLAY=fixture', 'LANE_DISPLAY='), 'required key: LANE_DISPLAY'),
     (SAMPLE.replace('SESSION_KMMLU=fixture', 'SESSION_KMMLU='), 'required key: SESSION_KMMLU'),
     (SAMPLE.replace('KEYVAR=FIXTURE_KEY', 'KEYVAR=1KEY'), 'invalid environment variable name'),
 ])
@@ -26,7 +26,9 @@ def test_error_bytes_match_original_shell(tmp_path, text, message):
     for side in ('HEAD', 'working'):
         fx.install(side)
         result = fx.lane('sample')
-        assert (result.returncode, result.stdout, result.stderr) == (2, b'', expected)
+        # Intentional v8 byte differences: required/prefix errors name the new key.
+        side_expected = expected.replace(b'LANE_DISPLAY', b'DISPLAY') if side == 'HEAD' else expected
+        assert (result.returncode, result.stdout, result.stderr) == (2, b'', side_expected)
     cli = fx.cli('sample')
     assert (cli.returncode, cli.stdout, cli.stderr) == (2, b'', expected)
 

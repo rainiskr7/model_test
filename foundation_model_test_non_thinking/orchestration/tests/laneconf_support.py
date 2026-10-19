@@ -1,5 +1,6 @@
 """Disposable checkout for CA1/CA2/CA3; no production credentials or runtime IO."""
 from pathlib import Path
+import re
 import shlex
 import shutil
 import subprocess
@@ -10,7 +11,7 @@ REPO = Path(__file__).resolve().parents[2]
 BASELINE_REVISION = "4e4354e122844ba8423c906057064dae6fd3074c"
 TRACKS = ("kmmlu", "taubench_std4", "full")
 SAMPLE = ("CONFIG=qwen_qwen3.5_27b_fp8\nHOST_ENV=FIXTURE_HOST\n"
-          "HOST_DEFAULT=first\nKEYVAR=FIXTURE_KEY\nDISPLAY=fixture\n"
+          "HOST_DEFAULT=first\nKEYVAR=FIXTURE_KEY\nLANE_DISPLAY=fixture\n"
           "SESSION_KMMLU=fixture\nLANE_TOKENIZER=unused\n")
 
 
@@ -18,6 +19,13 @@ def head_bytes(relative, revision=BASELINE_REVISION):
     """Read the original HEAD with Git's checkout-relative path syntax."""
     return subprocess.run(["git", "show", f"{revision}:./{relative}"],
                           cwd=REPO, check=True, capture_output=True).stdout
+
+
+def revision_files(package, revision):
+    """List historical sources without requiring newly added modules to exist there."""
+    result = subprocess.run(['git', 'ls-tree', '-r', '--name-only', revision, '--', package],
+                            cwd=REPO, check=True, capture_output=True, text=True)
+    return [Path(name) for name in result.stdout.splitlines() if Path(name).suffix in ('.py', '.sh')]
 
 
 class Comparison:
@@ -54,8 +62,11 @@ class Comparison:
     def install(self, side):
         paths = [Path("orchestration/run_lane.sh")]
         for package in ("tracks", "smoke"):
-            paths.extend(path.relative_to(REPO) for path in (REPO / "orchestration" / package).iterdir()
-                         if path.suffix in (".py", ".sh"))
+            if side == 'HEAD':
+                paths.extend(revision_files('orchestration/' + package, BASELINE_REVISION))
+            else:
+                paths.extend(path.relative_to(REPO) for path in (REPO / "orchestration" / package).iterdir()
+                             if path.suffix in (".py", ".sh"))
         for relative in paths:
             target = self.base / relative
             target.parent.mkdir(parents=True, exist_ok=True)
@@ -67,6 +78,16 @@ class Comparison:
             # The source tree may hold bytecode from the pytest process itself; copy sources only.
             shutil.copytree(REPO / "orchestration/laneconf", package,
                             ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
+        self.display_keys(side)
+
+    def display_keys(self, side):
+        """Adapt only conf key tokens, preserving values, CR, and absent final LF."""
+        old, new = (b'LANE_DISPLAY', b'DISPLAY') if side == 'HEAD' else (b'DISPLAY', b'LANE_DISPLAY')
+        pattern = rb'^(?P<prefix>(?:[A-Z0-9_]+_)?)' + old + rb'(?==)'
+        for path in (self.orch / 'models').glob('*.conf'):
+            path.write_bytes(re.sub(pattern, lambda m: m[0] if side != 'HEAD' and
+                                    m[0].endswith(b'LANE_DISPLAY') else m['prefix'] + new,
+                                    path.read_bytes(), flags=re.M))
 
     def run(self, argv, extra=None):
         return subprocess.run(argv, cwd=self.base.parent, env={**self.env, **(extra or {})},

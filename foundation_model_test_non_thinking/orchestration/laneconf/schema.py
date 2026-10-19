@@ -1,6 +1,10 @@
 """The model-conf whitelist, shell destinations, and defaults live here."""
 from dataclasses import dataclass
 
+# Internal settings must not shadow commonly exported operating environments.
+FORBIDDEN_VARIABLES = frozenset("""DISPLAY HOME PATH USER LOGNAME SHELL TERM LANG
+LC_ALL TMPDIR PWD OLDPWD EDITOR PAGER SSH_AUTH_SOCK XDG_CACHE_HOME VIRTUAL_ENV""".split())
+
 
 class ConfigError(ValueError):
     """A literal model configuration violates the lane contract."""
@@ -19,7 +23,7 @@ SETTINGS = {
     "HOST_ENV": Setting("HOST_ENV", scoped=False, required=True),
     "HOST_DEFAULT": Setting("HOST_DEFAULT", scoped=False, required=True),
     "KEYVAR": Setting("KEYVAR", scoped=False, required=True),
-    "DISPLAY": Setting("DISPLAY", scoped=False, required=True),
+    "LANE_DISPLAY": Setting("LANE_DISPLAY", scoped=False, required=True),
     "LANE_TOKENIZER": Setting("LANE_TOKENIZER"),
     "REPS": Setting("REPS", "3"),
     "REQUIRE_NOTHINK": Setting("REQUIRE_NOTHINK", "1"),

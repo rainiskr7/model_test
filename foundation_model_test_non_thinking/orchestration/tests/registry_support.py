@@ -8,6 +8,8 @@ REGISTRY_BASELINE = '587919d3ff568a08c94a59bd7c341506c0bd9bbe'
 
 
 class RegistryComparison(Comparison):
+    revision = REGISTRY_BASELINE
+
     def install(self, side):
         # The shared fixture's source-only copy excludes pre-existing bytecode.
         super().install('working')
@@ -15,8 +17,9 @@ class RegistryComparison(Comparison):
         for package, suffix in (('tracks', '*.sh'), ('laneconf', '*.py')):
             paths.extend(path.relative_to(REPO) for path in (REPO / 'orchestration' / package).glob(suffix))
         for path in paths:
-            data = head_bytes(path, REGISTRY_BASELINE) if side == 'HEAD' else (REPO / path).read_bytes()
+            data = head_bytes(path, self.revision) if side == 'HEAD' else (REPO / path).read_bytes()
             (self.base / path).write_bytes(data)
+        self.display_keys(side)
 
 
 def common_hashes(orch):

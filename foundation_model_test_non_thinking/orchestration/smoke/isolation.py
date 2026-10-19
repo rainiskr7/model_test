@@ -21,13 +21,18 @@ def outside(path, root):
 def assemble(root):
     # Do not trust a caller's TMPDIR (it could point into N/data).
     base = Path(tempfile.mkdtemp(prefix="serving-smoke-", dir="/tmp")).resolve()
-    outside(base, root)
-    for name in ("data", "configs", "shared"):
-        (base / name).symlink_to(root / name, target_is_directory=True)
-    for source in root.glob(".venv*"):
-        (base / source.name).symlink_to(source, target_is_directory=True)
-    for name in ("results", "logs", "cache", "tmp", "kreta_output"):
-        (base / name).mkdir()
+    try:
+        outside(base, root)
+        for name in ("data", "configs", "shared"):
+            (base / name).symlink_to(root / name, target_is_directory=True)
+        for source in root.glob(".venv*"):
+            (base / source.name).symlink_to(source, target_is_directory=True)
+        for name in ("results", "logs", "cache", "tmp", "kreta_output"):
+            (base / name).mkdir()
+    except (Exception, KeyboardInterrupt):
+        # Ownership is local even when construction never returns a BASE to main.
+        shutil.rmtree(base)
+        raise
     return base
 
 
