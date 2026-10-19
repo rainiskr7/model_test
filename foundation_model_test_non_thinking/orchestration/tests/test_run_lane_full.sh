@@ -78,6 +78,7 @@ fixture() {
   # Every case has a complete temporary orchestration copy and fake base.
   FX="$ARTIFACTS/$1"
   mkdir -p "$FX/bin" "$FX/.venv/bin" "$FX/configs" "$FX/shared" "$FX/rc" "$FX/dump" "$FX/home"
+  # 5a: this complete copy also supplies tracks/ sourced by run_lane.sh.
   cp -R "$ORCH" "$FX/orchestration"
   cp "$REPO/shared/results_dir.sh" "$FX/shared/results_dir.sh"
   # 4d: the isolated lane now sources the real, frozen locking helper.

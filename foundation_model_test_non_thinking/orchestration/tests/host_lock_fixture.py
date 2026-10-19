@@ -37,6 +37,8 @@ class Fixture:
         for directory in ('bin', '.venv/bin', 'shared/harness', 'orchestration/lanes', 'records', 'home'):
             (base / directory).mkdir(parents=True, exist_ok=True)
         shutil.copy2(REPO / 'orchestration/run_lane.sh', base / 'orchestration/run_lane.sh')
+        # 5a: keep sourced track definitions inside the isolated fixture BASE.
+        shutil.copytree(REPO / 'orchestration/tracks', base / 'orchestration/tracks')
         shutil.copy2(REPO / 'shared/harness/harness_lib.sh', base / 'shared/harness/harness_lib.sh')
         shutil.copy2(REPO / 'shared/results_dir.sh', base / 'shared/results_dir.sh')
         shutil.copy2(Path(__file__).with_name('host_lock_worker.py'), base / 'worker.py')
