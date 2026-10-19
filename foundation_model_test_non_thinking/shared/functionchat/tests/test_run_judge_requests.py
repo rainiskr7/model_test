@@ -17,7 +17,8 @@ def test_main_payload_votes_and_retry_unresolved(monkeypatch, tmp_path, capsys, 
     offline_guard(monkeypatch)
     monkeypatch.setenv("R3_JUDGE_KEY", "synthetic-key")
     pilot = sys.modules[runner.call_judge.__module__]
-    monkeypatch.setattr(pilot, "SERVED_IDENTITY", {"model": set(), "system_fingerprint": set(), "provider": set()})
+    # main이 실행마다 등록부를 소유하므로 전역 monkeypatch가 필요 없다.
+    # 요청·재판정·judge.json 캡처 기대값은 전역 구현 때와 동일하게 유지한다.
     rubrics = tmp_path / "rubrics"
     rubrics.mkdir()
     for kind in ("call", "slot", "relevance", "completion"):

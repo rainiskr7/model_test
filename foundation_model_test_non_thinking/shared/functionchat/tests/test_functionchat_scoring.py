@@ -471,22 +471,21 @@ def test_judge_rejects_non_enum_verdict():
 def test_judge_records_what_the_endpoint_actually_served():
     """`openai/gpt-4.1-mini` 는 alias 다 — 문자열이 그대로여도 리비전은 바뀐다."""
 
-    judge_pilot.SERVED_IDENTITY["model"].clear()
-    judge_pilot.SERVED_IDENTITY["provider"].clear()
-    judge_pilot.SERVED_IDENTITY["system_fingerprint"].clear()
-    _assert(judge_pilot.served_identity_snapshot() == {}, "초기 상태가 비어 있어야 한다")
+    # §12: 전역 초기화 대신 실행 소유 객체를 주입한다. 기대값은 그대로다.
+    identity = judge_pilot.ServedIdentity()
+    _assert(identity.snapshot() == {}, "초기 상태가 비어 있어야 한다")
 
-    judge_pilot.record_served_identity(
+    identity.record(
         {"model": "openai/gpt-4.1-mini-2025-04-14", "provider": "OpenAI"}
     )
-    judge_pilot.record_served_identity({"model": "openai/gpt-4.1-mini-2025-04-14"})
-    snapshot = judge_pilot.served_identity_snapshot()
+    identity.record({"model": "openai/gpt-4.1-mini-2025-04-14"})
+    snapshot = identity.snapshot()
     _assert(snapshot["model"] == ["openai/gpt-4.1-mini-2025-04-14"], snapshot)
     _assert(snapshot["provider"] == ["OpenAI"], snapshot)
 
     # 런 도중 서빙이 바뀌면 둘 다 남는다 — 하나로 덮으면 그 사실이 사라진다.
-    judge_pilot.record_served_identity({"model": "openai/gpt-4.1-mini-2026-01-01"})
-    _assert(len(judge_pilot.served_identity_snapshot()["model"]) == 2, "변경 이력이 남아야 한다")
+    identity.record({"model": "openai/gpt-4.1-mini-2026-01-01"})
+    _assert(len(identity.snapshot()["model"]) == 2, "변경 이력이 남아야 한다")
 
 
 def test_rubric_digest_changes_when_the_rubric_text_changes():
@@ -632,20 +631,22 @@ def test_repro_and_scorer_agree_on_which_items_count():
 def test_served_identity_resets_between_runs_and_merges_a_retry():
     """모듈 전역이라 리셋하지 않으면 앞선 실행이 다음 산출물로 샌다."""
 
-    judge_pilot.record_served_identity({"model": "leftover-from-previous-run"})
+    # 전역 접근 계약만 객체로 전환하고 reset/재판정 병합 기대값은 보존한다.
+    identity = judge_pilot.ServedIdentity()
+    identity.record({"model": "leftover-from-previous-run"})
 
     # 새 실행: 이전 기록 없이 시작한다
-    judge_pilot.reset_served_identity(None)
-    _assert(judge_pilot.served_identity_snapshot() == {}, "리셋이 비우지 않았다")
+    identity.reset(None)
+    _assert(identity.snapshot() == {}, "리셋이 비우지 않았다")
 
     # 재판정: 기존 judge.json 의 기록을 물려받아야 이미 확정된 항목의 출처가 남는다
-    judge_pilot.reset_served_identity({"model": ["rev-a"], "provider": ["OpenAI"]})
-    judge_pilot.record_served_identity({"model": "rev-b"})
-    snapshot = judge_pilot.served_identity_snapshot()
+    identity.reset({"model": ["rev-a"], "provider": ["OpenAI"]})
+    identity.record({"model": "rev-b"})
+    snapshot = identity.snapshot()
     _assert(snapshot["model"] == ["rev-a", "rev-b"], snapshot)
     _assert(snapshot["provider"] == ["OpenAI"], snapshot)
     _assert("leftover-from-previous-run" not in snapshot["model"], snapshot)
-    judge_pilot.reset_served_identity(None)
+    identity.reset(None)
 
 
 def test_repro_says_coverage_differed_instead_of_just_unverified():

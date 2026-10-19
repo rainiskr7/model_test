@@ -158,6 +158,10 @@ wrapper 전체에 `PYTHONPATH`를 export하지 않고 upstream 호출에도 붙�
 - 셸 스크립트 안의 python heredoc 은 `.py` 파일(함수 + `main`)로 뺀다. 오류 경로의 traceback 본문까지 같을 필요는 없다(rc·stdout·마지막 stderr 줄이 기준).
 - 모듈을 import 하는 것만으로 환경(os.environ)·전역 가변 상태가 바뀌면 안 된다. 키 로딩·dotenv·누적 상태는 `main()` 이 만든 객체에 둔다.
 
+| import 부작용 예외 | 유지 이유·조건 |
+|---|---|
+| `shared/agent/gpustack_custom/openai_compat_adapter.py`의 제약 로더 | 외부 Ko-AgentBench 배치의 제약 선택·경고 및 러너 decoding 메타데이터 import를 보존하기 위해 import 시 `MODEL_TEST_BASE/shared` 검색 경로 등록과 함수 선택을 허용한다. 부모 실행 환경에서 기준 경로를 확정하고 기존 no-op·경고·배치 import 계약을 유지한다. |
+
 ## 13. 시험
 
 `bash tests/run_pytests.sh`로 전체 Python 시험을 실행하며, 선택 트랙 이름과 pytest 옵션을 뒤에 붙일 수 있다(셸 시험은 `bash tests/run_shell_tests.sh`로 별도 실행).

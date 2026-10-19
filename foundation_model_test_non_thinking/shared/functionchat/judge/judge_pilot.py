@@ -30,6 +30,7 @@ import urllib.error
 import urllib.request
 from collections import Counter, defaultdict
 from pathlib import Path
+from threading import Lock
 from typing import Any, Dict, Mapping, Optional, List, Optional
 
 VERDICT_SCHEMA = {
@@ -75,34 +76,34 @@ JUDGE_ENDPOINT = "https://openrouter.ai/api/v1/chat/completions"
 # 엔드포인트가 실제로 무엇을 서빙했는지 모아 둔다. `openai/gpt-4.1-mini` 는 alias 라
 # 문자열이 그대로여도 서빙 리비전이 바뀔 수 있다. 판정 점수는 그 모델이 만든 것이므로
 # 무엇이 돌았는지 남기지 않으면 나중에 같은 점수인지 확인할 방법이 없다.
-SERVED_IDENTITY: Dict[str, set] = {"model": set(), "system_fingerprint": set(), "provider": set()}
+class ServedIdentity:
+    """main이 소유하고 그 실행의 모든 판정 worker가 공유하는 등록부."""
 
+    def __init__(self):
+        self._values = {"model": set(), "system_fingerprint": set(), "provider": set()}
+        self._lock = Lock()
 
-def record_served_identity(payload: Dict[str, Any]) -> None:
-    for field in ("model", "system_fingerprint", "provider"):
-        value = payload.get(field)
-        if value:
-            SERVED_IDENTITY[field].add(str(value))
+    def record(self, payload: Dict[str, Any]) -> None:
+        """판정 내용의 파싱 성공 여부와 관계없이 관측한 응답 출처를 모은다."""
+        with self._lock:
+            for field in ("model", "system_fingerprint", "provider"):
+                value = payload.get(field)
+                if value:
+                    self._values[field].add(str(value))
 
+    def reset(self, previous: Optional[Mapping[str, Any]] = None) -> None:
+        """새 실행은 비우고, 재판정은 이전 전체 judge.json 출처를 물려받는다."""
+        with self._lock:
+            for values in self._values.values():
+                values.clear()
+            for field, values in (previous or {}).items():
+                if field in self._values:
+                    self._values[field].update(str(value) for value in values or [])
 
-def reset_served_identity(previous: Optional[Mapping[str, Any]] = None) -> None:
-    """한 판정 실행의 시작점을 잡는다.
-
-    모듈 전역이므로 리셋하지 않으면 같은 프로세스의 앞선 실행 기록이 다음 산출물로
-    샌다. 반대로 ``--retry-unresolved`` 는 이전 실행의 판정을 그대로 물려받으므로,
-    기존 judge.json 의 기록을 넘겨 **합쳐야** 한다 — 새 프로세스의 스냅샷만 쓰면
-    이미 해결된 항목을 어느 리비전이 판정했는지가 사라진다.
-    """
-
-    for values in SERVED_IDENTITY.values():
-        values.clear()
-    for field, values in (previous or {}).items():
-        if field in SERVED_IDENTITY:
-            SERVED_IDENTITY[field].update(str(value) for value in values or [])
-
-
-def served_identity_snapshot() -> Dict[str, Any]:
-    return {field: sorted(values) for field, values in SERVED_IDENTITY.items() if values}
+    def snapshot(self) -> Dict[str, Any]:
+        """기존 필드 순서와 정렬·빈 필드 생략을 보존한 사본을 반환한다."""
+        with self._lock:
+            return {field: sorted(values) for field, values in self._values.items() if values}
 
 
 def rubric_digest(rubrics: Dict[str, str]) -> Dict[str, str]:
@@ -119,7 +120,8 @@ def rubric_digest(rubrics: Dict[str, str]) -> Dict[str, str]:
 
 
 def call_judge(
-    prompt: str, model: str, api_key: str, timeout: float, retries: int
+    prompt: str, model: str, api_key: str, timeout: float, retries: int,
+    *, identity: ServedIdentity,
 ) -> Dict[str, Any]:
     """구조화 출력으로 판정을 받는다. 실패는 fail 이 아니라 오류로 돌려준다."""
     body = json.dumps(
@@ -144,7 +146,7 @@ def call_judge(
         try:
             with urllib.request.urlopen(req, timeout=timeout) as resp:
                 payload = json.loads(resp.read().decode("utf-8"))
-            record_served_identity(payload)
+            identity.record(payload)
             content = payload["choices"][0]["message"]["content"]
             parsed = json.loads(content)
             # 구조화 출력을 요청했다고 지켜졌다는 보장은 없다. **직접 검증한다.**
@@ -249,6 +251,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     items = collect_items(args.results_dir)
     sample = stratified_sample(items, args.per_type, args.seed)
     models = [m.strip() for m in args.models.split(",") if m.strip()]
+    identity = ServedIdentity()
     print(f"[judge-pilot] 대상 {len(items)}건 중 층화 표본 {len(sample)}건, 모델 {models}")
 
     records = []
@@ -265,7 +268,8 @@ def main(argv: Optional[List[str]] = None) -> int:
             runs = []
             n = args.repeats if model == models[0] else 1
             for _ in range(n):
-                runs.append(call_judge(prompt, model, api_key, args.timeout, args.retries))
+                runs.append(call_judge(prompt, model, api_key, args.timeout, args.retries,
+                                       identity=identity))
             entry["judges"][model] = runs
         records.append(entry)
         if index % 5 == 0 or index == len(sample):

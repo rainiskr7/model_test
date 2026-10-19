@@ -30,11 +30,10 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from shared.functionchat.judge.judge_pilot import (
     JUDGE_ENDPOINT,
-    reset_served_identity,
+    ServedIdentity,
     VERDICT_SCHEMA,
     call_judge,
     rubric_digest,
-    served_identity_snapshot,
     collect_items,
     load_rubrics,
     render_prompt,
@@ -164,7 +163,7 @@ def _load_inputs(args):
     return rubrics, items, previous
 
 
-def _judge_item(item: Dict[str, Any], *, rubrics, args, api_key):
+def _judge_item(item: Dict[str, Any], *, rubrics, args, api_key, identity):
     """Request all repeated votes for one candidate unless generation failed."""
     kind = str(item.get("type_of_output"))
     # 후보 생성이 실패한 항목은 판정하지 않는다. 판정할 응답이 없기 때문이다.
@@ -174,15 +173,18 @@ def _judge_item(item: Dict[str, Any], *, rubrics, args, api_key):
         return item, []
     prompt = render_prompt(rubrics[kind], item)
     return item, [
-        call_judge(prompt, args.judge_model, api_key, args.timeout, args.retries)
+        call_judge(prompt, args.judge_model, api_key, args.timeout, args.retries,
+                   identity=identity)
         for _ in range(args.repeats)
     ]
 
 
-def _run_judgments(args, rubrics, items, api_key):
+def _run_judgments(args, rubrics, items, api_key, identity):
     """Request candidate votes with the configured worker pool."""
     with ThreadPoolExecutor(max_workers=args.concurrency) as pool:
-        pairs = list(pool.map(partial(_judge_item, rubrics=rubrics, args=args, api_key=api_key), items))
+        judge_item = partial(_judge_item, rubrics=rubrics, args=args,
+                             api_key=api_key, identity=identity)
+        pairs = list(pool.map(judge_item, items))
     return pairs
 
 
@@ -260,7 +262,7 @@ def _merge_previous(previous, records, per_type):
     return records, per_type
 
 
-def _build_summary(args, rubrics, records, per_type, errors):
+def _build_summary(args, rubrics, records, per_type, errors, identity):
     """Build judge metadata, vote distribution and aggregate metrics."""
     judged = sum(c["pass"] + c["fail"] for c in per_type.values())
     passed = sum(c["pass"] for c in per_type.values())
@@ -281,7 +283,7 @@ def _build_summary(args, rubrics, records, per_type, errors):
             "rubric_sha256": rubric_digest(rubrics),
             "endpoint": JUDGE_ENDPOINT,
             # 요청한 alias 가 아니라 엔드포인트가 실제로 서빙했다고 보고한 값.
-            "served_identity": served_identity_snapshot(),
+            "served_identity": identity.snapshot(),
             "human_validation": "not performed",
         },
         "caveat": (
@@ -366,12 +368,13 @@ def main(argv: Optional[List[str]] = None) -> int:
     args = _parse_args(argv)
     api_key = _load_api_key(args)
     rubrics, items, previous = _load_inputs(args)
-    reset_served_identity(((previous or {}).get("judge") or {}).get("served_identity"))
+    identity = ServedIdentity()
+    identity.reset(((previous or {}).get("judge") or {}).get("served_identity"))
     print(f"[judge] 대상 {len(items)}건, 판정기 {args.judge_model}, 반복 {args.repeats}")
-    pairs = _run_judgments(args, rubrics, items, api_key)
+    pairs = _run_judgments(args, rubrics, items, api_key, identity)
     records, per_type, errors = _aggregate_votes(pairs, len(items))
     records, per_type = _merge_previous(previous, records, per_type)
-    summary = _build_summary(args, rubrics, records, per_type, errors)
+    summary = _build_summary(args, rubrics, records, per_type, errors, identity)
     gate_failures = _apply_publish_gate(summary, items, previous, records)
     return _save_summary(args, summary, gate_failures)
 
