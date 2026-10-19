@@ -98,7 +98,7 @@ run_lane() {
   # env -i plus only synthetic inherited pollution; cwd is outside the fake repo.
   (cd "$ARTIFACTS" && env -i HOME="$FX/home" PATH="$FX/bin:/usr/bin:/bin" LC_ALL=C \
     PYTHONDONTWRITEBYTECODE=1 MODEL_TEST_BASE="$FX" LANE_DRY_RUN="${1:-0}" \
-    AGENT_REQUEST_TIMEOUT=999 NUM_CONCURRENT=99 TAUBENCH_MODE=standard TAUBENCH_TRIALS=9 \
+    AGENT_REQUEST_TIMEOUT=999 AGENT_TASK_TIMEOUT=9999 NUM_CONCURRENT=99 TAUBENCH_MODE=standard TAUBENCH_TRIALS=9 \
     TAUBENCH_MAX_CONCURRENCY=9 KRETA_WORKERS=9 KRETA_RESUME=1 \
     /bin/bash "$FX/orchestration/lanes/$LANE.sh") > "$FX/stdout" 2>&1
   RC=$?
@@ -125,6 +125,8 @@ f1() {
   printf '\nprintf unexpected > "$MODEL_TEST_BASE/helper_called"\n' >> "$FX/shared/results_dir.sh"
   run_lane 1
   expect_rc 0 || return 1
+  # 4a: all three functionchat/taubench pairs in dry_run.txt now carry env
+  # REQUEST=300 and TASK=900; TASK must exceed REQUEST to pass runner validation.
   sed "s|@BASE@|$FX|g" "$HERE/fixtures_full/dry_run.txt" > "$FX/expected"
   diff -u "$FX/expected" "$FX/stdout" || return 1
   [ ! -e "$FX/helper_called" ] && [ ! -e "$FX/preflight" ] &&
@@ -209,7 +211,15 @@ check_stage_env() {
   local dir=$1 stage=${1##*.} ts
   ts=$(basename "$dir"); ts=${ts%.*}
   exact "$dir/cwd" "$FX" && exact "$dir/env" "EVAL_TIMESTAMP=$ts" || return 1
-  absent "$dir/env" '^(AGENT_REQUEST_TIMEOUT|NUM_CONCURRENT|KRETA_RESUME)=' || return 1
+  absent "$dir/env" '^(NUM_CONCURRENT|KRETA_RESUME)=' || return 1
+  # 4a: replace blanket timeout absence with explicit values only for the two
+  # consuming stages; inherited pollution must still be absent everywhere else.
+  case "$stage" in
+    functionchat|taubench)
+      exact "$dir/env" "AGENT_REQUEST_TIMEOUT=${2:-300}" &&
+        exact "$dir/env" "AGENT_TASK_TIMEOUT=${3:-900}" || return 1 ;;
+    *) absent "$dir/env" '^AGENT_(REQUEST|TASK)_TIMEOUT=' || return 1 ;;
+  esac
   if [ "$stage" = taubench ]; then
     exact "$dir/env" TAUBENCH_MODE=solo && exact "$dir/env" TAUBENCH_TRIALS=1 &&
       exact "$dir/env" TAUBENCH_MAX_CONCURRENCY=4 || return 1
@@ -277,8 +287,11 @@ f5() {
 
 f6() {
   local setting count=0
+  # 4a: reject invalid full timeout pairs before activation/preflight.
   for setting in UNKNOWN=x KRETA_WORKERS=9 KRETA_WORKERS=0 KRETA_RESUME=2 \
     RESUME_FROM=r0:x RESUME_FROM=r4:nlu RESUME_FROM=r2:unknown RESUME_FROM=r2:nlu:extra \
+    AGENT_TASK_TIMEOUT=120 AGENT_TASK_TIMEOUT=300 AGENT_TASK_TIMEOUT=x \
+    AGENT_REQUEST_TIMEOUT=900 AGENT_REQUEST_TIMEOUT=0 AGENT_REQUEST_TIMEOUT=x \
     REPS=0 REPS=-1 REPS=x STOP_LABEL=; do
     count=$((count + 1))
     fixture "F6_$count"
@@ -286,6 +299,16 @@ f6() {
     run_lane
     expect_rc 2 && [ ! -e "$FX/calls" ] && [ ! -e "$FX/preflight" ] || return 1
   done
+}
+
+f7() {
+  # 4a: conf overrides must reach both consuming stages, not just dry-run text.
+  fixture F7
+  printf 'REPS=1\nAGENT_REQUEST_TIMEOUT=350\nAGENT_TASK_TIMEOUT=1000\n' >> "$FX/orchestration/lanes/full.conf"
+  run_lane
+  expect_rc 0 || return 1
+  local dir
+  for dir in "$FX/dump/"*; do check_stage_env "$dir" 350 1000 || return 1; done
 }
 
 
@@ -299,5 +322,6 @@ run_case F3 f3
 run_case F4 f4
 run_case F5 f5
 run_case F6 f6
+run_case F7 f7
 printf 'SUMMARY {"pass":%s,"fail":%s,"inconclusive":0}\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]

@@ -13,6 +13,7 @@ REPS=3 REQUIRE_NOTHINK=1 LM_EVAL_MODE=chat NUM_CONCURRENT=8
 TAUBENCH_USER_MODEL=openrouter/openai/gpt-4.1-mini
 TAUBENCH_TRIALS=4 TAUBENCH_MAX_CONCURRENCY=4 AGENT_REQUEST_TIMEOUT=300
 FULL_KRETA_WORKERS=4 FULL_KRETA_RESUME=0 FULL_RESUME_FROM=
+FULL_AGENT_TASK_TIMEOUT=900
 [ -f "$conf" ] || bad "missing conf: $conf"
 while IFS= read -r line || [ -n "$line" ]; do
   case "$line" in ''|\#*) continue ;; *=*) ;; *) bad "expected key=value: $line" ;; esac
@@ -27,6 +28,7 @@ while IFS= read -r line || [ -n "$line" ]; do
     LM_EVAL_MODE) LM_EVAL_MODE=$value ;; NUM_CONCURRENT) NUM_CONCURRENT=$value ;;
     TAUBENCH_USER_MODEL) TAUBENCH_USER_MODEL=$value ;; TAUBENCH_TRIALS) TAUBENCH_TRIALS=$value ;;
     TAUBENCH_MAX_CONCURRENCY) TAUBENCH_MAX_CONCURRENCY=$value ;; AGENT_REQUEST_TIMEOUT) AGENT_REQUEST_TIMEOUT=$value ;;
+    AGENT_TASK_TIMEOUT) FULL_AGENT_TASK_TIMEOUT=$value ;;
     KRETA_WORKERS) FULL_KRETA_WORKERS=$value ;; KRETA_RESUME) FULL_KRETA_RESUME=$value ;;
     RESUME_FROM) FULL_RESUME_FROM=$value ;;
     *) bad "unknown key: $key" ;;
@@ -52,6 +54,9 @@ full_validate() {
   [ -n "$STOP_LABEL" ] || bad 'required key: STOP_LABEL'
   case "$REPS" in ''|*[!0-9]*) bad 'REPS must be positive' ;; esac
   [ "$REPS" -gt 0 ] 2>/dev/null || bad 'REPS must be positive'
+  # Full-only: keep inherited AGENT_TASK_TIMEOUT untouched on legacy tracks.
+  [ "$AGENT_REQUEST_TIMEOUT" -gt 0 ] 2>/dev/null || bad 'AGENT_REQUEST_TIMEOUT must be a positive integer'
+  [ "$FULL_AGENT_TASK_TIMEOUT" -gt "$AGENT_REQUEST_TIMEOUT" ] 2>/dev/null || bad 'AGENT_TASK_TIMEOUT must be an integer greater than AGENT_REQUEST_TIMEOUT'
   case "$FULL_KRETA_WORKERS" in [1-4]) ;; *) bad 'KRETA_WORKERS must be 1..4' ;; esac
   case "$FULL_KRETA_RESUME" in 0|1) ;; *) bad 'KRETA_RESUME must be 0 or 1' ;; esac
   FULL_RESUME_REP=0 FULL_RESUME_INDEX=0
@@ -76,9 +81,12 @@ full_command() {
   local stage=$1 predfile=$2 judge_key=$3
   case "$stage" in
     nlu) FULL_CMD=(bash vsm/nlu/run_nlu.sh --model "$MODEL" --endpoint "$BASE_URL_CHAT") ;;
-    functionchat) FULL_CMD=(bash vsm/functionchat/run_functionchat.sh "$MODEL" "$BASE_URL_CHAT") ;;
+    functionchat)
+      FULL_CMD=(env "AGENT_REQUEST_TIMEOUT=$AGENT_REQUEST_TIMEOUT" "AGENT_TASK_TIMEOUT=$FULL_AGENT_TASK_TIMEOUT"
+        bash vsm/functionchat/run_functionchat.sh "$MODEL" "$BASE_URL_CHAT") ;;
     taubench)
       FULL_CMD=(env TAUBENCH_MODE=solo TAUBENCH_TRIALS=1 "TAUBENCH_MAX_CONCURRENCY=$TAUBENCH_MAX_CONCURRENCY"
+        "AGENT_REQUEST_TIMEOUT=$AGENT_REQUEST_TIMEOUT" "AGENT_TASK_TIMEOUT=$FULL_AGENT_TASK_TIMEOUT"
         bash vsm/taubench/run_taubench.sh "$MODEL" "$BASE_URL_CHAT") ;;
     multimodal)
       FULL_CMD=(env "KRETA_WORKERS=$FULL_KRETA_WORKERS")
@@ -145,7 +153,7 @@ full_stage_ready() {
 full_invoke() (
   # Clear inherited knobs inside the child; only argv's env entries reintroduce them.
   local stage=$1
-  unset AGENT_REQUEST_TIMEOUT NUM_CONCURRENT TAUBENCH_MODE TAUBENCH_TRIALS
+  unset AGENT_REQUEST_TIMEOUT AGENT_TASK_TIMEOUT NUM_CONCURRENT TAUBENCH_MODE TAUBENCH_TRIALS
   unset TAUBENCH_MAX_CONCURRENCY KRETA_WORKERS KRETA_RESUME
   case "$stage" in
     *_judge|derive) PYTHONPATH="$BASE${PYTHONPATH:+:$PYTHONPATH}" EVAL_TIMESTAMP="$TS" "${FULL_CMD[@]}" ;;

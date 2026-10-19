@@ -27,8 +27,10 @@ KMMLU/harness와 taubench standard는 포함하지 않는다. 같은 mtime의 wo
 | KRETA_RESUME | 0 또는 1, 기본 0; 정확한 multimodal 재개 지점에만 1 주입 |
 | RESUME_FROM | 선택: `r<N>:<stage>`, N은 1..REPS |
 | TAUBENCH_MAX_CONCURRENCY | 기존 키, 기본 4; solo taubench에만 주입 |
+| AGENT_REQUEST_TIMEOUT | 양의 정수 초, 기본 300; functionchat·taubench에만 주입 |
+| AGENT_TASK_TIMEOUT | REQUEST보다 큰 정수 초, 기본 900; functionchat·taubench에만 주입 |
 
-알 수 없는 키, 잘못된 REPS/KRETA 값, 유효하지 않은 재개 단계나 반복 번호는 rc 2다. 단계 이름은 위 7개 이름과 정확히 같아야 한다. full에서는 `TAUBENCH_TRIALS`의 기존 기본 4 대신 해당 단계에 1을 주입한다. `NUM_CONCURRENT`와 `AGENT_REQUEST_TIMEOUT`은 부모 환경에 있더라도 단계 자식 환경에서 제거하므로 FunctionChat/solo tau의 자체 timeout 기본값 60초를 사용한다. taubench와 KRETA의 단계별 변수도 자식 환경에서 먼저 제거하고 필요한 단계에만 다시 넣는다. loader 출력은 기존 방식으로 적용하며, Python 모듈 호출에만 `PYTHONPATH`를 붙인다.
+알 수 없는 키, 잘못된 REPS/KRETA 값, 유효하지 않은 재개 단계나 반복 번호는 rc 2다. 단계 이름은 위 7개 이름과 정확히 같아야 한다. full에서는 `TAUBENCH_TRIALS`의 기존 기본 4 대신 해당 단계에 1을 주입한다. `AGENT_REQUEST_TIMEOUT`(기본 300초)과 `AGENT_TASK_TIMEOUT`(기본 900초)은 conf에서 양의 정수 초로 지정하며, TASK가 REQUEST보다 커야 한다(아니면 rc 2). full 자식 환경에서는 `NUM_CONCURRENT`와 두 timeout의 상속값을 제거한 뒤 FunctionChat·solo tau 단계에만 conf 값 또는 레인 기본값을 `env` 접두로 전달한다. nlu·multimodal·judge·derive에는 두 timeout을 전달하지 않는다. 기존 kmmlu·taubench_std4의 timeout 전달은 유지한다. taubench와 KRETA의 단계별 변수도 자식 환경에서 먼저 제거하고 필요한 단계에만 다시 넣는다. loader 출력은 기존 방식으로 적용하며, Python 모듈 호출에만 `PYTHONPATH`를 붙인다.
 
 `qwen35fp8_full.conf`는 `CONFIG=qwen_qwen3.5_27b_fp8`, `QWEN35FP8_HOST`(기본 `192.168.0.7:18023`), `OPENAI_API_KEY_7`, `SESSION=20261015_full`, REPS=3, KRETA_WORKERS=4를 사용한다. MODEL은 loader 출력이며 러너에 하드코딩하지 않는다. 현재 모델 YAML은 `kreta_setting: direct`를 loader로 전달한다.
 

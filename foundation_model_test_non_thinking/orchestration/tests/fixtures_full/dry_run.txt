@@ -3,24 +3,24 @@ conf=@BASE@/orchestration/lanes/full.conf
 HOST=192.168.0.7:18023
 SESSION=20261015_full_r1
 COMMAND=bash vsm/nlu/run_nlu.sh --model fixture/model --endpoint http://192.168.0.7:18023/v1/chat/completions
-COMMAND=bash vsm/functionchat/run_functionchat.sh fixture/model http://192.168.0.7:18023/v1/chat/completions
-COMMAND=env TAUBENCH_MODE=solo TAUBENCH_TRIALS=1 TAUBENCH_MAX_CONCURRENCY=4 bash vsm/taubench/run_taubench.sh fixture/model http://192.168.0.7:18023/v1/chat/completions
+COMMAND=env AGENT_REQUEST_TIMEOUT=300 AGENT_TASK_TIMEOUT=900 bash vsm/functionchat/run_functionchat.sh fixture/model http://192.168.0.7:18023/v1/chat/completions
+COMMAND=env TAUBENCH_MODE=solo TAUBENCH_TRIALS=1 TAUBENCH_MAX_CONCURRENCY=4 AGENT_REQUEST_TIMEOUT=300 AGENT_TASK_TIMEOUT=900 bash vsm/taubench/run_taubench.sh fixture/model http://192.168.0.7:18023/v1/chat/completions
 COMMAND=env KRETA_WORKERS=4 bash vsm/multimodal/run_all.sh fixture/model http://192.168.0.7:18023/v1
 COMMAND[if-exists]=python -m shared.functionchat.judge.run_judge --results-dir <RD>/20261015_full_r1/language/functionchat
 COMMAND[if-exists]=python -m shared.multimodal.benches.koffvqa_api_judge --predfile <RD>/20261015_full_r1/vision/multimodal/koffvqa/<latest *_gen.xlsx> --target-model fixture/model --judge-model openai/gpt-4.1-mini --judge-base-url https://openrouter.ai/api/v1 --judge-api-key ${TAUBENCH_USER_API_KEY} --seed 0
 COMMAND[if-exists]=python derive_multimodal_publish.py --base . --write --source <RD>/20261015_full_r1/vision/multimodal/koffvqa_api_judge
 SESSION=20261015_full_r2
 COMMAND=bash vsm/nlu/run_nlu.sh --model fixture/model --endpoint http://192.168.0.7:18023/v1/chat/completions
-COMMAND=bash vsm/functionchat/run_functionchat.sh fixture/model http://192.168.0.7:18023/v1/chat/completions
-COMMAND=env TAUBENCH_MODE=solo TAUBENCH_TRIALS=1 TAUBENCH_MAX_CONCURRENCY=4 bash vsm/taubench/run_taubench.sh fixture/model http://192.168.0.7:18023/v1/chat/completions
+COMMAND=env AGENT_REQUEST_TIMEOUT=300 AGENT_TASK_TIMEOUT=900 bash vsm/functionchat/run_functionchat.sh fixture/model http://192.168.0.7:18023/v1/chat/completions
+COMMAND=env TAUBENCH_MODE=solo TAUBENCH_TRIALS=1 TAUBENCH_MAX_CONCURRENCY=4 AGENT_REQUEST_TIMEOUT=300 AGENT_TASK_TIMEOUT=900 bash vsm/taubench/run_taubench.sh fixture/model http://192.168.0.7:18023/v1/chat/completions
 COMMAND=env KRETA_WORKERS=4 bash vsm/multimodal/run_all.sh fixture/model http://192.168.0.7:18023/v1
 COMMAND[if-exists]=python -m shared.functionchat.judge.run_judge --results-dir <RD>/20261015_full_r2/language/functionchat
 COMMAND[if-exists]=python -m shared.multimodal.benches.koffvqa_api_judge --predfile <RD>/20261015_full_r2/vision/multimodal/koffvqa/<latest *_gen.xlsx> --target-model fixture/model --judge-model openai/gpt-4.1-mini --judge-base-url https://openrouter.ai/api/v1 --judge-api-key ${TAUBENCH_USER_API_KEY} --seed 0
 COMMAND[if-exists]=python derive_multimodal_publish.py --base . --write --source <RD>/20261015_full_r2/vision/multimodal/koffvqa_api_judge
 SESSION=20261015_full_r3
 COMMAND=bash vsm/nlu/run_nlu.sh --model fixture/model --endpoint http://192.168.0.7:18023/v1/chat/completions
-COMMAND=bash vsm/functionchat/run_functionchat.sh fixture/model http://192.168.0.7:18023/v1/chat/completions
-COMMAND=env TAUBENCH_MODE=solo TAUBENCH_TRIALS=1 TAUBENCH_MAX_CONCURRENCY=4 bash vsm/taubench/run_taubench.sh fixture/model http://192.168.0.7:18023/v1/chat/completions
+COMMAND=env AGENT_REQUEST_TIMEOUT=300 AGENT_TASK_TIMEOUT=900 bash vsm/functionchat/run_functionchat.sh fixture/model http://192.168.0.7:18023/v1/chat/completions
+COMMAND=env TAUBENCH_MODE=solo TAUBENCH_TRIALS=1 TAUBENCH_MAX_CONCURRENCY=4 AGENT_REQUEST_TIMEOUT=300 AGENT_TASK_TIMEOUT=900 bash vsm/taubench/run_taubench.sh fixture/model http://192.168.0.7:18023/v1/chat/completions
 COMMAND=env KRETA_WORKERS=4 bash vsm/multimodal/run_all.sh fixture/model http://192.168.0.7:18023/v1
 COMMAND[if-exists]=python -m shared.functionchat.judge.run_judge --results-dir <RD>/20261015_full_r3/language/functionchat
 COMMAND[if-exists]=python -m shared.multimodal.benches.koffvqa_api_judge --predfile <RD>/20261015_full_r3/vision/multimodal/koffvqa/<latest *_gen.xlsx> --target-model fixture/model --judge-model openai/gpt-4.1-mini --judge-base-url https://openrouter.ai/api/v1 --judge-api-key ${TAUBENCH_USER_API_KEY} --seed 0
