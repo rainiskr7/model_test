@@ -493,6 +493,44 @@ def render_markdown(
     return "\n".join(out) + "\n"
 
 
+def _print_console(published, rejected, no_record, show_rejected):
+    """발행 가능·거부·게이트 누락 행과 집계 문구를 기존 순서로 출력한다."""
+    print("=" * 78)
+    print("발행 가능 (publish_status.publishable == true)")
+    print("=" * 78)
+    for r in sorted(published, key=lambda x: (x["track"], x["model"], x["run"])):
+        head = f"  [{r['track']}] {r['model']} / {r['run']}"
+        print(head)
+        for name, num, den, provisional in r["axes"]:
+            tag = "  ** PROVISIONAL — 판정기 기준, 인간 검증 없음 **" if provisional else ""
+            print(f"      {name:<12} {fraction(num, den)}{tag}")
+        if r.get("judge_errors") is not None:
+            print(f"      (판정 불가 {r['judge_errors']}, 불안정 {r.get('unstable')})")
+
+    if rejected and show_rejected:
+        print()
+        print("=" * 78)
+        print("발행 불가 — 점수를 인용하지 마십시오")
+        print("=" * 78)
+        for r in sorted(rejected, key=lambda x: (x["track"], x["model"], x["run"])):
+            print(f"  [{r['track']}] {r['model']} / {r['run']}")
+            reasons = r["failures"] or [
+                "게이트 기록 없음 — 현재 채점 계약으로 재채점되지 않는 낡은 산출물"
+            ]
+            for f in reasons:
+                print(f"      X {f}")
+
+    if no_record:
+        print()
+        print("  ⚠️  게이트 기록이 없는 런 (재채점하세요):")
+        for r in no_record:
+            print(f"      {r['model']}/{r['run']}/{r['track']}")
+
+    print()
+    print(f"  발행 가능 {len(published)} / 거부 {len(rejected)} / 게이트 기록 없음 {len(no_record)}")
+    print("  상세 판단 기준: AGENT_TRACK_CLOSEOUT.md")
+
+
 def main(argv: Optional[List[str]] = None) -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument(
@@ -522,42 +560,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     published = [r for r in rows if r["publishable"]]
     rejected = [r for r in rows if not r["publishable"]]
     no_record = [r for r in rows if not r["has_gate_record"]]
-
-    print("=" * 78)
-    print("발행 가능 (publish_status.publishable == true)")
-    print("=" * 78)
-    for r in sorted(published, key=lambda x: (x["track"], x["model"], x["run"])):
-        head = f"  [{r['track']}] {r['model']} / {r['run']}"
-        print(head)
-        for name, num, den, provisional in r["axes"]:
-            tag = "  ** PROVISIONAL — 판정기 기준, 인간 검증 없음 **" if provisional else ""
-            print(f"      {name:<12} {fraction(num, den)}{tag}")
-        if r.get("judge_errors") is not None:
-            print(f"      (판정 불가 {r['judge_errors']}, 불안정 {r.get('unstable')})")
-
-    if rejected and args.show_rejected:
-        print()
-        print("=" * 78)
-        print("발행 불가 — 점수를 인용하지 마십시오")
-        print("=" * 78)
-        for r in sorted(rejected, key=lambda x: (x["track"], x["model"], x["run"])):
-            print(f"  [{r['track']}] {r['model']} / {r['run']}")
-            reasons = r["failures"] or [
-                "게이트 기록 없음 — 현재 채점 계약으로 재채점되지 않는 낡은 산출물"
-            ]
-            for f in reasons:
-                print(f"      X {f}")
-
-    if no_record:
-        print()
-        print("  ⚠️  게이트 기록이 없는 런 (재채점하세요):")
-        for r in no_record:
-            print(f"      {r['model']}/{r['run']}/{r['track']}")
-
-    print()
-    print(f"  발행 가능 {len(published)} / 거부 {len(rejected)} / 게이트 기록 없음 {len(no_record)}")
-    print("  상세 판단 기준: AGENT_TRACK_CLOSEOUT.md")
-
+    _print_console(published, rejected, no_record, args.show_rejected)
     if args.strict and (rejected or no_record):
         return 1
     return 0
