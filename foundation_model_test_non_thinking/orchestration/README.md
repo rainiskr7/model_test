@@ -43,6 +43,22 @@ Dry-run은 cd, venv 활성화, config loader까지만 진행하며 `.env`를 읽
 preflight, 로그 쓰기, harness/taubench 실행은 하지 않는다. `LANE_TOKENIZER`는
 harness 인자에만 쓰며 loader가 export한 `TOKENIZER`는 유지한다.
 
+kmmlu·taubench_std4·full 모두 preflight 전에 **endpoint 문자열 HOST**를 기준으로
+잠근다. 같은 서버라도 포트가 다르면 다른 잠금이다. 파일은
+`logs/resume_orch/.lane_host_<HOST의 [^A-Za-z0-9._-]를 _로 치환>.lock`이며,
+레인 이름·트랙이 달라도 같은 HOST이면 중복 실행을 거부한다.
+경합은 `같은 호스트 레인 실행 중 — 시작 안 함`과 rc 2, 잠금 오류는 `잠금 오류`와
+rc 4로 끝난다. dry-run에서는 잠금 helper를 source하지 않고 잠금 파일도 만들지 않는다.
+
+`harness_lock`은 fd 9를 열고 PATH의 `flock -n -E 75 9`를 우선 사용한다.
+없으면 macOS의 `/usr/bin/lockf -s -t 0 9` fd 방식을 쓰며 선택 결과는
+`HARNESS_LOCK_TOOL`에 남는다. 이 lockf 방식도 BSD flock이고 파일 존재 자체는
+잠금 여부가 아니다. 두 방식 모두 잠긴 열린 파일의 마지막 참조가 닫히면 해제된다.
+평가 자식 3곳에서 fd 9를 닫으므로 평가 프로세스가 부모 잠금을 계속 보유하지 않는다.
+운영 종료는 위와 같이 **프로세스 그룹 TERM**으로 한다. 종료 후 빈 잠금 파일이 남는 것은
+정상이며 삭제할 필요가 없다. 경합 중 잠금 파일을 지우면 다른 inode가 생길 수 있으므로
+해제 수단으로 삭제하지 않는다.
+
 conf는 빈 줄/`#` 주석과 `key=value`를 지원한다. 값 양끝의 한 쌍 따옴표는
 제거하며 shell 확장이나 eval은 하지 않는다. 모르는 키/인자는 rc 2다.
 필수 키는 CONFIG, HOST_ENV, HOST_DEFAULT, KEYVAR, TRACK, SESSION, LABEL,
@@ -64,8 +80,16 @@ bash orchestration/tests/test_lane_guard.sh
 # 같은 guard 시험의 직접 진입점:
 bash orchestration/tests/test_lane_guard_isolated.sh
 bash orchestration/tests/test_run_lane_equivalence.sh
+bash tests/run_pytests.sh orchestration -k lane_host_lock -v -s
 cmp shared/harness/tests/runner_checks.py ../foundation_model_test_thinking/shared/harness/tests/runner_checks.py
 ```
+
+HOST 잠금 시험은 임시 BASE와 합성 conf·curl·평가 스텁을 사용한다. 실제 flock/lockf로
+세 트랙의 경합, 같은 서버의 다른 포트 병행, 그룹 TERM 뒤 잠금 재획득을 검사한다.
+fixture가 만든 독립 프로세스 그룹과 평가 스텁이 기록한 PID만 신호·생존 확인 대상으로
+삼고, 전역 프로세스 탐색은 하지 않는다. 네이티브 도구나 신호 권한이 없으면 해당 검사는
+INCONCLUSIVE 사유와 함께 pytest skip으로 표시한다. macOS lockf 결과가 Linux flock의
+실행 증거를 대신하지는 않는다.
 
 guard 시험은 표준 라이브러리 패키지 `orchestration.tests.lane_guard_check`를
 `PYTHONPATH=N python3 -m`으로 실행한다. 운영 `lanes.conf`를 읽거나 복사하지

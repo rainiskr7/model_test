@@ -24,6 +24,8 @@ mkdir -p "$out"
 printf '%s\n' "$@" > "$out/argv"
 pwd > "$out/cwd"
 env | LC_ALL=C sort > "$out/env"
+# 4d: record fd ownership separately; existing argv/env/log expectations stay intact.
+if { : >&9; } 2>/dev/null; then echo open; else echo closed; fi > "$out/fd9"
 printf '%s %s\n' "$EVAL_TIMESTAMP" "$stage" >> "$base/calls"
 printf 'STUB_OUT %s\n' "$stage"
 printf 'STUB_ERR %s\n' "$stage" >&2
@@ -78,6 +80,9 @@ fixture() {
   mkdir -p "$FX/bin" "$FX/.venv/bin" "$FX/configs" "$FX/shared" "$FX/rc" "$FX/dump" "$FX/home"
   cp -R "$ORCH" "$FX/orchestration"
   cp "$REPO/shared/results_dir.sh" "$FX/shared/results_dir.sh"
+  # 4d: the isolated lane now sources the real, frozen locking helper.
+  mkdir -p "$FX/shared/harness"
+  cp "$REPO/shared/harness/harness_lib.sh" "$FX/shared/harness/harness_lib.sh"
   ln -s "$PYTHON3" "$FX/bin/python3"
   printf 'export PATH="%s/bin:/usr/bin:/bin"\n' "$FX" > "$FX/.venv/bin/activate"
   printf 'fixture_model\n' > "$FX/model_dir"
@@ -213,6 +218,7 @@ check_stage_env() {
   local dir=$1 stage=${1##*.} ts
   ts=$(basename "$dir"); ts=${ts%.*}
   exact "$dir/cwd" "$FX" && exact "$dir/env" "EVAL_TIMESTAMP=$ts" || return 1
+  exact "$dir/fd9" closed || return 1  # 4d: evaluation children must not retain the host lock.
   absent "$dir/env" '^(NUM_CONCURRENT|KRETA_RESUME)=' || return 1
   # 4a: replace blanket timeout absence with explicit values only for the two
   # consuming stages; inherited pollution must still be absent everywhere else.

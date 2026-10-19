@@ -31,6 +31,9 @@ def main():
     print('ARTIFACTS='+str(fx),flush=True)
     (fx/'.venv').symlink_to(repo/'.venv',target_is_directory=True)
     (fx/'configs').symlink_to(repo/'configs',target_is_directory=True)
+    # 4d: fixture preparation only; use the actual frozen lock helper.
+    (fx/'shared/harness').mkdir(parents=True)
+    (fx/'shared/harness/harness_lib.sh').symlink_to(repo/'shared/harness/harness_lib.sh')
     # Synthetic credentials only; never open the repository .env.
     put(fx/'.env','OPENAI_API_KEY=fixture-one\nOPENAI_API_KEY_7=fixture-seven\nTAUBENCH_USER_API_KEY=fixture-user\n')
     (fx/'orchestration/lanes').mkdir(parents=True)
@@ -40,6 +43,8 @@ set -u
 {
   printf 'argv=%s\\n' "$@"
   printf 'cwd=%s\\n' "$PWD"
+  # 4d: both sides record fd 9; it must be closed in evaluation children.
+  if { : >&9; } 2>/dev/null; then printf 'fd9=open\\n'; else printf 'fd9=closed\\n'; fi
   env | LC_ALL=C sort | awk '!/^(SHLVL|OLDPWD|PWD|LANE_DRY_RUN|__CF_USER_TEXT_ENCODING|_)=/ && !/^BASH_FUNC_/'
 } > "$MODEL_TEST_BASE/dump/$EVAL_TIMESTAMP.txt"
 printf '%s\\n' "$EVAL_TIMESTAMP" >> "$MODEL_TEST_BASE/calls"
@@ -124,6 +129,10 @@ END_LABEL="diffusiongemma taubench standard×4"
                     if scenario=='rc':put(fx/'rc'/sessions[0],str(expected_rc))
                     r=run(['/bin/bash',str(script)],env,fx)
                     dump={p.name:p.read_bytes() for p in (fx/'dump').glob('*.txt')}
+                    if side=='new':
+                        # Only the host lock file is new; old argv/env/log assertions below remain unchanged.
+                        assert len(list((fx/'logs/resume_orch').glob('.lane_host_*.lock')))==1
+                        assert all(b'fd9=closed\n' in data for data in dump.values())
                     calls=(fx/'calls').read_text().splitlines() if (fx/'calls').exists() else []
                     logs={ts:(fx/'logs'/ts/logname).read_bytes() for ts in sessions}
                     messages=re.sub(r'^\[\d\d-\d\d \d\d:\d\d:\d\d\] ','',(fx/'logs/resume_orch/orchestrator.log').read_text(),flags=re.M)

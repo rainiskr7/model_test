@@ -166,7 +166,7 @@ full_invoke() (
     *_judge|derive) PYTHONPATH="$BASE${PYTHONPATH:+:$PYTHONPATH}" EVAL_TIMESTAMP="$TS" "${FULL_CMD[@]}" ;;
     *) EVAL_TIMESTAMP="$TS" "${FULL_CMD[@]}" ;;
   esac
-)
+) 9>&-
 
 full_run_stage() {
   # Record every executed stage and enforce stop/continue policy at one boundary.
@@ -268,7 +268,16 @@ if [ "${LANE_DRY_RUN:-0}" = 1 ]; then
   fi
   exit 0
 fi
-if [ "$TRACK" = full ]; then mkdir -p "$ORCH"; fi
+mkdir -p "$ORCH" || { log "$PREFIX: 잠금 오류"; exit 4; }
+source "$BASE/shared/harness/harness_lib.sh" || { log "$PREFIX: 잠금 오류"; exit 4; }
+host_lock_name=${HOST//[^A-Za-z0-9._-]/_}
+harness_lock "$ORCH/.lane_host_${host_lock_name}.lock" >/dev/null
+lock_rc=$?
+case "$lock_rc" in
+  0) ;;
+  3) log "$PREFIX: 같은 호스트 레인 실행 중 — 시작 안 함"; exit 2 ;;
+  *) log "$PREFIX: 잠금 오류"; exit 4 ;;
+esac
 # Preserve the exact wording supplied by each lane's configuration.
 if [ "$TRACK" = kmmlu ] && [ "$REQUIRE_NOTHINK" = 1 ]; then
   grep -q 'set enable_thinking = false' "$TOK/chat_template.jinja" || { log "$PREFIX: 생각 끈 사본이 아니다 — $TOK"; exit 1; }
@@ -283,7 +292,7 @@ if [ "$TRACK" = kmmlu ]; then
     TS="${BASE_TS}_r${N}"
     mkdir -p "$BASE/logs/$TS"
     log "[$TS] harness 시작: run_harness.sh $MODEL $TOK $BASE_URL_CHAT (LM_EVAL_MODE=$LM_EVAL_MODE)"
-    ( EVAL_TIMESTAMP="$TS" bash vsm/harness/run_harness.sh "$MODEL" "$TOK" "$BASE_URL_CHAT" ) >>"$BASE/logs/$TS/harness_${MODEL}.log" 2>&1
+    ( EVAL_TIMESTAMP="$TS" bash vsm/harness/run_harness.sh "$MODEL" "$TOK" "$BASE_URL_CHAT" ) 9>&- >>"$BASE/logs/$TS/harness_${MODEL}.log" 2>&1
     rc=$?
     log "[$TS] harness 종료 rc=$rc"
     [ "$rc" -ne 0 ] && { log "[$TS] harness 실패 — $STOP_LABEL 레인 중단 (원인 확인 후 수동 재개)"; exit "$rc"; }
@@ -296,7 +305,7 @@ else
   log "[$TS] taubench_std4 시작: TAUBENCH_MODE=standard TRIALS=$TAUBENCH_TRIALS 동시 $TAUBENCH_MAX_CONCURRENCY 사용자 ${TAUBENCH_USER_MODEL##*/}"
   ( EVAL_TIMESTAMP="$TS" env TAUBENCH_MODE=standard TAUBENCH_USER_MODEL="$TAUBENCH_USER_MODEL" \
       TAUBENCH_TRIALS="$TAUBENCH_TRIALS" AGENT_REQUEST_TIMEOUT="$AGENT_REQUEST_TIMEOUT" TAUBENCH_MAX_CONCURRENCY="$TAUBENCH_MAX_CONCURRENCY" \
-      bash vsm/taubench/run_taubench.sh "$MODEL" "$BASE_URL_CHAT" ) >>"$BASE/logs/$TS/taubench_std4.log" 2>&1
+      bash vsm/taubench/run_taubench.sh "$MODEL" "$BASE_URL_CHAT" ) 9>&- >>"$BASE/logs/$TS/taubench_std4.log" 2>&1
   rc=$?
   log "[$TS] taubench_std4 종료 rc=$rc"
 fi

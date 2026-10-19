@@ -36,6 +36,12 @@ KMMLU/harness와 taubench standard는 포함하지 않는다. 같은 mtime의 wo
 
 ## 충돌과 재개
 
+full도 다른 트랙과 함께 endpoint 문자열 HOST별 잠금을 사용한다. 같은 서버라도 포트가
+다르면 다른 잠금이며, 파일은 `logs/resume_orch/.lane_host_<HOST의 [^A-Za-z0-9._-]를 _로 치환>.lock`이다.
+preflight 전에 획득하고 경합 시 rc 2, 잠금 오류 시 rc 4로 종료한다. dry-run은 잠금·helper
+source 없이 동작한다. 평가 자식에는 fd 9를 넘기지 않으며, 운영 종료는 프로세스 그룹 TERM이다.
+flock/lockf 선택과 잠금 수명은 [레인 README](README.md)를 따른다.
+
 RESUME_FROM이 없으면 각 반복의 첫 단계 전에 결과 세션 경로가 이미 있는지 확인한다. 있으면 `세션 존재 — 재개는 RESUME_FROM`을 기록하고 rc 2로 중단한다. 결과 모델 디렉터리는 MODEL의 `/`, `-`, `:`를 `_`로 바꾼 뒤 `shared/results_dir.sh`의 `results_model_dir`로 기존 대소문자 철자를 재사용한다. 이 helper가 여러 casefold 일치를 발견하면 rc 2로 중단한다.
 
 예를 들어 conf에 다음 두 줄을 지정한다.
