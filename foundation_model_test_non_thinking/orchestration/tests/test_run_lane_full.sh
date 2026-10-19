@@ -127,6 +127,8 @@ f1() {
   expect_rc 0 || return 1
   # 4a: all three functionchat/taubench pairs in dry_run.txt now carry env
   # REQUEST=300 and TASK=900; TASK must exceed REQUEST to pass runner validation.
+  # 4c: the three judge lines now show --judge-api-key-env and the variable name,
+  # matching actual argv instead of a masked key argument.
   sed "s|@BASE@|$FX|g" "$HERE/fixtures_full/dry_run.txt" > "$FX/expected"
   diff -u "$FX/expected" "$FX/stdout" || return 1
   [ ! -e "$FX/helper_called" ] && [ ! -e "$FX/preflight" ] &&
@@ -241,10 +243,11 @@ check_stage_argv() {
     functionchat_judge)
       printf '%s\n' -m shared.functionchat.judge.run_judge --results-dir "$FX/results/fixture_model/$ts/language/functionchat" ;;
     koffvqa_judge)
+      # 4c: only the environment variable name belongs in the recorded argv.
       printf '%s\n' -m shared.multimodal.benches.koffvqa_api_judge --predfile \
         "$FX/results/fixture_model/$ts/vision/multimodal/koffvqa/a_new_gen.xlsx" \
         --target-model fixture/model --judge-model openai/gpt-4.1-mini \
-        --judge-base-url https://openrouter.ai/api/v1 --judge-api-key synthetic-judge-key --seed 0 ;;
+        --judge-base-url https://openrouter.ai/api/v1 --judge-api-key-env TAUBENCH_USER_API_KEY --seed 0 ;;
     derive)
       printf '%s\n' derive_multimodal_publish.py --base . --write --source \
         "$FX/results/fixture_model/$ts/vision/multimodal/koffvqa_api_judge" ;;
@@ -268,6 +271,11 @@ f5() {
   for dir in "$FX/dump/"*; do check_stage_env "$dir" || return 1; done
   while read -r ts stage; do
     check_stage_argv "$ts" "$stage" || return 1
+    # 4c: prove the key is absent from argv and still available to the judge via env.
+    absent "$FX/dump/$ts.$stage/argv" 'synthetic-judge-key' || return 1
+    if [ "$stage" = koffvqa_judge ]; then
+      exact "$FX/dump/$ts.$stage/env" 'TAUBENCH_USER_API_KEY=synthetic-judge-key' || return 1
+    fi
     printf 'SENTINEL\nSTUB_OUT %s\nSTUB_ERR %s\n' "$stage" "$stage" > "$FX/expected_log"
     diff -u "$FX/expected_log" "$FX/logs/$ts/$stage.log" || return 1
     has "$FX/stdout" "[$ts] $stage 시작: " && has "$FX/stdout" "[$ts] $stage 종료 rc=0" || return 1

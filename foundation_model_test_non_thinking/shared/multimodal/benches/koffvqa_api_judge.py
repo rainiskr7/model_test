@@ -15,13 +15,15 @@ Usage:
     --target-model "Qwen/Qwen3.5-35B-A3B" \\
     --judge-model openai/gpt-4o-mini \\
     --judge-base-url https://api.openai.com/v1 \\
-    --judge-api-key sk-xxx
+    --judge-api-key-env JUDGE_API_KEY
 """
 
 import argparse
 import hashlib
 import json
+import os
 import re
+import sys
 from pathlib import Path
 from typing import Optional
 
@@ -162,7 +164,9 @@ def _parse_args():
     ap.add_argument("--target-model", required=True, help="평가 대상 모델명 (결과 폴더 명명용)")
     ap.add_argument("--judge-model", required=True, help="judge 로 사용할 OpenAI-compat 모델명")
     ap.add_argument("--judge-base-url", required=True, help="judge API base_url")
-    ap.add_argument("--judge-api-key", default=None, help="judge API key (없으면 OPENAI_API_KEY env)")
+    ap.add_argument("--judge-api-key", default=None, help="judge API key (환경변수 옵션보다 우선)")
+    ap.add_argument("--judge-api-key-env", default=None,
+                    help="judge 키 환경변수 이름 (미설정·빈 값이면 오류; 두 옵션 생략 시 기존 OPENAI_API_KEY fallback)")
     ap.add_argument("--limit", type=int, default=None)
     ap.add_argument("--seed", type=int, default=None, help="judge seed")
     ap.add_argument("--judge-max-tokens", type=int, default=1024, help="judge 응답 max_tokens (default 1024 — 근거 포함)")
@@ -173,6 +177,19 @@ def _parse_args():
                     help="모델 응답 컬럼 override (default: prediction)")
     args = ap.parse_args()
     return args
+
+
+def _resolve_judge_api_key(args):
+    """Prefer the explicit key; an explicitly named environment variable must exist."""
+    if args.judge_api_key is not None:
+        return args.judge_api_key
+    name = getattr(args, "judge_api_key_env", None)
+    if name is None:
+        return None
+    key = os.environ.get(name)
+    if not key:
+        raise ValueError(f"--judge-api-key-env {name!r}: 환경변수가 없거나 빈 값입니다")
+    return key
 
 
 def _load_predictions(args):
@@ -293,14 +310,19 @@ def _save_results(out_dir, results, summary, save_json):
 
 def main():
     """Coordinate delayed imports, workbook loading, judging and storage."""
+    args = _parse_args()
+    try:
+        judge_api_key = _resolve_judge_api_key(args)
+    except ValueError as exc:
+        print(f"[koffvqa_judge] {exc}", file=sys.stderr)
+        return 2
     # Delay runner dependencies so pure column/score validation stays importable.
     from shared.multimodal.benches.common import (  # pylint: disable=import-outside-toplevel
         get_base_dir, get_timestamp, get_results_dir,
         save_json, build_run_config, make_client,
     )
-    args = _parse_args()
     df, q_col, crit_col, resp_col = _load_predictions(args)
-    client = make_client(args.judge_base_url, args.judge_api_key)
+    client = make_client(args.judge_base_url, judge_api_key)
     out_dir = _prepare_output(args, get_base_dir, get_timestamp, get_results_dir)
     results, scores, identity = _judge_rows(args, df, q_col, crit_col, resp_col, client)
     summary = _build_summary(args, results, scores, identity, build_run_config)
@@ -308,4 +330,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

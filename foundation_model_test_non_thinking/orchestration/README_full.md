@@ -14,7 +14,7 @@
 6. koffvqa_judge: 이 세션의 `vision/multimodal/koffvqa/*_gen.xlsx` 중 수정 시각이 가장 최신인 파일이 있을 때
 7. derive: 이번 실행에서 이 세션의 koffvqa_judge가 rc 0으로 끝났을 때. `r<N>:derive` 재개 반복은 아래의 저장 산출 확인 규칙 적용
 
-KMMLU/harness와 taubench standard는 포함하지 않는다. 같은 mtime의 workbook은 셸 glob 순서에서 먼저 나온 파일을 선택한다. 모든 실행 단계에 `EVAL_TIMESTAMP`를 지정하고, stdout/stderr를 `logs/<TS>/<stage>.log`에 append한다. `logs/resume_orch/orchestrator.log`에는 단계 시작 명령과 종료 rc를 남긴다. 명령 로그의 judge 키는 `${TAUBENCH_USER_API_KEY}`로 가린다.
+KMMLU/harness와 taubench standard는 포함하지 않는다. 같은 mtime의 workbook은 셸 glob 순서에서 먼저 나온 파일을 선택한다. 모든 실행 단계에 `EVAL_TIMESTAMP`를 지정하고, stdout/stderr를 `logs/<TS>/<stage>.log`에 append한다. `logs/resume_orch/orchestrator.log`에는 단계 시작 명령과 종료 rc를 남긴다. KOFFVQA judge 명령에는 `--judge-api-key-env TAUBENCH_USER_API_KEY`로 변수 이름만 전달하고, 키 값은 이미 export된 환경에서 읽는다. judge의 직접 `--judge-api-key`가 우선하며, 환경변수 옵션을 지정했는데 값이 없거나 비어 있으면 fallback 없이 rc 2로 종료한다. 두 옵션을 생략하면 기존 `OPENAI_API_KEY` fallback을 유지한다.
 
 기존 공통 키와 함께 다음 키를 사용한다. conf는 shell을 실행하지 않는 리터럴 `key=value` 형식이다.
 

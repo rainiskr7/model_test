@@ -78,7 +78,7 @@ full_skip_resume() {
 
 full_command() {
   # Assemble argv once for execution and dry-run. RD is symbolic in dry-run.
-  local stage=$1 predfile=$2 judge_key=$3
+  local stage=$1 predfile=$2
   case "$stage" in
     nlu) FULL_CMD=(bash vsm/nlu/run_nlu.sh --model "$MODEL" --endpoint "$BASE_URL_CHAT") ;;
     functionchat)
@@ -99,7 +99,7 @@ full_command() {
     koffvqa_judge)
       FULL_CMD=(python -m shared.multimodal.benches.koffvqa_api_judge --predfile "$predfile"
         --target-model "$MODEL" --judge-model openai/gpt-4.1-mini
-        --judge-base-url https://openrouter.ai/api/v1 --judge-api-key "$judge_key" --seed 0) ;;
+        --judge-base-url https://openrouter.ai/api/v1 --judge-api-key-env TAUBENCH_USER_API_KEY --seed 0) ;;
     derive)
       FULL_CMD=(python derive_multimodal_publish.py --base . --write
         --source "$RD/$TS/vision/multimodal/koffvqa_api_judge") ;;
@@ -107,12 +107,11 @@ full_command() {
 }
 
 full_command_text() {
-  # Show the actual argv, but never write the judge credential to a log.
-  local arg previous= separator=
+  # Judge argv contains only the environment variable name, so no key masking is needed.
+  local arg separator=
   for arg in "${FULL_CMD[@]}"; do
-    [ "$previous" != --judge-api-key ] || arg='${TAUBENCH_USER_API_KEY}'
     printf '%s%s' "$separator" "$arg"
-    previous=$arg separator=' '
+    separator=' '
   done
 }
 
@@ -125,7 +124,7 @@ full_dry_run() {
     printf 'SESSION=%s\n' "$TS"
     for stage in $FULL_STAGES; do
       if full_skip_resume "$stage"; then printf 'SKIP=%s %s\n' "$TS" "$stage"; continue; fi
-      full_command "$stage" "$RD/$TS/vision/multimodal/koffvqa/<latest *_gen.xlsx>" ''
+      full_command "$stage" "$RD/$TS/vision/multimodal/koffvqa/<latest *_gen.xlsx>"
       case "$stage" in *_judge|derive) prefix='COMMAND[if-exists]=' ;; *) prefix='COMMAND=' ;; esac
       printf '%s%s\n' "$prefix" "$(full_command_text)"
     done
@@ -173,7 +172,7 @@ full_run_stage() {
   # Record every executed stage and enforce stop/continue policy at one boundary.
   local stage=$1 rc
   if ! full_stage_ready "$stage"; then log "[$TS] $stage skip (condition)"; return; fi
-  full_command "$stage" "$FULL_PREDFILE" "$TAUBENCH_USER_API_KEY"
+  full_command "$stage" "$FULL_PREDFILE"
   log "[$TS] $stage 시작: $(full_command_text)"
   full_invoke "$stage" >>"$BASE/logs/$TS/$stage.log" 2>&1
   rc=$?
