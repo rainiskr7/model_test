@@ -15,6 +15,31 @@ BASE_DIR="${MODEL_TEST_BASE:-$(cd "$SCRIPT_DIR/../.." && pwd)}"
 MODEL="${1:?'MODEL required: ./run_all.sh MODEL [BASE_URL]'}"
 BASE_URL="${2:-http://172.16.1.81:18090/v1}"
 
+# 직접 호출의 이름 오류는 세션 생성·정상 출력·벤치 실행 전에 거절한다.
+# 로더의 측정 제외 정책(현재 b4만 허용)과 별개인 재개용 훅 목록이다.
+SKIP_BENCH_NAMES=(kreta k_dtcbench koffvqa mtvqa_kr k_mmbench b4_latency_profile)
+validate_skip_benches() {
+  local name allowed found had_noglob=1
+  local unknown=()
+  case "$-" in *f*) ;; *) had_noglob=0; set -f ;; esac
+  # 공백 분리는 하되 '*' 같은 입력을 파일명으로 확장하지 않는다.
+  for name in ${SKIP_BENCHES:-}; do
+    found=0
+    for allowed in "${SKIP_BENCH_NAMES[@]}"; do
+      if [ "$name" = "$allowed" ]; then found=1; break; fi
+    done
+    if [ "$found" -eq 0 ]; then unknown+=("$name"); fi
+  done
+  [ "$had_noglob" -eq 0 ] && set +f
+  if [ "${#unknown[@]}" -ne 0 ]; then
+    printf '[run_all] SKIP_BENCHES 에 알 수 없는 이름: %s\n' "${unknown[*]}" >&2
+    printf '사용 가능: %s\n' "${SKIP_BENCH_NAMES[*]}" >&2
+    return 2
+  fi
+  return 0
+}
+validate_skip_benches || exit 2
+
 # 동일 timestamp 공유: EVAL_TIMESTAMP env > .eval_session 파일 > 새로 생성
 if [ -z "${EVAL_TIMESTAMP:-}" ]; then
   # 세션 파일은 결과가 쓰이는 뿌리와 같은 곳에 둔다. 다른 곳에 두면
@@ -41,9 +66,10 @@ run_checked() {
   fi
 }
 
-# SKIP_BENCHES: 모델 config(또는 serving_profile)가 지정한 제외 벤치 목록.
-# 해당 모델에서 숫자가 의미를 갖지 못하는 벤치를 아예 안 돌려, 잘못 비교될
-# 결과가 생기지 않게 한다. 미설정 시 아무것도 건너뛰지 않는다(기존 동작).
+# SKIP_BENCHES: 직접 호출의 재개용 목록 또는 로더의 측정 제외 정책 값.
+# run_full_eval·레인은 로더가 상속값을 unset/YAML 값으로 교체한다.
+# full_eval의 로더 뒤 .env에서 export하면 전달될 수 있으나 재개용으로 권장하지 않는다.
+# 미설정·빈 값·공백만 있으면 아무것도 건너뛰지 않는다.
 skip_bench() {
   local name="$1" s
   # set -f: unquoted 확장에서 벤치 이름에 '*' 같은 문자가 섞였을 때 glob 으로
@@ -67,8 +93,9 @@ fi
 #   이유 = 직전 런에서 KMMLU 가 chat-template 오염으로 폐기됐고, 같이 재실행하는
 #   KRETA(direct) 결과를 조기에 확인하기 위함. 원복하려면 이 블록을 아래
 #   K-MMBench 다음 자리로 되돌리면 된다.
-# SKIP_BENCHES 에 벤치 이름(kreta k_dtcbench koffvqa mtvqa_kr k_mmbench b4_latency_profile)을 주면 그 벤치를 건너뛴다.
-#   끝난 벤치를 덮어쓰지 않고 중단된 세션을 이어갈 때 쓴다. 마지막 sanity check 는 건너뛴 벤치의 기존 결과도 검사한다.
+# 재개는 같은 EVAL_TIMESTAMP로 직접 호출하며 SKIP_BENCH_NAMES 중 끝난 벤치를 지정한다.
+# 마지막 sanity check는 건너뛴 벤치의 기존 결과도 검사한다.
+# 발행 strict는 결과 원천이 전혀 없는 벤치의 부재를 검사하지 않는다.
 if skip_bench kreta; then
   echo "=== KRETA — SKIP (SKIP_BENCHES) ==="
 else

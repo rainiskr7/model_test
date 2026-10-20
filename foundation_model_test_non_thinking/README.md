@@ -167,6 +167,12 @@ bash vsm/multimodal/run_all.sh \
   http://127.0.0.1:18090/v1
 ```
 
+재개 시 이미 끝난 벤치를 건너뛰려면 같은 `EVAL_TIMESTAMP`를 지정하고 `run_all.sh`를 직접 호출하면서 `SKIP_BENCHES`에 공백으로 구분한 이름을 전달한다. 허용 이름은 `kreta k_dtcbench koffvqa mtvqa_kr k_mmbench b4_latency_profile`이다. 미설정·빈 값·공백만 있는 값은 제외하지 않으며, 모르는 이름은 세션 파일 생성과 벤치 실행 전에 stderr 두 줄을 출력하고 rc 2로 종료한다. 이때 직접 호출한 스크립트 자체는 파일을 만들거나 바꾸지 않는다(호출자의 리다이렉션·로그는 별개). 마지막 sanity 검사는 건너뛴 벤치의 기존 결과도 검사한다.
+
+모델 YAML·serving profile의 `skip_benches`는 해당 모델에서 숫자가 의미 없는 벤치를 아예 재지 않는 측정 제외 정책이며 현재 `b4_latency_profile`만 허용한다. `run_full_eval.sh`와 레인은 로더가 `SKIP_BENCHES`를 unset하거나 YAML 값으로 설정하므로, 최상위 명령 앞에 지정한 재개용 값은 유지되지 않는다. `run_full_eval.sh`에서는 로더 뒤 source되는 `.env`에서 export하면 전달될 수 있으나, 재개용 사용법으로 권장하지 않는다.
+
+발행 `--strict --run <세션>`은 기대 벤치의 완주 여부를 검사하지 않는다. 결과 원천이 전혀 없는 벤치의 부재와, 존재하는 결과의 게이트 기록 누락·손상은 구별해야 한다.
+
 발행 보고서: N 루트에서 `python3 -m reports.report_multimodal_tracks --base .`. 저장소 밖 cwd에서는 `PYTHONPATH="$N${PYTHONPATH:+:$PYTHONPATH}"`를 명령 앞에 붙인다.
 
 개별 벤치마크 실행은 `vsm/multimodal/run_<benchmark>.sh` 직접 호출.

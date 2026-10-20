@@ -56,9 +56,10 @@ def load_serving_profile(profile_name: str) -> dict:
     return yaml.safe_load(path.read_text()) or {}
 
 
-# skip_benches 에 쓸 수 있는 이름 = run_all.sh 에 실제로 skip 훅이 달린 벤치.
-# 훅 없는 이름을 적으면 조용히 무시되어 "제외했다고 생각했는데 돌아간" 상태가
-# 되므로, 여기서 즉시 실패시킨다. run_all.sh 에 훅을 추가하면 여기에도 추가할 것.
+# YAML·serving_profile의 skip_benches는 이 모델에서 숫자가 의미 없는 벤치를
+# 아예 재지 않는 측정 제외 정책이며, 현재 b4_latency_profile만 허용한다.
+# run_all.sh의 다른 재개용 훅은 허용하지 않는다. 발행 strict는 결과 원천이
+# 전혀 없는 벤치의 부재를 검사하지 않으므로, 훅 추가가 정책 허용을 뜻하지 않는다.
 SKIPPABLE_BENCHES = frozenset({"b4_latency_profile"})
 
 
