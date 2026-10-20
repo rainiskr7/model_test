@@ -128,3 +128,22 @@ PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -B -m pytest -q \
 단위 시험은 합성 행과 tmp_path만 사용한다. 네트워크·실제 HF 캐시·운영 결과가
 필요하지 않다. 실제 추적 세션 C2는 별도 scratch 스크립트에서 전체 results 파일
 목록·SHA256을 실행 전후 대조하고 그룹별 score ≤ row_mean을 검사한다.
+
+## 보고서 부록
+
+`python -B -m reports.report_multimodal_tracks --base .`는 기존 보고서 뒤에
+참고 절을 붙인다. `--no-official`은 이 기능의 YAML 읽기·재채점을 건너뛴다.
+
+- `report_inputs.py`: CLI가 이미 수집한 범위의 대표·반복을 선택하고 YAML과
+  원본을 읽는다. 기존 지표와 공식 방식 지표는 동일 반복 집합의 평균이다.
+- `report_section.py`: 채점된 평균·대표·반복 출처를 Markdown으로 만든다.
+- `conditions_section.py`: 선택된 judge 기록과 세션별 서빙 선언을 표시한다.
+- paired 계산·표는 `shared.stats.report_pairs`가 담당한다.
+
+전역 보고서의 별칭 폴더 접힘과 strict 코호트 선택을 유지한다.
+`stats.selection.read_collected_run()` 공개 함수는 `collect()`가 반환한 실행을
+디스크 sidecar와 대조하고 기존 `read_run()`의 artifact SHA 검증·채점을 재사용한다.
+이 함수 하나를 추가한 이유는 모델 폴더별 재수집 없이 전역 선택을 유지하면서
+sidecar SHA 근거를 확보하기 위해서다. 기존 rescore CLI 동작은 그대로다.
+서빙 YAML은 `--base/configs`, paired YAML은 실행 중인 코드의 `reports/`에서 읽는다.
+스키마·오류 정책·재생성 명령은 [reports README](../../../reports/README.md)를 따른다.

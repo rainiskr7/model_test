@@ -111,3 +111,16 @@ bash tests/run_pytests.sh --list
 `shared/stats/tests/test_stats_*_units.py`를 자동 발견한다. 등록 파일 수정은 없다.
 C3은 합성 데이터·tmp_path만 쓴다. C4는 별도 scratch 스크립트로 실제 추적
 입력임을 확인하고 CLI 전후 results 전체 파일 목록·SHA256을 비교한다.
+
+## 보고서에서 재사용
+
+`report_pairs.py`는 이미 채점된 코호트를 받아 CLI와 같은 `comparison()`으로
+계산하고 표를 만든다. 파일·YAML을 읽지 않으며 표준 라이브러리 계약을 유지한다.
+`SelectionError`만 비교 불가로 표시하고 구현 예외는 호출자에게 전파한다.
+보고서의 기본 seed=0·resamples=2000은 CLI 기본값과 같다.
+
+`selection.read_collected_run()`은 이미 수집된 sidecar를 디스크 기록과 대조한 뒤
+기존 `read_run()`을 호출한다. 보고서의 전역 별칭·반복 선택을 폴더별로 다시
+수집하지 않기 위한 공개 함수 추가이며 기존 CLI의 선택 동작은 바꾸지 않는다.
+paired 정책·서빙 선언·`--no-official` 사용법은
+[reports README](../../reports/README.md)에 있다.

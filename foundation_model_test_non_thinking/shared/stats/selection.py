@@ -117,3 +117,24 @@ def check_comparison(a, b):
                      "repetitions": v["repetitions"], "runs": [r["source"] for r in v["runs"]]}
                     for v in (a, b)]
         raise SelectionError(str(exc), evidence) from exc
+
+
+def read_collected_run(base, run, bench, manifest_directory=None):
+    """collect가 준 실행을 디스크 sidecar에 다시 바인딩하여 점수·SHA 근거를 읽는다."""
+    # collect는 모델 정체성·경고만 갱신한다. 보고서의 전역 선택을 폴더별로 재수집하지 않는다.
+    base = Path(base).resolve()
+    source = (base / run["source"]["unit"]).resolve()
+    if not source.is_relative_to(base / "results") or source.name != bench:
+        raise SelectionError("invalid collected source")
+    try:
+        raw = sidecar_path(source).read_bytes()
+        saved = json.loads(raw)
+        validate_sidecar(saved)
+        ignored = {"model_identity", "warnings", "_stats_sidecar_sha256"}
+        if ({k: v for k, v in saved.items() if k not in ignored}
+                != {k: v for k, v in run.items() if k not in ignored}):
+            raise SelectionError("collected sidecar changed")
+        bound = {**run, "_stats_sidecar_sha256": hashlib.sha256(raw).hexdigest()}
+        return read_run(base, bound, bench, manifest_directory)
+    except (OSError, ValueError) as exc:
+        raise SelectionError("collected run failed validation", candidates([run])) from exc

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Report only multimodal results admitted by the publication contract."""
+"""입력: 결과 base·세션 범위. 출력: 기존 발행 보고서와 검증된 참고 부록 Markdown."""
 
 from __future__ import annotations
 
@@ -10,6 +10,7 @@ from pathlib import Path
 BASE = Path(__file__).resolve().parents[1]
 
 from shared.multimodal.publish.report import collect, render_markdown, strict_failed
+from shared.multimodal.rescore.report_inputs import ConfigError, build_appendix
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -21,6 +22,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--run", help="scope report/strict validation to one session")
     parser.add_argument("--strict", action="store_true")
     parser.add_argument("--write-markdown", type=Path)
+    parser.add_argument("--no-official", action="store_true", help="참고 부록의 YAML 읽기·재채점 생략")
     args = parser.parse_args(argv)
     if args.strict and not args.run:
         parser.error("--strict requires --run")
@@ -32,6 +34,15 @@ def main(argv: list[str] | None = None) -> int:
     if args.strict:
         comparison_sidecars, _ = collect(args.base)
     markdown, ambiguous = render_markdown(sidecars, missing, comparison_sidecars)
+    if not args.no_official:
+        try:
+            markdown = markdown + "\n" + build_appendix(args.base, sidecars, comparison_sidecars)
+        except ConfigError as exc:
+            print(f"report configuration rejected: {exc}", file=sys.stderr)
+            return 2
+        except Exception as exc:
+            print(f"official appendix failed: {type(exc).__name__}", file=sys.stderr)
+            return 2
     if args.write_markdown:
         args.write_markdown.write_text(markdown, encoding="utf-8")
         print(f"wrote {args.write_markdown}")

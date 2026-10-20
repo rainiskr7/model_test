@@ -1502,3 +1502,229 @@
 </details>
 
 > 중복 접기: `gemma_4_31b_it` — `results/gemma_4_31b_it/20260505_130752/vision/customB/b4_latency_profile` 유지; 동일 artifact role/SHA-256·측정 payload 복사본 `results/google_gemma_4_31B_it/20260505_130752/vision/customB/b4_latency_profile` 접음.
+
+## 참고 지표 — 공식 방식 재채점
+
+참고 지표 — 발행 게이트 판정과 별개, 공식 리더보드 점수와 동등하지 않음(저장 판정 기반)
+
+기존·재채점 값은 같은 반복 집합의 평균입니다. 차이는 재채점−기존(pp)이며 지표 간 정의가 다릅니다.
+
+| 모델 | 지표 | protocol | 반복 | 기존 평균 (%) | 재채점 평균 (%) | 차이 (pp) |
+|---|---|---|---:|---:|---:|---:|
+| gemma_4_26b_a4b_it | `kmmbench_circular_stored_judgement` | `sha256:54e6a6c9ad08ec4b7ead056833d60bf04373ba27df8ce42286dea9a908c30a2f` | 1 | 86.8099 | 78.5223 | -8.2876 |
+| google_diffusiongemma_26B_A4B_it | `kmmbench_circular_stored_judgement` | `sha256:664089f27792bdf5a50df380e0bd0e91aad47e56c61390657d7712000c0d2341` | 3 | 86.4403 | 77.9210 | -8.5193 |
+| Qwen3.5_122B_A10B_GPTQ_Int4 | `kmmbench_circular_stored_judgement` | `sha256:aa74d55ecd55e431459c1f5f572195c5b4e516d0a9462dd128f0cd12e4064a30` | 1 | 80.5960 | 63.4021 | -17.1939 |
+| gemma_4_26b_a4b_it | `kmmbench_circular_stored_judgement` | `sha256:aa74d55ecd55e431459c1f5f572195c5b4e516d0a9462dd128f0cd12e4064a30` | 4 | 87.1910 | 79.2526 | -7.9385 |
+| qwen3.5_27b | `kmmbench_circular_stored_judgement` | `sha256:aa74d55ecd55e431459c1f5f572195c5b4e516d0a9462dd128f0cd12e4064a30` | 1 | 85.4932 | 76.0309 | -9.4623 |
+| qwen3.6-35b-a3b | `kmmbench_circular_stored_judgement` | `sha256:aa74d55ecd55e431459c1f5f572195c5b4e516d0a9462dd128f0cd12e4064a30` | 1 | 90.2518 | 84.5361 | -5.7157 |
+| qwen_qwen3.5_27b_fp8 | `kmmbench_circular_stored_judgement` | `sha256:aa74d55ecd55e431459c1f5f572195c5b4e516d0a9462dd128f0cd12e4064a30` | 1 | 85.1929 | 75.4296 | -9.7633 |
+| qwen_qwen3.5_35b_a3b | `kmmbench_circular_stored_judgement` | `sha256:aa74d55ecd55e431459c1f5f572195c5b4e516d0a9462dd128f0cd12e4064a30` | 1 | 78.4246 | 62.2852 | -16.1394 |
+| qwen_qwen3.5_35b_a3b_fp8 | `kmmbench_circular_stored_judgement` | `sha256:aa74d55ecd55e431459c1f5f572195c5b4e516d0a9462dd128f0cd12e4064a30` | 1 | 79.1176 | 62.1134 | -17.0042 |
+| qwen_qwen3.6_27b | `kmmbench_circular_stored_judgement` | `sha256:aa74d55ecd55e431459c1f5f572195c5b4e516d0a9462dd128f0cd12e4064a30` | 1 | 83.3911 | 70.5326 | -12.8584 |
+| qwen_qwen3.6_27b_fp8 | `kmmbench_circular_stored_judgement` | `sha256:aa74d55ecd55e431459c1f5f572195c5b4e516d0a9462dd128f0cd12e4064a30` | 1 | 83.3449 | 70.2749 | -13.0700 |
+| qwen_qwen3.6_35b_a3b_fp8 | `kmmbench_circular_stored_judgement` | `sha256:aa74d55ecd55e431459c1f5f572195c5b4e516d0a9462dd128f0cd12e4064a30` | 1 | 82.7905 | 70.1031 | -12.6874 |
+| qwen_qwen3.8_27B_FP8 | `kmmbench_circular_stored_judgement` | `sha256:aa74d55ecd55e431459c1f5f572195c5b4e516d0a9462dd128f0cd12e4064a30` | 3 | 84.5692 | 73.8259 | -10.7433 |
+| qwen_qwen3.8_27b | `kmmbench_circular_stored_judgement` | `sha256:aa74d55ecd55e431459c1f5f572195c5b4e516d0a9462dd128f0cd12e4064a30` | 3 | 84.5384 | 73.9691 | -10.5693 |
+| google_diffusiongemma_26B_A4B_it | `mtvqa_lmms_eval` | `sha256:356cc6eae2af10c9107886531b679f05cf23e79431df2970ae7662dfbdded969` | 3 | 39.7252 | 33.3931 | -6.3321 |
+| Qwen3.5_122B_A10B_GPTQ_Int4 | `mtvqa_lmms_eval` | `sha256:5db43694610d33e25662146cd959377ac1f1a67d9dfdfb1cdae26ab070ac866d` | 1 | 51.9713 | 39.6057 | -12.3656 |
+| gemma_4_26b_a4b_it | `mtvqa_lmms_eval` | `sha256:5db43694610d33e25662146cd959377ac1f1a67d9dfdfb1cdae26ab070ac866d` | 5 | 46.0932 | 36.9176 | -9.1756 |
+| gemma_4_31b_it | `mtvqa_lmms_eval` | `sha256:5db43694610d33e25662146cd959377ac1f1a67d9dfdfb1cdae26ab070ac866d` | 2 | 48.2079 | 41.3978 | -6.8100 |
+| qwen3.5_27b | `mtvqa_lmms_eval` | `sha256:5db43694610d33e25662146cd959377ac1f1a67d9dfdfb1cdae26ab070ac866d` | 1 | 51.2545 | 39.4265 | -11.8280 |
+| qwen3.6-35b-a3b | `mtvqa_lmms_eval` | `sha256:5db43694610d33e25662146cd959377ac1f1a67d9dfdfb1cdae26ab070ac866d` | 1 | 48.9247 | 38.1720 | -10.7527 |
+| qwen_qwen3.5_27b_fp8 | `mtvqa_lmms_eval` | `sha256:5db43694610d33e25662146cd959377ac1f1a67d9dfdfb1cdae26ab070ac866d` | 1 | 51.4337 | 39.2473 | -12.1864 |
+| qwen_qwen3.5_35b_a3b | `mtvqa_lmms_eval` | `sha256:5db43694610d33e25662146cd959377ac1f1a67d9dfdfb1cdae26ab070ac866d` | 1 | 52.3297 | 39.6057 | -12.7240 |
+| qwen_qwen3.5_35b_a3b_fp8 | `mtvqa_lmms_eval` | `sha256:5db43694610d33e25662146cd959377ac1f1a67d9dfdfb1cdae26ab070ac866d` | 1 | 51.6129 | 38.8889 | -12.7240 |
+| qwen_qwen3.6_27b | `mtvqa_lmms_eval` | `sha256:5db43694610d33e25662146cd959377ac1f1a67d9dfdfb1cdae26ab070ac866d` | 1 | 52.1505 | 40.6810 | -11.4695 |
+| qwen_qwen3.6_27b_fp8 | `mtvqa_lmms_eval` | `sha256:5db43694610d33e25662146cd959377ac1f1a67d9dfdfb1cdae26ab070ac866d` | 1 | 51.9713 | 40.3226 | -11.6487 |
+| qwen_qwen3.6_35b_a3b_fp8 | `mtvqa_lmms_eval` | `sha256:5db43694610d33e25662146cd959377ac1f1a67d9dfdfb1cdae26ab070ac866d` | 1 | 52.3297 | 39.0681 | -13.2616 |
+| qwen_qwen3.8_27B_FP8 | `mtvqa_lmms_eval` | `sha256:5db43694610d33e25662146cd959377ac1f1a67d9dfdfb1cdae26ab070ac866d` | 3 | 52.7479 | 36.7384 | -16.0096 |
+| qwen_qwen3.8_27b | `mtvqa_lmms_eval` | `sha256:5db43694610d33e25662146cd959377ac1f1a67d9dfdfb1cdae26ab070ac866d` | 3 | 52.8674 | 36.5591 | -16.3082 |
+
+<details>
+<summary>대표·반복 및 재채점 근거</summary>
+
+- gemma_4_26b_a4b_it · `kmmbench_circular_stored_judgement` · 대표: `results/gemma_4_26b_a4b_it/20260503_122218/vision/multimodal/k_mmbench`
+  - 반복: `results/gemma_4_26b_a4b_it/20260503_122218/vision/multimodal/k_mmbench` · revision `03d682e76405292ac5194b6289feb85ef5c4d98b`
+- google_diffusiongemma_26B_A4B_it · `kmmbench_circular_stored_judgement` · 대표: `results/google_diffusiongemma_26B_A4B_it/20260907_001502_r3/vision/multimodal/k_mmbench`
+  - 반복: `results/google_diffusiongemma_26B_A4B_it/20260830_222550_r1/vision/multimodal/k_mmbench` · revision `03d682e76405292ac5194b6289feb85ef5c4d98b`
+  - 반복: `results/google_diffusiongemma_26B_A4B_it/20260830_222550_r2/vision/multimodal/k_mmbench` · revision `03d682e76405292ac5194b6289feb85ef5c4d98b`
+  - 반복: `results/google_diffusiongemma_26B_A4B_it/20260907_001502_r3/vision/multimodal/k_mmbench` · revision `03d682e76405292ac5194b6289feb85ef5c4d98b`
+- Qwen3.5_122B_A10B_GPTQ_Int4 · `kmmbench_circular_stored_judgement` · 대표: `results/Qwen3.5_122B_A10B_GPTQ_Int4/20260720_235721/vision/multimodal/k_mmbench`
+  - 반복: `results/Qwen3.5_122B_A10B_GPTQ_Int4/20260720_235721/vision/multimodal/k_mmbench` · revision `03d682e76405292ac5194b6289feb85ef5c4d98b`
+- gemma_4_26b_a4b_it · `kmmbench_circular_stored_judgement` · 대표: `results/google_gemma_4_26B_A4B_it/20260927_230250_r3/vision/multimodal/k_mmbench`
+  - 반복: `results/gemma_4_26b_a4b_it/20260505_124246/vision/multimodal/k_mmbench` · revision `03d682e76405292ac5194b6289feb85ef5c4d98b`
+  - 반복: `results/google_gemma_4_26B_A4B_it/20260830_095733_r1/vision/multimodal/k_mmbench` · revision `03d682e76405292ac5194b6289feb85ef5c4d98b`
+  - 반복: `results/google_gemma_4_26B_A4B_it/20260830_095733_r2/vision/multimodal/k_mmbench` · revision `03d682e76405292ac5194b6289feb85ef5c4d98b`
+  - 반복: `results/google_gemma_4_26B_A4B_it/20260927_230250_r3/vision/multimodal/k_mmbench` · revision `03d682e76405292ac5194b6289feb85ef5c4d98b`
+- qwen3.5_27b · `kmmbench_circular_stored_judgement` · 대표: `results/qwen3.5_27b/20260525_145725/vision/multimodal/k_mmbench`
+  - 반복: `results/qwen3.5_27b/20260525_145725/vision/multimodal/k_mmbench` · revision `03d682e76405292ac5194b6289feb85ef5c4d98b`
+- qwen3.6-35b-a3b · `kmmbench_circular_stored_judgement` · 대표: `results/Qwen_Qwen3.6_35B_A3B/20260524_120652/vision/multimodal/k_mmbench`
+  - 반복: `results/Qwen_Qwen3.6_35B_A3B/20260524_120652/vision/multimodal/k_mmbench` · revision `03d682e76405292ac5194b6289feb85ef5c4d98b`
+- qwen_qwen3.5_27b_fp8 · `kmmbench_circular_stored_judgement` · 대표: `results/qwen_qwen3.5_27b_fp8/20260705_082256/vision/multimodal/k_mmbench`
+  - 반복: `results/qwen_qwen3.5_27b_fp8/20260705_082256/vision/multimodal/k_mmbench` · revision `03d682e76405292ac5194b6289feb85ef5c4d98b`
+- qwen_qwen3.5_35b_a3b · `kmmbench_circular_stored_judgement` · 대표: `results/qwen_qwen3.5_35b_a3b/20260621_233258/vision/multimodal/k_mmbench`
+  - 반복: `results/qwen_qwen3.5_35b_a3b/20260621_233258/vision/multimodal/k_mmbench` · revision `03d682e76405292ac5194b6289feb85ef5c4d98b`
+- qwen_qwen3.5_35b_a3b_fp8 · `kmmbench_circular_stored_judgement` · 대표: `results/qwen_qwen3.5_35b_a3b_fp8/20260711_003523/vision/multimodal/k_mmbench`
+  - 반복: `results/qwen_qwen3.5_35b_a3b_fp8/20260711_003523/vision/multimodal/k_mmbench` · revision `03d682e76405292ac5194b6289feb85ef5c4d98b`
+- qwen_qwen3.6_27b · `kmmbench_circular_stored_judgement` · 대표: `results/qwen_qwen3.6_27b/20260622_153150/vision/multimodal/k_mmbench`
+  - 반복: `results/qwen_qwen3.6_27b/20260622_153150/vision/multimodal/k_mmbench` · revision `03d682e76405292ac5194b6289feb85ef5c4d98b`
+- qwen_qwen3.6_27b_fp8 · `kmmbench_circular_stored_judgement` · 대표: `results/qwen_qwen3.6_27b_fp8/20260704_081047/vision/multimodal/k_mmbench`
+  - 반복: `results/qwen_qwen3.6_27b_fp8/20260704_081047/vision/multimodal/k_mmbench` · revision `03d682e76405292ac5194b6289feb85ef5c4d98b`
+- qwen_qwen3.6_35b_a3b_fp8 · `kmmbench_circular_stored_judgement` · 대표: `results/qwen_qwen3.6_35b_a3b_fp8/20260702_133909/vision/multimodal/k_mmbench`
+  - 반복: `results/qwen_qwen3.6_35b_a3b_fp8/20260702_133909/vision/multimodal/k_mmbench` · revision `03d682e76405292ac5194b6289feb85ef5c4d98b`
+- qwen_qwen3.8_27B_FP8 · `kmmbench_circular_stored_judgement` · 대표: `results/qwen_qwen3.8_27B_FP8/20261003_171917_r3/vision/multimodal/k_mmbench`
+  - 반복: `results/qwen_qwen3.8_27B_FP8/20261003_171917_r1/vision/multimodal/k_mmbench` · revision `03d682e76405292ac5194b6289feb85ef5c4d98b`
+  - 반복: `results/qwen_qwen3.8_27B_FP8/20261003_171917_r2/vision/multimodal/k_mmbench` · revision `03d682e76405292ac5194b6289feb85ef5c4d98b`
+  - 반복: `results/qwen_qwen3.8_27B_FP8/20261003_171917_r3/vision/multimodal/k_mmbench` · revision `03d682e76405292ac5194b6289feb85ef5c4d98b`
+- qwen_qwen3.8_27b · `kmmbench_circular_stored_judgement` · 대표: `results/qwen_qwen3.8_27b/20260927_232851_r3/vision/multimodal/k_mmbench`
+  - 반복: `results/qwen_qwen3.8_27b/20260927_232851_r1/vision/multimodal/k_mmbench` · revision `03d682e76405292ac5194b6289feb85ef5c4d98b`
+  - 반복: `results/qwen_qwen3.8_27b/20260927_232851_r2/vision/multimodal/k_mmbench` · revision `03d682e76405292ac5194b6289feb85ef5c4d98b`
+  - 반복: `results/qwen_qwen3.8_27b/20260927_232851_r3/vision/multimodal/k_mmbench` · revision `03d682e76405292ac5194b6289feb85ef5c4d98b`
+- google_diffusiongemma_26B_A4B_it · `mtvqa_lmms_eval` · 대표: `results/google_diffusiongemma_26B_A4B_it/20260907_001502_r3/vision/multimodal/mtvqa_kr`
+  - 반복: `results/google_diffusiongemma_26B_A4B_it/20260830_222550_r1/vision/multimodal/mtvqa_kr` · revision `7cdca63ec6cd71cdd0b52f79fc3176bb9ce36a9c`
+  - 반복: `results/google_diffusiongemma_26B_A4B_it/20260830_222550_r2/vision/multimodal/mtvqa_kr` · revision `7cdca63ec6cd71cdd0b52f79fc3176bb9ce36a9c`
+  - 반복: `results/google_diffusiongemma_26B_A4B_it/20260907_001502_r3/vision/multimodal/mtvqa_kr` · revision `7cdca63ec6cd71cdd0b52f79fc3176bb9ce36a9c`
+- Qwen3.5_122B_A10B_GPTQ_Int4 · `mtvqa_lmms_eval` · 대표: `results/Qwen3.5_122B_A10B_GPTQ_Int4/20260720_235721/vision/multimodal/mtvqa_kr`
+  - 반복: `results/Qwen3.5_122B_A10B_GPTQ_Int4/20260720_235721/vision/multimodal/mtvqa_kr` · revision `7cdca63ec6cd71cdd0b52f79fc3176bb9ce36a9c`
+- gemma_4_26b_a4b_it · `mtvqa_lmms_eval` · 대표: `results/google_gemma_4_26B_A4B_it/20260927_230250_r3/vision/multimodal/mtvqa_kr`
+  - 반복: `results/gemma_4_26b_a4b_it/20260505_124246/vision/multimodal/mtvqa_kr` · revision `7cdca63ec6cd71cdd0b52f79fc3176bb9ce36a9c`
+  - 반복: `results/google_gemma_4_26B_A4B_it/20260830_095733_r1/vision/multimodal/mtvqa_kr` · revision `7cdca63ec6cd71cdd0b52f79fc3176bb9ce36a9c`
+  - 반복: `results/google_gemma_4_26B_A4B_it/20260830_095733_r2/vision/multimodal/mtvqa_kr` · revision `7cdca63ec6cd71cdd0b52f79fc3176bb9ce36a9c`
+  - 반복: `results/google_gemma_4_26B_A4B_it/20260927_230250_r3/vision/multimodal/mtvqa_kr` · revision `7cdca63ec6cd71cdd0b52f79fc3176bb9ce36a9c`
+  - 반복: `results/google_gemma_4_26B_A4B_it/v2b_20260824/vision/multimodal/mtvqa_kr` · revision `7cdca63ec6cd71cdd0b52f79fc3176bb9ce36a9c`
+- gemma_4_31b_it · `mtvqa_lmms_eval` · 대표: `results/google_gemma_4_31B_it/20260525_152204/vision/multimodal/mtvqa_kr`
+  - 반복: `results/gemma_4_31b_it/20260505_130752/vision/multimodal/mtvqa_kr` · revision `7cdca63ec6cd71cdd0b52f79fc3176bb9ce36a9c`
+  - 반복: `results/google_gemma_4_31B_it/20260525_152204/vision/multimodal/mtvqa_kr` · revision `7cdca63ec6cd71cdd0b52f79fc3176bb9ce36a9c`
+- qwen3.5_27b · `mtvqa_lmms_eval` · 대표: `results/qwen3.5_27b/20260525_145725/vision/multimodal/mtvqa_kr`
+  - 반복: `results/qwen3.5_27b/20260525_145725/vision/multimodal/mtvqa_kr` · revision `7cdca63ec6cd71cdd0b52f79fc3176bb9ce36a9c`
+- qwen3.6-35b-a3b · `mtvqa_lmms_eval` · 대표: `results/Qwen_Qwen3.6_35B_A3B/20260524_120652/vision/multimodal/mtvqa_kr`
+  - 반복: `results/Qwen_Qwen3.6_35B_A3B/20260524_120652/vision/multimodal/mtvqa_kr` · revision `7cdca63ec6cd71cdd0b52f79fc3176bb9ce36a9c`
+- qwen_qwen3.5_27b_fp8 · `mtvqa_lmms_eval` · 대표: `results/qwen_qwen3.5_27b_fp8/20260705_082256/vision/multimodal/mtvqa_kr`
+  - 반복: `results/qwen_qwen3.5_27b_fp8/20260705_082256/vision/multimodal/mtvqa_kr` · revision `7cdca63ec6cd71cdd0b52f79fc3176bb9ce36a9c`
+- qwen_qwen3.5_35b_a3b · `mtvqa_lmms_eval` · 대표: `results/qwen_qwen3.5_35b_a3b/20260621_233258/vision/multimodal/mtvqa_kr`
+  - 반복: `results/qwen_qwen3.5_35b_a3b/20260621_233258/vision/multimodal/mtvqa_kr` · revision `7cdca63ec6cd71cdd0b52f79fc3176bb9ce36a9c`
+- qwen_qwen3.5_35b_a3b_fp8 · `mtvqa_lmms_eval` · 대표: `results/qwen_qwen3.5_35b_a3b_fp8/20260711_003523/vision/multimodal/mtvqa_kr`
+  - 반복: `results/qwen_qwen3.5_35b_a3b_fp8/20260711_003523/vision/multimodal/mtvqa_kr` · revision `7cdca63ec6cd71cdd0b52f79fc3176bb9ce36a9c`
+- qwen_qwen3.6_27b · `mtvqa_lmms_eval` · 대표: `results/qwen_qwen3.6_27b/20260622_153150/vision/multimodal/mtvqa_kr`
+  - 반복: `results/qwen_qwen3.6_27b/20260622_153150/vision/multimodal/mtvqa_kr` · revision `7cdca63ec6cd71cdd0b52f79fc3176bb9ce36a9c`
+- qwen_qwen3.6_27b_fp8 · `mtvqa_lmms_eval` · 대표: `results/qwen_qwen3.6_27b_fp8/20260704_081047/vision/multimodal/mtvqa_kr`
+  - 반복: `results/qwen_qwen3.6_27b_fp8/20260704_081047/vision/multimodal/mtvqa_kr` · revision `7cdca63ec6cd71cdd0b52f79fc3176bb9ce36a9c`
+- qwen_qwen3.6_35b_a3b_fp8 · `mtvqa_lmms_eval` · 대표: `results/qwen_qwen3.6_35b_a3b_fp8/20260702_133909/vision/multimodal/mtvqa_kr`
+  - 반복: `results/qwen_qwen3.6_35b_a3b_fp8/20260702_133909/vision/multimodal/mtvqa_kr` · revision `7cdca63ec6cd71cdd0b52f79fc3176bb9ce36a9c`
+- qwen_qwen3.8_27B_FP8 · `mtvqa_lmms_eval` · 대표: `results/qwen_qwen3.8_27B_FP8/20261003_171917_r3/vision/multimodal/mtvqa_kr`
+  - 반복: `results/qwen_qwen3.8_27B_FP8/20261003_171917_r1/vision/multimodal/mtvqa_kr` · revision `7cdca63ec6cd71cdd0b52f79fc3176bb9ce36a9c`
+  - 반복: `results/qwen_qwen3.8_27B_FP8/20261003_171917_r2/vision/multimodal/mtvqa_kr` · revision `7cdca63ec6cd71cdd0b52f79fc3176bb9ce36a9c`
+  - 반복: `results/qwen_qwen3.8_27B_FP8/20261003_171917_r3/vision/multimodal/mtvqa_kr` · revision `7cdca63ec6cd71cdd0b52f79fc3176bb9ce36a9c`
+- qwen_qwen3.8_27b · `mtvqa_lmms_eval` · 대표: `results/qwen_qwen3.8_27b/20260927_232851_r3/vision/multimodal/mtvqa_kr`
+  - 반복: `results/qwen_qwen3.8_27b/20260927_232851_r1/vision/multimodal/mtvqa_kr` · revision `7cdca63ec6cd71cdd0b52f79fc3176bb9ce36a9c`
+  - 반복: `results/qwen_qwen3.8_27b/20260927_232851_r2/vision/multimodal/mtvqa_kr` · revision `7cdca63ec6cd71cdd0b52f79fc3176bb9ce36a9c`
+  - 반복: `results/qwen_qwen3.8_27b/20260927_232851_r3/vision/multimodal/mtvqa_kr` · revision `7cdca63ec6cd71cdd0b52f79fc3176bb9ce36a9c`
+- `kmmbench_circular_stored_judgement` v1: https://github.com/open-compass/VLMEvalKit/blob/1445ec4f6fd02b25bad0d713690ee01a24b3b689/vlmeval/dataset/utils/multiple_choice.py
+- `mtvqa_lmms_eval` v1: https://github.com/EvolvingLMMs-Lab/lmms-eval/blob/d8fcb9c345fd89b22b4857244b3fdbb89206f8f5/lmms_eval/tasks/mtvqa/utils.py
+
+</details>
+
+## 참고 지표 — 모델 간 paired 비교
+
+관측한 반복 평균에 조건부인 문항 표집 불확실성 (반복 간 변동 미포함).
+차이 = A−B. 이미지 클러스터를 함께 재표집하며 문항 가중 평균을 사용합니다.
+
+| A 폴더 | B 폴더 | 벤치 | 차이 (pp) | 95% 구간 (pp) | 문항 / 이미지 | 반복 A/B |
+|---|---|---|---:|---|---:|---:|
+| qwen_qwen3.8_27b | qwen_qwen3.8_27B_FP8 | k_mmbench | +0.1432 | [-0.7148, +0.9862] | 1164 / 1121 | 3/3 |
+| qwen_qwen3.8_27b | qwen_qwen3.8_27B_FP8 | mtvqa_kr | -0.1792 | [-1.0715, +0.6716] | 558 / 250 | 3/3 |
+| qwen_qwen3.8_27b | qwen_qwen3.8_27B_FP8 | k_dtcbench | -1.1111 | [-3.0556, +0.6944] | 240 / 120 | 3/3 |
+| qwen_qwen3.5_35b_a3b | qwen_qwen3.5_35b_a3b_fp8 | k_mmbench | +0.1718 | [-1.1390, +1.5599] | 1164 / 1121 | 1/1 |
+| qwen_qwen3.5_35b_a3b | qwen_qwen3.5_35b_a3b_fp8 | mtvqa_kr | +0.7168 | [-0.3605, +1.9336] | 558 / 250 | 1/1 |
+| qwen_qwen3.5_35b_a3b | qwen_qwen3.5_35b_a3b_fp8 | k_dtcbench | +0.4167 | [-3.3333, +3.7500] | 240 / 120 | 1/1 |
+| qwen_qwen3.6_27b | qwen_qwen3.6_27b_fp8 | k_mmbench | +0.2577 | [-0.8658, +1.3817] | 1164 / 1121 | 1/1 |
+| qwen_qwen3.6_27b | qwen_qwen3.6_27b_fp8 | mtvqa_kr | +0.3584 | [-0.5597, +1.3746] | 558 / 250 | 1/1 |
+| qwen_qwen3.6_27b | qwen_qwen3.6_27b_fp8 | k_dtcbench | 비교 불가: 범위 내 발행 가능 코호트 없음 (REJECTED/비발행) | — | — | — |
+| qwen3.5_27b | qwen_qwen3.5_27b_fp8 | k_mmbench | +0.6014 | [-0.2571, +1.4706] | 1164 / 1121 | 1/1 |
+| qwen3.5_27b | qwen_qwen3.5_27b_fp8 | mtvqa_kr | +0.1792 | [-0.8882, +1.2567] | 558 / 250 | 1/1 |
+| qwen3.5_27b | qwen_qwen3.5_27b_fp8 | k_dtcbench | +0.4167 | [+0.0000, +1.2500] | 240 / 120 | 1/1 |
+
+<details>
+<summary>paired 계산·반복 근거</summary>
+
+- qwen_qwen3.8_27b − qwen_qwen3.8_27B_FP8 · `kmmbench_circular_stored_judgement` · `sha256:aa74d55ecd55e431459c1f5f572195c5b4e516d0a9462dd128f0cd12e4064a30` · seed=0, resamples=2000
+  - A: `results/qwen_qwen3.8_27b/20260927_232851_r1/vision/multimodal/k_mmbench`
+  - A: `results/qwen_qwen3.8_27b/20260927_232851_r2/vision/multimodal/k_mmbench`
+  - A: `results/qwen_qwen3.8_27b/20260927_232851_r3/vision/multimodal/k_mmbench`
+  - B: `results/qwen_qwen3.8_27B_FP8/20261003_171917_r1/vision/multimodal/k_mmbench`
+  - B: `results/qwen_qwen3.8_27B_FP8/20261003_171917_r2/vision/multimodal/k_mmbench`
+  - B: `results/qwen_qwen3.8_27B_FP8/20261003_171917_r3/vision/multimodal/k_mmbench`
+- qwen_qwen3.8_27b − qwen_qwen3.8_27B_FP8 · `mtvqa_lmms_eval` · `sha256:5db43694610d33e25662146cd959377ac1f1a67d9dfdfb1cdae26ab070ac866d` · seed=0, resamples=2000
+  - A: `results/qwen_qwen3.8_27b/20260927_232851_r1/vision/multimodal/mtvqa_kr`
+  - A: `results/qwen_qwen3.8_27b/20260927_232851_r2/vision/multimodal/mtvqa_kr`
+  - A: `results/qwen_qwen3.8_27b/20260927_232851_r3/vision/multimodal/mtvqa_kr`
+  - B: `results/qwen_qwen3.8_27B_FP8/20261003_171917_r1/vision/multimodal/mtvqa_kr`
+  - B: `results/qwen_qwen3.8_27B_FP8/20261003_171917_r2/vision/multimodal/mtvqa_kr`
+  - B: `results/qwen_qwen3.8_27B_FP8/20261003_171917_r3/vision/multimodal/mtvqa_kr`
+- qwen_qwen3.8_27b − qwen_qwen3.8_27B_FP8 · `kdtc_stored_judgement` · `sha256:a3fa0d693a36a437873ca73a1aa224e76ecd220dc0c4fe1c88973ee13b6e8d6b` · seed=0, resamples=2000
+  - A: `results/qwen_qwen3.8_27b/20260927_232851_r1/vision/multimodal/k_dtcbench`
+  - A: `results/qwen_qwen3.8_27b/20260927_232851_r2/vision/multimodal/k_dtcbench`
+  - A: `results/qwen_qwen3.8_27b/20260927_232851_r3/vision/multimodal/k_dtcbench`
+  - B: `results/qwen_qwen3.8_27B_FP8/20261003_171917_r1/vision/multimodal/k_dtcbench`
+  - B: `results/qwen_qwen3.8_27B_FP8/20261003_171917_r2/vision/multimodal/k_dtcbench`
+  - B: `results/qwen_qwen3.8_27B_FP8/20261003_171917_r3/vision/multimodal/k_dtcbench`
+- qwen_qwen3.5_35b_a3b − qwen_qwen3.5_35b_a3b_fp8 · `kmmbench_circular_stored_judgement` · `sha256:aa74d55ecd55e431459c1f5f572195c5b4e516d0a9462dd128f0cd12e4064a30` · seed=0, resamples=2000
+  - A: `results/qwen_qwen3.5_35b_a3b/20260621_233258/vision/multimodal/k_mmbench`
+  - B: `results/qwen_qwen3.5_35b_a3b_fp8/20260711_003523/vision/multimodal/k_mmbench`
+- qwen_qwen3.5_35b_a3b − qwen_qwen3.5_35b_a3b_fp8 · `mtvqa_lmms_eval` · `sha256:5db43694610d33e25662146cd959377ac1f1a67d9dfdfb1cdae26ab070ac866d` · seed=0, resamples=2000
+  - A: `results/qwen_qwen3.5_35b_a3b/20260621_233258/vision/multimodal/mtvqa_kr`
+  - B: `results/qwen_qwen3.5_35b_a3b_fp8/20260711_003523/vision/multimodal/mtvqa_kr`
+- qwen_qwen3.5_35b_a3b − qwen_qwen3.5_35b_a3b_fp8 · `kdtc_stored_judgement` · `sha256:a3fa0d693a36a437873ca73a1aa224e76ecd220dc0c4fe1c88973ee13b6e8d6b` · seed=0, resamples=2000
+  - A: `results/qwen_qwen3.5_35b_a3b/20260621_233258/vision/multimodal/k_dtcbench`
+  - B: `results/qwen_qwen3.5_35b_a3b_fp8/20260711_003523/vision/multimodal/k_dtcbench`
+- qwen_qwen3.6_27b − qwen_qwen3.6_27b_fp8 · `kmmbench_circular_stored_judgement` · `sha256:aa74d55ecd55e431459c1f5f572195c5b4e516d0a9462dd128f0cd12e4064a30` · seed=0, resamples=2000
+  - A: `results/qwen_qwen3.6_27b/20260622_153150/vision/multimodal/k_mmbench`
+  - B: `results/qwen_qwen3.6_27b_fp8/20260704_081047/vision/multimodal/k_mmbench`
+- qwen_qwen3.6_27b − qwen_qwen3.6_27b_fp8 · `mtvqa_lmms_eval` · `sha256:5db43694610d33e25662146cd959377ac1f1a67d9dfdfb1cdae26ab070ac866d` · seed=0, resamples=2000
+  - A: `results/qwen_qwen3.6_27b/20260622_153150/vision/multimodal/mtvqa_kr`
+  - B: `results/qwen_qwen3.6_27b_fp8/20260704_081047/vision/multimodal/mtvqa_kr`
+- qwen3.5_27b − qwen_qwen3.5_27b_fp8 · `kmmbench_circular_stored_judgement` · `sha256:aa74d55ecd55e431459c1f5f572195c5b4e516d0a9462dd128f0cd12e4064a30` · seed=0, resamples=2000
+  - A: `results/qwen3.5_27b/20260525_145725/vision/multimodal/k_mmbench`
+  - B: `results/qwen_qwen3.5_27b_fp8/20260705_082256/vision/multimodal/k_mmbench`
+- qwen3.5_27b − qwen_qwen3.5_27b_fp8 · `mtvqa_lmms_eval` · `sha256:5db43694610d33e25662146cd959377ac1f1a67d9dfdfb1cdae26ab070ac866d` · seed=0, resamples=2000
+  - A: `results/qwen3.5_27b/20260525_145725/vision/multimodal/mtvqa_kr`
+  - B: `results/qwen_qwen3.5_27b_fp8/20260705_082256/vision/multimodal/mtvqa_kr`
+- qwen3.5_27b − qwen_qwen3.5_27b_fp8 · `kdtc_stored_judgement` · `sha256:a3fa0d693a36a437873ca73a1aa224e76ecd220dc0c4fe1c88973ee13b6e8d6b` · seed=0, resamples=2000
+  - A: `results/qwen3.5_27b/20260525_145725/vision/multimodal/k_dtcbench`
+  - B: `results/qwen_qwen3.5_27b_fp8/20260705_082256/vision/multimodal/k_dtcbench`
+
+</details>
+
+## 평가 조건 — 공식과 다른 점
+
+- K-MMBench 기존 지표는 행 정답률, 참고 지표는 manifest 순환 묶음 통과율입니다.
+- MTVQA 기존 판정과 lmms 판정은 다릅니다. 참고 판정은 singleton gold·빈 gold·오류 처리의 로컬 예외를 포함합니다.
+- KOFFVQA 공식 기본 judge는 `google/gemma-2-9b-it`입니다. 아래는 선택 코호트의 저장 judge입니다.
+
+| 모델 | protocol | 저장 judge | 반복 |
+|---|---|---|---:|
+| gemma_4_26b_a4b_it | `sha256:e9b7bebe099f58615ff95622fcfb7f829bed4f102a9444d4d5bbc9cb36b1e162` | openai/gpt-4.1-mini | 3 |
+| google_diffusiongemma_26B_A4B_it | `sha256:e9b7bebe099f58615ff95622fcfb7f829bed4f102a9444d4d5bbc9cb36b1e162` | openai/gpt-4.1-mini | 3 |
+| qwen_qwen3.8_27B_FP8 | `sha256:e9b7bebe099f58615ff95622fcfb7f829bed4f102a9444d4d5bbc9cb36b1e162` | openai/gpt-4.1-mini | 3 |
+| qwen_qwen3.8_27b | `sha256:e9b7bebe099f58615ff95622fcfb7f829bed4f102a9444d4d5bbc9cb36b1e162` | openai/gpt-4.1-mini | 3 |
+
+### vLLM generation-config 선언
+
+서빙 선언은 실측 기록이 아닙니다. 명시된 모델·세션에만 적용하며 미기록을 auto로 추정하지 않습니다.
+
+| 모델 | 적용 세션 | generation-config | 근거 |
+|---|---|---|---|
+| Qwen3.5_122B_A10B_GPTQ_Int4 | 20260720_235721 | 미기록 | 선언 없음 |
+| gemma_4_26b_a4b_it | 20260503_120151, 20260503_120309, 20260503_122218, 20260505_124246, 20260621_221741, 20260830_095733_r1, 20260830_095733_r2, 20260927_230250_r3, v2b_20260824 | 미기록 | 선언 없음 |
+| gemma_4_31b_it | 20260505_130752, 20260525_152204 | 미기록 | 선언 없음 |
+| google_diffusiongemma_26B_A4B_it | 20260830_222550_r1, 20260830_222550_r2, 20260907_001502_r3 | 미기록 | 선언 없음 |
+| qwen3.5_27b | 20260525_145725 | 미기록 | 선언 없음 |
+| qwen3.6-35b-a3b | 20260524_120652 | 미기록 | 선언 없음 |
+| qwen_qwen3.5_27b_fp8 | 20260705_082256 | 미기록 | 선언 없음 |
+| qwen_qwen3.5_35b_a3b | 20260621_233258 | 미기록 | 선언 없음 |
+| qwen_qwen3.5_35b_a3b_fp8 | 20260711_003523 | 미기록 | 선언 없음 |
+| qwen_qwen3.6_27b | 20260622_153150 | 미기록 | 선언 없음 |
+| qwen_qwen3.6_27b_fp8 | 20260704_081047 | 미기록 | 선언 없음 |
+| qwen_qwen3.6_35b_a3b_fp8 | 20260702_133909 | 미기록 | 선언 없음 |
+| qwen_qwen3.8_27B_FP8 | 20261003_171917_r1, 20261003_171917_r2, 20261003_171917_r3 | 미기록 | 선언 없음 |
+| qwen_qwen3.8_27b | 20260927_232851_r1, 20260927_232851_r2, 20260927_232851_r3 | 미기록 | 선언 없음 |
