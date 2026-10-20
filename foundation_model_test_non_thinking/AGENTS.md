@@ -26,7 +26,7 @@
 
 - 현행 규칙·사용법: [CONVENTIONS](CONVENTIONS.md), [README](README.md), [레인](orchestration/README.md), [full 레인](orchestration/README_full.md), [트랙 훅 계약](orchestration/tracks/README.md), [멀티모달 발행 계약](MULTIMODAL_PUBLISH_CONTRACT.md).
 - [MULTIMODAL_REPRO_PLAN.md](MULTIMODAL_REPRO_PLAN.md)는 현행 정책과 과거 구현·측정 기록이 섞여 있다. 현재 CLI의 `--strict`는 `--run`이 필수([reports/report_multimodal_tracks.py:25](reports/report_multimodal_tracks.py#L25)).
-- 역사 기록: [REFACTORING_PLAN.md](REFACTORING_PLAN.md), `orchestration/SPEC_*.md` 중 완료·종료 문서. 각 제목 아래 상태와 근거 커밋을 확인한다. 진행 중인 [입구 SPEC](orchestration/SPEC_vibe_entry_docs_20261020.md)은 반영 결정 절을 따른다.
+- 역사 기록: [REFACTORING_PLAN.md](REFACTORING_PLAN.md), `orchestration/SPEC_*.md` 중 완료·종료 문서. 각 제목 아래 상태와 근거 커밋을 확인한다. 채택 작업이 완료된 [입구 SPEC](orchestration/SPEC_vibe_entry_docs_20261020.md)은 반영 결정 절과 완료 기록을 따른다.
 - 생성 문서 **손수정 금지**: [MULTIMODAL_TRACK_RESULTS.md:3](MULTIMODAL_TRACK_RESULTS.md#L3), [TAUBENCH_TRACK_RESULTS.md:3](TAUBENCH_TRACK_RESULTS.md#L3). 각각 보고 코드가 sidecar·summary에서 생성한다.
 
 ## 검색

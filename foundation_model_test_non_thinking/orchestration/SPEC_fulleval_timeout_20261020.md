@@ -1,5 +1,7 @@
 # SPEC: run_full_eval timeout 기본값 300/900 통일 — 트리 검토 3번 (2026-10-20)
 
+> 상태: 채택 범위 완료(`6b9d292`) — functionchat·taubench의 기본 timeout 300/900 주입·격리·검증 구현.
+
 담당: A 계획·검증·커밋, X 반박(read-only) → 구현(workspace-write). 범위 N 만. 동결·운영 쓰기 금지 판 6 §0 그대로.
 
 ## 사용자 결정(10-20)

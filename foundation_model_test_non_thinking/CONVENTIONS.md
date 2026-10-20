@@ -115,10 +115,30 @@ grep 친화 + LLM 이 로그 분류 용이.
 
 ## 10. 새 트랙/bench 추가 절차
 
-1. `shared/<track>/run_<bench>.sh` 작성 (다른 run_*.sh 패턴 따름)
-2. `shared/<track>/run_all.sh` (multimodal 의 경우) 에 호출 추가
-3. bench 본체 (`.py`) 가 결과 JSON 을 표준 schema 로 출력
-4. 필요 시 `configs/models/*.yaml` 의 `tracks` 에 추가
+새 트랙은 [트랙 등록과 입력 계약](orchestration/tracks/README.md)을 따른다. 아래는 기존 `multimodal` 트랙에 bench 를 추가할 때의 지도다. `M`은 `shared/multimodal/`, `S`는 `orchestration/smoke/`이며, 셸의 최상위 호출부는 함수 심볼이 없는 경우 그대로 적었다.
+
+| 구분 | 파일·심볼 | 할 일 |
+|---|---|---|
+| (a) 항상 | `M/run_<bench>.sh`의 모듈 호출, `M/benches/<bench>.py`의 `main` | 실행 진입점·결과 저장 구현. 기존 wrapper 패턴과 결과 schema·발행 계약을 따른다. |
+| (a) 항상 | `M/run_all.sh`의 `run_checked` 호출부·`skip_bench` 분기·`SKIP_BENCH_NAMES` | 일괄 실행에 연결하고 재개용 skip 훅과 허용 이름을 함께 추가한다(기존 B3 예외는 아래). |
+| (a) 항상 | `M/publish/adapters.py`의 `ADAPTERS`, `M/publish/adapters_common.py`의 `BENCHMARK_IDS` | 결과 폴더 이름 → 어댑터 → 발행 ID 연결. `BENCHMARK_KEYS`는 ID 표에서 자동 파생한다. KRETA 예외는 아래. |
+| (b) 채점 방식 | `M/publish/adapters_common.py`의 `EXPECTED_COUNTS`, `M/publish/adapters_accuracy.py`의 `summarize_records` 허용 집합 | 고정 건수·공통 정확도 집계를 쓰는 벤치만 추가. 전용 어댑터가 필요한 지표인지 먼저 판단한다. |
+| (b) 채점 방식 | `M/publish/adapters_accuracy.py`의 `_score_classified_records`·`_accuracy_item_keys`·`_accuracy_protocol` | 정답 판정·문항키·split/limit 등 protocol 출처 확인. 기본 분기는 A–D 선택형·`index`를 가정하므로 이름만 허용해서는 안 된다. |
+| (b) 발행·보고 | `M/publish/schema.py`의 `ACCURACY_BENCHMARK_IDS`, `M/publish/report.py`의 `collect`·`render_markdown` | 정확도 지표이면 overall fraction 검증 대상에 포함. 보고 수집은 `discover_sources`를 재사용하므로 일반 벤치마다 별도 보고 등록은 없다. |
+| (b) 스모크 | `S/commands.py`의 `command`·`prerequisites`·`dependencies`, `S/artifacts.py`의 `multimodal`, `S/isolation.py`의 `copy_cache` | 스모크 대상에 넣을 때 요청·검사·의존성·오프라인 캐시를 함께 확인. 현재 `copy_cache`는 K-DTC 전용이다. |
+| (c) 선택: 공식 재채점 | `M/rescore/manifest.py`의 `DATASETS`, `M/rescore/sessions.py`의 `BENCHES`·`rescore_source` | 고정 dataset manifest와 채점 함수 연결. 폴더 허용만 늘리지 말고 scorer 분기도 확인한다. |
+| (c) 선택: paired 통계 | `shared/stats/selection.py`의 `BENCHMARKS`, `shared/stats/item_scores.py`의 `METRICS`·`score_items` | 발행 ID·지표명·문항/이미지 클러스터 점수 연결. |
+| (c) 선택: 보고서 비교 쌍 | `M/rescore/report_inputs.py`의 `validate_pairs`, `reports/paired_pairs.yaml`의 `a`·`b`·`bench` | 지원 지표를 먼저 연결하고 비교 쌍 선언. `validate_pairs`는 `METRICS`를 참조하므로 별도 허용 집합을 만들지 않는다. |
+| (d) 선택: 표시 순서 | `M/publish/report.py`의 `HEADLINE_ORDER` | 원하는 순서가 있을 때 추가. 미등록도 순서 99로 표시되며 발행 필수 등록은 아니다. |
+
+- 모델 `configs/models/*.yaml`의 `tracks`에는 bench 이름이 아니라 `multimodal`을 넣는다. `configs/load_model_config.py`의 `SKIPPABLE_BENCHES`는 모델별 **측정 제외 정책**(현재 B4만)이지 벤치 등록부가 아니다. 재개용 skip 훅 추가만으로 늘리지 않는다([skip SPEC 반영 결정](orchestration/SPEC_skip_benches_20261020.md#반박-반영-결정판-2-10-20-x-반박--a-확인)).
+- KRETA는 `M/publish/derive.py`의 `discover_sources`가 **부모 폴더 `kreta` + `.jsonl`**로 발견하고, `M/publish/adapters.py`의 `adapt_source`가 같은 조건으로 `adapt_kreta`를 선택한다. `ADAPTERS`에 없음이 정상이며 `preflight_kreta_source`의 집계 호출은 등록부가 아니다.
+- B3/B4는 `ADAPTERS`·`BENCHMARK_IDS`에 있고 `EXPECTED_COUNTS`에는 없다. `M/run_all.sh`에서 B4는 `skip_bench` 훅, B3는 `B3_MANIFEST` 존재·`M/benches/b3_preflight.py`의 `main` 결과로 실행을 결정한다.
+- 결과 경로는 `M/benches/paths.py`의 `get_results_dir`에서 bench 이름을 받는다(`vision/multimodal`, B3/B4는 `vision/customB`). `M/benches/session_sanity.py`의 `iter_result_files`는 `vision/` 아래를 탐색하고, `M/benches/_schema.py`의 `detect_and_validate`는 키로 판별한다. 별도 벤치명 목록을 추가하지 말고 새 결과 형식이 검증되는지 확인한다.
+- 이름 검색은 필수 등록·조건부 분기·자동 파생·단순 언급을 구분한다. 이번 문서 보완에서는 이름 일관성 시험·통합 등록부를 만들지 않는다(필요성은 벤치 추가 때 판단).
+- 후속: `configs/load_model_config.py`의 `validate_skip_benches` 오류 문구("훅을 추가했다면 … 추가")와 위 측정 제외 정책의 충돌은 별도 작업이며 운영 코드는 그대로 둔다.
+- 후속: T 확인·이식 및 동결 `runner_checks.py`의 T 결과 읽기 경계는 별도 범위이며 이번 작업에서는 조사·수정하지 않는다.
+- 후속: `jev_test` 관련 확인·변경은 별도 범위다.
 
 ## 11. 패키지 구조·import·실행
 
@@ -176,6 +196,45 @@ wrapper 전체에 `PYTHONPATH`를 export하지 않고 upstream 호출에도 붙�
   - `shared/harness/tests/*`·`configs/tests/*`: 동결 시험의 기존 파일 로더·검색 경로. 수정하거나 `__init__.py`를 추가하지 않는다.
 - 운영 코드의 잔여 검색 경로·파일 로더는 §11 표의 목록만 허용한다. bare import 감사에서는 들여쓴 import와 점으로 이어진 이름도 확인한다. `gpustack_custom/*`의 외부·형제 import와 `session_sanity.py`의 `_schema`, `kreta_resume_context.py`·`kreta_resume_context_check.py`의 `metadata`, `kreta_output_check.py`의 upstream `evaluate`는 위 계약에 따른 예외다.
 - 모든 시험은 서버·`data/`·`results/` 없이 돈다. 러너는 가짜 어댑터/`subprocess`/`requests` 로 `main()` 을 끝까지 돌리며 **보낸 요청(모델·메시지·파라미터·헤더 키)과 저장 파일(키·byte 규약)·rc** 를 고정한다(`test_*_runner_requests.py`, 공용 가짜는 `multimodal/tests/_runner_fakes.py`). 소켓 `connect` 를 막은 상태에서도 통과해야 한다.
+
+위 원칙 중 **실제 `results/` 읽기 예외**는 아래 함수에 한정한다(파일 전체 허용이 아님). 서버 접근·운영 결과 쓰기는 허용하지 않는다. 실제 결과는 읽기만 하고 변조·재생성은 tmp 복사본에서만 한다. 고정 경로도 자료가 사라지거나 바뀌면 실패할 수 있으며, 전역 탐색은 Git 추적 여부로 제한되지 않아 **미추적 레인 세션도 포함**한다. 읽기 전용이라는 조건은 입력 고정·시험 안정성을 뜻하지 않는다.
+
+아래 `test_publish_*.py`는 모두 `shared/multimodal/tests/` 아래다. 고정 경로는 각 함수·fixture에 적힌 경로를 뜻한다.
+
+| 파일·시험 함수 | 이유·읽는 범위·알려진 취약점 |
+|---|---|
+| `test_publish_contamination.py` — `test_known_contaminated_kreta_sources_are_rejected` | 실측 오류 응답의 정답 오염 회귀. `fixtures/known_kreta_contamination.json`에 명시한 고정 10경로를 읽고 거부·오염 건수를 검사한다. 자료 누락·변경에 의존한다. |
+| `test_publish_contamination.py` — `test_non_error_kreta_sources_survive_independent_response_regrading` | 독립 재채점 회귀. `discover_sources(REPO)`의 KRETA JSONL 전역 탐색; 알려진 clean 경로 포함 여부와 모든 clean 결과를 검사한다. 새 clean 세션의 `parser_disagreement_rows`가 0이면 실패 가능하다. |
+| `test_publish_dataset_identity.py` — `test_kreta_same_items_and_mode_share_fingerprint_across_repo_commits` | 고정 KRETA 2경로의 문항 digest·protocol 일치와 repository commit 차이를 검사한다. 저장 provenance 변경에 의존한다. |
+| `test_publish_dataset_identity.py` — `test_k_dtcbench_different_artifact_item_sets_have_different_digests` | 고정 K-DTC 2경로의 240건/5건 문항집합·digest 차이를 검사한다. 자료 건수·내용 변경에 의존한다. |
+| `test_publish_dataset_identity.py` — `test_mtvqa_dataset_identity_uses_all_row_and_qa_pairs` | 고정 MTVQA 경로의 `(row_idx, qa_idx)` 전체 문항 identity 회귀. 558문항·250개 id 등 저장 자료의 구성을 고정한다. |
+| `test_publish_dataset_identity.py` — `test_clean_kreta_default_modes_use_final_answer_markers_not_body_letters` | KRETA 최종 답 파서 회귀. `results/*/*/vision/multimodal/kreta/*_default.jsonl` 전역 glob 뒤 basename 2개만 선택한다. 같은 이름의 새 세션에도 과거 기대값을 적용하며, 일치 파일이 없어도 루프가 비어 통과한다. |
+| `test_publish_runner_guards.py` — `test_sidecar_artifact_paths_match_git_index_casing` | 실측 sidecar 경로의 Git 철자 회귀. `results/**/_derived/*.json` 전역 탐색 후 추적 경로와 대조한다. sidecar 읽기 자체는 추적 파일로 제한되지 않으며 깨진 JSON·검사 0건이면 실패한다. |
+| `shared/agent/tests/test_agent_scoring.py` — `test_seeded_field_recall_uses_seed_in_moe_artifact_or_skip` | 고정 `p0verify_20260816/.../agent_p0verify/L6.json`의 seed/refetch 실측 회귀. 파일이 없으면 print 후 return 하므로 pytest에서는 skip이 아니라 **통과**로 끝난다. |
+| `shared/agent/tests/test_agent_scoring.py` — `test_agent_tracks_report_leaves_taubench_to_its_own_layer` | 보고서 트랙 분리 회귀. `report_agent_tracks.collect(TREE_ROOT)`가 `results/*/*/language/*/summary.json`을 전역 탐색해 FunctionChat summary를 읽는다. 수집 결과가 0건이면 실패하며 고정 corpus 검사가 아니다. |
+| `shared/harness/tests/runner_checks.py` — `harness_suite`의 C2 real fixture·C4 existing top-level JSON inventory | 동결 셸 시험 드라이버의 실측 구조 검증. `h.lib`가 있으면 C2는 N·T 각 `results/*/*/language/harness/*.json` 중 정렬 첫 파일, C4는 대상 저장소의 해당 glob 전체를 읽는다(미추적 포함). 디렉터리 부재는 INCONCLUSIVE, 존재하지만 비거나 자료가 깨지면 실패 가능. 검사 산출물은 `HARNESS_TEST_WORK`로 지정한 임시 폴더 아래에 둔다; 기본값은 상위 `.codex_work/harness_stop_guard`다. |
+
+`shared/multimodal/tests/test_publish_derive.py`의 예외는 **12개 함수**다. 아래 첫 11개는 `_copy_clean_source`가 고정 `results/qwen_qwen3.5_35b_a3b_fp8/20260711_003523/vision/multimodal/k_dtcbench`를 `_derived` 제외하고 tmp에 복사한 뒤 검사한다. 모두 원본 자료 부재·변경에 의존하지만, 검사 중 쓰기·삭제는 tmp 복사본에만 한다. 이 동작 시험 전부가 합성 fixture로 대체 불가능하다는 뜻은 아니다.
+
+| 시험 함수 | 이유·읽는 범위 |
+|---|---|
+| `test_write_only_adds_derived_and_preserves_original_hashes` | 고정 K-DTC → tmp; 파생 파일만 추가하고 원본 해시 보존. |
+| `test_dry_run_creates_nothing` | 고정 K-DTC → tmp; dry-run 무쓰기. |
+| `test_derive_all_preserves_native_status_and_completed_at` | 고정 K-DTC → tmp; NATIVE 상태·완료 시각 보존. |
+| `test_derive_refreshes_native_model_identity_without_downgrade` | 고정 K-DTC → tmp; 모델 identity 갱신과 NATIVE 유지. |
+| `test_force_overwrites_native_with_legacy_and_reports_loss` | 고정 K-DTC → tmp; 강제 덮어쓰기와 provenance 손실 경고. |
+| `test_native_write_can_promote_legacy_or_rejected` | 고정 K-DTC → tmp; LEGACY/REJECTED에서 NATIVE 승격(매개변수 2사례, 함수는 1개). |
+| `test_cli_skips_native_by_default_and_force_warns_before_overwrite` | 고정 K-DTC → tmp; CLI 기본 보호·강제 덮어쓰기 경고. |
+| `test_tampered_native_artifact_is_not_collected_or_skipped` | 고정 K-DTC → tmp; 변조한 원본의 무결성 거부. |
+| `test_native_with_missing_source_artifact_is_not_collected` | 고정 K-DTC → tmp; 원본 파일 삭제 시 수집 거부. |
+| `test_concurrent_passive_derive_cannot_overwrite_native` | 고정 K-DTC → tmp; 동시 파생의 NATIVE 덮어쓰기 방지. |
+| `test_strict_collection_is_scoped_to_requested_partial_session` | 고정 K-DTC → tmp; 지정 세션만 strict 검사. |
+| `test_stale_and_damaged_native_are_not_the_same_condition` | 같은 고정 세션의 `k_mmbench`를 직접 읽어 낡은 지문과 artifact 손상을 구별. 추적 자료를 쓰는 회귀이며 디렉터리 부재·내용 변경 시 실패 가능; 파일 쓰기 없음. |
+
+`results/` 리터럴만 검사하는 가드 시험은 만들지 않는다. tmp 합성 경로는 오탐하고 `collect(TREE_ROOT)` 같은 간접 읽기는 놓친다. 위 목록도 함수별 현재 동작의 기록이며 파일 안의 새 읽기까지 허용하지 않는다.
+
+후속: 탐색 범위 고정·fixture 전환은 별도 작업.
+
 - 기대값은 현재 코드를 실행해 얻은 값을 리터럴로 적는다(특성화). 시각·지연 같은 변동 키는 비교에서 빼고 그 목록을 시험 상단에 적는다.
 - 분해로 뽑은 순수 함수마다 단위 시험 1~2개(`test_<모듈>_units.py`, 2차는 `_units2.py`). 기존 시험은 분해 때 수정하지 않는다 — 수정이 필요하면 분해가 동작을 바꾼 것이다.
 - 러너를 검증용으로 직접 실행할 때는 `MODEL_TEST_BASE=<임시폴더>` + 더미 `--endpoint` + 저장소 밖 복사본 + `env -i`. 기본값만으로도 실제 엔드포인트에 요청하고 `results/` 에 쓴다.
