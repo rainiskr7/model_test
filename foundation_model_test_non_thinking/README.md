@@ -3,6 +3,22 @@
 한국어 LLM / 멀티모달 모델의 **재현 가능한 비교 평가 프레임워크**.
 공개 벤치마크 + 자체 트랙을 통합해 모델별 결과를 `results/<safe_model>/<timestamp>/...` 트리로 일관되게 누적한다.
 
+## 실행 진입점
+
+아래 `N`은 코드 루트에서 `N="$(pwd -P)"`로 설정한 정규 절대경로다. 레인 진입 링크 자체는 resolve하지 않는다([orchestration/README.md:5](orchestration/README.md#L5)). config 일괄 실행의 인자는 모델 YAML 이름, 레인·스모크의 인자는 모델 conf 이름이다([run_full_eval.sh:81](run_full_eval.sh#L81), [레인 README:29](orchestration/README.md#L29), [smoke README:10](orchestration/smoke/README.md#L10)).
+
+| 용도 | 명령 | 포함 단계 | 재개 | 실패 정책 | 자세한 문서·코드 근거 |
+|---|---|---|---|---|---|
+| config 일괄 | `bash "$N/run_full_eval.sh" <model_config_name>` | YAML tracks 순서: harness·nlu·functionchat·taubench·multimodal. agent 비활성 | 최상위 단계 재개 옵션 없음. 같은 timestamp와 하위 러너별 재개 기능을 구별 | 일반 실패는 계속 후 최종 rc 1; rc 3 또는 ≥129는 즉시 중단 | [§3.4](#34-전체-평가-한-모델-전-트랙-일괄), [run_full_eval.sh:81,142,187,200,242](run_full_eval.sh#L81) |
+| 반복 | `bash "$N/run_repeated_eval.sh" <model_config> [횟수]` | config 일괄을 기본 3회 | 매번 새 `<시각>_rN`; 기존 결과 세션 충돌은 rc 1. 재개용 아님 | 하위 full의 nonzero는 기록하고 다음 반복 진행; 실패 있으면 최종 rc 1 | [run_repeated_eval.sh:14,23,43,56,76](run_repeated_eval.sh#L14) |
+| KMMLU 레인 | `bash "$N/orchestration/lanes/kmmlu.sh" <model_conf>` | harness를 `${SESSION}_rN`으로 REPS회 | 같은 세션 재실행 시 harness의 기존 과목 결과 skip. full의 RESUME_FROM 의미 없음 | harness nonzero면 해당 rc로 즉시 중단 | [레인 README:113](orchestration/README.md#L113), [kmmlu.sh:32](orchestration/tracks/kmmlu.sh#L32), [run_harness.sh:167](shared/harness/run_harness.sh#L167) |
+| tau standard 레인 | `bash "$N/orchestration/lanes/taubench_std4.sh" <model_conf>` | 단일 SESSION, standard 모드, 기본 trials 4 | full의 단계 재개 기능 없음 | taubench rc 그대로 반환 | [레인 README:91,113](orchestration/README.md#L91), [taubench_std4.sh:15](orchestration/tracks/taubench_std4.sh#L15) |
+| full 레인 | `bash "$N/orchestration/lanes/full.sh" <model_conf>` | 반복마다 nlu→functionchat→tau solo→multimodal→조건부 judge 2종→derive. harness·tau standard 제외 | `FULL_RESUME_FROM=rN:stage`; KRETA 재개·derive 저장 산출 조건 별도 | rc 3/≥129와 nlu·functionchat·multimodal 실패는 즉시 중단. solo tau 일반 실패는 계속(최종 0 가능); judge/derive 일반 실패는 누적 후 rc 1 | [README_full.md:13,51,64,68](orchestration/README_full.md#L13) |
+| 실서버 스모크 | `bash "$N/orchestration/smoke/run_smoke.sh" <model_conf> [track…]` | 최소 요청: harness·tau preflight, nlu·functionchat·K-DTC 제한 입력. 정식 벤치 완주 아님 | 매 실행 새 임시 BASE; 이어 달리기 없음 | FAIL=1, 그 외 INCONCLUSIVE=77, PASS=0; CLI·설정 오류=2 | [smoke README:23,39,64](orchestration/smoke/README.md#L23) |
+| 단일 트랙 | 예: `bash "$N/shared/functionchat/run_functionchat.sh" <model> <chat_url>` | 해당 트랙만. 예시는 추론→exact 채점 | 트랙별 계약 확인; 공통 재개 보장 없음 | 예시 FunctionChat은 set -e로 실패 중단. 다른 트랙은 각 usage·구현 확인 | [§3.3](#33-단일-트랙-실행), [run_functionchat.sh:3,5,62](shared/functionchat/run_functionchat.sh#L3) |
+
+Timeout 정책: config 일괄(`run_full_eval.sh`)과 이를 호출하는 반복 실행은 FunctionChat·taubench에만 REQUEST/TASK 기본 **300/900초**를 적용한다. `AGENT_REQUEST_TIMEOUT`·`AGENT_TASK_TIMEOUT`의 비어 있지 않은 호출자 환경값이 우선하며, 미설정·빈 값은 기본값을 쓴다. 두 값은 양의 정수이고 TASK > REQUEST여야 한다. 단독 wrapper 기본값은 FunctionChat 60/120초, taubench 60/600초로 그대로다([run_full_eval.sh:9](run_full_eval.sh#L9), [run_functionchat.sh:40](shared/functionchat/run_functionchat.sh#L40), [run_functionchat.py:353](shared/functionchat/runner/run_functionchat.py#L353), [run_taubench.sh:65](shared/taubench/run_taubench.sh#L65)). 2026-10-20 이전 공식 r1~r3은 request 60초로 측정했으며, 해당 조건은 기존 결과 metadata에 기록되어 있다.
+
 ---
 
 ## 1. 무엇을 테스트하는가
@@ -23,7 +39,7 @@
 | 트랙 | 측정 항목 | 사용 도구 |
 |---|---|---|
 | **harness** | 한국어 일반 지식 / 추론 (KMMLU 45 sub-task) | EleutherAI `lm-evaluation-harness` |
-| **nlu** | 짧은 NLU smoke test (도메인 프롬프트 YAML) | 자체 runner (`nlu-gpustack.py`) |
+| **nlu** | 짧은 NLU smoke test (도메인 프롬프트 YAML) | 자체 runner (`nlu_gpustack.py`) |
 | **functionchat** | 한국어 첫 호출 정확도 (exact 670 + 판정 636) | `FunctionChat-Bench` (kakao) |
 | **taubench** | 다단계 실행 (telecom/retail/airline test 분할) | `tau2-bench` (sierra-research) |
 | ~~agent~~ | ~~Tool calling · multi-step (L1~L7)~~ — **중단됨** | ~~`Ko-AgentBench`~~ |
@@ -81,19 +97,22 @@
 | **KRETA** | 한국어 텍스트-리치 VQA, 15영역 × 26유형 | [tabtoyou/KRETA](https://github.com/tabtoyou/KRETA) |
 | **KOFFVQA** | 한국어 free-form VQA, **Rubric judge** 채점 (275 샘플) | [maum-ai/KOFFVQA](https://github.com/maum-ai/KOFFVQA) |
 | **K-DTCBench** | 한국어 문서/표/차트 multiple-choice VQA (240 샘플) | NCSOFT (HF: `NCSOFT/K-DTCBench`) |
-| **K-MMBench** | 한국어 멀티모달 dev set (4,330 샘플) | NCSOFT |
+| **K-MMBench** | 한국어 멀티모달 dev set (4,329 샘플) | NCSOFT |
 | **MTVQA (KR)** | 9개 언어 중 한국어 서브셋, 실세계 장면 텍스트 free-form VQA | ByteDance |
 | **KO-VLM-Benchmark** | KO-VQA / KO-VDC / KO-OCRAG | [Marker-Inc-Korea/KO-VLM-Benchmark](https://github.com/Marker-Inc-Korea/KO-VLM-Benchmark) (현재 stub) |
 | **B-3 Structured Output** (자체) | 이미지 → JSON 변환 정확도 (포맷 준수) | `vsm/multimodal/data/structured_output/` |
 | **B-4 Latency Profile** (자체) | 조건별(text-only / 256px / 1024px / multi-image) TTFT · tokens/sec | 자체 측정 스크립트 |
 
-### 2.4 데이터셋 카테고리 매핑 (Plan #2 가중치)
+### 2.4 데이터셋 카테고리 매핑 (합산 금지)
 
-| 카테고리 | 가중치 | 대표 벤치마크 |
+| 카테고리 | 대표 벤치마크 | 발행 단위 |
 |---|---|---|
-| 문서 OCR · 구조 이해 | **50%** | KRETA, K-DTCBench, K-MMBench (문서/표/차트 카테고리) |
-| 실세계 장면 텍스트 | **30%** | MTVQA(KR), KO-VLM-Benchmark |
-| 자유 서술형 VQA | **20%** | KOFFVQA |
+| 문서 OCR · 구조 이해 | KRETA, K-DTCBench, K-MMBench (문서/표/차트 카테고리) | 벤치별 accuracy와 분자/분모 |
+| 실세계 장면 텍스트 | MTVQA(KR), KO-VLM-Benchmark | 벤치별 native metric |
+| 자유 서술형 VQA | KOFFVQA | 0–10 rubric score, 인간 검증 전 PROVISIONAL |
+
+서로 다른 데이터셋과 판정 축은 척도가 같지 않으므로 종합 점수로 합산하거나 평균하지 않는다.
+발행 가능 여부와 대표 런 선정은 `MULTIMODAL_PUBLISH_CONTRACT.md`를 따른다.
 
 ---
 
@@ -148,28 +167,43 @@ bash vsm/multimodal/run_all.sh \
   http://127.0.0.1:18090/v1
 ```
 
+재개 시 이미 끝난 벤치를 건너뛰려면 같은 `EVAL_TIMESTAMP`를 지정하고 `run_all.sh`를 직접 호출하면서 `SKIP_BENCHES`에 공백으로 구분한 이름을 전달한다. 허용 이름은 `kreta k_dtcbench koffvqa mtvqa_kr k_mmbench b4_latency_profile`이다. 미설정·빈 값·공백만 있는 값은 제외하지 않으며, 모르는 이름은 세션 파일 생성과 벤치 실행 전에 stderr 두 줄을 출력하고 rc 2로 종료한다. 이때 직접 호출한 스크립트 자체는 파일을 만들거나 바꾸지 않는다(호출자의 리다이렉션·로그는 별개). 마지막 sanity 검사는 건너뛴 벤치의 기존 결과도 검사한다.
+
+모델 YAML·serving profile의 `skip_benches`는 해당 모델에서 숫자가 의미 없는 벤치를 아예 재지 않는 측정 제외 정책이며 현재 `b4_latency_profile`만 허용한다. `run_full_eval.sh`와 레인은 로더가 `SKIP_BENCHES`를 unset하거나 YAML 값으로 설정하므로, 최상위 명령 앞에 지정한 재개용 값은 유지되지 않는다. `run_full_eval.sh`에서는 로더 뒤 source되는 `.env`에서 export하면 전달될 수 있으나, 재개용 사용법으로 권장하지 않는다.
+
+발행 `--strict --run <세션>`은 기대 벤치의 완주 여부를 검사하지 않는다. 결과 원천이 전혀 없는 벤치의 부재와, 존재하는 결과의 게이트 기록 누락·손상은 구별해야 한다.
+
+발행 보고서: N 루트에서 `python3 -m reports.report_multimodal_tracks --base .`. 저장소 밖 cwd에서는 `PYTHONPATH="$N${PYTHONPATH:+:$PYTHONPATH}"`를 명령 앞에 붙인다.
+
 개별 벤치마크 실행은 `vsm/multimodal/run_<benchmark>.sh` 직접 호출.
 
-KRETA가 중단된 경우 `vsm/multimodal/run_kreta_resume.sh`로 이어서 진행한다. `run_kreta.sh`와 달리 `./output`의 jsonl을 삭제하지 않아, 이미 처리된 `id`는 skip하고 남은 샘플만 추론한다(idempotent resume). 추론 완료 후 evaluate · 결과 복사 · 키 검증까지 자동 수행.
+KRETA가 중단된 경우 `vsm/multimodal/run_kreta_resume.sh`로 이어서 진행한다. 최초 실행이 기록한 checkpoint context(세션·모델·모드·endpoint·max tokens)가 현재 실행과 정확히 같을 때만 기존 jsonl을 허용하며, 다른 모델의 jsonl은 evaluate 전에 제거한다. context가 없거나 다르면 stale checkpoint 재발행을 막기 위해 중단하고 `run_kreta.sh`로 새로 시작해야 한다. 일치할 때는 이미 처리된 `id`를 skip하고 남은 샘플만 추론한다.
 
 KRETA 러너는 3번째 인자로 프롬프트 모드(`SETTING`)를 받는다 — `direct`(글자만 답, 빠름·DGX Spark 권장) / `default`(추론 후 답). 모드별 생성 상한은 자동 설정되며 자세한 내용은 아래 §3.8 운영 노트 참고. 예: `bash vsm/multimodal/run_kreta_resume.sh <model> direct <url>`.
 
 KOFFVQA도 idempotent resume를 지원한다(`koffvqa_run.py`). 같은 `EVAL_TIMESTAMP`로 재실행하면 `out_dir/results.json`의 **유효 응답**(error 없음 + 비어있지 않은 prediction)은 `index` 기준으로 재사용하고, **에러·타임아웃·누락 항목만 다시 호출**한 뒤 results.json·xlsx·summary를 머지해 재생성한다. 따라서 일부 샘플이 타임아웃으로 실패하면 **같은 명령을 재실행하는 것만으로 복구**된다 — 별도 retry 스크립트 불필요. `run_koffvqa.sh`는 `KOFFVQA_TIMEOUT` env(기본 600초, kreta `KRETA_TIMEOUT`과 일관)를 받으며, 게이트웨이 200초 컷을 피하려면 직접 vLLM 포트를 `<url>`로 준다. 예: `KOFFVQA_TIMEOUT=600 bash vsm/multimodal/run_koffvqa.sh <model> http://<host>:<vllm_port>/v1`. 처음부터 다시 돌리려면 `koffvqa_run.py --no-resume`.
 
-### 3.4 전체 평가 (한 모델 4트랙 일괄)
-
-`run_full_eval.sh`가 vsm 클래스의 4개 트랙(harness → nlu → agent → multimodal)을 순차 실행한다.
+멀티모달 발행 계층 회귀 테스트:
 
 ```bash
-# 모델/엔드포인트는 스크립트 상단 변수 수정 후 실행
-bash run_full_eval.sh
+.venv/bin/python -m pytest shared/multimodal/tests/ -q
+```
+
+### 3.4 전체 평가 (한 모델 전 트랙 일괄)
+
+`run_full_eval.sh`가 모델 config(`configs/models/<NAME>.yaml`)의 `tracks` 목록 순서대로 트랙(harness · nlu · functionchat · taubench · multimodal)을 실행한다. agent(Ko-AgentBench)는 fixture-cache miss 율 때문에 dispatch가 비활성이며, 목록에 있으면 unknown track 경고만 낸다([run_full_eval.sh:200](run_full_eval.sh#L200)). full 레인의 단계 구성과는 다르므로 위 [진입점 표](#실행-진입점)를 확인한다.
+
+```bash
+# configs/models/<model_config_name>.yaml의 모델·엔드포인트·tracks를 사용
+bash run_full_eval.sh <model_config_name>
 ```
 
 특징:
 
-- 부모 프로세스 종료 시 자식 프로세스까지 일괄 cleanup (process group kill)
-- 트랙별 로그: `logs/<EVAL_TIMESTAMP>/<track>.log`
-- 한 트랙 실패해도 나머지는 계속 진행 (실패 트랙은 마지막에 정리해서 출력)
+- INT·TERM·EXIT trap의 cleanup은 그룹 리더일 때 같은 그룹의 다른 PID를, 아니면 추적 중인 TRACK_PID와 자손을 정리한다. setsid가 없는 환경에서는 그룹 리더 재실행을 건너뛴다([run_full_eval.sh:32,46,56,72](run_full_eval.sh#L32)).
+- FunctionChat·taubench에만 REQUEST/TASK 300/900초(비어 있지 않은 호출자 환경값 우선)를 주입하고, 다른 트랙에서는 두 상속값을 제거한다. 유효값은 `_master.log` 머리와 `CMD:`에 기록한다. 잘못된 값은 venv 활성화·키 읽기·HTTP preflight 전에 rc 2로 거절한다. 반복 실행은 이 rc 2도 실패로 기록하고 나머지 반복을 계속한 뒤 최종 rc 1로 끝낸다([run_full_eval.sh:9,173,195,218](run_full_eval.sh#L9), [run_repeated_eval.sh:56,76](run_repeated_eval.sh#L56)).
+- 트랙별 로그: `logs/<EVAL_TIMESTAMP>/<track>.log`. timestamp 우선순위는 환경변수 → 세션 파일 → 새 시각이다([run_full_eval.sh:142,159,169](run_full_eval.sh#L142)).
+- 일반 트랙 실패는 누적하고 다음 트랙을 실행한 뒤 최종 rc 1로 끝낸다. 단, rc 3 또는 ≥129는 그 rc로 즉시 중단한다([run_full_eval.sh:180,187,242](run_full_eval.sh#L180)).
 
 ### 3.5 평가 세션 관리
 
@@ -252,13 +286,13 @@ metric은 seed payload만 해석하고 normalization/value matcher를 적용하�
 기존 `L*.json`은 평가를 다시 실행하지 않고 재채점할 수 있다. `--results-dir`을 써도 vendored metric을 불러오려면 `MODEL_TEST_BASE`가 반드시 필요하다.
 
 ```bash
-MODEL_TEST_BASE="$PWD" .venv/bin/python shared/agent/scoring/score_run.py \
+MODEL_TEST_BASE="$PWD" .venv/bin/python -m shared.agent.scoring.score_run \
   --results-dir results/<model>/<timestamp>/language/<agent-track>
-MODEL_TEST_BASE="$PWD" .venv/bin/python shared/agent/scoring/validate_run.py \
+MODEL_TEST_BASE="$PWD" .venv/bin/python -m shared.agent.scoring.validate_run \
   --results-dir results/<model>/<timestamp>/language/<agent-track>
 ```
 
-validator는 scoring version·요약 구조·점수 범위, judge/L7의 기록 전용 계약, raw/summary의 native-tool 모드 일치, v2/v3의 6레벨 및 v4의 고정 5레벨 완전성·평균 불변식을 검사하고 포화/바닥·생존 신호 차이는 경고한다. v4의 level set은 정확히 `("L1","L2","L3","L5","L6")`이어야 하며 stated denominator에서 headline을 재구성한다. 채점된 레벨의 cache miss rate가 20%를 넘으면 실행 call 5개 중 1개보다 많은 도구 증거가 빠진 것으로 보고 임계값과 실측 분수를 명시한 경고를 내되 실패시키지 않는다. 종료 코드는 `0`=유효(경고 허용), `1`=검증 실패, `2`=호출·설정·입력 읽기·내부 오류다. `run_full_eval.sh`에서는 agent 트랙이 성공하면 validator가 자동 실행된다.
+validator는 scoring version·요약 구조·점수 범위, judge/L7의 기록 전용 계약, raw/summary의 native-tool 모드 일치, v2/v3의 6레벨 및 v4의 고정 5레벨 완전성·평균 불변식을 검사하고 포화/바닥·생존 신호 차이는 경고한다. v4의 level set은 정확히 `("L1","L2","L3","L5","L6")`이어야 하며 stated denominator에서 headline을 재구성한다. 채점된 레벨의 cache miss rate가 20%를 넘으면 실행 call 5개 중 1개보다 많은 도구 증거가 빠진 것으로 보고 임계값과 실측 분수를 명시한 경고를 내되 실패시키지 않는다. 종료 코드는 `0`=유효(경고 허용), `1`=검증 실패, `2`=호출·설정·입력 읽기·내부 오류다. `run_full_eval.sh` 의 agent 트랙과 validator 자동 실행은 현재 비활성이다(스크립트 주석 참조). validator 는 `.venv/bin/python -m shared.agent.scoring.validate_run` 으로 실행한다.
 
 변형 런은 `AGENT_TRACK_NAME=<variant>`로 별도 폴더에 기록한다. 변형 결과와 canonical `agent` 트랙 결과를 한 트랙에 섞지 않는다.
 
@@ -288,7 +322,7 @@ GB10은 통합 메모리(LPDDR5X, 대역폭 ~273 GB/s)라 dense 대형 모델의
 
 **튜닝 env / 권장값:**
 
-- **`KRETA_MAX_TOKENS`** (생성 상한): 러너가 모드별 기본값을 자동 export — `direct`→**32**, 그 외→**4096**. env로 override 가능.
+- **`KRETA_MAX_TOKENS`** (생성 상한): 러너가 모드별 기본값을 자동 export — `direct`→**32**, 그 외→**4096**. env로 override 가능하며, wrapper가 실제 최종값을 `run_config.json`과 NATIVE sidecar protocol에 기록한다.
   - ⚠️ `default` 모드를 1024 등으로 낮추지 말 것: 응답의 ~13%(가장 긴 = 가장 어려운 문항)가 잘려 답이 유실되고, 손실이 난이도 쪽으로 **편향**되어 랭킹을 왜곡한다. `default`는 4096 유지, 속도가 필요하면 `direct` 사용.
 - **`KRETA_TIMEOUT`** (요청 timeout, 기본 **600초**): 큰 비전 prefill/긴 생성이 timeout→오답으로 기록되는 것을 방지.
 - **vLLM `--max-model-len`**: KRETA 요청 최대 컨텍스트 ≈ 비전(~16K) + 텍스트 + 출력 ≈ 20.5K. **24576 이상** 필요 (16384는 ~1.3% 요청이 길이 초과로 거부됨).
@@ -300,33 +334,37 @@ GB10은 통합 메모리(LPDDR5X, 대역폭 ~273 GB/s)라 dense 대형 모델의
 ## 4. 디렉토리 구조
 
 ```
-model_test/
-├── llm/  slm/  vlm/  vsm/        # 4 클래스 (자급자족)
-│   └── <class>/
-│       ├── harness/              # lm-evaluation-harness 래퍼
-│       ├── nlu/                  # NLU smoke test
-│       ├── agent/                # Ko-AgentBench 래퍼 + GPUStack 어댑터
-│       ├── multimodal/           # vlm/vsm 에만 존재
-│       │   ├── benches/          # 개별 벤치마크 runner
-│       │   ├── patches/          # 외부 repo 로컬 패치 (kreta_infer_gpt.patch)
-│       │   ├── run_<bench>.sh
-│       │   ├── run_kreta_resume.sh  # KRETA 중단-재개 (jsonl 보존)
-│       │   ├── run_all.sh
-│       │   └── install.sh
-│       ├── recommended_models.md
-│       └── (평가계획.md)
+foundation_model_test_non_thinking/
+├── shared/                        # 트랙 구현의 단일 소스 — 각 트랙은 run_*.sh(진입) · runner/ · scoring/ · tests/
+│   ├── harness/                   # KMMLU (lm-evaluation-harness 래퍼, harness_lib.sh 가 정지·검증·잠금)
+│   ├── nlu/                       # NLU (nlu_gpustack.py + scoring/)
+│   ├── functionchat/              # FunctionChat (runner/ · scoring/ · judge/)
+│   ├── taubench/                  # tau2-bench (runner/ · scoring/)
+│   ├── agent/                     # Ko-AgentBench (gpustack_custom/ · scoring/; run_full_eval 에서는 비활성)
+│   ├── multimodal/                # 이미지 벤치 (benches/ · publish/ · run_<bench>.sh · run_all.sh)
+│   ├── publish/                   # 발행 등급 (claims.py)
+│   ├── serving/                   # 서빙 제약 (constraints.py)
+│   ├── jsonwrite/                 # 공용: 원자적 JSON 쓰기 (write_json_atomic)
+│   ├── resultspath/               # 공용: results/ 모델 폴더 철자 재사용·채점 경로·실행 시각
+│   └── results_dir.sh             # 위 철자 재사용의 bash 판 (run_harness.sh 가 source)
+├── llm/  slm/  vlm/  vsm/         # 클래스별 진입점 = shared/ 로의 symlink + recommended_models.md + 평가계획
+├── orchestration/                 # 레인 실행·감시: run_lane.sh + tracks/ + models/<모델>.conf · lane_guard.sh · tests/ · README
+├── reports/                       # 보고서 패키지: python3 -m reports.report_<track>_tracks
+├── configs/                       # 모델별 YAML (models/), 로더, model_identity.json, serving_profiles/
 ├── data/                          # 외부 repo 중앙 clone (.gitignore)
-│   ├── KRETA/  KOFFVQA/  KO-VLM-Benchmark/
-│   ├── Ko-AgentBench/
-│   └── lm-evaluation-harness/
-├── results/                       # 평가 결과 (git 추적 — 모델별 결과 누적)
-├── logs/                          # 트랙별 실행 로그 (.gitignore)
-├── run_full_eval.sh               # 한 모델 4트랙 일괄
-├── start_eval_session.sh / end_eval_session.sh
-├── sync.sh                        # 머신 간 rsync
-├── REFACTORING_PLAN.md            # 향후 정비 계획
+├── results/                       # 평가 결과 (git 추적 — results/INDEX.md 가 본·보조·실험·구판 분류)
+├── logs/                          # 실행 로그 (.gitignore; resume_orch/ 에 레인 상태·orchestrator.log)
+├── run_full_eval.sh               # 한 모델 전 트랙 일괄 (config 의 tracks 순서)
+├── start_eval_session.sh / end_eval_session.sh / check_servers.sh / sync.sh
+├── CONVENTIONS.md                 # 코드 작성 규칙 (크기·분해·공용 모듈·시험·검증 방식)
 └── README.md
 ```
+
+코드 루트에서 `N="$(pwd -P)"`를 설정한다. KMMLU·taubench std4 같은 단일 트랙 재측정은 `bash "$N/orchestration/lanes/<track>.sh" <model_conf>`로(track: kmmlu·taubench_std4·full), 절차는 `orchestration/README.md`.
+
+`bash tests/run_pytests.sh`로 전체 Python 시험을 실행하며, 선택 트랙 이름과 pytest 옵션을 뒤에 붙일 수 있다(예: `bash tests/run_pytests.sh nlu -q`).
+
+모든 트랙 보고서는 N 루트에서 `python3 -m reports.report_<track>_tracks`로 실행한다(예: `python3 -m reports.report_harness_tracks`). `--base`는 결과 위치만 지정하며 기본값은 이 저장소다. 채점 코드는 실행 중인 저장소의 패키지를 쓴다. 저장소 밖 cwd에서는 N의 절대 경로를 `PYTHONPATH="$N${PYTHONPATH:+:$PYTHONPATH}"`로 명령 앞에 붙인다. 자세한 예는 [`reports/README.md`](reports/README.md)를 따른다.
 
 ---
 

@@ -59,6 +59,9 @@ def _load_serving_constraints():
     return _noop
 
 
+# CONVENTIONS §12 예외: 외부 배치의 제약 선택·경고 시점과 러너의
+# _decoding_provenance()가 쓰는 serving.constraints 검색 경로를 함께 보존한다.
+# 첫 요청까지 미루면 요청 변환 전 실패한 실행의 메타데이터도 달라질 수 있다.
 apply_serving_constraints = _load_serving_constraints()
 
 _DEFAULT_BASE_URL = "http://172.16.1.81:18090/v1"

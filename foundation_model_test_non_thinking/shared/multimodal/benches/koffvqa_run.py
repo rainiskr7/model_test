@@ -19,6 +19,7 @@ Judge 단계는 별도:
 import base64
 import io
 import json
+import sys
 from pathlib import Path
 
 try:
@@ -28,14 +29,16 @@ try:
 except ImportError as e:
     raise SystemExit("의존성 미설치 — `pip install pandas pillow requests openpyxl`") from e
 
-from common import (
+from shared.multimodal.benches.common import (
     standard_argparser, make_client, chat_with_image,
     get_base_dir, get_timestamp, get_results_dir, save_json,
     safe_model_name, build_run_config,
+    native_sidecar_from_records, summarize_records, write_sidecar,
 )
 
 
 KOFFVQA_TSV_URL = "https://huggingface.co/datasets/maum-ai/KOFFVQA_Data/resolve/main/data/KOFFVQA.tsv"
+EXPECTED_COUNT = 275
 
 
 def download_tsv(target: Path) -> None:
@@ -54,7 +57,8 @@ def img_decode(encoded: str) -> Image.Image:
     return img
 
 
-def main():
+def _parse_args():
+    """Parse args."""
     parser = standard_argparser()
     parser.add_argument(
         "--data", type=str, default=None,
@@ -65,7 +69,11 @@ def main():
         help="기존 out_dir/results.json 무시하고 처음부터 (기본: 유효분 재사용 + 에러/누락만 재시도)",
     )
     args = parser.parse_args()
+    return args
 
+
+def _prepare_output(args):
+    """Prepare output."""
     base_dir = get_base_dir(__file__)
     ts = get_timestamp(base_dir)
     out_dir = get_results_dir(base_dir, args.model, ts, "koffvqa")
@@ -73,7 +81,11 @@ def main():
     print(f"[koffvqa] model={args.model}")
     print(f"[koffvqa] base={base_dir}")
     print(f"[koffvqa] out={out_dir}")
+    return base_dir, out_dir
 
+
+def _load_inputs(args, base_dir):
+    """Load the TSV, downloading only when absent."""
     # 1) 데이터 로드 (없으면 다운로드)
     tsv_path = Path(args.data) if args.data else base_dir / "data" / "KOFFVQA" / "data" / "KOFFVQA.tsv"
     if not tsv_path.exists():
@@ -83,9 +95,11 @@ def main():
 
     if args.limit:
         bench = bench.head(args.limit)
+    return tsv_path, bench
 
-    client = make_client(args.base_url, args.api_key)
 
+def _load_resume(args, out_dir, bench):
+    """Read valid previous predictions for reuse."""
     # Resume: 같은 out_dir 의 기존 results.json 에서 유효(에러 없음 + 비어있지 않은 prediction)
     # 항목은 재사용하고, 에러/누락 항목만 다시 호출한다. (kreta infer_gpt.py 와 동일한 정책)
     # out_dir 는 EVAL_TIMESTAMP 로 스코프되므로, 새 타임스탬프면 빈 dict → 전량 신규 실행.
@@ -103,7 +117,11 @@ def main():
             print(f"[koffvqa] 기존 results.json 읽기 실패 → 처음부터: {e}")
             done = {}
         print(f"[koffvqa] resume: {len(done)}건 재사용, 나머지 {len(bench) - len(done)}건 재시도")
+    return done
 
+
+def _run_samples(args, bench, client, done):
+    """Request missing predictions and merge reused records in input order."""
     results = []
     predictions = []
     retried = 0
@@ -127,10 +145,10 @@ def main():
             )
             err = None
         except Exception as e:
-            response = ""
             err = str(e)
+            response = {"error": err}
 
-        predictions.append(response)
+        predictions.append(response if isinstance(response, str) else "")
         results.append({
             "index": idx,
             "category": str(row.get("category", "")),
@@ -144,7 +162,11 @@ def main():
         retried += 1
         if retried % 25 == 0:
             print(f"[koffvqa] 재시도/신규 {retried}건 처리")
+    return results, predictions
 
+
+def _save_predictions(args, bench, out_dir, results, predictions):
+    """Write the compatible workbook followed by raw JSON."""
     # 2) KOFFVQA evaluate.py 호환 xlsx 저장 (image 컬럼 제거 + prediction 추가)
     out_df = bench.drop(columns=["image"]).copy()
     out_df["prediction"] = predictions
@@ -154,13 +176,27 @@ def main():
 
     # 3) raw results.json + summary.json
     save_json(out_dir / "results.json", results)
+    return xlsx_path
 
+
+def _build_summary(args, base_dir, tsv_path, bench, results, xlsx_path):
+    """Build summary."""
+    expected_count = len(bench) if args.limit else EXPECTED_COUNT
+    aggregate = summarize_records(
+        "koffvqa", results, response_field="prediction", expected_count=expected_count,
+    )
+    generation_failures = aggregate["publish_status"]["failures"]
     summary = {
         "benchmark": "KOFFVQA (response generation)",
         "model": args.model,
         "total": len(results),
         "successful": sum(1 for r in results if not r.get("error")),
         "failed": sum(1 for r in results if r.get("error")),
+        "counts": aggregate["counts"],
+        "publish_status": {
+            "publishable": False,
+            "failures": generation_failures or ["채점 산출물 없음"],
+        },
         "predictions_xlsx": str(xlsx_path),
         "judge_step": "별도 — koffvqa_api_judge.py 또는 KOFFVQA evaluate.py 로 채점 필요",
         "run_config": build_run_config(
@@ -179,11 +215,42 @@ def main():
             extra={"limit": args.limit, "tsv_path": str(tsv_path)},
         ),
     }
-    save_json(out_dir / "summary.json", summary)
+    return summary, generation_failures, expected_count
 
+
+def _save_summary(out_dir, base_dir, results, summary, expected_count):
+    """Write summary and publication sidecar."""
+    save_json(out_dir / "summary.json", summary)
+    sidecar_path, sidecar = native_sidecar_from_records(
+        out_dir, base_dir, results,
+        benchmark_id="koffvqa", response_field="prediction", expected_count=expected_count,
+    )
+    write_sidecar(sidecar_path, sidecar)
+    return sidecar
+
+
+def _print_summary(summary, xlsx_path, generation_failures, sidecar):
+    """Print generation status and return the existing exit code."""
     print(f"\n[koffvqa] FINAL {summary['successful']}/{summary['total']} 응답 생성 완료")
     print(f"[koffvqa] judge 채점 필요: koffvqa_api_judge.py --predfile {xlsx_path}")
+    return 1 if generation_failures or sidecar["status"] != "UNSCORED" else 0
+
+
+def main():
+    """Coordinate TSV loading, resume, requests, storage and reporting."""
+    args = _parse_args()
+    base_dir, out_dir = _prepare_output(args)
+    tsv_path, bench = _load_inputs(args, base_dir)
+    client = make_client(args.base_url, args.api_key)
+    done = _load_resume(args, out_dir, bench)
+    results, predictions = _run_samples(args, bench, client, done)
+    xlsx_path = _save_predictions(args, bench, out_dir, results, predictions)
+    summary, generation_failures, expected_count = _build_summary(
+        args, base_dir, tsv_path, bench, results, xlsx_path,
+    )
+    sidecar = _save_summary(out_dir, base_dir, results, summary, expected_count)
+    return _print_summary(summary, xlsx_path, generation_failures, sidecar)
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

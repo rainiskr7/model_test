@@ -6,6 +6,22 @@ set -u
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
+# Full-eval accepts integer seconds, like the full lane; the runners allow floats.
+# Resolve caller values before activation/.env, and reject errors before activation, secrets or HTTP.
+FULL_EVAL_REQUEST_TIMEOUT="${AGENT_REQUEST_TIMEOUT:-300}"
+FULL_EVAL_TASK_TIMEOUT="${AGENT_TASK_TIMEOUT:-900}"
+export -n FULL_EVAL_REQUEST_TIMEOUT FULL_EVAL_TASK_TIMEOUT
+if ! [[ "$FULL_EVAL_REQUEST_TIMEOUT" =~ ^[0-9]+$ ]] ||
+   ! [ "$FULL_EVAL_REQUEST_TIMEOUT" -gt 0 ] 2>/dev/null; then
+  echo '[full_eval] ERROR: AGENT_REQUEST_TIMEOUT must be a positive integer' >&2
+  exit 2
+fi
+if ! [[ "$FULL_EVAL_TASK_TIMEOUT" =~ ^[0-9]+$ ]] ||
+   ! [ "$FULL_EVAL_TASK_TIMEOUT" -gt "$FULL_EVAL_REQUEST_TIMEOUT" ] 2>/dev/null; then
+  echo '[full_eval] ERROR: AGENT_TASK_TIMEOUT must be an integer greater than AGENT_REQUEST_TIMEOUT' >&2
+  exit 2
+fi
+
 # 부모 죽으면 자식까지 일괄 cleanup
 # (이전 run 에서 wrapper 죽은 뒤 ko-agentbench 자식이 살아남아 결과 폴더 오염시킨 사례 있음)
 # 자기 자신을 setsid 로 재실행해 새 session leader 가 되게 만든 뒤,
@@ -23,42 +39,39 @@ if [ -z "${_FULL_EVAL_REEXEC:-}" ]; then
     echo "[full_eval] WARN: 정식 평가는 리눅스에서 실행하세요." >&2
   fi
 fi
+source "$SCRIPT_DIR/shared/harness/harness_lib.sh" || exit 4
+TRACK_PID="" CANCELLING=0 FIRST_RC=""
+FULL_EVAL_CANCEL_GRACE=${FULL_EVAL_CANCEL_GRACE:-15}
 PGID="$(ps -o pgid= $$ | tr -d ' ')"
 cleanup() {
-  local sig="${1:-EXIT}"
-  trap - INT TERM EXIT  # 재진입 방지
+  local sig="${1:-EXIT}" original_rc="${2:-0}" victims="" p
+  [ "$CANCELLING" = 0 ] || return
+  CANCELLING=1
+  trap '' INT TERM
+  trap - EXIT
+  if [ -z "$FIRST_RC" ]; then
+    case "$sig" in INT) FIRST_RC=130 ;; TERM) FIRST_RC=143 ;; *) FIRST_RC=$original_rc ;; esac
+  fi
   echo "[full_eval] trap: cleanup pgid=$PGID sig=$sig" | tee -a "${LOG_DIR:-/tmp}/_master.log" 2>/dev/null
-  # 자기 자신($$)을 제외한 process group 멤버에만 시그널 → trap 함수가 KILL 라인까지 도달 보장.
-  # 우리가 그룹 리더일 때만 그룹 전체를 죽인다 (setsid 재실행에 성공한 경우).
-  # 리더가 아니면 이 그룹은 호출자의 것이므로 건드리면 안 된다.
-  if [ "$PGID" != "$$" ]; then
-    echo "[full_eval] cleanup: 그룹 리더가 아니므로 그룹 kill 을 건너뜁니다 (pgid=$PGID self=$$)" >&2
-    case "$sig" in
-      INT)  exit 130 ;;
-      TERM) exit 143 ;;
-    esac
-    return
+  if [ "$PGID" = "$$" ]; then
+    victims=$(pgrep -g "$PGID" 2>/dev/null | awk -v self="$$" '$0 != self { print }')
+  elif [ -n "$TRACK_PID" ]; then
+    victims=$(harness_descendants "$TRACK_PID")
   fi
-  local victims
-  victims=$(pgrep -g "$PGID" 2>/dev/null | awk -v self="$$" '$0 != self { print }' | tr '\n' ' ')
-  if [ -n "$victims" ]; then
-    # 1) 직속 + 손자 SIGTERM
-    kill -TERM $victims 2>/dev/null || true
-    sleep 2
-    # 2) 살아남은 것들 SIGKILL
-    victims=$(pgrep -g "$PGID" 2>/dev/null | awk -v self="$$" '$0 != self { print }' | tr '\n' ' ')
-    [ -n "$victims" ] && kill -KILL $victims 2>/dev/null || true
+  # Non-leader uses the original snapshot even after reparenting.
+  harness_stop_set "$FULL_EVAL_CANCEL_GRACE" "$victims"
+  if [ "$PGID" = "$$" ]; then
+    # A private group remains identifiable; also reap members born during grace.
+    victims=$(pgrep -g "$PGID" 2>/dev/null | awk -v self="$$" '$0 != self { print }')
+    for p in $victims; do kill -KILL "$p" 2>/dev/null || :; done
   fi
-  # bash trap 은 함수가 정상 반환해도 SIGINT/SIGTERM 의 default action 을 자동 재적용하지 않음.
-  # 종료 코드를 명시적으로 표준값으로 맞춤.
-  case "$sig" in
-    INT)  exit 130 ;;
-    TERM) exit 143 ;;
-  esac
+  if [ -n "$TRACK_PID" ]; then wait "$TRACK_PID" 2>/dev/null || :; fi
+  TRACK_PID=""
+  exit "$FIRST_RC"
 }
-trap 'cleanup INT'  INT
-trap 'cleanup TERM' TERM
-trap 'cleanup EXIT' EXIT
+trap 'cleanup INT 130' INT
+trap 'cleanup TERM 143' TERM
+trap 'cleanup EXIT $?' EXIT
 
 # venv 활성화 (lm_eval, python 등이 PATH 에 잡혀야 함)
 # shellcheck disable=SC1091
@@ -87,10 +100,22 @@ echo "[full_eval] config=$MODEL_CONFIG → MODEL=$MODEL CLASS=$MODEL_CLASS"
 
 # API key 외부화: .env 파일 또는 env 변수에서 로드 (하드코딩 금지)
 # .env 파일은 .gitignore 됨 — `OPENAI_API_KEY=gpustack_...` 형식
+# .env 는 **기본값**이지 덮어쓰기가 아니다. 호출자가 이미 export 한 값이 이긴다.
+# 트랙 러너들(run_functionchat.sh, run_taubench.sh)은 이미 이 규칙을 쓰는데 최상위
+# 드라이버만 무조건 source 하고 있었다. 그래서 다른 엔드포인트를 향해 export 한
+# 키가 조용히 덮어써진다 — 그 러너들의 주석이 기록한 사고와 같은 것이다
+# ("2026-08-19 에 7번 서버 런이 8번 키로 나가 401 로 죽었다").
+# 서버마다 키가 다르므로(실측: .7 의 키로 .8 을 부르면 401) 이 구분이 필요하다.
+_CALLER_OPENAI_API_KEY="${OPENAI_API_KEY:-}"
 if [ -f "$SCRIPT_DIR/.env" ]; then
   # shellcheck disable=SC1091
   source "$SCRIPT_DIR/.env"
 fi
+if [ -n "$_CALLER_OPENAI_API_KEY" ]; then
+  OPENAI_API_KEY="$_CALLER_OPENAI_API_KEY"
+  echo "[full_eval] OPENAI_API_KEY: 호출자가 넘긴 값을 쓴다 (.env 값은 무시)"
+fi
+unset _CALLER_OPENAI_API_KEY
 : "${OPENAI_API_KEY:?OPENAI_API_KEY 필요 (.env 파일 작성 또는 env 변수 export)}"
 export OPENAI_API_KEY
 
@@ -144,8 +169,13 @@ run_track() {
   local LOG="$LOG_DIR/${NAME}.log"
   echo "[$(date +%H:%M:%S)] === ${NAME} 시작 ===" | tee -a "$LOG_DIR/_master.log"
   echo "  CMD: $*" | tee -a "$LOG_DIR/_master.log"
-  ( "$@" ) >>"$LOG" 2>&1
-  local RC=$?
+  local RC
+  (
+    unset AGENT_REQUEST_TIMEOUT AGENT_TASK_TIMEOUT
+    "$@"
+  ) >>"$LOG" 2>&1 </dev/null &
+  TRACK_PID=$!
+  wait "$TRACK_PID"; RC=$?; TRACK_PID=""
   LAST_TRACK_RC=$RC
   if (( RC != 0 )); then
     TRACK_FAILURES+=("${NAME}(rc=${RC})")
@@ -153,11 +183,16 @@ run_track() {
   else
     echo "[$(date +%H:%M:%S)] === ${NAME} 종료 (rc=$RC) ===" | tee -a "$LOG_DIR/_master.log"
   fi
-  # 트랙 실패해도 다음 트랙은 계속 진행 → 호출 측에는 항상 성공 반환
+  # Reserved lock conflict / >=129 stop the sequence; ordinary failures continue.
+  if (( RC == 3 || RC >= 129 )); then
+    FIRST_RC=$RC
+    exit "$RC"
+  fi
   return 0
 }
 
 echo "[full_eval] EVAL_TIMESTAMP=$EVAL_TIMESTAMP" | tee "$LOG_DIR/_master.log"
+echo "[full_eval] AGENT_REQUEST_TIMEOUT=$FULL_EVAL_REQUEST_TIMEOUT AGENT_TASK_TIMEOUT=$FULL_EVAL_TASK_TIMEOUT (functionchat·taubench only)" | tee -a "$LOG_DIR/_master.log"
 echo "[full_eval] MODEL=$MODEL" | tee -a "$LOG_DIR/_master.log"
 echo "[full_eval] NUM_CONCURRENT=$NUM_CONCURRENT" | tee -a "$LOG_DIR/_master.log"
 echo "[full_eval] PID=$$ PGID=$PGID" | tee -a "$LOG_DIR/_master.log"
@@ -181,9 +216,11 @@ for track in $TRACKS; do
     # (측정 0건 / 부분 실행 / infrastructure_error) exit 1 로 나가면 run_track 이
     # TRACK_FAILURES 에 기록한다 — 실패한 측정이 조용히 성공으로 지나가지 않는다.
     functionchat)
-      run_track functionchat bash "$TRACK_BASE/functionchat/run_functionchat.sh" "$MODEL" "$BASE_URL_CHAT" ;;
+      run_track functionchat env "AGENT_REQUEST_TIMEOUT=$FULL_EVAL_REQUEST_TIMEOUT" "AGENT_TASK_TIMEOUT=$FULL_EVAL_TASK_TIMEOUT" \
+        bash "$TRACK_BASE/functionchat/run_functionchat.sh" "$MODEL" "$BASE_URL_CHAT" ;;
     taubench)
-      run_track taubench     bash "$TRACK_BASE/taubench/run_taubench.sh" "$MODEL" "$BASE_URL_CHAT" ;;
+      run_track taubench env "AGENT_REQUEST_TIMEOUT=$FULL_EVAL_REQUEST_TIMEOUT" "AGENT_TASK_TIMEOUT=$FULL_EVAL_TASK_TIMEOUT" \
+        bash "$TRACK_BASE/taubench/run_taubench.sh" "$MODEL" "$BASE_URL_CHAT" ;;
     *) echo "[full_eval] WARN: unknown track '$track' (configs/models/$MODEL_CONFIG.yaml)" ;;
   esac
 done

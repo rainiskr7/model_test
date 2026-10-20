@@ -1,8 +1,11 @@
-# tau2-bench no-user track
+# tau2-bench track
 
 This track drives the pinned upstream tau2 framework and converts its programmatic
 state/action rewards into this repository's `summary.json` contract. It never starts
-an LLM judge or an LLM user simulator.
+an LLM judge. Two modes exist (`TAUBENCH_MODE`, default `solo`): `solo` runs
+`llm_agent_solo` with `dummy_user` and no LLM user simulator; `standard` runs
+`llm_agent` with the upstream `user_simulator`, which requires `TAUBENCH_USER_MODEL`
+(the same user model for every candidate, so comparisons hold).
 
 Only canonical telecom text tasks are runnable. `llm_agent_solo` plus `dummy_user`
 is supported there. The banking-knowledge environment explicitly rejects solo mode,

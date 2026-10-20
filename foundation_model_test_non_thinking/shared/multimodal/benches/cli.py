@@ -1,7 +1,7 @@
 """bench CLI 인자 빌더 — 단일 책임 모듈.
 
 표준 bench argparser(standard_argparser). common.py 가 re-export 하므로
-기존 `from common import standard_argparser` 도 그대로 동작.
+`from shared.multimodal.benches.common import standard_argparser` 도 그대로 동작.
 """
 
 import argparse

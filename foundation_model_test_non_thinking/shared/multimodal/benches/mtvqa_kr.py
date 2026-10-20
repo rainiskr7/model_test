@@ -5,7 +5,9 @@ Free-form VQA (정답 짧은 문자열). 메트릭: normalized exact match.
 Source: https://huggingface.co/datasets/ByteDance/MTVQA
 """
 
+import ast
 import re
+import sys
 import unicodedata
 
 try:
@@ -13,16 +15,19 @@ try:
 except ImportError as e:
     raise SystemExit("datasets 패키지 미설치 — `uv pip install datasets`") from e
 
-from common import (
+from shared.multimodal.benches.common import (
     standard_argparser, make_client, chat_with_image,
     get_base_dir, get_timestamp, get_results_dir, save_json,
     build_run_config, resolve_dataset_revision,
+    native_sidecar_from_records, summarize_records, write_sidecar,
+    prepare_native_output, save_native_results,
 )
 
 
 PROMPT_TEMPLATE = """{question}
 
 이미지를 보고 위 질문에 한 단어 또는 짧은 구로 정확히 답하세요. 설명·머리말 없이 답만 출력하세요."""
+EXPECTED_COUNT = 558
 
 
 def normalize_answer(s: str) -> str:
@@ -73,19 +78,48 @@ def _is_korean_row(row: dict) -> bool:
     return False
 
 
-def main():
+def _expand_qa(row, qa_pairs_key, direct_q_key, direct_a_key) -> list:
+    """row → list of (question, [gold_answers]). MTVQA의 qa_pairs 파싱."""
+    if qa_pairs_key:
+        raw = row[qa_pairs_key]
+        try:
+            parsed = ast.literal_eval(raw) if isinstance(raw, str) else raw
+        except (ValueError, SyntaxError):
+            return []
+        if not isinstance(parsed, list):
+            return []
+        out = []
+        for qa in parsed:
+            if not isinstance(qa, dict):
+                continue
+            q = qa.get("question") or qa.get("Q") or ""
+            a = qa.get("answer") or qa.get("A") or qa.get("answers")
+            if not q or a is None:
+                continue
+            if isinstance(a, list):
+                gold = [str(x) for x in a]
+            else:
+                gold = [str(a)]
+            out.append((str(q), gold))
+        return out
+    # direct columns
+    q = row[direct_q_key]
+    a = row[direct_a_key]
+    gold = [str(x) for x in a] if isinstance(a, list) else [str(a)]
+    return [(str(q), gold)]
+
+
+def _parse_args():
+    """Parse the existing command line."""
     parser = standard_argparser()
     parser.add_argument("--split", type=str, default="test", help="HF split (default: test)")
     parser.add_argument("--config", type=str, default=None, help="HF config (없으면 default)")
     args = parser.parse_args()
+    return args
 
-    base_dir = get_base_dir(__file__)
-    ts = get_timestamp(base_dir)
-    out_dir = get_results_dir(base_dir, args.model, ts, "mtvqa_kr")
 
-    print(f"[mtvqa_kr] model={args.model}")
-    print(f"[mtvqa_kr] out={out_dir}")
-
+def _load_inputs(args):
+    """Resolve revision and load the selected dataset."""
     revision, rev_source = resolve_dataset_revision(
         "ByteDance/MTVQA", args.revision, "MTVQA_REVISION",
     )
@@ -130,9 +164,11 @@ def main():
 
     if args.limit:
         ds = ds.select(range(min(args.limit, len(ds))))
+    return ds, revision, rev_source
 
-    client = make_client(args.base_url, args.api_key)
 
+def _run_samples(args, ds, client):
+    """Request and score samples in their original order."""
     results = []
     correct = 0
 
@@ -153,40 +189,9 @@ def main():
     if qa_pairs_key is None and (direct_q_key is None or direct_a_key is None):
         raise SystemExit(f"qa_pairs OR question+answer column 미존재. cols={cols}")
 
-    import ast
-
-    def _expand_qa(row) -> list:
-        """row → list of (question, [gold_answers]). MTVQA의 qa_pairs 파싱."""
-        if qa_pairs_key:
-            raw = row[qa_pairs_key]
-            try:
-                parsed = ast.literal_eval(raw) if isinstance(raw, str) else raw
-            except (ValueError, SyntaxError):
-                return []
-            if not isinstance(parsed, list):
-                return []
-            out = []
-            for qa in parsed:
-                if not isinstance(qa, dict):
-                    continue
-                q = qa.get("question") or qa.get("Q") or ""
-                a = qa.get("answer") or qa.get("A") or qa.get("answers")
-                if not q or a is None:
-                    continue
-                if isinstance(a, list):
-                    gold = [str(x) for x in a]
-                else:
-                    gold = [str(a)]
-                out.append((str(q), gold))
-            return out
-        # direct columns
-        q = row[direct_q_key]
-        a = row[direct_a_key]
-        gold = [str(x) for x in a] if isinstance(a, list) else [str(a)]
-        return [(str(q), gold)]
 
     for i, row in enumerate(ds):
-        qa_list = _expand_qa(row)
+        qa_list = _expand_qa(row, qa_pairs_key, direct_q_key, direct_a_key)
         if not qa_list:
             continue
 
@@ -201,10 +206,10 @@ def main():
                 )
                 err = None
             except Exception as e:
-                response = ""
                 err = str(e)
+                response = {"error": err}
 
-            is_correct = any(is_match(response, g) for g in gold_list)
+            is_correct = isinstance(response, str) and any(is_match(response, g) for g in gold_list)
             if is_correct:
                 correct += 1
 
@@ -222,7 +227,13 @@ def main():
         if (i + 1) % 25 == 0:
             total_q = len(results)
             print(f"[mtvqa_kr] row {i+1}/{len(ds)} (Q={total_q}) acc={correct/total_q:.3f}")
+    return results
 
+
+def _build_summary(args, ds, results, revision, rev_source):
+    """Build the aggregate and reproducibility metadata."""
+    aggregate = summarize_records("mtvqa_kr", results, expected_count=EXPECTED_COUNT)
+    correct = aggregate["correct"]
     summary = {
         "benchmark": "MTVQA-KR",
         "model": args.model,
@@ -230,6 +241,10 @@ def main():
         "correct": correct,
         "accuracy": correct / len(results) if results else 0.0,
         "metric": "normalized exact/substring match (case-insensitive)",
+        "counts": aggregate["counts"],
+        "accuracy_strict": aggregate["accuracy_strict"],
+        "accuracy_conditional": aggregate["accuracy_conditional"],
+        "publish_status": aggregate["publish_status"],
         "run_config": build_run_config(
             benchmark="MTVQA-KR",
             model=args.model,
@@ -251,12 +266,34 @@ def main():
             },
         ),
     }
+    return summary, aggregate
 
-    save_json(out_dir / "results.json", results)
-    save_json(out_dir / "summary.json", summary)
 
-    print(f"\n[mtvqa_kr] FINAL acc={summary['accuracy']:.3f} ({correct}/{summary['total']})")
+def _print_summary(summary, aggregate, sidecar):
+    """Print the summary and return the publication status."""
+    print(f"\n[mtvqa_kr] FINAL acc={summary['accuracy']:.3f} ({summary['correct']}/{summary['total']})")
+    return 0 if aggregate["publish_status"]["publishable"] and sidecar["publishable"] else 1
+
+
+def main():
+    """Coordinate input loading, requests, storage and reporting."""
+    args = _parse_args()
+    base_dir, out_dir = prepare_native_output(
+        __file__, args.model, "mtvqa_kr",
+        get_base_dir=get_base_dir, get_timestamp=get_timestamp,
+        get_results_dir=get_results_dir, print_base=False,
+    )
+    ds, revision, rev_source = _load_inputs(args)
+    client = make_client(args.base_url, args.api_key)
+    results = _run_samples(args, ds, client)
+    summary, aggregate = _build_summary(args, ds, results, revision, rev_source)
+    sidecar = save_native_results(
+        out_dir, base_dir, results, summary, benchmark_id="mtvqa_kr",
+        expected_count=EXPECTED_COUNT, save_json=save_json,
+        native_sidecar_from_records=native_sidecar_from_records, write_sidecar=write_sidecar,
+    )
+    return _print_summary(summary, aggregate, sidecar)
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

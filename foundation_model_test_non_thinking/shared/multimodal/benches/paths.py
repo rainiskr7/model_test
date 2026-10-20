@@ -1,7 +1,7 @@
 """파일시스템/세션/JSON IO 헬퍼 — 단일 책임 모듈.
 
 결과 경로 명명(safe_model_name), base/timestamp 세션 해석, results 디렉토리,
-JSON 저장. common.py 가 re-export 하므로 기존 `from common import ...` 도 그대로 동작.
+JSON 저장. common.py 가 re-export 하므로 `from shared.multimodal.benches.common import ...` 도 그대로 동작.
 """
 
 import os
@@ -10,15 +10,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional, Any
 
-
-def safe_model_name(model: str) -> str:
-    """Normalize model name for filesystem path.
-
-    Examples:
-        Qwen/Qwen3.5-35B-A3B → Qwen_Qwen3.5_35B_A3B
-        google/gemma-4-26B-A4B → google_gemma_4_26B_A4B
-    """
-    return model.replace("/", "_").replace("-", "_").replace(":", "_")
+from shared.resultspath.model_dir import results_model_dir_name, safe_model_name
 
 
 def get_base_dir(script_path: str) -> Path:
@@ -82,7 +74,7 @@ def get_results_dir(
     Default: vision/multimodal (한국어 비전 벤치마크 트랙용).
     customB(B-1~B-4) 등은 track="customB" 같이 override.
     """
-    p = base_dir / "results" / safe_model_name(model) / timestamp / category / track / bench
+    p = base_dir / "results" / results_model_dir_name(base_dir, model) / timestamp / category / track / bench
     p.mkdir(parents=True, exist_ok=True)
     return p
 

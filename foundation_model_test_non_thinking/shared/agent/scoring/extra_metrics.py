@@ -4,10 +4,7 @@ import numbers
 import re
 from typing import Optional
 
-try:
-    from .context import load_metrics_module
-except ImportError:  # direct file loading in tests
-    from context import load_metrics_module
+from shared.agent.scoring.context import load_metrics_module
 
 
 def fsm_prefix(ctx) -> float:

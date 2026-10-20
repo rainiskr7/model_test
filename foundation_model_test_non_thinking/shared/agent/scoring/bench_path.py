@@ -24,6 +24,8 @@ def ensure_bench_path() -> Path:
             "Run shared/agent/install.sh or set MODEL_TEST_BASE correctly."
         )
 
+    # External checkout: bench.runner.metrics is deployed under MODEL_TEST_BASE,
+    # not in the shared.agent package, so its search-path insertion is intentional.
     koa_str = str(koa_dir)
     if koa_str not in sys.path:
         sys.path.insert(0, koa_str)

@@ -2,49 +2,30 @@
 
 import math
 import re
-import sys
 from pathlib import Path
 from typing import Any, Dict, Iterable, List
 
-if __package__:
-    from . import SCORING_VERSION, SCORING_VERSION_V3, SCORING_VERSION_V4
-    from .cache_diagnostics import CACHE_MISS_RE, build_cache_diagnostics
-    from .context import build_eval_context
-    from .extra_metrics import (
-        result_field_coverage_diagnostics,
-        result_field_coverage_entry_diagnostics,
-    )
-    from .level_spec import (
-        COMMON_RECORD_ONLY,
-        JUDGE_METRICS,
-        LEVEL_SPECS,
-        LEVEL_SPECS_V3,
-        MetricSpec,
-        level_score,
-        mean_or_none,
-        vendored_metric,
-    )
-    from .task_data import prepare_v3_loaded
-else:
-    sys.path.insert(0, str(Path(__file__).resolve().parent))
-    from __init__ import SCORING_VERSION, SCORING_VERSION_V3, SCORING_VERSION_V4
-    from cache_diagnostics import CACHE_MISS_RE, build_cache_diagnostics
-    from context import build_eval_context
-    from extra_metrics import (
-        result_field_coverage_diagnostics,
-        result_field_coverage_entry_diagnostics,
-    )
-    from level_spec import (
-        COMMON_RECORD_ONLY,
-        JUDGE_METRICS,
-        LEVEL_SPECS,
-        LEVEL_SPECS_V3,
-        MetricSpec,
-        level_score,
-        mean_or_none,
-        vendored_metric,
-    )
-    from task_data import prepare_v3_loaded
+from shared.resultspath.model_dir import results_model_dir_name, safe_model_name
+
+from shared.agent.scoring.aggregate_coverage import _format_l7_coverage
+from shared.agent.scoring import SCORING_VERSION, SCORING_VERSION_V3, SCORING_VERSION_V4
+from shared.agent.scoring.cache_diagnostics import CACHE_MISS_RE, build_cache_diagnostics
+from shared.agent.scoring.context import build_eval_context
+from shared.agent.scoring.extra_metrics import (
+    result_field_coverage_diagnostics,
+    result_field_coverage_entry_diagnostics,
+)
+from shared.agent.scoring.level_spec import (
+    COMMON_RECORD_ONLY,
+    JUDGE_METRICS,
+    LEVEL_SPECS,
+    LEVEL_SPECS_V3,
+    MetricSpec,
+    level_score,
+    mean_or_none,
+    vendored_metric,
+)
+from shared.agent.scoring.task_data import prepare_v3_loaded
 
 
 ALL_LEVELS = tuple(f"L{i}" for i in range(1, 8))
@@ -255,6 +236,50 @@ def _build_swallowed_exception_diagnostics(
     }
 
 
+def _l3_retry_class(task: Dict[str, Any]) -> tuple:
+    """Normalize saved calls and classify the position of cache misses."""
+    calls = task.get("tool_calls")
+    calls = calls if isinstance(calls, list) else []
+    golden_action = task.get("golden_action")
+    if isinstance(golden_action, dict):
+        golden_action = [golden_action]
+    elif not isinstance(golden_action, list):
+        golden_action = []
+    miss_indexes = [
+        index
+        for index, call in enumerate(calls)
+        if isinstance(call, dict)
+        and CACHE_MISS_RE.search(str(call.get("error") or ""))
+    ]
+    if not calls:
+        class_name = "no_tool_calls_emitted"
+    elif not miss_indexes:
+        class_name = "no_cache_miss"
+    elif miss_indexes == [len(calls) - 1]:
+        class_name = "cache_miss_only_at_final_call"
+    else:
+        class_name = "cache_miss_before_final_call"
+    return calls, golden_action, miss_indexes, class_name
+
+
+def _count_following_calls(calls, miss_indexes, *, after_non_final_miss) -> None:
+    """Accumulate tool/argument transitions into the supplied miss counters."""
+    for index in miss_indexes:
+        if index >= len(calls) - 1:
+            continue
+        current = calls[index]
+        following = calls[index + 1]
+        if not isinstance(current, dict) or not isinstance(following, dict):
+            after_non_final_miss["different_tool"] += 1
+        elif _call_tool(current) != _call_tool(following):
+            after_non_final_miss["different_tool"] += 1
+        elif _call_arguments(current) == _call_arguments(following):
+            after_non_final_miss["same_tool_identical_arguments"] += 1
+        else:
+            after_non_final_miss["same_tool_different_arguments"] += 1
+        after_non_final_miss["misses_with_following_call"] += 1
+
+
 def _build_l3_retry_inflation(level_data: Dict[str, Any]) -> Dict[str, Any]:
     class_names = (
         "no_tool_calls_emitted",
@@ -290,47 +315,14 @@ def _build_l3_retry_inflation(level_data: Dict[str, Any]) -> Dict[str, Any]:
             if first_context_error is None:
                 first_context_error = exc
         # L3 수치는 저장된 call만 읽으므로 context 실패와 무관하게 기존 분류를 유지한다.
-        calls = task.get("tool_calls")
-        calls = calls if isinstance(calls, list) else []
-        golden_action = task.get("golden_action")
-        if isinstance(golden_action, dict):
-            golden_action = [golden_action]
-        elif not isinstance(golden_action, list):
-            golden_action = []
-        miss_indexes = [
-            index
-            for index, call in enumerate(calls)
-            if isinstance(call, dict)
-            and CACHE_MISS_RE.search(str(call.get("error") or ""))
-        ]
-        if not calls:
-            class_name = "no_tool_calls_emitted"
-        elif not miss_indexes:
-            class_name = "no_cache_miss"
-        elif miss_indexes == [len(calls) - 1]:
-            class_name = "cache_miss_only_at_final_call"
-        else:
-            class_name = "cache_miss_before_final_call"
+        calls, golden_action, miss_indexes, class_name = _l3_retry_class(task)
 
         entry = classes[class_name]
         entry["tasks"] += 1
         entry["calls_emitted"] += len(calls)
         entry["golden_action_calls"] += len(golden_action)
 
-        for index in miss_indexes:
-            if index >= len(calls) - 1:
-                continue
-            current = calls[index]
-            following = calls[index + 1]
-            if not isinstance(current, dict) or not isinstance(following, dict):
-                after_non_final_miss["different_tool"] += 1
-            elif _call_tool(current) != _call_tool(following):
-                after_non_final_miss["different_tool"] += 1
-            elif _call_arguments(current) == _call_arguments(following):
-                after_non_final_miss["same_tool_identical_arguments"] += 1
-            else:
-                after_non_final_miss["same_tool_different_arguments"] += 1
-            after_non_final_miss["misses_with_following_call"] += 1
+        _count_following_calls(calls, miss_indexes, after_non_final_miss=after_non_final_miss)
 
     for name, entry in classes.items():
         if name == "no_tool_calls_emitted":
@@ -493,7 +485,8 @@ def _build_possible_absorbed_request_timeouts(
     }
 
 
-def _build_l7_partial_coverage(level_data: Dict[str, Any]) -> Dict[str, Any]:
+def _collect_l7_coverage(level_data: Dict[str, Any]) -> tuple:
+    """L7 문맥 진단을 분포, 필드 집계, 커버리지로 모은다."""
     distribution: Dict[tuple, int] = {}
     per_field: Dict[str, Dict[str, int]] = {}
     tasks_total = 0
@@ -547,79 +540,28 @@ def _build_l7_partial_coverage(level_data: Dict[str, Any]) -> Dict[str, Any]:
                 )
                 field_entry["required"] += 1
                 field_entry["present"] += int(field["present"])
-
-    fields_required = sum(entry["required"] for entry in per_field.values())
-    fields_present = sum(entry["present"] for entry in per_field.values())
-    complete_entries = sum(
-        count
-        for (required, present), count in distribution.items()
-        if required == present
-    )
-    partial_entries = sum(
-        count
-        for (required, present), count in distribution.items()
-        if 0 < present < required
-    )
-    zero_entries = sum(
-        count
-        for (_required, present), count in distribution.items()
-        if present == 0
-    )
-    return {
-        "annotation_only": True,
-        "distribution": [
-            {
-                "fields_required": required,
-                "fields_present": present,
-                "entry_count": distribution[(required, present)],
-            }
-            for required, present in sorted(distribution)
-        ],
-        "per_field": {
-            name: {
-                **counts,
-                "hit_rate": counts["present"] / counts["required"],
-            }
-            for name, counts in sorted(per_field.items())
-        },
-        "totals": {
-            "entries": entries_classifiable,
-            "complete_entries": complete_entries,
-            "partial_entries": partial_entries,
-            "zero_entries": zero_entries,
-            "fields_required": fields_required,
-            "fields_present": fields_present,
-            "field_hit_rate": (
-                fields_present / fields_required if fields_required else None
-            ),
-        },
-        "coverage": {
-            "tasks_total": tasks_total,
-            "tasks_classifiable": tasks_classifiable,
-            "tasks_unclassifiable": tasks_total - tasks_classifiable,
-            "golden_entries_declared": entries_declared,
-            "golden_entries_classifiable": entries_classifiable,
-            "golden_entries_unclassifiable": (
-                entries_declared - entries_classifiable
-            ),
-            "fields_declared": fields_declared,
-            "fields_excluded_long_text": fields_excluded_long_text,
-            "fields_unresolved": fields_unresolved,
-            "context_construction_failures": _diagnostic_failures(
-                context_failures, first_context_error
-            ),
-        },
-        "eligibility_rule": (
-            "Uses the exact ResultFieldCoverage_det seeded-only resolver, field "
-            "normalization, and value matcher; normalized non-numeric values "
-            "longer than 80 characters are excluded, and entries with an "
-            "unresolved field are unclassifiable."
+    coverage = {
+        "tasks_total": tasks_total,
+        "tasks_classifiable": tasks_classifiable,
+        "tasks_unclassifiable": tasks_total - tasks_classifiable,
+        "golden_entries_declared": entries_declared,
+        "golden_entries_classifiable": entries_classifiable,
+        "golden_entries_unclassifiable": (
+            entries_declared - entries_classifiable
         ),
-        "statement": (
-            "ResultFieldCoverage_det is all-or-nothing per golden-fields entry; "
-            "partial field hits shown here are discarded by its score."
+        "fields_declared": fields_declared,
+        "fields_excluded_long_text": fields_excluded_long_text,
+        "fields_unresolved": fields_unresolved,
+        "context_construction_failures": _diagnostic_failures(
+            context_failures, first_context_error
         ),
     }
+    return distribution, per_field, entries_classifiable, coverage
+
+
+def _build_l7_partial_coverage(level_data: Dict[str, Any]) -> Dict[str, Any]:
+    distribution, per_field, entries, coverage = _collect_l7_coverage(level_data)
+    return _format_l7_coverage(distribution, per_field, entries, coverage)
 
 
 def _average_metric(tasks: List[Dict[str, Any]], spec: MetricSpec) -> Dict[str, Any]:
@@ -836,10 +778,6 @@ def _native_tool_calling(level_data: Iterable[Dict[str, Any]]):
     return False
 
 
-def safe_model_name(model: str) -> str:
-    return model.replace("/", "_").replace("-", "_").replace(":", "_")
-
-
 def _model_name(results_dir: Path, level_data: Iterable[Dict[str, Any]]) -> str:
     for data in level_data:
         metadata = data.get("metadata") or {}
@@ -851,9 +789,8 @@ def _model_name(results_dir: Path, level_data: Iterable[Dict[str, Any]]) -> str:
         return ""
 
 
-def build_summary_from_loaded(
-    loaded: Dict[str, Dict[str, Any]], results_dir: Path
-) -> Dict[str, Any]:
+def _build_v2_summary(loaded: Dict[str, Dict[str, Any]], results_dir: Path) -> dict:
+    """고정된 v2 레벨 가중치와 최상위 요약 계약을 구성한다."""
     # The top-level contract is the published, frozen v2 summary. Keep this
     # construction and all existing field meanings intact.
     by_level = {level: score_level(level, data) for level, data in loaded.items()}
@@ -905,12 +842,11 @@ def build_summary_from_loaded(
         "levels_missing": levels_missing,
         "levels_unscorable": levels_unscorable,
     }
+    return summary
 
-    v3_loaded, task_data_provenance = prepare_v3_loaded(loaded)
-    v3_by_level = {
-        level: _score_level_with_specs(level, data, LEVEL_SPECS_V3)
-        for level, data in v3_loaded.items()
-    }
+
+def _add_v3_summary(v3_by_level: dict, required_levels: int, levels_missing: list, task_data_provenance: dict, summary: dict) -> None:
+    """v3 레벨 점수에서 요약 블록을 추가한다."""
     v3_levels_unscorable = [
         level for level, result in v3_by_level.items() if result.get("score") is None
     ]
@@ -936,14 +872,10 @@ def build_summary_from_loaded(
         "levels_unscorable": v3_levels_unscorable,
         "task_data": task_data_provenance,
     }
-    summary["scoring_v4"] = _build_v4_block(
-        v3_by_level, levels_missing, task_data_provenance
-    )
-    summary["headline_denominators"] = {
-        SCORING_VERSION: list(SCORABLE_LEVELS),
-        SCORING_VERSION_V3: list(SCORABLE_LEVELS),
-        SCORING_VERSION_V4: list(V4_HEADLINE_LEVELS),
-    }
+
+
+def _add_summary_diagnostics(loaded: dict, results_dir: Path, v3_loaded: dict, v3_by_level: dict, summary: dict) -> None:
+    """모든 채점 버전 계산 후 점수 중립 진단을 추가한다."""
     # Additive and score-neutral: diagnostics only observe saved tasks/calls and
     # fixed metric definitions after all scoring contracts have been computed.
     summary["cache_miss_diagnostics"] = build_cache_diagnostics(
@@ -976,4 +908,28 @@ def build_summary_from_loaded(
     summary["l7_partial_coverage_diagnostics"] = _build_l7_partial_coverage(
         loaded.get("L7", {})
     )
+
+
+def build_summary_from_loaded(
+    loaded: Dict[str, Dict[str, Any]], results_dir: Path
+) -> Dict[str, Any]:
+    summary = _build_v2_summary(loaded, results_dir)
+    levels_missing = summary["levels_missing"]
+    required_levels = summary["required_levels"]
+
+    v3_loaded, task_data_provenance = prepare_v3_loaded(loaded)
+    v3_by_level = {
+        level: _score_level_with_specs(level, data, LEVEL_SPECS_V3)
+        for level, data in v3_loaded.items()
+    }
+    _add_v3_summary(v3_by_level, required_levels, levels_missing, task_data_provenance, summary)
+    summary["scoring_v4"] = _build_v4_block(
+        v3_by_level, levels_missing, task_data_provenance
+    )
+    summary["headline_denominators"] = {
+        SCORING_VERSION: list(SCORABLE_LEVELS),
+        SCORING_VERSION_V3: list(SCORABLE_LEVELS),
+        SCORING_VERSION_V4: list(V4_HEADLINE_LEVELS),
+    }
+    _add_summary_diagnostics(loaded, results_dir, v3_loaded, v3_by_level, summary)
     return summary

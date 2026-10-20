@@ -1,0 +1,35 @@
+# 평가 모델 설정 — Qwen3.8-27B-FP8 (vsm, dense, vision 포함, FP8 양자화)
+# ⚠️ model 필드는 gpustack /v1/models 의 id 와 정확히 일치해야 함. 확인값(2026-10-03): qwen_qwen3.8_27B_FP8 (GPUStack 모델 이름, 대소문자 그대로).
+#    예정(2026-10-03): aitopatom-337f (192.168.0.7:18023, 키 OPENAI_API_KEY_7) — gemma 측정 종료 후.
+
+model: qwen_qwen3.8_27B_FP8
+tokenizer_path: /home/rainis/Desktop/workplace/models/Qwen_Qwen3.8_27B_FP8
+class: vsm
+
+endpoint:
+  chat: http://127.0.0.1:18023/v1/chat/completions
+  v1: http://127.0.0.1:18023/v1
+
+tracks:
+  - harness
+  - nlu
+  - functionchat
+  - taubench
+  - multimodal
+
+agent:
+  native_tool_calling: true
+
+backend_reference:
+  engine: vllm
+  notes: |
+    BF16 판(qwen_qwen3.8_27b.yaml)과 같은 서빙 규약(2026-10-03 고정)을 쓴다:
+      vLLM 0.28.0
+      --max-model-len 65536
+      --enable-auto-tool-choice --tool-call-parser qwen3_coder
+      --reasoning-parser qwen3
+      --default-chat-template-kwargs '{"enable_thinking": false}'
+      채팅 템플릿: 모델 폴더 원본 (BF16 판과 sha256 동일 c3cf9e34…)
+    토크나이저·템플릿·vocab·merges 는 BF16 판과 sha256 동일(10-03 확인). config.json quant_method=fp8.
+    Mac 에서 harness 를 돌릴 때는 로컬 사본 /Users/rainis/Desktop/workplace/models/Qwen_Qwen3.8_27B_FP8
+    (sha256 8/8 일치) 를 run_harness.sh 에 직접 준다.

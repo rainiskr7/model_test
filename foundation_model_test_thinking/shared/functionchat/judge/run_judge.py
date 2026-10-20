@@ -25,7 +25,7 @@ import sys
 from collections import Counter, defaultdict
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from judge_pilot import (  # noqa: E402
@@ -65,6 +65,52 @@ def vote_integrity(verdicts: List[Optional[str]], requested: int) -> Dict[str, A
     }
 
 
+def record_key(row: Dict[str, Any]) -> Tuple[Any, Any]:
+    """항목·레코드를 가리키는 키 (dataset, serial_num). serial_num 은 데이터셋마다 따로 매겨져 겹치므로 단독으로 쓰지 않는다.
+    둘 중 하나라도 없거나 None 이면 키로 쓸 수 없다 — 조용히 None 으로 묶지 않고 멈춘다."""
+    dataset, serial = row.get("dataset"), row.get("serial_num")
+    if dataset is None or serial is None:
+        raise SystemExit(f"[judge] dataset/serial_num 이 없는 항목은 재판정 키로 쓸 수 없다: dataset={dataset!r} serial_num={serial!r}")
+    return (dataset, serial)
+
+
+def _require_unique_keys(rows: List[Dict[str, Any]], label: str) -> None:
+    counts = Counter(record_key(r) for r in rows)
+    dup = sorted(k for k, n in counts.items() if n > 1)
+    if dup:
+        raise SystemExit(f"[judge] {label} 에 (dataset, serial_num) 중복 {len(dup)}개 — 재판정을 시작하지 않는다: {dup[:5]}")
+
+
+def select_retry_items(
+    items: List[Dict[str, Any]], previous_records: List[Dict[str, Any]]
+) -> List[Dict[str, Any]]:
+    """판정 불가(judge_error) 레코드에 해당하는 항목만 고른다. 판정 API 를 부르기 **전에** 입력을 검사한다."""
+    _require_unique_keys(previous_records, "기존 judge.json records")
+    _require_unique_keys(items, "수집된 항목")
+    unresolved = {record_key(r) for r in previous_records if r["status"] == "judge_error"}
+    selected = [i for i in items if record_key(i) in unresolved]
+    missing = sorted(unresolved - {record_key(i) for i in selected})
+    if missing:
+        raise SystemExit(f"[judge] 판정 불가 {len(missing)}건에 해당하는 원본 항목이 없다 — 재판정을 시작하지 않는다: {missing[:5]}")
+    return selected
+
+
+def merge_retry_records(
+    previous_records: List[Dict[str, Any]], redone: List[Dict[str, Any]]
+) -> List[Dict[str, Any]]:
+    """재판정 레코드를 기존 레코드에 병합한다. 판정 불가였던 레코드만 교체할 수 있다."""
+    _require_unique_keys(redone, "재판정 레코드")
+    unresolved = {record_key(r) for r in previous_records if r["status"] == "judge_error"}
+    redone_keys = {record_key(r) for r in redone}
+    not_unresolved = sorted(redone_keys - unresolved)
+    if not_unresolved:
+        raise SystemExit(f"[judge] 재판정이 판정 불가가 아닌 레코드를 바꾸려 한다 — judge.json 을 쓰지 않는다: {not_unresolved[:5]}")
+    merged = [r for r in previous_records if record_key(r) not in redone_keys] + list(redone)
+    if Counter(record_key(r) for r in merged) != Counter(record_key(r) for r in previous_records):
+        raise SystemExit("[judge] 재판정 병합 전후 (dataset, serial_num) 구성이 다르다 — judge.json 을 쓰지 않는다")
+    return merged
+
+
 def main(argv: Optional[List[str]] = None) -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--results-dir", required=True, type=Path)
@@ -100,10 +146,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         if not out_path.exists():
             raise SystemExit(f"--retry-unresolved 인데 {out_path} 가 없습니다.")
         previous = json.loads(out_path.read_text(encoding="utf-8"))
-        unresolved = {
-            r["serial_num"] for r in previous["records"] if r["status"] == "judge_error"
-        }
-        items = [i for i in items if i.get("serial_num") in unresolved]
+        items = select_retry_items(items, previous["records"])
         print(f"[judge] 재판정 대상 {len(items)}건 (기존 판정 불가)")
 
     print(f"[judge] 대상 {len(items)}건, 판정기 {args.judge_model}, 반복 {args.repeats}")
@@ -185,9 +228,7 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     if previous is not None:
         # 재판정하지 않은 기존 레코드를 합치고 유형별 집계를 다시 만든다.
-        redone = {r["serial_num"] for r in records}
-        merged = [r for r in previous["records"] if r["serial_num"] not in redone]
-        records = merged + records
+        records = merge_retry_records(previous["records"], records)
         per_type = defaultdict(Counter)
         for r in records:
             kind = r["type_of_output"]

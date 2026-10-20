@@ -1,0 +1,42 @@
+{
+  "version": 1,
+  "_note": "프롬프트 본문은 건드리지 않는다. 이 계약은 요청 시점에 본문 뒤에 덧붙이며, 산출물에 버전과 SHA-256 이 기록된다. --no-contract 로 계약 없는 예전 규약을 그대로 재현할 수 있다.",
+  "instruction_header": "\n\n=========\n\n답변을 평소대로 자유롭게 작성한 뒤, 맨 마지막에 아래 블록을 그대로 덧붙여라.\n블록 안에는 각 항목마다 제시된 라벨 중 **하나만** 적는다. 설명은 블록 밖에 쓴다.\n",
+  "block_open": "[ANSWER]",
+  "block_close": "[/ANSWER]",
+  "prompts": {
+    "carwash": {
+      "items": [
+        {
+          "id": "carwash_choice",
+          "gloss": "걸어갈지 운전해서 갈지",
+          "labels": ["walk", "drive", "depends"]
+        }
+      ]
+    },
+    "jjajangmyeon": {
+      "items": [
+        {
+          "id": "mother_reason",
+          "gloss": "어머니가 자장면이 싫다고 한 이유",
+          "labels": ["sacrifice", "dislike", "undetermined"]
+        },
+        {
+          "id": "speaker_gender",
+          "gloss": "화자의 성별",
+          "labels": ["male", "female", "undetermined"]
+        },
+        {
+          "id": "speaker_gender_basis",
+          "gloss": "그 성별 판단의 근거가 가사에 명시되어 있는가",
+          "labels": ["stated", "inferred"]
+        },
+        {
+          "id": "palbochae",
+          "gloss": "어머니가 일터에서 팔보채를 드셨을 가능성",
+          "labels": ["likely", "unlikely", "undetermined"]
+        }
+      ]
+    }
+  }
+}

@@ -10,31 +10,35 @@ KOFFVQA 기본 judge (google/gemma-2-9b-it 로컬) 의 단일 모델 편향 완�
 prompt 변경 시 버전 문자열 갱신 → run_config 에 기록되어 추적 가능.
 
 Usage:
-  python koffvqa_api_judge.py \\
+  python -m shared.multimodal.benches.koffvqa_api_judge \\
     --predfile /path/to/KOFFVQA/result/<dir>/*_gen.xlsx \\
     --target-model "Qwen/Qwen3.5-35B-A3B" \\
     --judge-model openai/gpt-4o-mini \\
     --judge-base-url https://api.openai.com/v1 \\
-    --judge-api-key sk-xxx
+    --judge-api-key-env JUDGE_API_KEY
 """
 
 import argparse
+import hashlib
 import json
+import os
 import re
+import sys
+from pathlib import Path
 from typing import Optional
+
+from shared.multimodal.benches.koffvqa_judge_complete import completion_rc, valid_score
 
 try:
     import pandas as pd
 except ImportError as e:
     raise SystemExit("pandas 미설치 — `uv pip install pandas openpyxl`") from e
 
-from common import (
-    safe_model_name, get_base_dir, get_timestamp, get_results_dir,
-    save_json, build_run_config, make_client,
-)
-
-
 JUDGE_PROMPT_VERSION = "v3-anchored-with-examples"
+# The version string is written by hand and can stay put while the template
+# below is edited.  The hash cannot: it is the template itself.
+def _prompt_template_hash():
+    return "sha256:" + hashlib.sha256(JUDGE_PROMPT.encode("utf-8")).hexdigest()
 
 JUDGE_PROMPT = """아래는 한국어 시각 질의응답에 대한 객관적 채점 작업입니다.
 
@@ -72,7 +76,8 @@ JUDGE_PROMPT = """아래는 한국어 시각 질의응답에 대한 객관적 �
 
 
 def judge_one(client, judge_model: str, question: str, response: str, criteria,
-              seed: Optional[int] = None, max_tokens: int = 1024) -> tuple:
+              seed: Optional[int] = None, max_tokens: int = 1024,
+              identity: Optional["ServedIdentity"] = None) -> tuple:
     crit_str = criteria if isinstance(criteria, str) else json.dumps(criteria, ensure_ascii=False, indent=2)
     prompt = JUDGE_PROMPT.format(question=question, criteria=crit_str, response=response)
     kwargs = {
@@ -85,12 +90,17 @@ def judge_one(client, judge_model: str, question: str, response: str, criteria,
         kwargs["seed"] = seed
     try:
         resp = client.chat.completions.create(**kwargs)
+        if identity is not None:
+            _record_served_identity(identity, resp)
         text = resp.choices[0].message.content or ""
         m = re.search(r'\{[^{}]*"score"[^{}]*\}', text, re.DOTALL)
         if m:
             try:
                 data = json.loads(m.group(0))
-                return data.get("score"), data.get("reason"), None, text
+                score = data.get("score")
+                if not valid_score(score):
+                    return None, data.get("reason"), "score must be an integer from 0 through 10", text
+                return score, data.get("reason"), None, text
             except json.JSONDecodeError as e:
                 return None, None, f"json parse: {e}", text
         return None, None, "no JSON in judge response", text
@@ -98,46 +108,112 @@ def judge_one(client, judge_model: str, question: str, response: str, criteria,
         return None, None, str(e), ""
 
 
-def _detect_column(cols, candidates):
-    cl = [c.lower() for c in cols]
-    for cand in candidates:
-        for i, c in enumerate(cl):
-            if cand in c:
-                return cols[i]
-    return None
+# What the endpoint reported serving, collected across the run.  A judged score
+# is only interpretable against the model that actually produced it.
+class ServedIdentity:
+    def __init__(self):
+        self.values = {"model": set(), "system_fingerprint": set(), "provider": set()}
 
 
-def main():
+def _record_served_identity(identity: ServedIdentity, resp):
+    for field in ("model", "system_fingerprint", "provider"):
+        value = getattr(resp, field, None)
+        if value:
+            identity.values[field].add(str(value))
+
+
+def served_identity_snapshot(identity: ServedIdentity):
+    return {field: sorted(values) for field, values in identity.values.items() if values}
+
+
+def _detect_column(cols, name):
+    """Exact, case-insensitive column lookup; fuzzy substring matching is unsafe."""
+    matches = [column for column in cols if str(column).casefold() == name.casefold()]
+    return matches[0] if len(matches) == 1 else None
+
+
+def resolve_columns(cols, question=None, criteria=None, response=None):
+    """Resolve KOFFVQA columns and reject missing or duplicate role binding."""
+    resolved = {
+        "question": question or _detect_column(cols, "question"),
+        "criteria": criteria or _detect_column(cols, "answer"),
+        "response": response or _detect_column(cols, "prediction"),
+    }
+    missing = [role for role, column in resolved.items() if column not in cols]
+    if missing:
+        raise ValueError(f"컬럼 감지 실패 ({', '.join(missing)}). 실제 컬럼: {cols}")
+    if len(set(resolved.values())) != len(resolved):
+        raise ValueError(f"동일 컬럼을 여러 역할에 결합할 수 없음: {resolved}")
+    return resolved["question"], resolved["criteria"], resolved["response"]
+
+
+def file_sha256(path):
+    digest = hashlib.sha256()
+    with Path(path).open("rb") as fh:
+        for chunk in iter(lambda: fh.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return "sha256:" + digest.hexdigest()
+
+
+def _parse_args():
+    """Parse args."""
     ap = argparse.ArgumentParser()
     ap.add_argument("--predfile", required=True, help="KOFFVQA generate.py 결과 .xlsx")
     ap.add_argument("--target-model", required=True, help="평가 대상 모델명 (결과 폴더 명명용)")
     ap.add_argument("--judge-model", required=True, help="judge 로 사용할 OpenAI-compat 모델명")
     ap.add_argument("--judge-base-url", required=True, help="judge API base_url")
-    ap.add_argument("--judge-api-key", default=None, help="judge API key (없으면 OPENAI_API_KEY env)")
+    ap.add_argument("--judge-api-key", default=None, help="judge API key (환경변수 옵션보다 우선)")
+    ap.add_argument("--judge-api-key-env", default=None,
+                    help="judge 키 환경변수 이름 (미설정·빈 값이면 오류; 두 옵션 생략 시 기존 OPENAI_API_KEY fallback)")
     ap.add_argument("--limit", type=int, default=None)
     ap.add_argument("--seed", type=int, default=None, help="judge seed")
     ap.add_argument("--judge-max-tokens", type=int, default=1024, help="judge 응답 max_tokens (default 1024 — 근거 포함)")
+    ap.add_argument("--question-column", default=None, help="질문 컬럼 override (default: question)")
+    ap.add_argument("--criteria-column", "--answer-column", dest="criteria_column", default=None,
+                    help="채점 기준 컬럼 override (default: answer)")
+    ap.add_argument("--response-column", "--prediction-column", dest="response_column", default=None,
+                    help="모델 응답 컬럼 override (default: prediction)")
     args = ap.parse_args()
+    return args
 
+
+def _resolve_judge_api_key(args):
+    """Prefer the explicit key; an explicitly named environment variable must exist."""
+    if args.judge_api_key is not None:
+        return args.judge_api_key
+    name = getattr(args, "judge_api_key_env", None)
+    if name is None:
+        return None
+    key = os.environ.get(name)
+    if not key:
+        raise ValueError(f"--judge-api-key-env {name!r}: 환경변수가 없거나 빈 값입니다")
+    return key
+
+
+def _load_predictions(args):
+    """Load the workbook and validate column bindings."""
     df = pd.read_excel(args.predfile)
     cols = df.columns.tolist()
     print(f"[koffvqa_judge] loaded {args.predfile}: {len(df)} rows / cols: {cols}")
 
-    q_col = _detect_column(cols, ["question", "instruction", "input"])
-    crit_col = _detect_column(cols, ["criteria", "rubric", "grading"])
-    resp_col = _detect_column(cols, ["response", "output", "answer", "model_response"])
-
-    if not (q_col and crit_col and resp_col):
-        raise SystemExit(
-            f"컬럼 자동감지 실패. question/criteria/response 가 필요. 실제 컬럼: {cols}"
+    try:
+        q_col, crit_col, resp_col = resolve_columns(
+            cols,
+            question=args.question_column,
+            criteria=args.criteria_column,
+            response=args.response_column,
         )
+    except ValueError as exc:
+        raise SystemExit(str(exc)) from exc
     print(f"[koffvqa_judge] columns: q={q_col} criteria={crit_col} response={resp_col}")
 
     if args.limit:
         df = df.head(args.limit)
+    return df, q_col, crit_col, resp_col
 
-    client = make_client(args.judge_base_url, args.judge_api_key)
 
+def _prepare_output(args, get_base_dir, get_timestamp, get_results_dir):
+    """Prepare output."""
     base_dir = get_base_dir(__file__)
     ts = get_timestamp()
     out_dir = get_results_dir(
@@ -148,7 +224,12 @@ def main():
     print(f"[koffvqa_judge] judge={args.judge_model}")
     print(f"[koffvqa_judge] target={args.target_model}")
     print(f"[koffvqa_judge] out={out_dir}")
+    return out_dir
 
+
+def _judge_rows(args, df, q_col, crit_col, resp_col, client):
+    """Judge workbook rows and collect served identity."""
+    identity = ServedIdentity()
     results = []
     scores = []
     for i, row in df.iterrows():
@@ -158,13 +239,14 @@ def main():
 
         score, reason, err, raw_judge = judge_one(
             client, args.judge_model, q, resp, crit,
-            seed=args.seed, max_tokens=args.judge_max_tokens,
+            seed=args.seed, max_tokens=args.judge_max_tokens, identity=identity,
         )
-        if score is not None and isinstance(score, (int, float)):
-            scores.append(float(score))
+        if score is not None:
+            scores.append(score)
 
         results.append({
             "idx": int(i),
+            "dataset_item_id": str(row["index"]) if "index" in df.columns and pd.notna(row["index"]) else str(i),
             "question": q,
             "response": resp,
             "criteria": crit if isinstance(crit, str) else str(crit),
@@ -177,13 +259,21 @@ def main():
         if (i + 1) % 25 == 0:
             avg = sum(scores) / len(scores) if scores else 0.0
             print(f"[koffvqa_judge] {i+1}/{len(df)} scored={len(scores)} avg={avg:.2f}")
+    return results, scores, identity
 
+
+def _build_summary(args, results, scores, identity, build_run_config):
+    """Build summary."""
     summary = {
         "benchmark": "KOFFVQA (API judge)",
         "judge_model": args.judge_model,
         "judge_prompt_version": JUDGE_PROMPT_VERSION,
+        "judge_prompt_template_sha256": _prompt_template_hash(),
+        "judge_base_url": args.judge_base_url,
+        "judge_served_identity": served_identity_snapshot(identity),
         "target_model": args.target_model,
         "predfile": args.predfile,
+        "prediction_sha256": file_sha256(args.predfile),
         "total": len(results),
         "scored": len(scores),
         "avg_score": sum(scores) / len(scores) if scores else None,
@@ -192,6 +282,7 @@ def main():
             benchmark="KOFFVQA-API-judge",
             model=args.target_model,
             base_url=args.judge_base_url,
+            temperature=0.0,
             seed=args.seed,
             max_tokens=args.judge_max_tokens,
             judge_model=args.judge_model,
@@ -203,7 +294,11 @@ def main():
             },
         ),
     }
+    return summary
 
+
+def _save_results(out_dir, results, summary, save_json):
+    """Write judge artifacts and print the final score."""
     save_json(out_dir / "results.json", results)
     save_json(out_dir / "summary.json", summary)
 
@@ -211,5 +306,27 @@ def main():
     print(f"[koffvqa_judge] saved → {out_dir}")
 
 
+def main():
+    """Coordinate delayed imports, workbook loading, judging and storage."""
+    args = _parse_args()
+    try:
+        judge_api_key = _resolve_judge_api_key(args)
+    except ValueError as exc:
+        print(f"[koffvqa_judge] {exc}", file=sys.stderr)
+        return 2
+    # Delay runner dependencies so pure column/score validation stays importable.
+    from shared.multimodal.benches.common import (  # pylint: disable=import-outside-toplevel
+        get_base_dir, get_timestamp, get_results_dir,
+        save_json, build_run_config, make_client,
+    )
+    df, q_col, crit_col, resp_col = _load_predictions(args)
+    client = make_client(args.judge_base_url, judge_api_key)
+    out_dir = _prepare_output(args, get_base_dir, get_timestamp, get_results_dir)
+    results, scores, identity = _judge_rows(args, df, q_col, crit_col, resp_col, client)
+    summary = _build_summary(args, results, scores, identity, build_run_config)
+    _save_results(out_dir, results, summary, save_json)
+    return completion_rc(results, summary)
+
+
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

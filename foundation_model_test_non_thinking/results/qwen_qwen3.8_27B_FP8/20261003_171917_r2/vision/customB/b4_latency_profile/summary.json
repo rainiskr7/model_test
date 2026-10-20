@@ -1,0 +1,211 @@
+{
+  "benchmark": "B-4 Latency Profile",
+  "model": "qwen_qwen3.8_27B_FP8",
+  "conditions": [
+    {
+      "condition": "text_only",
+      "reps": 50,
+      "successful": 50,
+      "failed": 0,
+      "ttft": {
+        "p50": 0.3716621250496246,
+        "p95": 0.45670806076377635,
+        "p99": 0.5133296727691775,
+        "mean": 0.37909851589472965,
+        "n": 50
+      },
+      "total": {
+        "p50": 2.2380500205326825,
+        "p95": 2.2813793812936636,
+        "p99": 2.3546524626447347,
+        "mean": 2.2457088249432853,
+        "n": 50
+      },
+      "completion_tokens": {
+        "p50": 32.0,
+        "p95": 32.0,
+        "p99": 32.0,
+        "mean": 32.0,
+        "n": 50
+      },
+      "tokens_per_sec": {
+        "p50": 14.298161553132918,
+        "p95": 14.447944464311066,
+        "p99": 14.483362680220715,
+        "mean": 14.252198271292546,
+        "n": 50
+      }
+    },
+    {
+      "condition": "image_256px",
+      "reps": 50,
+      "successful": 50,
+      "failed": 0,
+      "ttft": {
+        "p50": 0.3908011669991538,
+        "p95": 0.4542153227783274,
+        "p99": 0.46944185516797005,
+        "mean": 0.38997619996080174,
+        "n": 50
+      },
+      "total": {
+        "p50": 2.0736731464858167,
+        "p95": 2.0988632746739313,
+        "p99": 2.1477368272712916,
+        "mean": 2.0755217058118434,
+        "n": 50
+      },
+      "completion_tokens": {
+        "p50": 30.0,
+        "p95": 30.0,
+        "p99": 30.0,
+        "mean": 30.0,
+        "n": 50
+      },
+      "tokens_per_sec": {
+        "p50": 14.46708227868318,
+        "p95": 14.585060069627268,
+        "p99": 14.961444761654723,
+        "mean": 14.456356561436692,
+        "n": 50
+      }
+    },
+    {
+      "condition": "image_1024px",
+      "reps": 50,
+      "successful": 50,
+      "failed": 0,
+      "ttft": {
+        "p50": 0.8083951034932397,
+        "p95": 0.9442929649027063,
+        "p99": 0.9723967963526957,
+        "mean": 0.82732890419662,
+        "n": 50
+      },
+      "total": {
+        "p50": 2.3309704170096666,
+        "p95": 2.4056009959254876,
+        "p99": 2.514047329983441,
+        "mean": 2.339146071670111,
+        "n": 50
+      },
+      "completion_tokens": {
+        "p50": 31.0,
+        "p95": 31.0,
+        "p99": 31.0,
+        "mean": 31.0,
+        "n": 50
+      },
+      "tokens_per_sec": {
+        "p50": 13.29918210423779,
+        "p95": 13.398591051141336,
+        "p99": 13.428741872762494,
+        "mean": 13.256453883103795,
+        "n": 50
+      }
+    },
+    {
+      "condition": "multi_image_3x512px",
+      "reps": 50,
+      "successful": 50,
+      "failed": 0,
+      "ttft": {
+        "p50": 0.6776741665089503,
+        "p95": 0.7889845795114525,
+        "p99": 0.8538262590975498,
+        "mean": 0.6996247967029922,
+        "n": 50
+      },
+      "total": {
+        "p50": 2.3665586875285953,
+        "p95": 2.382742060744204,
+        "p99": 2.5113291697937528,
+        "mean": 2.368453349119518,
+        "n": 50
+      },
+      "completion_tokens": {
+        "p50": 31.0,
+        "p95": 31.0,
+        "p99": 31.0,
+        "mean": 31.0,
+        "n": 50
+      },
+      "tokens_per_sec": {
+        "p50": 13.09918919967727,
+        "p95": 13.179324626621723,
+        "p99": 13.619651387342739,
+        "mean": 13.09233577985897,
+        "n": 50
+      }
+    }
+  ],
+  "publish_status": {
+    "publishable": true,
+    "failures": []
+  },
+  "run_config": {
+    "benchmark": "B-4 Latency Profile",
+    "timestamp_utc": "2026-10-05T02:06:29.770635+00:00",
+    "model": {
+      "name": "qwen_qwen3.8_27B_FP8",
+      "safe_name": "qwen_qwen3.8_27B_FP8"
+    },
+    "endpoint": {
+      "base_url": "http://192.168.0.7:18023/v1"
+    },
+    "decoding": {
+      "temperature": 0.0,
+      "max_tokens": 256,
+      "seed": null
+    },
+    "decoding_requested": {
+      "temperature": 0.0,
+      "max_tokens": 256,
+      "seed": null
+    },
+    "serving_constraints": {
+      "unsupported_sampling_params": [],
+      "max_output_tokens": null,
+      "force_skip_special_tokens": null,
+      "removed_parameters": [],
+      "skip_special_tokens": null
+    },
+    "request_policy": {
+      "timeout": 60.0,
+      "retry_max": null,
+      "retry_backoff": null
+    },
+    "dataset": {
+      "huggingface_id": null,
+      "revision": null,
+      "revision_source": null,
+      "git_repo": null,
+      "git_commit": null
+    },
+    "judge": {
+      "model": null,
+      "prompt_version": null
+    },
+    "eval_framework": {
+      "script_path": "/Users/rainis/Desktop/workspace/source/model_test/foundation_model_test_non_thinking/shared/multimodal/benches/b4_latency_profile.py",
+      "script_hash_sha256_16": "c7584cf08a5063fa8863a8d946ca090d"
+    },
+    "environment": {
+      "python": "3.13.5",
+      "platform": "macOS-27.0-arm64-arm-64bit-Mach-O",
+      "openai_pkg": "2.54.0",
+      "datasets_pkg": "5.0.1",
+      "pillow_pkg": "10.4.0",
+      "huggingface_hub_pkg": "1.27.0"
+    },
+    "env_vars": {
+      "MODEL_TEST_BASE": "/Users/rainis/Desktop/workspace/source/model_test/foundation_model_test_non_thinking",
+      "EVAL_TIMESTAMP": "20261003_171917_r2"
+    },
+    "extra": {
+      "reps_per_condition": 50,
+      "prompt": "다음 한국어 문단을 한 문장으로 요약해 주세요.\n\n인공지능 기술이 빠르게 발전하면서 다양한 분야에서 활용되고 있습니다.\n의료, 금융, 교육, 제조업 등 거의 모든 산업에서 AI가 도입되고 있으며,\n이는 효율성을 크게 향상시키고 있습니다.",
+      "skip_multi_image": false
+    }
+  }
+}

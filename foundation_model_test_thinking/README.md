@@ -166,9 +166,9 @@ KRETA 러너는 3번째 인자로 프롬프트 모드(`SETTING`)를 받는다 �
 
 KOFFVQA도 idempotent resume를 지원한다(`koffvqa_run.py`). 같은 `EVAL_TIMESTAMP`로 재실행하면 `out_dir/results.json`의 **유효 응답**(error 없음 + 비어있지 않은 prediction)은 `index` 기준으로 재사용하고, **에러·타임아웃·누락 항목만 다시 호출**한 뒤 results.json·xlsx·summary를 머지해 재생성한다. 따라서 일부 샘플이 타임아웃으로 실패하면 **같은 명령을 재실행하는 것만으로 복구**된다 — 별도 retry 스크립트 불필요. `run_koffvqa.sh`는 `KOFFVQA_TIMEOUT` env(기본 600초, kreta `KRETA_TIMEOUT`과 일관)를 받으며, 게이트웨이 200초 컷을 피하려면 직접 vLLM 포트를 `<url>`로 준다. 예: `KOFFVQA_TIMEOUT=600 bash vsm/multimodal/run_koffvqa.sh <model> http://<host>:<vllm_port>/v1`. 처음부터 다시 돌리려면 `koffvqa_run.py --no-resume`.
 
-### 3.4 전체 평가 (한 모델 4트랙 일괄)
+### 3.4 전체 평가 (한 모델 전 트랙 일괄)
 
-`run_full_eval.sh`가 vsm 클래스의 4개 트랙(harness → nlu → agent → multimodal)을 순차 실행한다.
+`run_full_eval.sh`가 모델 config(`configs/models/<NAME>.yaml`)의 `tracks` 목록 순서대로 트랙(harness · nlu · functionchat · taubench · multimodal)을 실행한다. agent(Ko-AgentBench) 트랙은 fixture-cache miss 율 때문에 비활성이라 목록에 있어도 실행하지 않는다(`run_full_eval.sh` 의 주석 참조).
 
 ```bash
 # 모델/엔드포인트는 스크립트 상단 변수 수정 후 실행
@@ -268,7 +268,7 @@ MODEL_TEST_BASE="$PWD" .venv/bin/python shared/agent/scoring/validate_run.py \
   --results-dir results/<model>/<timestamp>/language/<agent-track>
 ```
 
-validator는 scoring version·요약 구조·점수 범위, judge/L7의 기록 전용 계약, raw/summary의 native-tool 모드 일치, v2/v3의 6레벨 및 v4의 고정 5레벨 완전성·평균 불변식을 검사하고 포화/바닥·생존 신호 차이는 경고한다. v4의 level set은 정확히 `("L1","L2","L3","L5","L6")`이어야 하며 stated denominator에서 headline을 재구성한다. 채점된 레벨의 cache miss rate가 20%를 넘으면 실행 call 5개 중 1개보다 많은 도구 증거가 빠진 것으로 보고 임계값과 실측 분수를 명시한 경고를 내되 실패시키지 않는다. 종료 코드는 `0`=유효(경고 허용), `1`=검증 실패, `2`=호출·설정·입력 읽기·내부 오류다. `run_full_eval.sh`에서는 agent 트랙이 성공하면 validator가 자동 실행된다.
+validator는 scoring version·요약 구조·점수 범위, judge/L7의 기록 전용 계약, raw/summary의 native-tool 모드 일치, v2/v3의 6레벨 및 v4의 고정 5레벨 완전성·평균 불변식을 검사하고 포화/바닥·생존 신호 차이는 경고한다. v4의 level set은 정확히 `("L1","L2","L3","L5","L6")`이어야 하며 stated denominator에서 headline을 재구성한다. 채점된 레벨의 cache miss rate가 20%를 넘으면 실행 call 5개 중 1개보다 많은 도구 증거가 빠진 것으로 보고 임계값과 실측 분수를 명시한 경고를 내되 실패시키지 않는다. 종료 코드는 `0`=유효(경고 허용), `1`=검증 실패, `2`=호출·설정·입력 읽기·내부 오류다. `run_full_eval.sh` 의 agent 트랙과 validator 자동 실행은 현재 비활성이다(스크립트 주석 참조). validator 는 `shared/agent/scoring/validate_run.py` 로 직접 실행한다.
 
 변형 런은 `AGENT_TRACK_NAME=<variant>`로 별도 폴더에 기록한다. 변형 결과와 canonical `agent` 트랙 결과를 한 트랙에 섞지 않는다.
 
@@ -331,7 +331,7 @@ model_test/
 │   └── lm-evaluation-harness/
 ├── results/                       # 평가 결과 (git 추적 — 모델별 결과 누적)
 ├── logs/                          # 트랙별 실행 로그 (.gitignore)
-├── run_full_eval.sh               # 한 모델 4트랙 일괄
+├── run_full_eval.sh               # 한 모델 전 트랙 일괄 (config 의 tracks 순서)
 ├── start_eval_session.sh / end_eval_session.sh
 ├── sync.sh                        # 머신 간 rsync
 ├── REFACTORING_PLAN.md            # 향후 정비 계획

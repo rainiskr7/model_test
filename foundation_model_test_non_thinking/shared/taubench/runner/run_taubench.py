@@ -7,20 +7,19 @@ import json
 import os
 import subprocess
 import sys
-import tempfile
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Iterable, Mapping, Optional
+from typing import Any, Iterable, Mapping, MutableMapping, Optional
+
+from shared.jsonwrite.atomic_json import write_json_atomic
+from shared.resultspath.model_dir import results_model_dir_name, safe_model_name
+from shared.resultspath.run_dir import run_timestamp as _timestamp
 
 
 SOURCE_COMMIT = "c3398666e6559e3a063da3fc04b5acf7f941464e"
 DEFAULT_SPLIT = "test"
 JUDGE_BASES = frozenset({"NL_ASSERTION", "COMMUNICATE"})
 PROGRAMMATIC_BASES = frozenset({"DB", "ENV_ASSERTION", "ACTION"})
-
-
-def safe_model_name(model: str) -> str:
-    return model.replace("/", "_").replace("-", "_").replace(":", "_")
 
 
 def normalize_api_base(base_url: str) -> str:
@@ -39,6 +38,70 @@ def litellm_model_name(model: str) -> str:
     무조건 붙이면 'openai/openai/gpt-4.1-mini' 가 된다 (2026-08-23 실제로 발생).
     """
     return model if "/" in model else f"openai/{model}"
+
+
+def _unsupported_sampling_params() -> list[str]:
+    """서빙 백엔드가 거부하는 sampling 파라미터. 미설정이면 빈 목록."""
+
+    try:
+        from shared.serving.constraints import unsupported_sampling_params
+
+        return sorted(unsupported_sampling_params())
+    except Exception:
+        return []
+
+
+def _read_shim_record(path: Path) -> dict[str, list[str]] | None:
+    """shim 이 남긴 "실제로 제거한 파라미터" 기록을 읽는다.
+
+    기록이 없거나 깨졌으면 **None** 을 돌려준다. 빈 목록과 구분해야 한다:
+    빈 목록은 "관측했고 뺀 것이 없다", None 은 "관측 자체를 못 했다"이다.
+    둘을 같은 값으로 접으면, 실제로 seed 를 빼고 돈 런이 기록만 유실됐을 때
+    제약 없이 돈 런과 같은 코호트로 묶인다.
+    """
+
+    try:
+        record = json.loads(path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return None
+    except Exception as exc:
+        print(f"[taubench] shim 기록을 읽지 못했다: {exc}", file=sys.stderr)
+        return None
+    removed = record.get("removed_params") or []
+    adjusted = record.get("adjusted_params") or []
+    return {
+        "removed": sorted(str(name) for name in removed),
+        "adjusted": sorted(str(name) for name in adjusted),
+        "user_removed": sorted(str(n) for n in record.get("user_removed_params") or []),
+        "request_counts": record.get("request_counts") or {},
+    }
+
+
+def apply_user_serving_constraints(user_llm_args: dict, *, inherited: bool = True) -> list[str]:
+    """로컬 엔드포인트로 가는 사용자 시뮬레이터 인자에서 거부 파라미터를 뺀다.
+
+    후보에는 temperature 를 보내지 않지만(`temperature_sent: False`) 사용자
+    시뮬레이터에는 상류 기본값을 지키려고 temperature=0.0 을 넣는다. 그런데
+    ``user_model`` 에 provider 접두사가 없으면 외부로 분류되지 않아 ``api_base``
+    가 로컬 서빙 주소로 남는다. 그 백엔드가 diffusion 이면 **매 사용자 턴이 400**
+    이다 — 실측 응답: "The temperature, min_p, seed, ... are not yet supported
+    with diffusion models."
+
+    적용 대상은 **후보의 엔드포인트를 물려받은 경우뿐**이다. ``--user-base-url``
+    로 사용자 시뮬레이터를 다른 서버에 명시적으로 붙였다면 그쪽 백엔드의 제약은
+    이 프로파일이 말하는 대상이 아니다 — 그런데도 적용하면 그 서버가 요구하는
+    temperature 를 말없이 빼서 사용자 프로토콜을 바꿔버린다. 외부 엔드포인트로
+    가는 경우(api_base 가 제거된 경우)도 마찬가지로 건드리지 않는다.
+    """
+
+    if not inherited or not user_llm_args.get("api_base"):
+        return []
+    removed = [
+        name for name in _unsupported_sampling_params() if name in user_llm_args
+    ]
+    for name in removed:
+        user_llm_args.pop(name, None)
+    return removed
 
 
 def build_litellm_args(
@@ -163,10 +226,13 @@ def build_upstream_command(
 ) -> list[str]:
     """tau2 CLI에 공식 split과 실제 실행 id를 함께 전달한다."""
     selected_ids = list(task_ids)
+    # `-m tau2.cli` 가 아니라 shim 을 부른다. shim 은 tau2.cli 를 그대로 실행하되
+    # 서빙 백엔드가 거부하는 sampling 파라미터를 요청 직전에 뺀다 — tau2 가
+    # 시뮬레이션마다 llm_args["seed"] 를 런타임 주입하므로 --agent-llm-args 로는
+    # 막을 수 없다 (tau2_cli_shim.py 의 주석 참조).
     return [
         sys.executable,
-        "-m",
-        "tau2.cli",
+        str(Path(__file__).resolve().parent / "tau2_cli_shim.py"),
         "run",
         "--domain",
         args.domain,
@@ -193,7 +259,7 @@ def build_upstream_command(
         "--task-ids",
         *selected_ids,
         "--num-trials",
-        "1",
+        str(args.trials),
         "--max-steps",
         str(args.max_steps),
         "--timeout",
@@ -238,7 +304,7 @@ def redact_secrets_in_upstream(upstream_dir: Path) -> int:
         except json.JSONDecodeError:
             continue
         if _scrub_api_key(data):
-            _write_atomic(path, data)
+            write_json_atomic(path, data)
             redacted += 1
     return redacted
 
@@ -260,37 +326,11 @@ def _scrub_api_key(node: Any) -> bool:
     return changed
 
 
-def _write_atomic(path: Path, data: Mapping[str, Any]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    fd, temp_name = tempfile.mkstemp(prefix=f".{path.name}.", dir=str(path.parent))
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as handle:
-            json.dump(data, handle, ensure_ascii=False, indent=2)
-            handle.write("\n")
-        os.replace(temp_name, path)
-    except Exception:
-        try:
-            os.unlink(temp_name)
-        except FileNotFoundError:
-            pass
-        raise
-
-
 def _package_version(name: str) -> Optional[str]:
     try:
         return importlib.metadata.version(name)
     except importlib.metadata.PackageNotFoundError:
         return None
-
-
-def _timestamp(base_dir: Path) -> str:
-    value = os.environ.get("EVAL_TIMESTAMP")
-    if value:
-        return value
-    session_file = base_dir / ".eval_session"
-    if session_file.is_file():
-        value = session_file.read_text(encoding="utf-8").strip()
-    return value or datetime.now().strftime("%Y%m%d_%H%M%S")
 
 
 def parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
@@ -330,6 +370,18 @@ def parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
     parser.add_argument(
         "--split", default=os.environ.get("TAUBENCH_SPLIT", DEFAULT_SPLIT)
     )
+    # 사용자 시뮬레이터 인자는 후보에서 물려받지 않는다. 상류 제출 요건이
+    # "모든 도메인에서 동일한 agent 모델과 사용자 시뮬레이터를 identical
+    # arguments 로" 이므로, 후보 설정이 바뀌면 사용자 설정도 따라 바뀌는 구조는
+    # 모델 비교 자체를 무효로 만든다. 2026-08-23 실측: 같은 gpt-4.1-mini 인데
+    # gemma 런은 timeout 600s/8192 tokens, qwen 런은 120s/16384 tokens 였다.
+    # 반복 시행. 상류는 4회 이상을 권장한다 — Pass^k 는 반복이 있어야 정의된다.
+    # 실측(2026-08-27): airline 20과제를 같은 프로토콜로 두 번 돌렸더니 통과 과제가
+    # 4~6건 뒤집혔다. 1회 시행 점수로는 모델 간 10점 차를 실력 차로 읽을 수 없다.
+    parser.add_argument("--trials", type=int, default=1)
+    parser.add_argument("--user-request-timeout", type=float, default=120.0)
+    parser.add_argument("--user-max-tokens", type=int, default=16384)
+    # 값 검증은 _validate_args 에서 후보 인자와 같은 규칙으로 한다.
     parser.add_argument("--request-timeout", type=float, default=60.0)
     parser.add_argument("--task-timeout", type=float, default=600.0)
     parser.add_argument("--max-retries", type=int, default=0)
@@ -356,169 +408,374 @@ def _validate_args(args: argparse.Namespace) -> None:
         )
     if args.max_tokens < 1 or args.max_concurrency < 1 or args.max_steps < 1:
         raise ValueError("max tokens/concurrency/steps must be positive")
+    if args.trials < 1:
+        raise ValueError("trials must be positive")
+    # 사용자 인자도 후보와 같은 규칙으로 검증한다. 검증하지 않으면 음수/0 이
+    # 그대로 litellm 으로 넘어가고, 산출물에는 그 값이 "고정된 프로토콜" 로 남는다.
+    if args.mode == "standard":
+        if args.user_request_timeout <= 0:
+            raise ValueError("user request timeout must be positive")
+        if args.user_max_tokens < 1:
+            raise ValueError("user max tokens must be positive")
+
+
+def _prepare_bench_dir(environ: Mapping[str, str]) -> tuple[Path, Path]:
+    """환경에서 저장소 경로를 정하고 상류 commit을 확인한다."""
+    base_dir = Path(
+        environ.get("MODEL_TEST_BASE") or Path(__file__).resolve().parents[3]
+    ).resolve()
+    bench_dir = base_dir / "data" / "tau2-bench"
+    actual_commit = subprocess.check_output(
+        ["git", "-C", str(bench_dir), "rev-parse", "HEAD"], text=True
+    ).strip()
+    if actual_commit != SOURCE_COMMIT:
+        raise ValueError(
+            f"tau2-bench commit mismatch: expected {SOURCE_COMMIT}, got {actual_commit}"
+        )
+    return base_dir, bench_dir
+
+
+def _load_run_split(bench_dir: Path, args: argparse.Namespace) -> tuple[dict, list[str]]:
+    """공식 입력과 split을 읽어 비어 있지 않은 실행 목록을 반환한다."""
+    domain_dir = bench_dir / "data" / "tau2" / "domains" / args.domain
+    canonical_path = domain_dir / "tasks.json"
+    split_path = domain_dir / "split_tasks.json"
+    tasks = _load_tasks(canonical_path)
+    split = resolve_task_split(tasks, split_path, args.split, args.domain)
+    selected_ids = list(split["task_ids"])
+    if not selected_ids:
+        raise ValueError(
+            f"{args.domain} split {args.split!r} has no judge-free runnable tasks"
+        )
+    return split, selected_ids
+
+
+def _prepare_results_dirs(base_dir: Path, args: argparse.Namespace) -> tuple[Path, Path]:
+    """기존 모델 폴더 표기와 timestamp로 결과 및 상류 경로를 정한다."""
+    timestamp = _timestamp(base_dir)
+    results_dir = (
+        base_dir
+        / "results"
+        / results_model_dir_name(base_dir, args.model)
+        / timestamp
+        / "language"
+        / args.track_name
+    )
+    upstream_dir = results_dir / "upstream" / args.domain
+    return results_dir, upstream_dir
+
+
+def _prepare_llm_args(
+    args: argparse.Namespace, api_base: str, environ: MutableMapping[str, str]
+) -> tuple[dict, dict, list[str]]:
+    """후보와 사용자 인자를 만들고 키 환경 설정 및 제약 로그를 적용한다."""
+    llm_args = build_litellm_args(api_base, args.request_timeout, args.max_tokens)
+
+    # 사용자 시뮬레이터 llm_args. 별도 엔드포인트를 주면 그쪽으로, 아니면
+    # 에이전트와 같은 곳으로 보낸다. 키는 환경변수에서만 읽는다.
+    #
+    # **후보의 llm_args 를 복사하지 않는다.** 복사하면 후보의 timeout/max_tokens
+    # 가 사용자 시뮬레이터에 흘러들어, 모델마다 다른 사용자 프로토콜로 비교하게
+    # 된다. 사용자 인자는 --user-* 로만 정해지고 후보 설정과 독립이다.
+    user_llm_args = build_litellm_args(
+        api_base, args.user_request_timeout, args.user_max_tokens
+    )
+    if args.mode == "standard":
+        # 상류는 사용자 시뮬레이터에 temperature=0 을 명시한다
+        # (config.py DEFAULT_LLM_ARGS_USER). 우리는 --user-llm-args 를 통째로
+        # 넘기므로 여기서 넣지 않으면 상류 기본값까지 덮여, 사용자가 서버
+        # 기본 temperature 로 비결정적으로 돈다. 예전에는 외부 API 분기에서만
+        # 넣어서 로컬 standard 런이 이 구멍에 빠졌다.
+        user_llm_args["temperature"] = 0.0
+    if args.mode == "standard":
+        user_model = args.user_model or args.model
+        is_external = "/" in user_model and not user_model.startswith("openai/")
+        if args.user_base_url:
+            user_llm_args["api_base"] = normalize_api_base(args.user_base_url)
+        elif is_external:
+            # **에이전트의 api_base 를 물려받으면 안 된다.** user_llm_args 는
+            # llm_args 를 복사해 만들므로 로컬 서빙 주소가 들어 있다. provider
+            # 접두사가 있는 외부 모델은 litellm 이 자기 엔드포인트를 아는데,
+            # api_base 가 남아 있으면 그쪽으로 보내 401 이 난다
+            # (2026-08-23 airline 첫 런에서 20/20 AuthenticationError).
+            user_llm_args.pop("api_base", None)
+        if is_external or args.user_base_url:
+            # **키를 llm_args 에 넣지 않는다.** tau2 는 llm_args 를 results.json 에
+            # 그대로 적으므로 넣으면 산출물에 자격증명이 박힌다 (2026-08-23 에
+            # 실제로 발생, GitHub 푸시 보호가 두 번 막았다).
+            #
+            # litellm 은 provider 접두사에 따라 환경변수에서 키를 읽는다:
+            #   openrouter/...  -> OPENROUTER_API_KEY  (main.py:3283)
+            # 따라서 모델명을 openrouter/openai/gpt-4.1-mini 형태로 주면
+            # api_base 도 api_key 도 인자로 넘길 필요가 없다.
+            user_api_key = environ.get(args.user_api_key_env)
+            if not user_api_key:
+                raise SystemExit(
+                    f"외부 사용자 시뮬레이터에는 {args.user_api_key_env} 환경변수가 "
+                    "필요합니다 (값은 인자로 넘기지 않습니다)."
+                )
+            # litellm 이 읽을 자리에 옮겨 담는다. 자식 프로세스 env 로만 전달된다.
+            environ.setdefault("OPENROUTER_API_KEY", user_api_key)
+    # 엔드포인트가 정해진 **뒤에** 적용한다 — 로컬로 가는지 외부로 가는지
+    # 알아야 어느 제약을 걸지 정할 수 있다.
+    user_removed_params = (
+        apply_user_serving_constraints(
+            user_llm_args, inherited=not args.user_base_url
+        )
+        if args.mode == "standard"
+        else []
+    )
+    if user_removed_params:
+        print(
+            "[taubench] 사용자 시뮬레이터 인자에서 서빙 백엔드가 거부하는 "
+            f"파라미터를 제거했다: {', '.join(user_removed_params)}",
+            file=sys.stderr,
+        )
+    return llm_args, user_llm_args, user_removed_params
+
+
+def _build_manifest(
+    args: argparse.Namespace, split: dict, api_base: str,
+    user_llm_args: Mapping[str, Any], candidate_unsupported_params: list[str],
+    user_removed_params: list[str],
+) -> dict[str, Any]:
+    """설정과 패키지 버전으로 최초 running manifest를 만든다."""
+    manifest: dict[str, Any] = {
+        "status": "running",
+        "model": args.model,
+        "track": args.track_name,
+        "source": {
+            "repository": "sierra-research/tau2-bench",
+            "commit": SOURCE_COMMIT,
+            "license": "MIT",
+        },
+        "split": split,
+        # 실행 도메인만 runnable 로 적고 나머지는 미실행 사유를 남긴다.
+        # 판정 불필요 태스크 수는 requires_judge() 로 판정한다 (선언이 아니라
+        # nl_assertions 내용 유무 기준). 2026-08-23 실측:
+        #   telecom test 40/40, retail test 29/40, airline test 0/20
+        "domain_scope": {
+            d: (
+                {"runnable": True, "user_mode": args.mode}
+                if d == args.domain
+                else {"runnable": False, "reason": "not selected for this run"}
+            )
+            for d in ("telecom", "retail", "airline", "banking_knowledge")
+        },
+        "harness_integrity": {
+            "architecture": "upstream_tau2_framework",
+            # 채점기의 무결성 대조는 이 값에서 기대 구현명을 파생시킨다.
+            # 매니페스트는 "우리가 무엇을 돌렸다고 주장하는가", upstream results.info 는
+            # "실제로 무엇이 돌았는가" 다 — 둘을 대조하는 것이 검사의 요지다.
+            "mode": args.mode,
+            "agent_implementation": (
+                "llm_agent_solo" if args.mode == "solo" else "llm_agent"
+            ),
+            "user_implementation": (
+                "dummy_user" if args.mode == "solo" else "user_simulator"
+            ),
+            "user_model_sent_to_litellm": (
+                None
+                if args.mode == "solo"
+                else litellm_model_name(args.user_model or args.model)
+            ),
+            # 사용자 프로토콜을 산출물에 새긴다. 이것이 같아야 두 모델의
+            # 점수를 나란히 놓을 수 있다.
+            "user_request_timeout": (
+                None if args.mode == "solo" else args.user_request_timeout
+            ),
+            "user_max_tokens": None if args.mode == "solo" else args.user_max_tokens,
+            "user_args_inherited_from_candidate": False,
+            "trials": args.trials,
+            # 사용자 프로토콜은 모델명만이 아니다. 엔드포인트와 temperature 가
+            # 다르면 같은 alias 라도 다른 실험 조건이다.
+            "user_temperature": (
+                None if args.mode == "solo" else user_llm_args.get("temperature")
+            ),
+            "user_api_base": (
+                None if args.mode == "solo" else user_llm_args.get("api_base")
+            ),
+            "provider": "litellm_openai_compatible",
+            "model_requested": args.model,
+            "model_sent_to_litellm": litellm_model_name(args.model),
+            "api_base": api_base,
+            "api_key_source": "OPENAI_API_KEY environment variable",
+            "request_timeout": args.request_timeout,
+            "task_timeout": args.task_timeout,
+            "framework_max_retries": 0,
+            "litellm_num_retries": 0,
+            "max_tokens": args.max_tokens,
+            "temperature_sent": False,
+            # 후보 경로에도 프로파일을 적용한다. 예전 주석은 "temperature 를
+            # 안 보내니 후보는 안전하다" 였는데 **틀렸다**: tau2 가 시뮬레이션
+            # 마다 llm_args["seed"] 를 주입해 diffusion 백엔드가 40/40 을 400 으로
+            # 거부했다 (r1·r2·r3). 실제로 무엇이 빠졌는지는 런이 끝난 뒤
+            # shim 기록을 읽어 candidate_removed_sampling_params 에 채운다.
+            # 비어 있으면 뺀 것이 없다는 뜻이고, 값이 있으면 그 런은 그
+            # 파라미터의 **제어 없이** 돌았다는 뜻이다.
+            "serving_profile_applied": bool(candidate_unsupported_params),
+            # 런이 끝나고 shim 기록을 읽은 뒤에야 True 가 된다. 도중에 죽으면
+            # 이 값이 남아, 관측하지 못했다는 사실이 산출물에 남는다.
+            "serving_profile_observable": False,
+            "candidate_serving_profile_observation": "unobserved",
+            "candidate_unsupported_sampling_params": candidate_unsupported_params,
+            "candidate_removed_sampling_params": [],
+            "candidate_adjusted_serving_params": [],
+            "user_removed_sampling_params": user_removed_params,
+            # **true 가 결정론을 뜻하지 않는다.** 재현을 부정하는 근거만 싣는다.
+            "user_sampling_controls_removed": (
+                None if args.mode == "solo"
+                else "temperature" in user_removed_params
+            ),
+            "max_concurrency": args.max_concurrency,
+            "max_steps": args.max_steps,
+            "tau2_version": _package_version("tau2"),
+            "litellm_version": _package_version("litellm"),
+            "openai_sdk_version": _package_version("openai"),
+            "successful_request_logs": True,
+            "failed_request_attempts_observable": False,
+            "absorbed_timeout_counter_observable": False,
+        },
+    }
+    return manifest
+
+
+def _upstream_env(
+    environ: Mapping[str, str], bench_dir: Path, api_base: str,
+    model: str, shim_record_path: Path,
+) -> dict[str, str]:
+    """입력 환경을 복사해 상류 및 shim 전용 환경을 반환한다."""
+    env = dict(environ)
+    env["TAU2_DATA_DIR"] = str(bench_dir / "data")
+    # shim 계약: 이 주소로 가는 요청에서만 거부 파라미터를 뺀다. 사용자
+    # 시뮬레이터를 다른 서버에 붙였다면 그쪽은 건드리지 않는다.
+    env["TAUBENCH_CONSTRAINED_API_BASE"] = api_base
+    # 역할 구분용. 같은 주소로 가는 요청이라도 후보와 사용자 시뮬레이터의
+    # 제거를 한 칸에 적으면 사용자 쪽 게이트를 우회한다.
+    env["TAUBENCH_CANDIDATE_MODEL"] = litellm_model_name(model)
+    env["TAUBENCH_REMOVED_PARAMS_OUT"] = str(shim_record_path)
+    root = str(Path(__file__).resolve().parents[3])
+    existing = env.get("PYTHONPATH")
+    env["PYTHONPATH"] = f"{root}{os.pathsep}{existing}" if existing else root
+    return env
+
+
+def _split_summary(args: argparse.Namespace, selected_ids: list[str], split: Mapping[str, Any]) -> str:
+    """기존 split 실행 요약 문자열을 반환한다."""
+    return (
+        f"[taubench] telecom split {args.split!r}: "
+        f"{len(selected_ids)}/{split['task_count']} judge-free tasks; "
+        f"{split['not_measured_task_count']} not measured"
+    )
+
+
+def _redact_upstream(upstream_dir: Path) -> None:
+    """상류 성공 여부와 무관하게 자격증명을 마스킹하고 재저장을 알린다."""
+    # 성공/실패와 무관하게 반드시 지운다. 실패한 런의 산출물도 커밋된다.
+    n_redacted = redact_secrets_in_upstream(upstream_dir)
+    if n_redacted:
+        print(f"[taubench] api_key 를 {n_redacted}개 파일에서 제거했다")
+
+
+def _complete_manifest(
+    results_dir: Path, upstream_dir: Path, shim_record_path: Path,
+    manifest: dict[str, Any], candidate_unsupported_params: list[str],
+    user_removed_params: list[str],
+) -> None:
+    """성공한 실행의 shim 기록과 완료 상태를 manifest에 반영해 재저장한다."""
+    # shim 이 실제로 무엇을 뺐는지 읽어 매니페스트에 남긴다. 기록이 없으면
+    # 뺐다고 말하지 않는다 — 증거 없는 필드를 채우면 게이트가 거짓을 읽는다.
+    shim_record = _read_shim_record(shim_record_path)
+    integrity = manifest["harness_integrity"]
+    if shim_record is None:
+        # 관측 실패. 프로파일이 걸려 있었다면 무엇이 빠졌는지 알 수 없으므로
+        # "뺀 것 없음"으로 적지 않는다 — 게이트가 이 런을 제약 없는 런과
+        # 같은 코호트로 묶으면 안 된다.
+        removed_by_shim, adjusted_by_shim = [], []
+        integrity["serving_profile_observable"] = False
+        integrity["candidate_serving_profile_observation"] = "unobserved"
+        if candidate_unsupported_params:
+            print(
+                "[taubench] 경고: 서빙 프로파일이 걸린 런인데 shim 기록이 없다 "
+                "— 무엇이 제거됐는지 확인할 수 없다",
+                file=sys.stderr,
+            )
+    else:
+        removed_by_shim = shim_record["removed"]
+        adjusted_by_shim = shim_record["adjusted"]
+        integrity["serving_profile_observable"] = True
+        integrity["candidate_serving_profile_observation"] = "observed"
+        integrity["shim_request_counts"] = shim_record["request_counts"]
+        # shim 이 사용자 요청에서 뺀 것은 **사용자 칸**에 합친다. 이 경로는
+        # --user-base-url 을 후보와 같은 주소로 줬을 때만 생긴다.
+        if shim_record["user_removed"]:
+            integrity["user_removed_sampling_params"] = sorted(
+                set(user_removed_params) | set(shim_record["user_removed"])
+            )
+            print(
+                "[taubench] 사용자 요청에서도 서빙 제약으로 파라미터가 제거됐다: "
+                f"{', '.join(shim_record['user_removed'])}"
+            )
+        if candidate_unsupported_params and not shim_record["request_counts"].get("matched"):
+            print(
+                "[taubench] 경고: 서빙 프로파일이 걸렸는데 제약 주소로 간 요청이 "
+                "한 건도 없다 — 주소 매칭을 확인하라",
+                file=sys.stderr,
+            )
+    integrity["candidate_removed_sampling_params"] = removed_by_shim
+    # 값을 바꾼 것(max_tokens 상한, skip_special_tokens 강제)도 남긴다.
+    # 제거는 아니지만 후보의 실행 규약이 선언과 다르다는 사실은 같다.
+    integrity["candidate_adjusted_serving_params"] = adjusted_by_shim
+    if removed_by_shim:
+        print(
+            "[taubench] 후보 요청에서 서빙 백엔드가 거부하는 파라미터를 "
+            f"제거했다: {', '.join(removed_by_shim)} — 이 런은 그 제어 없이 돌았다"
+        )
+    if adjusted_by_shim:
+        print(
+            "[taubench] 후보 요청의 서빙 파라미터를 프로파일에 맞춰 조정했다: "
+            f"{', '.join(adjusted_by_shim)}"
+        )
+    manifest["status"] = "completed"
+    manifest["completed_at"] = datetime.now().isoformat()
+    manifest["upstream_results"] = str(
+        (upstream_dir / "results.json").relative_to(results_dir)
+    )
+    write_json_atomic(results_dir / "run_manifest.json", manifest)
 
 
 def main(argv: Optional[list[str]] = None) -> int:
+    """상류 실행과 finally 마스킹을 조정하고 기존 종료 코드를 반환한다."""
     try:
         args = parse_args(argv)
         _validate_args(args)
-        base_dir = Path(
-            os.environ.get("MODEL_TEST_BASE") or Path(__file__).resolve().parents[3]
-        ).resolve()
-        bench_dir = base_dir / "data" / "tau2-bench"
-        actual_commit = subprocess.check_output(
-            ["git", "-C", str(bench_dir), "rev-parse", "HEAD"], text=True
-        ).strip()
-        if actual_commit != SOURCE_COMMIT:
-            raise ValueError(
-                f"tau2-bench commit mismatch: expected {SOURCE_COMMIT}, got {actual_commit}"
-            )
-
-        domain_dir = bench_dir / "data" / "tau2" / "domains" / args.domain
-        canonical_path = domain_dir / "tasks.json"
-        split_path = domain_dir / "split_tasks.json"
-        tasks = _load_tasks(canonical_path)
-        split = resolve_task_split(tasks, split_path, args.split, args.domain)
-        selected_ids = list(split["task_ids"])
-        if not selected_ids:
-            raise ValueError(
-                f"{args.domain} split {args.split!r} has no judge-free runnable tasks"
-            )
-        timestamp = _timestamp(base_dir)
-        results_dir = (
-            base_dir
-            / "results"
-            / safe_model_name(args.model)
-            / timestamp
-            / "language"
-            / args.track_name
-        )
-        upstream_dir = results_dir / "upstream" / args.domain
+        base_dir, bench_dir = _prepare_bench_dir(os.environ)
+        split, selected_ids = _load_run_split(bench_dir, args)
+        results_dir, upstream_dir = _prepare_results_dirs(base_dir, args)
         api_base = normalize_api_base(args.base_url)
-        llm_args = build_litellm_args(api_base, args.request_timeout, args.max_tokens)
-
-        # 사용자 시뮬레이터 llm_args. 별도 엔드포인트를 주면 그쪽으로, 아니면
-        # 에이전트와 같은 곳으로 보낸다. 키는 환경변수에서만 읽는다.
-        user_llm_args = dict(llm_args)
-        if args.mode == "standard":
-            user_model = args.user_model or args.model
-            is_external = "/" in user_model and not user_model.startswith("openai/")
-            if args.user_base_url:
-                user_llm_args["api_base"] = normalize_api_base(args.user_base_url)
-            elif is_external:
-                # **에이전트의 api_base 를 물려받으면 안 된다.** user_llm_args 는
-                # llm_args 를 복사해 만들므로 로컬 서빙 주소가 들어 있다. provider
-                # 접두사가 있는 외부 모델은 litellm 이 자기 엔드포인트를 아는데,
-                # api_base 가 남아 있으면 그쪽으로 보내 401 이 난다
-                # (2026-08-23 airline 첫 런에서 20/20 AuthenticationError).
-                user_llm_args.pop("api_base", None)
-            if is_external or args.user_base_url:
-                # **키를 llm_args 에 넣지 않는다.** tau2 는 llm_args 를 results.json 에
-                # 그대로 적으므로 넣으면 산출물에 자격증명이 박힌다 (2026-08-23 에
-                # 실제로 발생, GitHub 푸시 보호가 두 번 막았다).
-                #
-                # litellm 은 provider 접두사에 따라 환경변수에서 키를 읽는다:
-                #   openrouter/...  -> OPENROUTER_API_KEY  (main.py:3283)
-                # 따라서 모델명을 openrouter/openai/gpt-4.1-mini 형태로 주면
-                # api_base 도 api_key 도 인자로 넘길 필요가 없다.
-                user_api_key = os.environ.get(args.user_api_key_env)
-                if not user_api_key:
-                    raise SystemExit(
-                        f"외부 사용자 시뮬레이터에는 {args.user_api_key_env} 환경변수가 "
-                        "필요합니다 (값은 인자로 넘기지 않습니다)."
-                    )
-                # litellm 이 읽을 자리에 옮겨 담는다. 자식 프로세스 env 로만 전달된다.
-                os.environ.setdefault("OPENROUTER_API_KEY", user_api_key)
-                # 상류는 사용자 시뮬레이터에 temperature=0 을 명시한다
-                # (config.py DEFAULT_LLM_ARGS_USER). 외부 API 는 이를 받는다.
-                user_llm_args["temperature"] = 0.0
-        manifest: dict[str, Any] = {
-            "status": "running",
-            "model": args.model,
-            "track": args.track_name,
-            "source": {
-                "repository": "sierra-research/tau2-bench",
-                "commit": SOURCE_COMMIT,
-                "license": "MIT",
-            },
-            "split": split,
-            # 실행 도메인만 runnable 로 적고 나머지는 미실행 사유를 남긴다.
-            # 판정 불필요 태스크 수는 requires_judge() 로 판정한다 (선언이 아니라
-            # nl_assertions 내용 유무 기준). 2026-08-23 실측:
-            #   telecom test 40/40, retail test 29/40, airline test 0/20
-            "domain_scope": {
-                d: (
-                    {"runnable": True, "user_mode": args.mode}
-                    if d == args.domain
-                    else {"runnable": False, "reason": "not selected for this run"}
-                )
-                for d in ("telecom", "retail", "airline", "banking_knowledge")
-            },
-            "harness_integrity": {
-                "architecture": "upstream_tau2_framework",
-                # 채점기의 무결성 대조는 이 값에서 기대 구현명을 파생시킨다.
-                # 매니페스트는 "우리가 무엇을 돌렸다고 주장하는가", upstream results.info 는
-                # "실제로 무엇이 돌았는가" 다 — 둘을 대조하는 것이 검사의 요지다.
-                "mode": args.mode,
-                "agent_implementation": (
-                    "llm_agent_solo" if args.mode == "solo" else "llm_agent"
-                ),
-                "user_implementation": (
-                    "dummy_user" if args.mode == "solo" else "user_simulator"
-                ),
-                "user_model_sent_to_litellm": (
-                    None
-                    if args.mode == "solo"
-                    else litellm_model_name(args.user_model or args.model)
-                ),
-                "provider": "litellm_openai_compatible",
-                "model_requested": args.model,
-                "model_sent_to_litellm": litellm_model_name(args.model),
-                "api_base": api_base,
-                "api_key_source": "OPENAI_API_KEY environment variable",
-                "request_timeout": args.request_timeout,
-                "task_timeout": args.task_timeout,
-                "framework_max_retries": 0,
-                "litellm_num_retries": 0,
-                "max_tokens": args.max_tokens,
-                "temperature_sent": False,
-                "serving_profile_applied": False,
-                "serving_profile_observable": False,
-                "max_concurrency": args.max_concurrency,
-                "max_steps": args.max_steps,
-                "tau2_version": _package_version("tau2"),
-                "litellm_version": _package_version("litellm"),
-                "openai_sdk_version": _package_version("openai"),
-                "successful_request_logs": True,
-                "failed_request_attempts_observable": False,
-                "absorbed_timeout_counter_observable": False,
-            },
-        }
-        _write_atomic(results_dir / "run_manifest.json", manifest)
-
-        env = os.environ.copy()
-        env["TAU2_DATA_DIR"] = str(bench_dir / "data")
+        llm_args, user_llm_args, user_removed_params = _prepare_llm_args(
+            args, api_base, os.environ
+        )
+        # 실제 제거 내역은 상류 실행 이후 shim 기록에서 확인한다.
+        candidate_unsupported_params = _unsupported_sampling_params()
+        manifest = _build_manifest(
+            args, split, api_base, user_llm_args, candidate_unsupported_params, user_removed_params
+        )
+        write_json_atomic(results_dir / "run_manifest.json", manifest)
+        shim_record_path = results_dir / ".shim_removed_params.json"
+        env = _upstream_env(os.environ, bench_dir, api_base, args.model, shim_record_path)
         command = build_upstream_command(
             args, llm_args, user_llm_args, upstream_dir, selected_ids
         )
-        print(
-            f"[taubench] telecom split {args.split!r}: "
-            f"{len(selected_ids)}/{split['task_count']} judge-free tasks; "
-            f"{split['not_measured_task_count']} not measured"
-        )
+        print(_split_summary(args, selected_ids, split))
         try:
             subprocess.run(command, cwd=bench_dir, env=env, check=True)
         finally:
-            # 성공/실패와 무관하게 반드시 지운다. 실패한 런의 산출물도 커밋된다.
-            n_redacted = redact_secrets_in_upstream(upstream_dir)
-            if n_redacted:
-                print(f"[taubench] api_key 를 {n_redacted}개 파일에서 제거했다")
-        manifest["status"] = "completed"
-        manifest["completed_at"] = datetime.now().isoformat()
-        manifest["upstream_results"] = str(
-            (upstream_dir / "results.json").relative_to(results_dir)
+            _redact_upstream(upstream_dir)
+        _complete_manifest(
+            results_dir, upstream_dir, shim_record_path, manifest,
+            candidate_unsupported_params, user_removed_params,
         )
-        _write_atomic(results_dir / "run_manifest.json", manifest)
         print(f"[taubench] upstream artifacts written to {upstream_dir}")
         return 0
     except Exception as exc:
