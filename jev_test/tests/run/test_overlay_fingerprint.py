@@ -7,7 +7,8 @@ import pytest
 from jeveval.io.config import read_yaml
 from jeveval.io.history_inputs import checked_task
 from jeveval.run import context, replay_check
-from tests.run.cli_support import Harness, put_yaml
+from tests.run.cli_support import Harness
+from tests.run.file_support import put_yaml
 
 
 def test_overlay_dependencies_are_hashed_and_checked_for_history(tmp_path):

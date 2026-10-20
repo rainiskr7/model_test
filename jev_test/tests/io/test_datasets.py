@@ -6,7 +6,7 @@ import pytest
 
 from jeveval.io.datasets import dataset_entry, read_label_vocab
 from jeveval.types import LabelVocab
-from tests.run.cli_support import put_yaml
+from tests.run.file_support import put_yaml
 
 REPO = Path(__file__).resolve().parents[2]
 

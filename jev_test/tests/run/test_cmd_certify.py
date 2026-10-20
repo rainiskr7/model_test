@@ -7,7 +7,7 @@ import pytest
 from jeveval.io import run_files
 from jeveval.io.hashes import sha256_file
 from jeveval.run import cmd_certify
-from tests.run.cli_support import output_files
+from tests.run.file_support import output_files
 
 
 @pytest.mark.parametrize("check", ["a", "b", "c"])

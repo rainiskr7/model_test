@@ -5,8 +5,8 @@ import pytest
 from jeveval.io.t0_files import read_lines
 from jeveval.io.t0_inputs import load
 from jeveval.run import t0_server
-from tests.run.cli_support import output_files
-from tests.t0_io.conftest import fake_post, inputs, setup
+from tests.run.file_support import output_files
+from tests.t0_io.support import fake_post, inputs, setup
 
 
 @pytest.mark.parametrize("secret", [None, "", "bad\nkey", "한글"])

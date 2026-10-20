@@ -6,7 +6,7 @@ import pytest
 
 from jeveval.io import run_files
 from jeveval.run import cli, cmd_report
-from tests.run.cli_support import output_files
+from tests.run.file_support import output_files
 from tests.run.history_support import finished
 
 
@@ -73,7 +73,7 @@ def test_cli_error_never_prints_private_output_path(tmp_path, monkeypatch, capsy
 
 def test_verified_models_exact_compare_and_exploratory_table(tmp_path, monkeypatch):
     from jeveval.run import cmd_compare, cmd_question_risk, cmd_run, cmd_score, cmd_threshold
-    from tests.run.cli_support import put_yaml
+    from tests.run.file_support import put_yaml
     import yaml
     h = finished(tmp_path, monkeypatch)
     cfg = yaml.safe_load((tmp_path / "configs/models/synthetic.yaml").read_text())

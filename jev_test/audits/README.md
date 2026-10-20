@@ -1,5 +1,9 @@
 # 감사 기록 (보존본)
 
+판 5 보정 4의 새 [공개 전 원문 검사](publish_check/README.md)는 고정 Git 범위와
+기존 reader 출력을 대조하는 별도 도구다. 기존 보존 감사·선정·out 파일은 변경하지 않는다.
+독립 라벨 oracle이 아니며 실제 원문을 사용하는 실행과 최종 push SHA 대조는 Claude가 한다.
+
 세션 임시 폴더에서 10-13 에 복사한 **과거 실행의 증거**다. 여기서 다시 실행하지 않는다 — `audit_v3/run.py` 는 `out/` 을 덮어쓰고, 입력을 `HERE.parent` 기준(`data_kosgd/`, `data_sgd_en/`, `tokenizers/`, `kosgd_audit/`)과 절대경로(계획, Qwen3.8 토크나이저)로 찾는다. 재실행이 필요하면 새 폴더에 복사해 입력 위치를 명세에 적고 돌린다.
 
 | 폴더 | 무엇 | 실행 기록 |

@@ -7,7 +7,8 @@ import pytest
 
 from jeveval.io import set_config
 from jeveval.io.config import read_yaml
-from tests.run.cli_support import Harness, REPO, put_yaml
+from tests.run.cli_support import Harness, REPO
+from tests.run.file_support import put_yaml
 
 
 def test_base_entry_never_opens_overlay_directory(tmp_path, monkeypatch):

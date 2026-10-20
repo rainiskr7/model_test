@@ -8,8 +8,8 @@ from jeveval.io import t0_fingerprint
 from jeveval.io.hashes import code_sha256
 from jeveval.io.run_files import read_json
 from jeveval.io.t0_inputs import load
-from tests.run.cli_support import output_files
-from tests.t0_io.conftest import inputs, setup
+from tests.run.file_support import output_files
+from tests.t0_io.support import inputs, setup
 
 
 def test_initialize_records_declared_fields(setup):

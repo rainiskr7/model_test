@@ -615,6 +615,12 @@ kosgd2 full은 성공 10·진단 3, actions_only는 성공 8·진단 2다. 진�
 - `b_flip` 은 MEETS 일 때만, 아니면 null. NO_THRESHOLD 면 `t_star`·`test.n_accepted`·`k_errors`·`U` 는 null, `coverage = {num: 0, den: n_denom}`.
 - 판 2 의 `test.groups/n/k` · `accepted_mix: {분포}` 는 위 필드로 바꾼다.
 
+판정 해석 (판 5 보정 4): 칸 하나(모델·셋·판·τ)에 대해 dev 선택을 고정한 조건에서, test 묶음 대표들을 같은 원천 분포의 독립 표본으로 볼 때 P(MEETS ∧ 참 위험 > τ) ≤ 5%로 해석한다. 유한 평가 풀 자체를 섞어 dev/test로 비복원 분할한 설계에 대한 보장으로 주장하지 않는다. 여러 칸의 동시 보장이나 중간 결과를 보고 멈추는 방식의 보장이 아니며, 사후확률이나 처리율의 신뢰하한도 아니다.
+
+상태 결정 순서는 NO_THRESHOLD → UNDERPOWERED(n < n_min) → U ≤ τ이면 MEETS → 그 밖 FAILS다. FAILS는 t*가 있고 n ≥ n_min인데 U > τ인 인증 실패이며, 위험이 τ를 넘는다는 입증이 아니다. n_min은 오류 0일 때 인증 가능한 최소 수락 수이고 검정력이 아니다. 예를 들어 수락 수 149가 고정되고 요청 오류가 독립적으로 1%이면 통과 확률은 0.99^149 ≈ 22%다. 검정력 표는 2단계 보고서에서 다룬다.
+
+요청 확신은 성공 질문 confidence의 최솟값으로 정의한 수락 순위 점수다. 요청 정답 확률이나 그 상한으로 해석하지 않는다. 정답 없는 성공 질문도 점수에 포함되지만 오류는 정답 있는 질문으로 계산한다. b_flip은 판정 민감도이며 라벨 오류율의 추정이 아니다. 인증은 공개 라벨(정답지) 기준이다. 상태 이름과 계산은 바꾸지 않는다.
+
 ### 7-4b. 질문 단위 위험과 등록
 
 QuestionOutcome는 요청 identity/stage/status/valid와 question_id/role/label/qtype/gold/answer/
@@ -1028,7 +1034,7 @@ all 무출력·무쓰기, overlay 의존성 해시와 역사 변조 거부, D1a�
 
 보정 2는 감사 독립성·13종 주입·공통 입력 변조·등록 사슬 복사/삭제/중단·200 파일럿 논리 분모와 10/11 경계·라벨 미접근·연결된 감사 줄·보호 파일 SHA/네트워크 거부를 검증한다. 합성 시험은 외부 oracle의 실데이터 1,200/1,200·모델 응답 게이트·서빙 후 전송 감사를 대신하지 않는다. (판 5 보정 2)
 
-보정 3은 기존 nodeid/skip/xfail을 보존한다. pyarrow 차단 하위 프로세스의 고정 여섯 파일은 test_policy/test_outcome/test_plan_calls/test_length/test_derive/test_layout이며 pytest·PyYAML은 허용한다. 공개 실행기의 sink 예외·복구·fsync 순서, 6셋 Item/systemone/B1 바이트, 현재/역사 단계와 history/report/score/archive/compare의 판정·분모를 합성 기준값과 비교한다. (판 5 보정 3)
+보정 3은 기존 nodeid/skip/xfail을 보존한다. pyarrow 차단 하위 프로세스의 고정 여섯 파일은 test_policy/test_outcome/test_plan_calls/test_length/test_derive/test_layout이며 pytest·PyYAML은 허용한다. 보정 4는 이 고정 여섯 파일을 유지하고 file_support 분리로 가벼워진 tests/io/test_datasets.py·tests/io/test_t0_policy.py를 별도 목록으로 차단 검증한다. CLI import도 차단하며 기존 nodeid는 유지한다. 공개 실행기의 sink 예외·복구·fsync 순서, 6셋 Item/systemone/B1 바이트, 현재/역사 단계와 history/report/score/archive/compare의 판정·분모를 합성 기준값과 비교한다. (판 5 보정 3)
 
 구현 종료는 오프라인 구현 검토만 뜻한다. 재채점·실데이터 감사·B 중재·W1 파일럿·최종 primary 확정·실험 동결 완료는 별도 운영 수용이며, 이전 판의 C1~C7 번호와 이번 수용 번호는 판별로 구분한다. (판 5 보정 2·보정 3)
 
@@ -1050,6 +1056,8 @@ all 무출력·무쓰기, overlay 의존성 해시와 역사 변조 거부, D1a�
 - 감사 v4 (§2-2) — 동결 때.
 
 ## 11. 판 이력
+
+- 판 5 보정 4 (10-20): 상태·확신·CP 보장의 해석 문구 보완, 운영 절차와 공개 전 검사 도구 추가. jeveval Python 코드·동결 설정·보존 원문은 불변.
 
 아래 이력은 당시의 범위·실행 상태를 보존한다. 현행 규칙을 과거 run에 소급하지 않으며, 원문 보존 블록은 현재 실행 지시가 아니다. 현행 위치와 대체 사유는 CONTRACT_MAP.md를 따른다. (판 5 보정 3)
 

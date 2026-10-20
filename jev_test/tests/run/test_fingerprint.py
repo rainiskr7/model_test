@@ -11,7 +11,8 @@ from jeveval.io.hashes import sha256_file
 from jeveval.io.models import load_model_config
 from jeveval.run.fingerprint import build_fingerprint, same_fingerprint
 from jeveval.run import cmd_score, cmd_threshold
-from tests.run.cli_support import Harness, output_files, put_yaml
+from tests.run.cli_support import Harness
+from tests.run.file_support import output_files, put_yaml
 from tests.run.t0_support import add_external
 
 

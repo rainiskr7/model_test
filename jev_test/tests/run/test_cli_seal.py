@@ -14,7 +14,8 @@ from jeveval.run import cli
 from jeveval.run.fingerprint import build_fingerprint
 from jeveval.run.layout import run_dir
 from jeveval.types import BoundQuestion, Item
-from tests.run.cli_support import Harness, REPO, put_yaml, output_files
+from tests.run.cli_support import Harness, REPO
+from tests.run.file_support import put_yaml, output_files
 from tests.run.stage_support import install_case, plan_for
 
 CASES = json.loads((REPO / "tests/fixtures/seal/cases.json").read_text())["cases"]

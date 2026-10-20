@@ -9,7 +9,7 @@ from jeveval.io import run_files
 from jeveval.run import context
 from jeveval.run import cli, cmd_compare
 from jeveval.run.layout import compare_dir
-from tests.run.cli_support import output_files
+from tests.run.file_support import output_files
 from tests.run.compare_support import pair
 
 

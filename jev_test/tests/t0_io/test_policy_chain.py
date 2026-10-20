@@ -3,8 +3,8 @@
 import pytest
 
 from jeveval.io.config import read_yaml
-from tests.run.cli_support import output_files, put_yaml
-from .conftest import fake_post, inputs, stage
+from tests.run.file_support import output_files, put_yaml
+from .support import fake_post, inputs, stage
 
 
 def change_policy(ctx):

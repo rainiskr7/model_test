@@ -4,7 +4,7 @@ import pytest
 
 from jeveval.io.run_files import read_json, write_json
 from jeveval.io.t0_files import read_lines, write_lines
-from tests.t0_io.conftest import fake_post, inputs, stage, setup
+from tests.t0_io.support import fake_post, inputs, stage, setup
 
 
 def complete(ctx):

@@ -81,7 +81,7 @@ def test_cli_error_never_prints_exception_state(monkeypatch, capsys):
 
 def test_cli_pipeline_without_socket(setup, monkeypatch, capsys):
     from jeveval.client.systemone import send_t0
-    from .conftest import fake_post
+    from .support import fake_post
     ctx = setup("pplx_v1_1")
     monkeypatch.chdir(ctx.root)
     monkeypatch.setattr(cmd_t0.t0_inputs, "read_sources", lambda *a: ctx.sources)

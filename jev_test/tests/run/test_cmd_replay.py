@@ -7,7 +7,7 @@ import pytest
 from jeveval.io import records, run_files
 from jeveval.run import cmd_replay
 from jeveval.run.layout import run_dir
-from tests.run.cli_support import output_files
+from tests.run.file_support import output_files
 
 
 def setup(h):

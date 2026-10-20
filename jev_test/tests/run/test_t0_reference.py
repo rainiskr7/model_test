@@ -6,8 +6,8 @@ from jeveval.io.hashes import sha256_file
 from jeveval.io.t0_files import read_lines
 from jeveval.io.t0_inputs import load
 from jeveval.run import t0_reference
-from tests.run.cli_support import output_files
-from tests.t0_io.conftest import inputs, setup
+from tests.run.file_support import output_files
+from tests.t0_io.support import inputs, setup
 
 
 @pytest.mark.parametrize("mode,reason", [("equal", None), ("mismatch", "batch_one_mismatch"),

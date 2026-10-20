@@ -1,5 +1,13 @@
 # jev_test — 결정 모델(Jev 계열) 공용 평가 틀
 
+## 현재 상태 (2026-10-20, Claude 확인)
+
+구현 판은 판 5 보정 3이며, 보정 4에서 문서·운영 절차를 보완했다. 최신 run은 `main_20261019T141841`이다. B1 BF16·FP8은 6셋 완료, pplx v1.1은 KoSGD full·actions_only test가 미완이고 나머지 셋은 완료했다. full test는 2,400 중 1,770 수신 후 10-20 중단되어 재개 대기 중이다.
+
+[최신 보고서](results/_report/main_20261019T141841.md) · [운영 절차](ops/README.md)
+
+남은 일은 pplx KoSGD 마무리·compare, 파일럿 200턴 → W1 동결 → kosgd2 전 모델, Clef·Clef-Flash·pplx v1 서빙 뒤 감사 v4 바이트 증거·T0다.
+
 `POST /v1/systemone` 형식의 오픈웨이트 결정 모델을 로컬에서 서빙해 평가한다. 등록된 모델은 전부 돌린다
 (처음: Cloudflare Clef · Clef-Flash, Perplexity pplx-decider v1 · v1.1). 결정 모델은 글을 쓰지 않고
 타입이 정해진 질문(`noul` · `choice` · `score`)에 확률로 답하므로, 정확도와 함께 **보정(calibration)** 과
@@ -11,6 +19,8 @@
 - 외부에서 받은 원본 데이터는 `dataset/` 에 두고 커밋하지 않는다 (`.gitignore`).
 
 - 사전 감사 기록(라벨만 읽는 스크립트·실행 기록): [`audits/`](audits/README.md)
+
+## 이력
 
 현재 상태: **계획 단계** (개정 12, 평가 코드 없음). 첫 실행은 A 묶음 + B1.
 

@@ -4,8 +4,8 @@ import json
 
 from jeveval.io.config import read_yaml
 from jeveval.run import make_t0_fixture
-from tests.run.cli_support import put_yaml
-from tests.t0_io.conftest import ROOT, setup
+from tests.run.file_support import put_yaml
+from tests.t0_io.support import ROOT, setup
 
 
 def test_cli_uses_selected_policy_placements(setup, monkeypatch, capsys):

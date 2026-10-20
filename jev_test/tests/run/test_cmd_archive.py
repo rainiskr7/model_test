@@ -9,7 +9,7 @@ import zstandard
 from jeveval.io import run_files
 from jeveval.io.archive import verify_archive
 from jeveval.run import cli, cmd_archive
-from tests.run.cli_support import output_files
+from tests.run.file_support import output_files
 from tests.run.compare_support import pair
 from tests.run.test_cmd_compare import compare, result
 

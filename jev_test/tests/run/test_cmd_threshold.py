@@ -4,7 +4,8 @@ import pytest
 
 from jeveval.io import run_files
 from jeveval.run import cmd_run
-from tests.run.cli_support import Harness, output_files, put_yaml
+from tests.run.cli_support import Harness
+from tests.run.file_support import output_files, put_yaml
 
 
 def test_threshold_never_opens_other_stage_and_incomplete_dev_rejected(h, monkeypatch):

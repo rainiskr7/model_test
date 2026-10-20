@@ -4,7 +4,8 @@ import pytest
 
 from jeveval.io import run_files
 from jeveval.run import cmd_run
-from tests.run.cli_support import Harness, output_files, put_yaml
+from tests.run.cli_support import Harness
+from tests.run.file_support import output_files, put_yaml
 
 
 @pytest.mark.parametrize("failure", ["auth", "missing", "measurer", "items"])

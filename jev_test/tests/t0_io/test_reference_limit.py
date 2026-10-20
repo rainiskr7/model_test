@@ -4,8 +4,8 @@ import pytest
 
 from jeveval.io.config import read_yaml
 from jeveval.run import cmd_t0
-from tests.run.cli_support import output_files, put_yaml
-from .conftest import inputs, stage
+from tests.run.file_support import output_files, put_yaml
+from .support import inputs, stage
 
 
 @pytest.mark.parametrize("family", ["clef", "clef_flash", "pplx_v1", "pplx_v1_1"])

@@ -15,14 +15,13 @@ from jeveval.io.splits import write_split_plan
 from jeveval.run import cli, cmd_run
 from jeveval.run.layout import run_dir
 from jeveval.types import AttemptResult, LengthInfo, SplitPlan
+from tests.run import file_support
 from tests.run.t0_support import add_external, add_policy, add_t0_policy, label_entries
 
 REPO = Path(__file__).resolve().parents[2]
 
 
-def put_yaml(path, value):
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(yaml.safe_dump(value, allow_unicode=True))
+
 
 
 class Harness:
@@ -88,15 +87,15 @@ class Harness:
             data["map"] = {"primary_variant": "full"}
         cfg = {**rules, "family": self.family}
         if set_name != self.family:
-            put_yaml(root / "configs/splits/rules.yaml", {"sets": {self.family: {"family": self.family}}})
-            put_yaml(root / f"configs/sets/{set_name}.yaml", dict(schema="set_overlay/1", id=set_name,
+            file_support.put_yaml(root / "configs/splits/rules.yaml", {"sets": {self.family: {"family": self.family}}})
+            file_support.put_yaml(root / f"configs/sets/{set_name}.yaml", dict(schema="set_overlay/1", id=set_name,
                      tasks=[f"{set_name}_full.yaml", f"{set_name}_actions_only.yaml"],
                      dataset=data, split_rules=cfg))
         else:
-            put_yaml(root / "configs/splits/rules.yaml", {"sets": {set_name: cfg}})
+            file_support.put_yaml(root / "configs/splits/rules.yaml", {"sets": {set_name: cfg}})
             if data not in entries:
                 entries.append(data)
-        put_yaml(root / "configs/datasets.yaml", {"sets": entries})
+        file_support.put_yaml(root / "configs/datasets.yaml", {"sets": entries})
 
     def _write_model(self, root, kind):
         tokenizer = root / "tokenizer"
@@ -115,7 +114,7 @@ class Harness:
         if kind == "b1":
             labels = yaml.safe_load((root / "configs/tasks/b1.yaml").read_text())["labels"]
             cfg["b1"] = {"label_token_ids": dict(zip(labels, range(len(labels))))}
-        put_yaml(root / "configs/models/synthetic.yaml", cfg)
+        file_support.put_yaml(root / "configs/models/synthetic.yaml", cfg)
         self.kind = kind
 
     @property
@@ -167,8 +166,3 @@ class Harness:
             self.run("extra")
         assert self.command("score") == 0
         assert self.command("certify") == 0
-
-
-def output_files(directory):
-    return {p.relative_to(directory).as_posix(): p.read_bytes()
-            for p in directory.rglob("*") if p.is_file()}

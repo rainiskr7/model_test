@@ -8,7 +8,7 @@ from jeveval.io.hashes import sha256_file
 from jeveval.io.run_files import read_json
 from jeveval.io.t0_files import read_lines
 from jeveval.t0.request import build_request
-from .conftest import CANARY, fake_post, inputs, stage
+from .support import CANARY, fake_post, inputs, stage
 
 
 @pytest.mark.parametrize("family", ["clef", "clef_flash", "pplx_v1", "pplx_v1_1"])

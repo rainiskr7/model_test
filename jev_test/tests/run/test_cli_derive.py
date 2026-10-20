@@ -5,7 +5,8 @@ import pytest
 from jeveval.io import records, run_files
 from jeveval.io.config import load_taskspec
 from jeveval.run.fingerprint import build_fingerprint
-from tests.run.cli_support import Harness, output_files, put_yaml
+from tests.run.cli_support import Harness
+from tests.run.file_support import output_files, put_yaml
 
 
 @pytest.mark.parametrize("kind", ["systemone", "b1"])

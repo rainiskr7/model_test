@@ -9,7 +9,8 @@ from jeveval.io.set_config import entry
 from jeveval.io.splits import write_split_plan
 from jeveval.io.t0_sources import read_sources
 from jeveval.run.make_splits import _make_plan
-from tests.run.cli_support import Harness, put_yaml
+from tests.run.cli_support import Harness
+from tests.run.file_support import put_yaml
 
 
 def prepare(root):

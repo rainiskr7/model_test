@@ -9,12 +9,21 @@ import textwrap
 
 FILES = tuple(f"tests/run/test_{name}.py" for name in
               ("policy", "outcome", "plan_calls", "length", "derive", "layout"))
+LIGHT_FILES = ("tests/io/test_datasets.py", "tests/io/test_t0_policy.py")
 
 
 def test_six_files_run_without_pyarrow(tmp_path):
+    _isolated(tmp_path, FILES)
+
+
+def test_file_helpers_run_without_pyarrow_or_cli(tmp_path):
+    _isolated(tmp_path, LIGHT_FILES)
+
+
+def _isolated(tmp_path, files):
     """pytest를 import하기 전 차단하며 자식에서 자기 자신을 수집하지 않는다."""
     root = Path(__file__).resolve().parents[2]
-    assert Path(__file__).relative_to(root).as_posix() not in FILES
+    assert Path(__file__).relative_to(root).as_posix() not in files
     script = textwrap.dedent('''
         import importlib.abc
         import sys
@@ -23,8 +32,11 @@ def test_six_files_run_without_pyarrow(tmp_path):
             def find_spec(self, fullname, path=None, target=None):
                 if fullname == "pyarrow" or fullname.startswith("pyarrow."):
                     raise ImportError("pyarrow forbidden by unit isolation")
+                if fullname == "jeveval.run.cli":
+                    raise ImportError("CLI forbidden by unit isolation")
 
         assert not any(n == "pyarrow" or n.startswith("pyarrow.") for n in sys.modules)
+        assert "jeveval.run.cli" not in sys.modules
         sys.meta_path.insert(0, BlockArrow())
         import pytest
 
@@ -38,11 +50,12 @@ def test_six_files_run_without_pyarrow(tmp_path):
         assert collected.count > 0, "empty isolated suite"
         assert result == 0, "isolated pytest failed"
         assert not any(n == "pyarrow" or n.startswith("pyarrow.") for n in sys.modules)
+        assert "jeveval.run.cli" not in sys.modules
         print("UNIT_ISOLATION_COLLECTED=" + str(collected.count))
     ''')
     env = {**os.environ, "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1", "PYTHONDONTWRITEBYTECODE": "1"}
     result = subprocess.run([sys.executable, "-B", "-c", script,
-                             "--confcutdir", str(root), "--basetemp", str(tmp_path / "child"), *FILES],
+                             "--confcutdir", str(root), "--basetemp", str(tmp_path / "child"), *files],
                             cwd=root, env=env, capture_output=True, text=True, timeout=120)
     assert result.returncode == 0, result.stdout + result.stderr
     assert "UNIT_ISOLATION_COLLECTED=" in result.stdout

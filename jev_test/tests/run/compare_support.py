@@ -11,7 +11,8 @@ import yaml
 from jeveval.io.hashes import sha256_file
 from jeveval.io.splits import write_split_plan
 from jeveval.run.layout import run_dir
-from tests.run.cli_support import Harness, put_yaml
+from tests.run.cli_support import Harness
+from tests.run.file_support import put_yaml
 from tests.run.t0_support import passed_record
 
 

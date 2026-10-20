@@ -7,7 +7,7 @@ import pytest
 from jeveval.io.hashes import sha256_file
 from jeveval.io.t0_policy import read_t0_policy
 from jeveval.types.t0_io import T0Policy
-from tests.run.cli_support import put_yaml
+from tests.run.file_support import put_yaml
 
 REPO = Path(__file__).resolve().parents[2]
 

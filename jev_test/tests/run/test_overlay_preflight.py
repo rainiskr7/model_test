@@ -5,7 +5,7 @@ import json
 import pytest
 
 from jeveval.run import make_splits, item_summary
-from tests.run.cli_support import put_yaml
+from tests.run.file_support import put_yaml
 from tests.run.test_make_splits import _synthetic_rules
 from tests.run.test_item_summary import _prepare
 

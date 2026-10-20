@@ -7,7 +7,8 @@ import pytest
 from jeveval.io import records, run_files
 from jeveval.run import context
 from jeveval.types import RunContext, StageData
-from tests.run.cli_support import Harness, put_yaml
+from tests.run.cli_support import Harness
+from tests.run.file_support import put_yaml
 
 
 @pytest.fixture

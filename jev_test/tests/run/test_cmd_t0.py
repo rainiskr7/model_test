@@ -3,8 +3,8 @@
 import pytest
 
 from jeveval.run import cmd_t0
-from tests.run.cli_support import output_files
-from tests.t0_io.conftest import inputs, setup, stage
+from tests.run.file_support import output_files
+from tests.t0_io.support import inputs, setup, stage
 
 
 def test_unknown_stage_is_rejected_without_writes(setup):

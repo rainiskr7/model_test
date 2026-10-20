@@ -7,7 +7,7 @@ import pytest
 
 from jeveval.reference import variants
 from jeveval.reference.t0_runner import respond
-from tests.t0_io.conftest import setup
+from tests.t0_io.support import setup
 
 
 @pytest.mark.parametrize("variant,count,index", [("single", 1, 0), ("eight_0", 8, 0),

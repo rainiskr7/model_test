@@ -6,7 +6,7 @@ import json
 import pytest
 
 from jeveval.data.t0_fixture import make_fixture
-from tests.t0_io.conftest import ROOT, setup
+from tests.t0_io.support import ROOT, setup
 
 
 def test_case_counts_policy_placements_and_boundary(setup):

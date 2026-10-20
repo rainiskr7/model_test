@@ -19,7 +19,7 @@ from jeveval.io.datasets import dataset_entry
 from jeveval.io.splits import write_split_plan
 from jeveval.run.stage_inputs import attempts_path, final_path, load_items, read_stage_finals
 from jeveval.types import PoolResult, SourceRow, SplitPlan
-from tests.run.cli_support import put_yaml
+from tests.run.file_support import put_yaml
 
 
 REPO = Path(__file__).resolve().parents[2]

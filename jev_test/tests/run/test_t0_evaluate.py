@@ -6,8 +6,8 @@ from jeveval.io.hashes import sha256_file
 from jeveval.io.run_files import read_json, write_json
 from jeveval.io.t0_inputs import load
 from jeveval.run import t0_evaluate
-from tests.run.cli_support import output_files
-from tests.t0_io.conftest import fake_post, inputs, setup, stage
+from tests.run.file_support import output_files
+from tests.t0_io.support import fake_post, inputs, setup, stage
 
 
 def prepared(setup, t0_policy):

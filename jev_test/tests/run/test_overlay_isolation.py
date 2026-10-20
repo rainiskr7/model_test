@@ -10,7 +10,8 @@ from jeveval.run import context, history_stage
 from jeveval.run.make_splits import _make_plan
 from jeveval.run.plan_calls import plan_calls
 from jeveval.run.stage_inputs import load_items
-from tests.run.cli_support import Harness, put_yaml
+from tests.run.cli_support import Harness
+from tests.run.file_support import put_yaml
 
 
 def snapshot(h, saved):

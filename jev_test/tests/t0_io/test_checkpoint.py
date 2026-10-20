@@ -8,7 +8,7 @@ from jeveval.io.hashes import sha256_file
 from jeveval.io.run_files import read_json
 from jeveval.run import cmd_t0
 from . import fakes
-from .conftest import inputs, stage
+from .support import inputs, stage
 
 
 def strings(value):

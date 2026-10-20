@@ -8,7 +8,8 @@ from jeveval.io import archive, records, run_files
 from jeveval.run import cli, cmd_run, context
 from jeveval.run.layout import run_dir
 from jeveval.run.seal import check_seal
-from tests.run.cli_support import Harness, output_files
+from tests.run.cli_support import Harness
+from tests.run.file_support import output_files
 from tests.run.replay_support import mixed_source
 
 

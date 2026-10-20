@@ -3,7 +3,8 @@
 import shutil
 
 from jeveval.io.config import read_yaml
-from tests.run.cli_support import Harness, REPO, put_yaml
+from tests.run.cli_support import Harness, REPO
+from tests.run.file_support import put_yaml
 
 
 def registered(tmp_path, monkeypatch):
