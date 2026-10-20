@@ -44,7 +44,7 @@ def configuration(root, base, env, stamp, name):
                str(root / "configs/load_model_config.py"), conf["CONFIG"]]
     proc = subprocess.run(command, env=env, cwd=base, capture_output=True, text=True)
     if proc.returncode:
-        raise Unavailable("model config loader failed")
+        raise Unavailable(loader_failure_reason(conf["CONFIG"], proc.returncode, proc.stderr, env))
     for line in proc.stdout.splitlines():
         words = shlex.split(line)
         if len(words) != 2 or words[0] not in ("export", "unset"):
@@ -56,6 +56,29 @@ def configuration(root, base, env, stamp, name):
             env[key] = value
     return Context(root, base, env, stamp, env["MODEL"], endpoint,
                    Path(conf["LANE_TOKENIZER"]), conf["CONFIG"], conf["KEYVAR"])
+
+
+def loader_failure_reason(config, returncode, stderr, env):
+    """Bound a diagnostic after redacting known keys, before it reaches JSON."""
+    # This does not identify arbitrary secrets embedded in YAML input snippets.
+    secrets = sorted({env.get(name, "") for name in ("OPENAI_API_KEY", "TAUBENCH_USER_API_KEY")}
+                     - {""}, key=len, reverse=True)
+    pattern = re.compile("|".join(re.escape(key) for key in secrets)) if secrets else None
+
+    def clean(text):
+        if pattern is not None:
+            text = pattern.sub("***", text)
+        return "".join(char if char == "\n" or char.isprintable() else " " for char in text)
+
+    marker = "[truncated] "
+    name = clean(config).replace("\n", " ")
+    if len(name) > 256:
+        name = name[:256 - len(marker)] + marker
+    lines = clean(stderr).strip().splitlines()
+    tail = "\n".join(lines[-20:]) or "(no loader stderr)"
+    if len(lines) > 20 or len(tail) > 4096:
+        tail = marker + tail[-(4096 - len(marker)):]
+    return f"model config loader failed (CONFIG={name}, rc={returncode})\n{tail}"
 
 
 def read_key(path, name):

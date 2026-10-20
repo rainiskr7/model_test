@@ -47,7 +47,37 @@ fi
 log() { echo "[$(date '+%m-%d %H:%M:%S')] $*" | tee -a "$ORCH/orchestrator.log"; }
 export BASE_URL_CHAT_OVERRIDE=http://$HOST/v1/chat/completions
 export BASE_URL_V1_OVERRIDE=http://$HOST/v1
-loader=$(python "$BASE/configs/load_model_config.py" "$CONFIG" 2>/dev/null) || exit 1
+loader_failure() {
+  local message first=${OPENAI_API_KEY:-} second=${TAUBENCH_USER_API_KEY:-} swap key
+  printf -v message 'run_lane: model config loader failed (CONFIG=%s, rc=%s)\n%s' \
+    "$CONFIG" "$1" "$2"
+  # Known credentials only; arbitrary secrets in YAML cannot be identified here.
+  # Replace the longer value first when one credential contains the other.
+  if [ "${#first}" -lt "${#second}" ]; then
+    swap=$first; first=$second; second=$swap
+  fi
+  for key in "$first" "$second"; do
+    [ -z "$key" ] || message=${message//"$key"/\*\*\*}
+  done
+  printf '%s' "$message" >&2
+}
+loader=$(
+  {
+    loader_stderr=$(
+      python "$BASE/configs/load_model_config.py" "$CONFIG" 2>&1 1>&3 3>&-
+      loader_rc=$?
+      # Preserve trailing LF in textual stderr (Bash variables cannot hold NUL).
+      printf '.'
+      exit "$loader_rc"
+    )
+    loader_rc=$?
+    loader_stderr=${loader_stderr%.}
+    if [ "$loader_rc" -ne 0 ]; then
+      loader_failure "$loader_rc" "$loader_stderr"
+      exit "$loader_rc"
+    fi
+  } 3>&1
+) || exit 1
 eval "$loader"
 if [ "${LANE_DRY_RUN:-0}" = 1 ]; then
   printf 'BASE=%s\nconf=%s\nHOST=%s\n' "$BASE" "$conf" "$HOST"
