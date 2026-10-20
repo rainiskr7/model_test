@@ -1,5 +1,7 @@
 # SPEC: 판 6 7단계 — 중복 함수 통합 (2026-10-20, 판 2: X 반박 반영)
 
+> 상태: 완료(`659a7e9`) — 채택 범위 구현; 7e heredoc 추출은 동결 계약 때문에 취소([shared/results_dir.sh:2](../shared/results_dir.sh#L2)).
+
 담당: A(Claude) 계획·검증·커밋, X(Codex) 반박·구현. 공통 규칙은 판 6 명세 §0 그대로(동결 파일 `shared/harness/*`·`configs/tests/*` 금지, CONVENTIONS §11~§14, 기능별 작은 파일, 운영 logs/results/data 쓰기 금지, commit/push 는 A, X 의 "통과" 는 PASS 아님, 시험은 바이트코드 허용·차단 두 환경).
 N = `foundation_model_test_non_thinking/`. thinking 쪽 이식은 하지 않는다(사용자 결정: non_thinking 끝난 뒤).
 

@@ -3,6 +3,22 @@
 한국어 LLM / 멀티모달 모델의 **재현 가능한 비교 평가 프레임워크**.
 공개 벤치마크 + 자체 트랙을 통합해 모델별 결과를 `results/<safe_model>/<timestamp>/...` 트리로 일관되게 누적한다.
 
+## 실행 진입점
+
+아래 `N`은 코드 루트에서 `N="$(pwd -P)"`로 설정한 정규 절대경로다. 레인 진입 링크 자체는 resolve하지 않는다([orchestration/README.md:5](orchestration/README.md#L5)). config 일괄 실행의 인자는 모델 YAML 이름, 레인·스모크의 인자는 모델 conf 이름이다([run_full_eval.sh:65](run_full_eval.sh#L65), [레인 README:29](orchestration/README.md#L29), [smoke README:10](orchestration/smoke/README.md#L10)).
+
+| 용도 | 명령 | 포함 단계 | 재개 | 실패 정책 | 자세한 문서·코드 근거 |
+|---|---|---|---|---|---|
+| config 일괄 | `bash "$N/run_full_eval.sh" <model_config_name>` | YAML tracks 순서: harness·nlu·functionchat·taubench·multimodal. agent 비활성 | 최상위 단계 재개 옵션 없음. 같은 timestamp와 하위 러너별 재개 기능을 구별 | 일반 실패는 계속 후 최종 rc 1; rc 3 또는 ≥129는 즉시 중단 | [§3.4](#34-전체-평가-한-모델-전-트랙-일괄), [run_full_eval.sh:65,126,167,180,220](run_full_eval.sh#L65) |
+| 반복 | `bash "$N/run_repeated_eval.sh" <model_config> [횟수]` | config 일괄을 기본 3회 | 매번 새 `<시각>_rN`; 기존 결과 세션 충돌은 rc 1. 재개용 아님 | 하위 full의 nonzero는 기록하고 다음 반복 진행; 실패 있으면 최종 rc 1 | [run_repeated_eval.sh:14,23,43,56,76](run_repeated_eval.sh#L14) |
+| KMMLU 레인 | `bash "$N/orchestration/lanes/kmmlu.sh" <model_conf>` | harness를 `${SESSION}_rN`으로 REPS회 | 같은 세션 재실행 시 harness의 기존 과목 결과 skip. full의 RESUME_FROM 의미 없음 | harness nonzero면 해당 rc로 즉시 중단 | [레인 README:113](orchestration/README.md#L113), [kmmlu.sh:32](orchestration/tracks/kmmlu.sh#L32), [run_harness.sh:167](shared/harness/run_harness.sh#L167) |
+| tau standard 레인 | `bash "$N/orchestration/lanes/taubench_std4.sh" <model_conf>` | 단일 SESSION, standard 모드, 기본 trials 4 | full의 단계 재개 기능 없음 | taubench rc 그대로 반환 | [레인 README:91,113](orchestration/README.md#L91), [taubench_std4.sh:15](orchestration/tracks/taubench_std4.sh#L15) |
+| full 레인 | `bash "$N/orchestration/lanes/full.sh" <model_conf>` | 반복마다 nlu→functionchat→tau solo→multimodal→조건부 judge 2종→derive. harness·tau standard 제외 | `FULL_RESUME_FROM=rN:stage`; KRETA 재개·derive 저장 산출 조건 별도 | rc 3/≥129와 nlu·functionchat·multimodal 실패는 즉시 중단. solo tau 일반 실패는 계속(최종 0 가능); judge/derive 일반 실패는 누적 후 rc 1 | [README_full.md:13,51,64,68](orchestration/README_full.md#L13) |
+| 실서버 스모크 | `bash "$N/orchestration/smoke/run_smoke.sh" <model_conf> [track…]` | 최소 요청: harness·tau preflight, nlu·functionchat·K-DTC 제한 입력. 정식 벤치 완주 아님 | 매 실행 새 임시 BASE; 이어 달리기 없음 | FAIL=1, 그 외 INCONCLUSIVE=77, PASS=0; CLI·설정 오류=2 | [smoke README:23,39,64](orchestration/smoke/README.md#L23) |
+| 단일 트랙 | 예: `bash "$N/shared/functionchat/run_functionchat.sh" <model> <chat_url>` | 해당 트랙만. 예시는 추론→exact 채점 | 트랙별 계약 확인; 공통 재개 보장 없음 | 예시 FunctionChat은 set -e로 실패 중단. 다른 트랙은 각 usage·구현 확인 | [§3.3](#33-단일-트랙-실행), [run_functionchat.sh:3,5,62](shared/functionchat/run_functionchat.sh#L3) |
+
+알려진 제한: `run_full_eval.sh`는 timeout 기본값을 따로 주입하지 않아 `AGENT_REQUEST_TIMEOUT`이 없으면 FunctionChat·taubench request 기본값은 60초다. `AGENT_TASK_TIMEOUT`도 하위 러너 기본값을 따르며, 두 환경변수를 주면 하위 wrapper가 전달한다. full 레인은 별도 timeout 계약을 쓴다([run_full_eval.sh:198](run_full_eval.sh#L198), [run_functionchat.sh:40](shared/functionchat/run_functionchat.sh#L40), [run_functionchat.py:353](shared/functionchat/runner/run_functionchat.py#L353), [run_taubench.sh:65](shared/taubench/run_taubench.sh#L65), [README_full.md:36](orchestration/README_full.md#L36)).
+
 ---
 
 ## 1. 무엇을 테스트하는가
@@ -169,18 +185,18 @@ KOFFVQA도 idempotent resume를 지원한다(`koffvqa_run.py`). 같은 `EVAL_TIM
 
 ### 3.4 전체 평가 (한 모델 전 트랙 일괄)
 
-`run_full_eval.sh`가 모델 config(`configs/models/<NAME>.yaml`)의 `tracks` 목록 순서대로 트랙(harness · nlu · functionchat · taubench · multimodal)을 실행한다. agent(Ko-AgentBench) 트랙은 fixture-cache miss 율 때문에 비활성이라 목록에 있어도 실행하지 않는다(`run_full_eval.sh` 의 주석 참조).
+`run_full_eval.sh`가 모델 config(`configs/models/<NAME>.yaml`)의 `tracks` 목록 순서대로 트랙(harness · nlu · functionchat · taubench · multimodal)을 실행한다. agent(Ko-AgentBench)는 fixture-cache miss 율 때문에 dispatch가 비활성이며, 목록에 있으면 unknown track 경고만 낸다([run_full_eval.sh:180](run_full_eval.sh#L180)). full 레인의 단계 구성과는 다르므로 위 [진입점 표](#실행-진입점)를 확인한다.
 
 ```bash
-# 모델/엔드포인트는 스크립트 상단 변수 수정 후 실행
-bash run_full_eval.sh
+# configs/models/<model_config_name>.yaml의 모델·엔드포인트·tracks를 사용
+bash run_full_eval.sh <model_config_name>
 ```
 
 특징:
 
-- 부모 프로세스 종료 시 자식 프로세스까지 일괄 cleanup (process group kill)
-- 트랙별 로그: `logs/<EVAL_TIMESTAMP>/<track>.log`
-- 한 트랙 실패해도 나머지는 계속 진행 (실패 트랙은 마지막에 정리해서 출력)
+- INT·TERM·EXIT trap의 cleanup은 그룹 리더일 때 같은 그룹의 다른 PID를, 아니면 추적 중인 TRACK_PID와 자손을 정리한다. setsid가 없는 환경에서는 그룹 리더 재실행을 건너뛴다([run_full_eval.sh:16,30,40,56](run_full_eval.sh#L16)).
+- 트랙별 로그: `logs/<EVAL_TIMESTAMP>/<track>.log`. timestamp 우선순위는 환경변수 → 세션 파일 → 새 시각이다([run_full_eval.sh:126,143,153](run_full_eval.sh#L126)).
+- 일반 트랙 실패는 누적하고 다음 트랙을 실행한 뒤 최종 rc 1로 끝낸다. 단, rc 3 또는 ≥129는 그 rc로 즉시 중단한다([run_full_eval.sh:161,167,220](run_full_eval.sh#L161)).
 
 ### 3.5 평가 세션 관리
 

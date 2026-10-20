@@ -1,5 +1,7 @@
 # multimodal 재현성 검증 계획
 
+> 상태: 혼합 문서 — 재현성 정책은 현행, A/B 구현 완료(`8c615f5`, 후속 `e2b3a50`·`10c6724`·`cd8ca52`); 현재 CLI는 [reports/report_multimodal_tracks.py:25](reports/report_multimodal_tracks.py#L25)(`--strict`는 `--run` 필수), 채점 구현은 [shared/multimodal/publish/](shared/multimodal/publish/)가 기준이며 과거 측정·미해결 기록은 별도 증거 확인이 필요하다.
+
 러너나 채점 로직을 고친 뒤 **"채점이 바뀌지 않았다"를 증명하는 절차**다.
 `MULTIMODAL_PUBLISH_CONTRACT.md` 가 "어떤 수치를 믿어도 되는가" 를 정한다면,
 이 문서는 "코드를 고친 뒤에도 같은 수치가 나오는가" 를 정한다.

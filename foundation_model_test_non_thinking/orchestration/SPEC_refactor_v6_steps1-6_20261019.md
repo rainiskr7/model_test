@@ -1,5 +1,7 @@
 # SPEC: 리팩터 판 6 — 1~6단계 (2026-10-19, 판 2: Codex 반박 반영)
 
+> 상태: 완료 — 1~6단계 구현(`8dd8b82`부터 `4e4354e`까지)·C6.2 실서버 검증(`94707d2`); 후속 계약 변경은 [v7](SPEC_refactor_v7_lane_registry_20261019.md)·[v8](SPEC_fix_v8_display_cleanup_20261019.md)을 따른다.
+
 담당: A(Claude) 요구·수용 조건·검증, X(Codex) 반박·구현. 판 6 순서의 1~6단계만 다룬다(7~10 은 별도 명세).
 저장소 N = `foundation_model_test_non_thinking/`. 모든 경로는 N 기준. 판 1 에 대한 X 반박(10-19)을 반영한 결정은 **[결정]** 으로 표시.
 

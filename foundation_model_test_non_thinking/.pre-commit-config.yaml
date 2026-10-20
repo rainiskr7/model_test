@@ -1,6 +1,10 @@
 # pre-commit hooks — bash + python lint
-# 설치: pip install pre-commit && pre-commit install
-# 수동 실행: pre-commit run --all-files
+# 아래 명령은 Git 루트(model_test/)에서 실행한다. 이 작업에서는 hook을 설치하지 않는다.
+# 설치: pre-commit install -c foundation_model_test_non_thinking/.pre-commit-config.yaml
+# 수동 실행: pre-commit run -c foundation_model_test_non_thinking/.pre-commit-config.yaml --all-files
+
+files: ^foundation_model_test_non_thinking/
+exclude: ^foundation_model_test_non_thinking/(shared/harness/|configs/tests/|results/|data/|logs/)
 
 repos:
   - repo: https://github.com/koalaman/shellcheck-precommit

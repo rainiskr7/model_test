@@ -1,5 +1,7 @@
 # SPEC: run_lane TRACK=full (전 트랙 3회 레인) — A 계획 (Codex 반박 반영, 2026-10-15)
 
+> 상태: 역사 기록 — 초기 full 구현 완료(`2944f67`); 현행 계약은 [README_full.md](README_full.md)와 v6·v7·v8 후속 변경을 따른다.
+
 ## 0. 절대 제약 (실행 중 BF16 레인 보호)
 - 다음 파일은 **읽기만** 한다. 한 바이트도 바꾸지 않는다: orchestration/run_lane.sh, orchestration/lane_guard.sh,
   orchestration/lanes.conf, orchestration/lanes/*.conf(기존 3개), orchestration/tests/test_run_lane_equivalence.sh,

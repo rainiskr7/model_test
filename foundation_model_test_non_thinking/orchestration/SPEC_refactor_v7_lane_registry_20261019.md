@@ -1,5 +1,7 @@
 # SPEC: 판 7 — 설정 파서 통일(급함) + 트랙 등록 정리(5a·5b 마저) (2026-10-19, 판 2: X 반박 반영)
 
+> 상태: 완료(`587919d`·`015c3c5`) — 공통 설정 파서·파일 기반 트랙 등록 구현; 필수 훅 조기 검사는 [v8](SPEC_fix_v8_display_cleanup_20261019.md)(`e9dbd1c`)에서 보강([run_lane.sh:26](run_lane.sh#L26)).
+
 담당: A(Claude) 계획·수용 조건·검증·커밋, X(Codex) 반박·구현. 근거는 10-19 바이브코딩 평가(준비도 2/5)와 A 의 파일 검증.
 N = `foundation_model_test_non_thinking/`. 판 6 명세(`SPEC_refactor_v6_steps1-6_20261019.md`)의 공통 규칙(§0)을 그대로 따른다:
 동결 파일(`shared/harness/*`, `configs/tests/*`) 수정 금지, CONVENTIONS §11~§14, bash 3.2, 함수 80줄·main 40줄, 기능별 작은 파일,

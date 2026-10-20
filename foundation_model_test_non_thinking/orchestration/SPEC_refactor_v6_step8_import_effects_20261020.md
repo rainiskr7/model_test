@@ -1,5 +1,7 @@
 # SPEC: 판 6 8단계 — import 부작용 2건 (2026-10-20)
 
+> 상태: 완료(`0718b8b`) — FunctionChat identity 실행별 객체화([judge_pilot.py:79](../shared/functionchat/judge/judge_pilot.py#L79)); 외부 배치 adapter는 [CONVENTIONS §12 예외](../CONVENTIONS.md#L163)로 유지.
+
 담당: A 계획·결정·검증·커밋, X 반박·구현. 공통 규칙은 판 6 §0 그대로. 규약: CONVENTIONS §12 마지막 항목 "모듈을 import 하는 것만으로 환경(os.environ)·전역 가변 상태가 바뀌면 안 된다. 키 로딩·dotenv·누적 상태는 main() 이 만든 객체에 둔다."
 
 **이 단계는 "고친다" 가 정해진 단계가 아니다.** 대상마다 (가) 고치기 (나) 규약 예외로 남기고 이유 기록 중 하나를 근거로 고른다. 기존 시험이 import 시점 동작을 계약으로 고정하고 있으면 그 시험을 바꾸는 것 자체가 계약 변경이므로 (가) 를 고르려면 그 이득이 분명해야 한다.

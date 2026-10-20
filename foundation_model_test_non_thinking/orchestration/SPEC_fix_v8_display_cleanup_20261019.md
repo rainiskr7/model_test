@@ -1,5 +1,7 @@
 # SPEC: 판 8 — DISPLAY 이름 충돌 수정 + 정리 (2026-10-19, 판 2: X 반박 반영)
 
+> 상태: 코드 항목 1~4 완료(`e9dbd1c`) — 기존 임시 잔여물 삭제·브랜치 정리 행은 완료 근거 미기록(아래 진행 기록).
+
 담당: A(Claude) 계획·검증·커밋·로컬 정리, X(Codex) 반박·구현. 판 7 명세(`SPEC_refactor_v7_lane_registry_20261019.md`)의 공통 규칙을 그대로 따른다
 (동결 파일 금지, bash 3.2, 기능별 작은 파일, 운영 logs/results/data 쓰기 금지, commit/push 는 A, X 의 "통과" 는 PASS 아님).
 근거: 10-19 push 전 새 맥락 검토(B) 보고 + A 재현.

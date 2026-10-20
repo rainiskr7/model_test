@@ -3,7 +3,9 @@ set -u
 BASE=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd) || exit 1
 cd "$BASE" || exit 1
 failed=0
-# 운영 레인 실행 중 금지: test_lane_guard.sh (guard 실프로세스 시험).
+# test_lane_guard.sh는 격리 래퍼이며 fixture 소유 PID에 실제 STOP/CONT를 보낸다.
+# 운영 입력·전역 프로세스 탐색을 사용하지 않는다. 명시적인 실행 금지 지시는 별도로 따른다.
+# 동결 runner_checks.py의 guard suite는 퇴역했으므로 호출하지 않는다.
 # test_lane_guard_isolated.sh는 위 래퍼가 호출하므로 중복 실행하지 않는다.
 for script in \
   orchestration/tests/test_lane_guard.sh \
