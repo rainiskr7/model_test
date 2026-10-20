@@ -1,30 +1,16 @@
 """tau2-bench 공식 split 선택과 upstream reward 변환 회귀 테스트."""
 
-import importlib.util
 import json
 import os
-import sys
 import tempfile
 import unittest
 from pathlib import Path
 from unittest import mock
 
-
-TAUBENCH_DIR = Path(__file__).resolve().parents[1]
-
-
-def load_module(name: str, path: Path):
-    spec = importlib.util.spec_from_file_location(name, path)
-    if spec is None or spec.loader is None:
-        raise ImportError(path)
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[name] = module
-    spec.loader.exec_module(module)
-    return module
-
-
-runner = load_module("taubench_runner_test", TAUBENCH_DIR / "runner" / "run_taubench.py")
-scorer = load_module("taubench_scorer_test", TAUBENCH_DIR / "scoring" / "score_run.py")
+from reports import report_taubench_tracks
+from shared.taubench.runner import run_taubench as runner
+from shared.taubench.scoring import cohort, passk
+from shared.taubench.scoring import report as reporter, score_run as scorer
 
 
 def task(task_id, basis, nl_assertions=None):
@@ -89,6 +75,26 @@ def raw_results(tasks, simulations):
 
 
 class TauBenchScoringTests(unittest.TestCase):
+    def test_main_smoke_writes_summary(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            directory = Path(temp_dir)
+            (directory / "run_manifest.json").write_text(
+                json.dumps(manifest(["one"])), encoding="utf-8"
+            )
+            raw_path = directory / "upstream" / "telecom" / "results.json"
+            raw_path.parent.mkdir(parents=True)
+            raw_path.write_text(
+                json.dumps(raw_results(
+                    [task("one", ["ENV_ASSERTION"])], [simulation("one", 1.0)]
+                )),
+                encoding="utf-8",
+            )
+            self.assertEqual(0, scorer.main(["--results-dir", str(directory)]))
+            summary_path = directory / "summary.json"
+            self.assertTrue(summary_path.is_file())
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            self.assertEqual(1, summary["overall"]["measured"])
+
     def test_task_with_real_nl_assertions_is_never_scored(self):
         """nl_assertions 에 **내용이 있으면** 판정이 필요하므로 채점하지 않는다."""
         for basis in (["DB", "NL_ASSERTION"], ["ENV_ASSERTION", "ACTION", "NL_ASSERTION"]):
@@ -285,8 +291,6 @@ class TauBenchScoringTests(unittest.TestCase):
         self.assertIsNone(scored["pass_rate"])
 
 
-if __name__ == "__main__":
-    unittest.main()
 
 
 class PublishGateTest(unittest.TestCase):
@@ -480,3 +484,697 @@ class SecretLeakTest(unittest.TestCase):
             self.assertNotIn(
                 name, {"user_api_key", "api_key"}, "키 값을 받는 인자가 있으면 안 된다"
             )
+
+
+def _integrity_fixture(user_timeout, user_max_tokens, declared=None):
+    manifest = {
+        "harness_integrity": {
+            "agent_implementation": "llm_agent",
+            "user_implementation": "user_simulator",
+            "model_sent_to_litellm": "openai/candidate",
+            "request_timeout": 60.0,
+            "max_tokens": 16384,
+            **(declared or {}),
+        }
+    }
+    raw = {
+        "info": {
+            "agent_info": {
+                "implementation": "llm_agent",
+                "llm": "openai/candidate",
+                "llm_args": {"timeout": 60.0, "num_retries": 0, "max_tokens": 16384},
+            },
+            "user_info": {
+                "implementation": "user_simulator",
+                "llm": "openrouter/openai/gpt-4.1-mini",
+                "llm_args": {"timeout": user_timeout, "max_tokens": user_max_tokens},
+            },
+        }
+    }
+    return raw, manifest
+
+
+class TestUserSimulatorProtocol(unittest.TestCase):
+    """두 모델을 비교하려면 후보만 달라야 한다 — 사용자 프로토콜은 같아야 한다."""
+
+    def test_declared_user_protocol_must_match_what_actually_ran(self):
+        declared = {"user_request_timeout": 120.0, "user_max_tokens": 16384}
+        raw, manifest = _integrity_fixture(120.0, 16384, declared)
+        result = scorer._validate_upstream_integrity(raw, manifest)
+        self.assertTrue(result["user_protocol"]["pinned"])
+
+        # 불일치는 예외가 아니라 기록이다. build_summary 안에서 터지면 main 이
+        # exit 2 로 끝나 summary.json 을 아예 남기지 않는데, 이 트랙의 원칙은
+        # "발행 불가여도 산출물은 남긴다" 이다.
+        raw, manifest = _integrity_fixture(600.0, 8192, declared)
+        protocol = scorer._validate_upstream_integrity(raw, manifest)["user_protocol"]
+        self.assertEqual(protocol["mismatch"]["declared"]["user_request_timeout"], 120.0)
+        self.assertEqual(protocol["mismatch"]["observed"]["user_request_timeout"], 600.0)
+
+        summary = {
+            "overall": {"pass_rate": 0.5, "measured": 1},
+            "split": {"domain": "telecom", "task_count": 1},
+            "by_domain": {"telecom": {"status": "measured", "runnable_tasks": 1,
+                                      "measured": 1, "termination_reasons": {}}},
+            "harness_integrity": {"upstream_result_evidence": {"user_protocol": protocol}},
+        }
+        failures, _ = scorer.validate_summary(summary)
+        self.assertTrue(any("비교할 수 없다" in f for f in failures))
+
+    def test_legacy_artifacts_pass_but_are_marked_unpinned(self):
+        """구버전 런은 사용자 인자를 기록하지 않는다. 거부하지 않되 증거 없음을 남긴다."""
+
+        raw, manifest = _integrity_fixture(600.0, 8192)
+        protocol = scorer._validate_upstream_integrity(raw, manifest)["user_protocol"]
+        self.assertFalse(protocol["pinned"])
+        self.assertEqual(protocol["user_request_timeout"], 600.0)
+        self.assertIn("증거가 없다", protocol["reason"])
+
+
+class TestOfficialCoverage(unittest.TestCase):
+    """완주와 '도메인을 다 쟀다'는 다르다.
+
+    retail test 는 40건 중 29건만 판정 없이 채점된다. 29/29 를 끝냈다는 이유로
+    'retail' 이라는 이름을 달면 공식 split 성적으로 읽힌다.
+    """
+
+    @staticmethod
+    def _summary(domain, official, runnable, measured):
+        eligible = runnable == official
+        coverage = {"measured": measured, "runnable_task_count": runnable,
+                    "official_task_count": official}
+        if not eligible:
+            coverage["reason"] = "판정 불필요 부분집합만 측정했다 — 공식 도메인 점수가 아니다"
+        return {
+            "overall": {"pass_rate": 0.5, "measured": measured},
+            "split": {"domain": domain, "task_count": official},
+            "by_domain": {
+                domain: {
+                    "status": "measured",
+                    "runnable_tasks": runnable,
+                    "measured": measured,
+                    "termination_reasons": {},
+                    "benchmark_eligible": eligible,
+                    "coverage": coverage,
+                }
+            },
+        }
+
+    def test_a_judge_free_subset_is_not_the_domain_score(self):
+        summary = self._summary("retail", official=40, runnable=29, measured=29)
+        failures, warnings = scorer.validate_summary(summary)
+        self.assertEqual(failures, [])          # 유효한 측정이다 — 거부하지 않는다
+        self.assertTrue(any("부분집합 점수로만" in w for w in warnings))
+
+    def test_full_official_coverage_is_eligible(self):
+        summary = self._summary("telecom", official=40, runnable=40, measured=40)
+        failures, warnings = scorer.validate_summary(summary)
+        self.assertEqual(failures, [])
+        self.assertEqual(warnings, [])
+
+    def test_build_summary_is_what_marks_eligibility(self):
+        """검증 함수가 요약을 변형하면 계산과 판정의 경계가 흐려진다."""
+
+        summary = self._summary("retail", official=40, runnable=29, measured=29)
+        del summary["by_domain"]["retail"]["benchmark_eligible"]
+        del summary["by_domain"]["retail"]["coverage"]
+        scorer.validate_summary(summary)
+        self.assertNotIn("benchmark_eligible", summary["by_domain"]["retail"])
+
+
+def _run(session, candidate, user_model, passed, *, user_timeout=None, user_max_tokens=None,
+         domain="telecom", split_name="test", task_ids=("t1", "t2", "t3")):
+    return {
+        "_session": session,
+        "benchmark": "tau2",
+        "scoring_version": "taubench_state_v1",
+        "model": candidate,
+        "split": {"domain": domain, "name": split_name, "task_count": len(task_ids),
+                  "runnable_task_count": len(task_ids), "task_ids": list(task_ids)},
+        "harness_integrity": {
+            "mode": "standard", "agent_implementation": "llm_agent",
+            "user_implementation": "user_simulator", "user_model_sent_to_litellm": user_model,
+            "user_request_timeout": user_timeout, "user_max_tokens": user_max_tokens,
+            "max_steps": 100, "tau2_version": "1.0.1",
+            "model_sent_to_litellm": f"openai/{candidate}",
+        },
+        "by_domain": {domain: {"task_results": [
+            {"task_id": t, "passed": t in passed} for t in task_ids]}},
+    }
+
+
+class TestCohortKeys(unittest.TestCase):
+    def test_candidate_is_excluded_from_the_comparison_fingerprint(self):
+        """후보가 지문에 들어가면 모든 모델이 자기만의 코호트가 되어 비교가 사라진다."""
+
+        a = _run("s1", "modelA", "openai/gpt-4.1-mini", {"t1"}, user_timeout=120.0, user_max_tokens=16384)
+        b = _run("s2", "modelB", "openai/gpt-4.1-mini", {"t2"}, user_timeout=120.0, user_max_tokens=16384)
+        self.assertEqual(
+            cohort.comparison_fingerprint(a)["fingerprint"],
+            cohort.comparison_fingerprint(b)["fingerprint"],
+        )
+
+    def test_a_different_user_simulator_is_a_different_protocol(self):
+        """사용자 시뮬레이터 교체로 같은 모델이 0.475 -> 0.900 이 된 전례가 있다."""
+
+        a = _run("s1", "m", "openai/gpt-4.1-mini", {"t1"}, user_timeout=120.0, user_max_tokens=16384)
+        b = _run("s2", "m", "openai/m", {"t1"}, user_timeout=120.0, user_max_tokens=16384)
+        self.assertNotEqual(
+            cohort.comparison_fingerprint(a)["fingerprint"],
+            cohort.comparison_fingerprint(b)["fingerprint"],
+        )
+
+    def test_unrecorded_user_args_block_cross_candidate_comparison(self):
+        legacy = _run("s1", "m", "openai/gpt-4.1-mini", {"t1"})
+        pinned = _run("s2", "m", "openai/gpt-4.1-mini", {"t1"}, user_timeout=120.0, user_max_tokens=16384)
+        self.assertFalse(cohort.comparison_fingerprint(legacy)["comparable_across_candidates"])
+        self.assertTrue(cohort.comparison_fingerprint(pinned)["comparable_across_candidates"])
+
+    def test_pinning_status_does_not_split_replicates(self):
+        """고정 여부를 지문에 섞으면 같은 모델의 반복 실행끼리 갈라진다."""
+
+        runs = [_run(f"rep{i}", "m", "openai/gpt-4.1-mini", {"t1"}) for i in range(3)]
+        keys = {cohort.replicate_key(r) for r in runs}
+        self.assertEqual(len(keys), 1)
+
+    def test_reproducibility_compares_sets_not_counts(self):
+        same = [_run(f"r{i}", "m", "openai/u", {"t1", "t2"}) for i in range(2)]
+        report = cohort.reproducibility_report(same)
+        self.assertEqual(report[0]["status"], "IDENTICAL")
+
+        swapped = [_run("r1", "m", "openai/u", {"t1", "t2"}),
+                   _run("r2", "m", "openai/u", {"t1", "t3"})]
+        report = cohort.reproducibility_report(swapped)
+        self.assertEqual(report[0]["status"], "DIVERGED")
+        self.assertEqual(report[0]["passed_counts"], [2, 2])   # 건수는 같다
+        self.assertEqual(report[0]["unstable_tasks"], ["t2", "t3"])
+
+    def test_a_single_run_is_unverified_not_passing(self):
+        report = cohort.reproducibility_report([_run("only", "m", "openai/u", {"t1"})])
+        self.assertEqual(report[0]["status"], "UNVERIFIED")
+
+
+class TestUserProtocolP0(unittest.TestCase):
+    """terra 검토(01a03eb1)에서 나온 P0 두 건."""
+
+    def test_a_swapped_user_model_is_a_mismatch(self):
+        """인자만 대조하면 시뮬레이터가 통째로 바뀌어도 통과한다."""
+
+        declared = {"user_request_timeout": 120.0, "user_max_tokens": 16384}
+        raw, manifest = _integrity_fixture(120.0, 16384, declared)
+        manifest["harness_integrity"]["user_model_sent_to_litellm"] = "openai/some-other-user"
+        protocol = scorer._validate_upstream_integrity(raw, manifest)["user_protocol"]
+        self.assertIn("mismatch", protocol)
+        self.assertEqual(protocol["mismatch"]["observed"]["user_model"],
+                         "openrouter/openai/gpt-4.1-mini")
+
+    def test_a_recorded_mismatch_blocks_cross_candidate_comparison(self):
+        """채점기는 upstream_result_evidence 아래에 쓴다 — 위치를 잘못 읽으면 항상 통과한다."""
+
+        run = _run("s1", "m", "openai/gpt-4.1-mini", {"t1"},
+                   user_timeout=120.0, user_max_tokens=16384)
+        self.assertTrue(cohort.comparison_fingerprint(run)["comparable_across_candidates"])
+
+        run["harness_integrity"]["upstream_result_evidence"] = {
+            "user_protocol": {"pinned": True, "mismatch": {"declared": {}, "observed": {}}}
+        }
+        result = cohort.comparison_fingerprint(run)
+        self.assertFalse(result["comparable_across_candidates"])
+        self.assertIn("실제 실행이 다르다", result["reason"])
+
+
+class TestReviewFollowups(unittest.TestCase):
+    """terra(01a03eb1) / luna(01a03eb3) 검토에서 나온 나머지."""
+
+    def test_multi_trial_summaries_are_not_judged_by_set_equality(self):
+        """1/4 통과와 4/4 통과가 같은 집합이 된다 — Pass^k 를 대신할 수 없다."""
+
+        run = _run("s1", "m", "openai/u", {"t1"})
+        run["by_domain"]["telecom"]["task_results"] = [
+            {"task_id": "t1", "passed": True},
+            {"task_id": "t1", "passed": False},      # 같은 과제의 2회차
+            {"task_id": "t2", "passed": False},
+        ]
+        self.assertTrue(cohort.is_multi_trial(run))
+        report = cohort.reproducibility_report([run, run])
+        self.assertEqual(report[0]["status"], "UNSUPPORTED")
+
+    def test_single_trial_is_still_compared(self):
+        runs = [_run(f"r{i}", "m", "openai/u", {"t1"}) for i in range(2)]
+        self.assertFalse(cohort.is_multi_trial(runs[0]))
+        self.assertEqual(cohort.reproducibility_report(runs)[0]["status"], "IDENTICAL")
+
+    def test_an_unpinned_run_warns_that_it_cannot_be_compared(self):
+        summary = {
+            "overall": {"pass_rate": 0.5, "measured": 1},
+            "split": {"domain": "telecom", "task_count": 1},
+            "by_domain": {"telecom": {"status": "measured", "runnable_tasks": 1,
+                                      "measured": 1, "termination_reasons": {}}},
+            "harness_integrity": {"upstream_result_evidence": {
+                "user_protocol": {"pinned": False, "reason": "구버전"}}},
+        }
+        failures, warnings = scorer.validate_summary(summary)
+        self.assertEqual(failures, [])
+        self.assertTrue(any("모델 간 비교에 쓸 수 없다" in w for w in warnings))
+
+
+class TestReportEnforcement(unittest.TestCase):
+    """플래그를 읽는 코드가 없으면 플래그는 아무것도 막지 못한다."""
+
+    @staticmethod
+    def _summary(model, *, official=40, runnable=40, publishable=True, pinned=True):
+        run = _run("s", model, "openai/gpt-4.1-mini", {"t1"},
+                   user_timeout=120.0 if pinned else None,
+                   user_max_tokens=16384 if pinned else None)
+        run["split"].update({"task_count": official, "runnable_task_count": runnable})
+        run["by_domain"]["telecom"].update({
+            "pass_rate": 0.5, "passed": 1, "measured": 2, "runnable_tasks": runnable,
+        })
+        run["publish_status"] = {"publishable": publishable}
+        return run
+
+    def test_a_subset_never_carries_the_domain_name(self):
+        markdown = reporter.render_markdown([self._summary("m", runnable=29)], [])
+        self.assertIn("telecom/test/judge-free-29", markdown)
+        self.assertIn("공식 split 부분집합", markdown)
+
+    def test_eligibility_is_recomputed_when_the_artifact_predates_the_flag(self):
+        """보고 계층이 재채점을 전제하면 강제가 조용히 풀린다."""
+
+        run = self._summary("m", runnable=29)
+        self.assertNotIn("benchmark_eligible", run["by_domain"]["telecom"])
+        _, entry = reporter._domain_entry(run)
+        self.assertFalse(entry["benchmark_eligible"])
+
+    def test_an_unpinned_cohort_is_marked_uncomparable(self):
+        runs = [self._summary("a", pinned=False), self._summary("b", pinned=False)]
+        markdown = reporter.render_markdown(runs, [])
+        self.assertIn("UNCOMPARABLE", markdown)
+        self.assertIn("사용자 프로토콜 미고정", markdown)
+
+    def test_a_pinned_publishable_cohort_has_no_exclusion_reason(self):
+        runs = [self._summary("a"), self._summary("b")]
+        markdown = reporter.render_markdown(runs, [])
+        self.assertNotIn("UNCOMPARABLE", markdown)
+
+    def test_a_rejected_run_never_shows_its_number(self):
+        markdown = reporter.render_markdown([self._summary("m", publishable=False)], [])
+        self.assertIn("발행 불가", markdown)
+        self.assertNotIn("50.00", markdown)
+
+    def test_claims_use_the_full_task_vector_not_only_passed_tasks(self):
+        """실패 과제가 벡터에서 빠지면 커버리지 차이가 재현성처럼 보인다."""
+
+        run = self._summary("m")
+        run["by_domain"]["telecom"]["task_results"] = [
+            {"task_id": "pass", "passed": True}, {"task_id": "fail", "passed": False},
+        ]
+        claims = reporter._claims([run])
+        cred = claims["credentials"][0]["credential"]
+        self.assertEqual(cred["measured_items"], 2)
+        self.assertEqual(cred["pass_counts"], [1])
+
+    def test_multi_trial_claims_are_excluded_and_reported(self):
+        """Pass^k 산출물을 통과 집합으로 접어 우열 근거로 만들면 안 된다."""
+
+        run = self._summary("m")
+        run["by_domain"]["telecom"]["task_results"] = [
+            {"task_id": "t1", "passed": True}, {"task_id": "t1", "passed": False},
+        ]
+        markdown = reporter.render_markdown([run], [])
+        self.assertIn("**제외**", markdown)
+        self.assertIn("Pass^k 를 대신할 수 없다", markdown)
+
+    def test_unpinned_claims_do_not_call_the_comparison_rule(self):
+        """프로토콜 미고정은 불안정 예산을 볼 단계 이전의 비교 불가 사유다."""
+
+        runs = [self._summary("a", pinned=False), self._summary("b", pinned=False)]
+        claims = reporter._claims(runs)
+        self.assertFalse(claims["verdicts"][0]["verdict"]["comparable"])
+        self.assertIn("사용자", claims["verdicts"][0]["verdict"]["reason"])
+
+
+class TestResultsPathCasing(unittest.TestCase):
+    """문자열 치환만 하면 리눅스에서 한 런의 산출물이 두 디렉토리로 갈린다."""
+
+    def test_an_existing_directory_spelling_wins(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            (base / "results" / "Google_Gemma_4_26B_A4B_it").mkdir(parents=True)
+            resolved = runner.results_model_dir_name(base, "google/gemma-4-26b-a4b-it")
+            self.assertEqual(resolved, "Google_Gemma_4_26B_A4B_it")
+
+    def test_a_new_model_keeps_its_normalized_name(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            (base / "results").mkdir()
+            self.assertEqual(runner.results_model_dir_name(base, "new/model:v1"), "new_model_v1")
+
+    def test_ambiguous_casing_is_rejected_rather_than_guessed(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            try:
+                for name in ("model_a", "MODEL_A"):
+                    (base / "results" / name).mkdir(parents=True)
+            except FileExistsError:
+                self.skipTest("case-insensitive filesystem cannot hold both spellings")
+            with self.assertRaises(ValueError):
+                runner.results_model_dir_name(base, "model/a")
+
+
+class TestPassHatK(unittest.TestCase):
+    """정의는 상류(agent_metrics.pass_hat_k)를 그대로 따른다."""
+
+    @staticmethod
+    def _results(spec):
+        """spec = {task_id: [통과여부, ...]} — 시행 순서대로."""
+        out = []
+        for task_id, outcomes in spec.items():
+            for passed in outcomes:
+                out.append({"task_id": task_id, "evaluation_status": "measured",
+                            "passed": passed})
+        return out
+
+    def test_a_task_passed_once_of_two_scores_zero_at_k2(self):
+        table = passk.pass_hat_k_table(self._results({"a": [True, False]}))
+        self.assertEqual(table["pass_hat_k"]["pass^1"], 0.5)
+        self.assertEqual(table["pass_hat_k"]["pass^2"], 0.0)
+
+    def test_always_passing_stays_one_at_every_k(self):
+        table = passk.pass_hat_k_table(self._results({"a": [True, True, True]}))
+        self.assertEqual(table["pass_hat_k"]["pass^3"], 1.0)
+
+    def test_max_k_follows_the_least_repeated_task(self):
+        """4회 돌린 과제 하나 때문에 2회짜리 과제에 k=4 를 물을 수는 없다."""
+
+        table = passk.pass_hat_k_table(self._results({"a": [True] * 4, "b": [True] * 2}))
+        self.assertEqual(table["max_k"], 2)
+        self.assertEqual(table["trials_per_task"], [2, 4])
+
+    def test_unmeasured_trials_leave_the_denominator(self):
+        """하네스 장애를 실패로 세면 모델 점수로 둔갑한다."""
+
+        results = self._results({"a": [True, False]})
+        results.append({"task_id": "a", "evaluation_status": "not_measured"})
+        self.assertEqual(passk.task_success_counts(results)["a"], (1, 2))
+
+    def test_no_measured_trials_yields_an_empty_table(self):
+        table = passk.pass_hat_k_table([{"task_id": "a", "evaluation_status": "not_measured"}])
+        self.assertEqual(table["max_k"], 0)
+        self.assertEqual(table["pass_hat_k"], {})
+
+
+class TestReportStrict(unittest.TestCase):
+    """taubench 를 분리하면서 report_agent_tracks --strict 의 CI 검사가 사라졌었다."""
+
+    def _cli(self, tmp, publishable):
+        run = tmp / "results" / "m" / "s" / "language" / "taubench"
+        run.mkdir(parents=True)
+        (run / "summary.json").write_text(json.dumps({
+            "benchmark": "tau2", "scoring_version": "v1", "model": "m",
+            "split": {"domain": "telecom", "name": "test", "task_count": 1,
+                      "runnable_task_count": 1, "task_ids": ["t1"]},
+            "harness_integrity": {"mode": "standard", "user_implementation": "user_simulator"},
+            "by_domain": {"telecom": {"status": "measured", "pass_rate": 0.5,
+                                      "passed": 1, "measured": 2,
+                                      "task_results": [{"task_id": "t1", "passed": True}]}},
+            "publish_status": {"publishable": publishable,
+                               "failures": [] if publishable else ["부분 실행이다"]},
+        }, ensure_ascii=False), encoding="utf-8")
+        with mock.patch("sys.stdout"), mock.patch("sys.stderr"):
+            return report_taubench_tracks.main(["--base", str(tmp), "--strict"])
+
+    def test_a_rejected_run_fails_strict(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.assertEqual(self._cli(Path(tmp), publishable=False), 1)
+
+    def test_a_clean_run_passes_strict(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.assertEqual(self._cli(Path(tmp), publishable=True), 0)
+
+    def test_an_unreadable_artifact_fails_strict(self):
+        """읽을 수 없는 산출물이 조용히 통과하면 게이트의 의미가 없다.
+
+        깨진 summary.json 은 "발행 가능한 런이 하나 줄었다" 가 아니라 "무엇이 있었는지
+        모른다" 는 뜻이다. 거부와 같은 무게로 CI 를 실패시킨다.
+        """
+
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            run = base / "results" / "m" / "s" / "language" / "taubench"
+            run.mkdir(parents=True)
+            (run / "summary.json").write_text("{ 깨진 JSON", encoding="utf-8")
+            with mock.patch("sys.stdout"), mock.patch("sys.stderr"):
+                self.assertEqual(report_taubench_tracks.main(["--base", str(base), "--strict"]), 1)
+
+    def test_collect_records_why_an_artifact_could_not_be_read(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            run = base / "results" / "m" / "s" / "language" / "taubench"
+            run.mkdir(parents=True)
+            (run / "summary.json").write_text("{ 깨진 JSON", encoding="utf-8")
+            summaries, unreadable = reporter.collect(base)
+            self.assertEqual(summaries, [])
+            self.assertEqual(len(unreadable), 1)
+            self.assertIn("JSONDecodeError", unreadable[0]["reason"])
+
+
+class UserSimulatorServingConstraints(unittest.TestCase):
+    """diffusion 백엔드는 temperature 를 400 으로 거부한다."""
+
+    def test_a_local_user_simulator_drops_the_rejected_parameter(self):
+        # user_model 에 provider 접두사가 없으면 외부로 분류되지 않아 api_base 가
+        # 로컬로 남는다. 그대로 두면 매 사용자 턴이 400 이다.
+        args = {"api_base": "http://local:18023/v1", "temperature": 0.0, "max_tokens": 512}
+        with mock.patch.dict(
+            os.environ, {"SERVING_UNSUPPORTED_SAMPLING_PARAMS": "temperature,seed"}
+        ):
+            removed = runner.apply_user_serving_constraints(args)
+        self.assertEqual(removed, ["temperature"])
+        self.assertNotIn("temperature", args)
+        self.assertEqual(args["max_tokens"], 512, "관계없는 인자를 건드리면 안 된다")
+
+    def test_an_explicitly_pointed_user_endpoint_is_left_alone(self):
+        # --user-base-url 로 다른 서버에 붙였다면 그쪽 제약은 이 프로파일이 말하는
+        # 대상이 아니다. 그런데도 적용하면 그 서버가 요구하는 temperature 를 말없이
+        # 빼서 사용자 프로토콜을 바꿔버린다.
+        args = {"api_base": "http://other:9000/v1", "temperature": 0.0}
+        with mock.patch.dict(
+            os.environ, {"SERVING_UNSUPPORTED_SAMPLING_PARAMS": "temperature"}
+        ):
+            removed = runner.apply_user_serving_constraints(args, inherited=False)
+        self.assertEqual(removed, [])
+        self.assertEqual(args["temperature"], 0.0)
+
+    def test_a_removed_user_parameter_costs_comparison_eligibility(self):
+        # 선언한 temperature 가 제거됐다면 적어놓은 사용자 프로토콜은 실제로
+        # 실행된 것이 아니다. 지문을 갈라 반복 실행 코호트를 깨는 대신 비교
+        # 자격을 뺀다.
+        summary = {
+            "benchmark": "tau2", "scoring_version": "v1",
+            "split": {"domain": "airline", "name": "full"},
+            "harness_integrity": {
+                "mode": "standard", "user_model_sent_to_litellm": "m",
+                "user_request_timeout": 60, "user_max_tokens": 512,
+                "user_removed_sampling_params": ["temperature"],
+            },
+        }
+        got = cohort.comparison_fingerprint(summary)
+        self.assertFalse(got["comparable_across_candidates"])
+        self.assertIn("temperature", got["reason"])
+
+    def test_a_run_without_removed_user_parameters_keeps_its_eligibility(self):
+        summary = {
+            "benchmark": "tau2", "scoring_version": "v1",
+            "split": {"domain": "airline", "name": "full"},
+            "harness_integrity": {
+                "mode": "standard", "user_model_sent_to_litellm": "m",
+                "user_request_timeout": 60, "user_max_tokens": 512,
+                "user_removed_sampling_params": [],
+            },
+        }
+        self.assertTrue(
+            cohort.comparison_fingerprint(summary)["comparable_across_candidates"]
+        )
+
+    def test_an_external_user_simulator_is_left_alone(self):
+        # 외부 엔드포인트의 제약은 이 프로파일이 말하는 대상이 아니다.
+        args = {"temperature": 0.0}
+        with mock.patch.dict(
+            os.environ, {"SERVING_UNSUPPORTED_SAMPLING_PARAMS": "temperature"}
+        ):
+            removed = runner.apply_user_serving_constraints(args)
+        self.assertEqual(removed, [])
+        self.assertEqual(args["temperature"], 0.0)
+
+    def test_an_unconstrained_backend_keeps_temperature(self):
+        args = {"api_base": "http://local:18023/v1", "temperature": 0.0}
+        with mock.patch.dict(os.environ, {"SERVING_UNSUPPORTED_SAMPLING_PARAMS": ""}):
+            removed = runner.apply_user_serving_constraints(args)
+        self.assertEqual(removed, [])
+        self.assertEqual(args["temperature"], 0.0)
+
+
+if __name__ == "__main__":
+    unittest.main()
+
+
+class CandidateProtocolFailureTest(unittest.TestCase):
+    """후보가 도구 호출 대신 텍스트로 답해 tau2 가 죽인 시뮬레이션은 측정된 실패(보상 0)다.
+
+    2026-09-26 결정. 그 전에는 unclassified 미완주로 남아 발행이 막혔다 (diffusion 3런 모두
+    16/40, gemma 2런 10/40). 서버 장애와 달리 모델의 행동이므로 점수에 반영한다.
+    """
+
+    AGENT_TB = "agent_msg, self.agent_state = self.agent.generate_next_message(\n"
+    USER_TB = "user_msg, self.user_state = self.user.generate_next_message(\n"
+
+    @staticmethod
+    def _dead(task_id, traceback, error="LLMSoloAgent only supports tool calls.", error_type="ValueError"):
+        return {
+            "task_id": task_id,
+            "termination_reason": "infrastructure_error",
+            "info": {"error": error, "error_type": error_type, "error_traceback": traceback},
+            "messages": [],
+        }
+
+    def _summary(self, sims, ids=("a", "b", "c", "d")):
+        raw = raw_results([task(v, ["ENV_ASSERTION"]) for v in ids], sims)
+        return scorer.build_summary({"telecom": raw}, manifest(list(ids)), "taubench")
+
+    def test_no_tool_call_by_agent_counts_as_measured_failure_and_publishes(self):
+        summary = self._summary([
+            simulation("a", 1.0), simulation("b", 0.0),
+            self._dead("c", self.AGENT_TB), self._dead("d", self.AGENT_TB),
+        ])
+        entry = summary["by_domain"]["telecom"]
+        self.assertEqual(4, entry["measured"])
+        self.assertEqual(1, entry["passed"])
+        self.assertEqual(3, entry["failed"])
+        self.assertEqual(0.25, entry["pass_rate"])
+        self.assertEqual({"no_tool_call@agent": 2}, entry["candidate_protocol_failures"])
+        self.assertEqual(4, entry["distinct_tasks_measured"])
+        self.assertEqual({}, entry["incompletion_attribution"]["unclassified"])
+        records = {r["task_id"]: r for r in entry["task_results"]}
+        self.assertIs(False, records["c"]["passed"])
+        self.assertEqual("no_tool_call", records["c"]["protocol_failure"])
+        self.assertEqual("measured", records["c"]["evaluation_status"])
+        failures, _ = scorer.validate_summary(summary)
+        self.assertEqual([], failures)
+
+    def test_same_error_without_agent_traceback_stays_blocking(self):
+        """actor 를 모르면 후보에게 씌우지 않는다 — 발행도 막힌다."""
+        summary = self._summary([
+            simulation("a", 1.0), simulation("b", 0.0),
+            self._dead("c", None), self._dead("d", self.AGENT_TB),
+        ])
+        entry = summary["by_domain"]["telecom"]
+        self.assertEqual(3, entry["measured"])
+        self.assertEqual({"no_tool_call@agent": 1}, entry["candidate_protocol_failures"])
+        self.assertEqual({"ValueError@unknown": 1}, entry["incompletion_attribution"]["unclassified"])
+        failures, _ = scorer.validate_summary(summary)
+        self.assertTrue(any("완주 실패 1건" in f for f in failures), failures)
+        self.assertTrue(any("3개만 측정" in f for f in failures), failures)
+
+    def test_same_error_in_user_simulator_is_not_candidate(self):
+        summary = self._summary([
+            simulation("a", 1.0), simulation("b", 0.0), simulation("c", 0.0),
+            self._dead("d", self.USER_TB),
+        ])
+        entry = summary["by_domain"]["telecom"]
+        self.assertEqual({}, entry["candidate_protocol_failures"])
+        self.assertEqual({"ValueError@user": 1}, entry["incompletion_attribution"]["unclassified"])
+
+    def test_other_value_errors_are_not_protocol_failures(self):
+        summary = self._summary([
+            simulation("a", 1.0), simulation("b", 0.0), simulation("c", 0.0),
+            self._dead("d", self.AGENT_TB, error="some other ValueError"),
+        ])
+        entry = summary["by_domain"]["telecom"]
+        self.assertEqual({}, entry["candidate_protocol_failures"])
+        self.assertEqual({"ValueError@agent": 1}, entry["incompletion_attribution"]["unclassified"])
+
+    def test_scoring_version_bumped_for_new_rule(self):
+        self.assertEqual("taubench_state_v2", scorer.SCORING_VERSION)
+
+    EMPTY_ERROR = (
+        "AssistantMessage must have either content or tool_calls. "
+        "Got AssistantMessage\nis_final_chunk: True"
+    )
+    VALIDATE_TB = (
+        'Traceback (most recent call last):\n'
+        '  File "/venv/site-packages/tau2/orchestrator/orchestrator.py", line 861, in step\n'
+        '    agent_msg.validate()\n'
+        '    ~~~~~~~~~~~~~~~~~~^^\n'
+        '  File "/venv/site-packages/tau2/data_model/message.py", line 287, in validate\n'
+        '    raise ValueError(\n'
+    )
+
+    def test_empty_agent_message_counts_as_measured_failure(self):
+        summary = self._summary([
+            simulation("a", 1.0), simulation("b", 0.0),
+            self._dead("c", self.VALIDATE_TB, self.EMPTY_ERROR),
+            self._dead("d", self.VALIDATE_TB, self.EMPTY_ERROR),
+        ])
+        entry = summary["by_domain"]["telecom"]
+        self.assertEqual({"empty_message@agent": 2}, entry["candidate_protocol_failures"])
+        self.assertEqual({"pass_rate": 0.25, "measured": 4, "passed": 1, "failed": 3},
+                         summary["overall"])
+        self.assertEqual(4, entry["distinct_tasks_measured"])
+        self.assertEqual(0.25, entry["pass_rate_strict"])
+        self.assertEqual(0.25, entry["pass_hat_k"]["pass_hat_k"]["pass^1"])
+        self.assertEqual({}, entry["incompletion_attribution"]["unclassified"])
+        for record in entry["task_results"][2:]:
+            self.assertEqual("measured", record["evaluation_status"])
+            self.assertEqual("empty_message", record["protocol_failure"])
+            self.assertIs(False, record["passed"])
+        self.assertEqual([], scorer.validate_summary(summary)[0])
+
+    def test_empty_message_suffix_and_source_line_can_change(self):
+        prefix = "AssistantMessage must have either content or tool_calls"
+        for suffix in ("", ". Got AssistantMessage\nis_final_chunk: False\nchunk_id: 7",
+                       ". Got AssistantMessage\ncontent:    \nsource: text"):
+            with self.subTest(suffix=suffix):
+                dead = self._dead("a", self.VALIDATE_TB.replace("line 861", "line 999"),
+                                  prefix + suffix)
+                self.assertEqual("empty_message", scorer._candidate_protocol_failure(dead))
+
+    def test_empty_user_message_is_not_candidate_failure(self):
+        user_error = self.EMPTY_ERROR.replace("AssistantMessage", "UserMessage")
+        for tb in (self.VALIDATE_TB.replace("agent_msg", "user_msg"), self.VALIDATE_TB):
+            with self.subTest(traceback=tb):
+                summary = self._summary([
+                    simulation("a", 1.0), simulation("b", 0.0), simulation("c", 0.0),
+                    self._dead("d", tb, user_error),
+                ])
+                entry = summary["by_domain"]["telecom"]
+                self.assertEqual(3, entry["measured"])
+                self.assertEqual({}, entry["candidate_protocol_failures"])
+                self.assertEqual({"ValueError@unknown": 1},
+                                 entry["incompletion_attribution"]["unclassified"])
+                self.assertTrue(scorer.validate_summary(summary)[0])
+
+    def test_empty_assistant_message_requires_exact_agent_validation_frame(self):
+        for tb in (
+            None, self.AGENT_TB, self.USER_TB, "agent_msg.validate()",
+            self.VALIDATE_TB.replace("agent_msg", "user_msg"),
+            self.VALIDATE_TB.replace("in step", "in validate_message_history"),
+            self.VALIDATE_TB.replace("tau2/orchestrator/orchestrator.py", "other/orchestrator.py"),
+            self.VALIDATE_TB.replace("    agent_msg.validate()\n", "") +
+                '\n  File "/other.py", line 1, in step\n    agent_msg.validate()\n',
+        ):
+            with self.subTest(traceback=tb):
+                dead = self._dead("a", tb, self.EMPTY_ERROR)
+                self.assertIsNone(scorer._candidate_protocol_failure(dead))
+
+    def test_empty_message_keeps_other_error_types_and_terminations_unchanged(self):
+        for error_type in ("TypeError", "Timeout", "ContextWindowExceededError", ""):
+            with self.subTest(error_type=error_type):
+                dead = self._dead("a", self.VALIDATE_TB, self.EMPTY_ERROR, error_type)
+                self.assertIsNone(scorer._candidate_protocol_failure(dead))
+                candidate, environment, unclassified = scorer._classify_incompletions([dead])
+                self.assertEqual({}, candidate)
+                self.assertEqual(1, sum(environment.values()) + sum(unclassified.values()))
+        dead = self._dead("a", self.VALIDATE_TB, self.EMPTY_ERROR)
+        dead["termination_reason"] = "agent_stop"
+        self.assertIsNone(scorer._candidate_protocol_failure(dead))

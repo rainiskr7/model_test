@@ -20,6 +20,7 @@ codex 지적을 반영한 설계:
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import random
@@ -29,7 +30,8 @@ import urllib.error
 import urllib.request
 from collections import Counter, defaultdict
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from threading import Lock
+from typing import Any, Dict, Mapping, Optional, List, Optional
 
 VERDICT_SCHEMA = {
     "name": "verdict",
@@ -69,8 +71,57 @@ def render_prompt(rubric: str, item: Dict[str, Any]) -> str:
     )
 
 
+JUDGE_ENDPOINT = "https://openrouter.ai/api/v1/chat/completions"
+
+# 엔드포인트가 실제로 무엇을 서빙했는지 모아 둔다. `openai/gpt-4.1-mini` 는 alias 라
+# 문자열이 그대로여도 서빙 리비전이 바뀔 수 있다. 판정 점수는 그 모델이 만든 것이므로
+# 무엇이 돌았는지 남기지 않으면 나중에 같은 점수인지 확인할 방법이 없다.
+class ServedIdentity:
+    """main이 소유하고 그 실행의 모든 판정 worker가 공유하는 등록부."""
+
+    def __init__(self):
+        self._values = {"model": set(), "system_fingerprint": set(), "provider": set()}
+        self._lock = Lock()
+
+    def record(self, payload: Dict[str, Any]) -> None:
+        """판정 내용의 파싱 성공 여부와 관계없이 관측한 응답 출처를 모은다."""
+        with self._lock:
+            for field in ("model", "system_fingerprint", "provider"):
+                value = payload.get(field)
+                if value:
+                    self._values[field].add(str(value))
+
+    def reset(self, previous: Optional[Mapping[str, Any]] = None) -> None:
+        """새 실행은 비우고, 재판정은 이전 전체 judge.json 출처를 물려받는다."""
+        with self._lock:
+            for values in self._values.values():
+                values.clear()
+            for field, values in (previous or {}).items():
+                if field in self._values:
+                    self._values[field].update(str(value) for value in values or [])
+
+    def snapshot(self) -> Dict[str, Any]:
+        """기존 필드 순서와 정렬·빈 필드 생략을 보존한 사본을 반환한다."""
+        with self._lock:
+            return {field: sorted(values) for field, values in self._values.items() if values}
+
+
+def rubric_digest(rubrics: Dict[str, str]) -> Dict[str, str]:
+    """루브릭 **본문**의 해시.
+
+    지금은 "upstream data/rubric_{type}.txt (unmodified)" 라는 문장만 남는데,
+    그것은 검증되지 않은 주장이다. 파일이 수정돼도 문장은 그대로다. 해시는 그럴 수 없다.
+    """
+
+    return {
+        kind: "sha256:" + hashlib.sha256(text.encode("utf-8")).hexdigest()[:32]
+        for kind, text in sorted(rubrics.items())
+    }
+
+
 def call_judge(
-    prompt: str, model: str, api_key: str, timeout: float, retries: int
+    prompt: str, model: str, api_key: str, timeout: float, retries: int,
+    *, identity: ServedIdentity,
 ) -> Dict[str, Any]:
     """구조화 출력으로 판정을 받는다. 실패는 fail 이 아니라 오류로 돌려준다."""
     body = json.dumps(
@@ -85,7 +136,7 @@ def call_judge(
     last_error = None
     for attempt in range(max(1, retries)):
         req = urllib.request.Request(
-            "https://openrouter.ai/api/v1/chat/completions",
+            JUDGE_ENDPOINT,
             data=body,
             headers={
                 "Authorization": f"Bearer {api_key}",
@@ -95,6 +146,7 @@ def call_judge(
         try:
             with urllib.request.urlopen(req, timeout=timeout) as resp:
                 payload = json.loads(resp.read().decode("utf-8"))
+            identity.record(payload)
             content = payload["choices"][0]["message"]["content"]
             parsed = json.loads(content)
             # 구조화 출력을 요청했다고 지켜졌다는 보장은 없다. **직접 검증한다.**
@@ -177,7 +229,8 @@ def stratified_sample(
     return picked
 
 
-def main(argv: Optional[List[str]] = None) -> int:
+def _parse_args(argv):
+    """파일럿의 입력 경로와 판정 실행 옵션을 읽는다."""
     parser = argparse.ArgumentParser()
     parser.add_argument("--results-dir", required=True, type=Path)
     parser.add_argument("--out", required=True, type=Path)
@@ -189,18 +242,11 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser.add_argument("--api-key-env", default="TAUBENCH_USER_API_KEY")
     parser.add_argument("--timeout", type=float, default=120.0)
     parser.add_argument("--retries", type=int, default=3)
-    args = parser.parse_args(argv)
+    return parser.parse_args(argv)
 
-    api_key = os.environ.get(args.api_key_env)
-    if not api_key:
-        raise SystemExit(f"{args.api_key_env} 환경변수가 필요합니다 (값은 인자로 받지 않습니다).")
 
-    rubrics = load_rubrics(args.data_dir)
-    items = collect_items(args.results_dir)
-    sample = stratified_sample(items, args.per_type, args.seed)
-    models = [m.strip() for m in args.models.split(",") if m.strip()]
-    print(f"[judge-pilot] 대상 {len(items)}건 중 층화 표본 {len(sample)}건, 모델 {models}")
-
+def _judge_sample(sample, rubrics, models, api_key, args, identity):
+    """호출별 identity를 공유하며 표본을 반복 판정하고 진행 상황을 출력한다."""
     records = []
     for index, item in enumerate(sample, start=1):
         kind = str(item.get("type_of_output"))
@@ -215,12 +261,28 @@ def main(argv: Optional[List[str]] = None) -> int:
             runs = []
             n = args.repeats if model == models[0] else 1
             for _ in range(n):
-                runs.append(call_judge(prompt, model, api_key, args.timeout, args.retries))
+                runs.append(call_judge(prompt, model, api_key, args.timeout, args.retries,
+                                       identity=identity))
             entry["judges"][model] = runs
         records.append(entry)
         if index % 5 == 0 or index == len(sample):
             print(f"[judge-pilot] {index}/{len(sample)}")
+    return records
 
+
+def main(argv: Optional[List[str]] = None) -> int:
+    args = _parse_args(argv)
+    api_key = os.environ.get(args.api_key_env)
+    if not api_key:
+        raise SystemExit(f"{args.api_key_env} 환경변수가 필요합니다 (값은 인자로 받지 않습니다).")
+
+    rubrics = load_rubrics(args.data_dir)
+    items = collect_items(args.results_dir)
+    sample = stratified_sample(items, args.per_type, args.seed)
+    models = [m.strip() for m in args.models.split(",") if m.strip()]
+    identity = ServedIdentity()
+    print(f"[judge-pilot] 대상 {len(items)}건 중 층화 표본 {len(sample)}건, 모델 {models}")
+    records = _judge_sample(sample, rubrics, models, api_key, args, identity)
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(
         json.dumps(

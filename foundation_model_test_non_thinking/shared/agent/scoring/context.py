@@ -3,10 +3,7 @@
 from functools import lru_cache
 from typing import Any, Dict
 
-try:
-    from .bench_path import ensure_bench_path
-except ImportError:  # direct file loading in tests
-    from bench_path import ensure_bench_path
+from shared.agent.scoring.bench_path import ensure_bench_path
 
 
 @lru_cache(maxsize=1)

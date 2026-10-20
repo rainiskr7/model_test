@@ -1,6 +1,5 @@
 """FunctionChat exact-match port와 dataset expansion 회귀 테스트."""
 
-import importlib.util
 import json
 import os
 import sys
@@ -19,20 +18,9 @@ BENCH_DIR = Path(
 DATA_DIR = BENCH_DIR / "data"
 
 
-def _load(name, path):
-    spec = importlib.util.spec_from_file_location(name, path)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
-
-
-exact = _load("functionchat_exact_under_test", EXACT_PATH)
-sys.path.insert(0, str(EXACT_PATH.parent))
-try:
-    score = _load("functionchat_score_under_test", SCORE_PATH)
-finally:
-    sys.path.remove(str(EXACT_PATH.parent))
-runner = _load("functionchat_runner_under_test", RUNNER_PATH)
+from shared.functionchat.scoring import exact_match as exact, score_run as score, repro
+from shared.functionchat.runner import run_functionchat as runner
+from shared.functionchat.judge import judge_pilot
 
 
 def _assert(condition, message):
@@ -67,6 +55,58 @@ def _output(name="informWeather", arguments=None):
             }
         ]
     }
+
+
+def _write_main_inputs(directory, output_type="call"):
+    metadata = {
+        "model": "test/model",
+        "request_timeout": 60.0,
+        "task_timeout": 120.0,
+        "max_retries": 0,
+        "max_tokens": 1024,
+        "native_tool_calling": True,
+        "sdk_max_retries": 0,
+        "openai_sdk_version": "test",
+    }
+    item = {**_input(output_type=output_type), "model_output": _output()}
+    for name in ("singlecall", "call_decision", "dialog"):
+        (directory / f"{name}.json").write_text(
+            json.dumps({"metadata": metadata, "results": [item]}, ensure_ascii=False),
+            encoding="utf-8",
+        )
+    counts = {} if output_type == "call" else {output_type: 1}
+    (directory / "coverage.json").write_text(
+        json.dumps({"not_measured": {"call_decision": counts, "dialog": counts}}),
+        encoding="utf-8",
+    )
+
+
+def test_main_all_not_measured_writes_rejected_summary(tmp_path, capsys):
+    _write_main_inputs(tmp_path, output_type="slot")
+    assert len(list(tmp_path.glob("*.json"))) == 4
+    rc = score.main(["--results-dir", str(tmp_path)])
+    assert rc != 2
+    assert rc == 1
+    summary_path = tmp_path / "summary.json"
+    assert summary_path.is_file()
+    summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    assert summary["overall"]["measured"] == 0
+    assert summary["overall"]["accuracy"] is None
+    assert summary["publish_status"]["publishable"] is False
+    assert "overall.measured 가 0 이다 — 측정된 항목이 없다" in summary["publish_status"]["failures"]
+    assert "accuracy=n/a (measured=0)" in capsys.readouterr().out
+
+
+def test_main_measured_smoke_writes_summary(tmp_path):
+    _write_main_inputs(tmp_path)
+    rc = score.main(["--results-dir", str(tmp_path)])
+    assert rc == 1  # A small fixture is incomplete under the unchanged publish gate.
+    summary_path = tmp_path / "summary.json"
+    assert summary_path.is_file()
+    summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    assert set(summary["by_dataset"]) == {"singlecall", "call_decision", "dialog"}
+    assert summary["overall"]["measured"] == 3
+    assert summary["overall"]["accuracy"] == 1.0
 
 
 def test_three_acceptable_argument_sentinels_are_empty():
@@ -286,13 +326,9 @@ def test_not_measured_items_still_carry_a_response():
 
 
 def _load_judge_mod():
-    import importlib.util, sys as _s
-    base = Path(__file__).resolve().parents[1] / "judge"
-    _s.path.insert(0, str(base))
-    spec = importlib.util.spec_from_file_location("run_judge_under_test", base / "run_judge.py")
-    m = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(m)
-    return m
+    from shared.functionchat.judge import run_judge
+
+    return run_judge
 
 
 def test_lost_vote_cannot_produce_a_single_vote_verdict():
@@ -310,16 +346,79 @@ def test_vote_integrity_records_full_votes():
     _assert(integ["lost"] == 0 and not integ["single_vote"], f"정상인데 유실로 잡혔다: {integ}")
 
 
+def test_retry_selects_and_replaces_only_unresolved_records():
+    from copy import deepcopy
+
+    m = _load_judge_mod()
+    previous_records = [
+        {"dataset": "dialog", "serial_num": 7, "status": "judge_error",
+         "verdict": None, "verdicts": ["pass", "fail"]},
+        {"dataset": "call_decision", "serial_num": 7, "status": "judged",
+         "verdict": "pass", "verdicts": ["pass", "pass"]},
+        {"dataset": "dialog", "serial_num": 8, "status": "judged",
+         "verdict": "fail", "verdicts": ["fail", "fail"]},
+    ]
+    original = deepcopy(previous_records)
+    items = [
+        {"dataset": "dialog", "serial_num": 7},
+        {"dataset": "call_decision", "serial_num": 7},
+        {"dataset": "dialog", "serial_num": 8},
+    ]
+    selected = m.select_retry_items(items, previous_records)
+    _assert(selected == [items[0]], f"판정 불가 (dialog, 7)만 골라야 한다: {selected}")
+
+    redone = [
+        {"dataset": "dialog", "serial_num": 7, "status": "judged",
+         "verdict": "pass", "verdicts": ["pass"] * 3},
+    ]
+    merged = m.merge_retry_records(previous_records, redone)
+    by_key = {(r["dataset"], r["serial_num"]): r for r in merged}
+    expected_keys = {(r["dataset"], r["serial_num"]) for r in original}
+    _assert(len(merged) == 3, f"병합 후 레코드 수가 바뀌었다: {merged}")
+    _assert(set(by_key) == expected_keys, f"병합 후 키 구성이 바뀌었다: {by_key}")
+    for record in original[1:]:
+        key = (record["dataset"], record["serial_num"])
+        _assert(by_key[key] == record, f"확정 레코드가 바뀌었다: {by_key[key]}")
+        _assert(len(by_key[key]["verdicts"]) == 2, f"기존 2표가 바뀌었다: {by_key[key]}")
+    retried = by_key[("dialog", 7)]
+    _assert(retried == redone[0], f"재판정 레코드로 교체되지 않았다: {retried}")
+    _assert(retried["status"] == "judged", f"재판정 상태가 틀렸다: {retried}")
+    _assert(len(retried["verdicts"]) == 3, f"재판정 3표가 보존되지 않았다: {retried}")
+
+
+def test_retry_refuses_ambiguous_or_out_of_scope_records():
+    m = _load_judge_mod()
+    unresolved = {"dataset": "dialog", "serial_num": 7, "status": "judge_error"}
+    confirmed = {"dataset": "call_decision", "serial_num": 7, "status": "judged"}
+    previous_records = [unresolved, confirmed]
+    items = [
+        {"dataset": "dialog", "serial_num": 7},
+        {"dataset": "call_decision", "serial_num": 7},
+    ]
+    cases = [
+        ("기존 레코드 중복", lambda: m.select_retry_items(items, previous_records + [dict(unresolved)])),
+        ("수집 항목 중복", lambda: m.select_retry_items(items + [dict(items[0])], previous_records)),
+        ("판정 불가 원본 누락", lambda: m.select_retry_items(items[1:], previous_records)),
+        ("dataset 누락", lambda: m.record_key({"serial_num": 7})),
+        ("확정 레코드 교체", lambda: m.merge_retry_records(previous_records, [dict(confirmed)])),
+        ("새 키 병합", lambda: m.merge_retry_records(
+            previous_records, [{"dataset": "dialog", "serial_num": 9, "status": "judged"}]
+        )),
+    ]
+    for label, action in cases:
+        try:
+            action()
+        except SystemExit as exc:
+            _assert("[judge]" in str(exc), f"예상하지 않은 종료: {label}: {exc}")
+        else:
+            _assert(False, f"SystemExit 없이 허용됐다: {label}")
+
+
 def test_non_retryable_http_errors_are_not_retried():
     """400 을 3회 재시도해도 성공할 수 없다. 429/408 만 재시도한다."""
     import inspect
     src = inspect.getsource(exact.__class__) if False else None
-    import importlib.util, sys as _s
-    base = Path(__file__).resolve().parents[1] / "judge"
-    _s.path.insert(0, str(base))
-    spec = importlib.util.spec_from_file_location("judge_pilot_under_test", base / "judge_pilot.py")
-    jp = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(jp)
+    from shared.functionchat.judge import judge_pilot as jp
     body = inspect.getsource(jp.call_judge)
     _assert("408, 429" in body, "재시도 예외 목록(408/429)이 없다")
     _assert("Retry-After" in body, "429 의 Retry-After 를 존중하지 않는다")
@@ -363,16 +462,614 @@ def test_generation_errors_block_publish():
 def test_judge_rejects_non_enum_verdict():
     """{"verdict": "error"} 같은 값이 judged 로 확정되면서 pass/fail 어디에도
     안 세어져 조용히 사라지던 경로."""
-    import importlib.util, sys as _s, inspect
-    base = Path(__file__).resolve().parents[1] / "judge"
-    _s.path.insert(0, str(base))
-    spec = importlib.util.spec_from_file_location("jp_verdict_test", base / "judge_pilot.py")
-    jp = importlib.util.module_from_spec(spec); spec.loader.exec_module(jp)
+    import inspect
+    from shared.functionchat.judge import judge_pilot as jp
     src = inspect.getsource(jp.call_judge)
     _assert('("pass", "fail")' in src, "verdict 값을 검증하지 않는다")
 
 
+def test_judge_records_what_the_endpoint_actually_served():
+    """`openai/gpt-4.1-mini` 는 alias 다 — 문자열이 그대로여도 리비전은 바뀐다."""
+
+    # §12: 전역 초기화 대신 실행 소유 객체를 주입한다. 기대값은 그대로다.
+    identity = judge_pilot.ServedIdentity()
+    _assert(identity.snapshot() == {}, "초기 상태가 비어 있어야 한다")
+
+    identity.record(
+        {"model": "openai/gpt-4.1-mini-2025-04-14", "provider": "OpenAI"}
+    )
+    identity.record({"model": "openai/gpt-4.1-mini-2025-04-14"})
+    snapshot = identity.snapshot()
+    _assert(snapshot["model"] == ["openai/gpt-4.1-mini-2025-04-14"], snapshot)
+    _assert(snapshot["provider"] == ["OpenAI"], snapshot)
+
+    # 런 도중 서빙이 바뀌면 둘 다 남는다 — 하나로 덮으면 그 사실이 사라진다.
+    identity.record({"model": "openai/gpt-4.1-mini-2026-01-01"})
+    _assert(len(identity.snapshot()["model"]) == 2, "변경 이력이 남아야 한다")
+
+
+def test_rubric_digest_changes_when_the_rubric_text_changes():
+    """"unmodified" 라는 문장은 주장일 뿐이고, 본문이 바뀌어도 그대로다."""
+
+    first = judge_pilot.rubric_digest({"singlecall": "본문", "dialog": "다른 본문"})
+    same = judge_pilot.rubric_digest({"dialog": "다른 본문", "singlecall": "본문"})
+    changed = judge_pilot.rubric_digest({"singlecall": "본문 수정됨", "dialog": "다른 본문"})
+    _assert(first == same, "키 순서가 해시를 바꾸면 안 된다")
+    _assert(first["singlecall"] != changed["singlecall"], "본문이 바뀌면 해시가 바뀌어야 한다")
+    _assert(first["dialog"] == changed["dialog"], "안 바뀐 루브릭은 그대로여야 한다")
+
+
+def test_judge_endpoint_is_recorded_not_hardcoded_at_the_call_site():
+    source = (EXACT_PATH.parent.parent / "judge" / "judge_pilot.py").read_text(encoding="utf-8")
+    call_site = source.split("def call_judge")[1]
+    _assert(
+        "https://openrouter.ai" not in call_site,
+        "호출부에 URL 을 박으면 산출물에 어디로 보냈는지 남지 않는다",
+    )
+    _assert("JUDGE_ENDPOINT" in call_site, "상수를 써야 judge 블록에 기록할 수 있다")
+
+
+def _run(session, model, version, items):
+    return {"session": session, "model": model, "scoring_version": version,
+            "publishable": True, "items": items}
+
+
+def test_repro_compares_item_sets_not_counts():
+    """실측: qwen 5런이 전부 553 인데 통과 항목은 10개가 뒤집혔다."""
+
+    a = _run("r1", "m", "v1", {"i1": True, "i2": True, "i3": False})
+    b = _run("r2", "m", "v1", {"i1": True, "i2": False, "i3": True})
+    [report] = repro.reproducibility_report([a, b])
+    _assert(report["status"] == "DIVERGED", report)
+    _assert(report["passed_counts"] == [2, 2], report)
+    _assert(report["count_spread"] == 0, "건수만 보면 완벽 재현으로 보인다")
+    _assert(report["unstable_items"] == ["i2", "i3"], report)
+    _assert(report["stable_passed"] == 1, report)
+
+
+def test_repro_identical_when_the_same_items_pass():
+    same = {"i1": True, "i2": False}
+    [report] = repro.reproducibility_report([_run("r1", "m", "v1", same),
+                                             _run("r2", "m", "v1", dict(same))])
+    _assert(report["status"] == "IDENTICAL", report)
+    _assert(report["unstable_items"] == [], report)
+
+
+def test_repro_never_mixes_scoring_versions():
+    """v1 은 600문항, v2 는 670문항이다 — 같은 이름의 다른 측정이다."""
+
+    reports = repro.reproducibility_report([
+        _run("r1", "m", "functionchat_exact_v1", {"i1": True}),
+        _run("r2", "m", "functionchat_exact_v2", {"i1": True}),
+    ])
+    _assert(len(reports) == 2, reports)
+    _assert(all(r["status"] == "UNVERIFIED" for r in reports), reports)
+
+
+def test_repro_separates_models():
+    """후보를 코호트 키에서 빼면 서로 다른 모델이 서로의 반복 실행이 된다."""
+
+    reports = repro.reproducibility_report([
+        _run("r1", "a", "v1", {"i1": True}),
+        _run("r2", "b", "v1", {"i1": False}),
+    ])
+    _assert({r["model"] for r in reports} == {"a", "b"}, reports)
+    _assert(all(r["status"] == "UNVERIFIED" for r in reports), reports)
+
+
+def test_repro_ignores_unmeasured_items_rather_than_failing_them():
+    """하네스 장애를 실패로 세면 모델 점수로 둔갑한다."""
+
+    import json as _json
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as tmp:
+        run_dir = Path(tmp) / "results" / "m" / "s" / "language" / "functionchat"
+        run_dir.mkdir(parents=True)
+        (run_dir / "summary.json").write_text(
+            _json.dumps({"model": "m", "scoring_version": "v1",
+                         "publish_status": {"publishable": True}}), encoding="utf-8")
+        (run_dir / "singlecall.json").write_text(_json.dumps({"results": [
+            {"item_id": "ok", "evaluation_status": "measured", "type_of_output": "call",
+             "raw_response": "{}", "error": None,
+             "ground_truth": None, "model_output": None},
+            # 채점 대상이 아닌 유형 — 점수에 들어가지 않는다
+            {"item_id": "other_type", "evaluation_status": "not_measured",
+             "type_of_output": "relevance", "raw_response": "{}", "error": None},
+            # **API 실패.** evaluation_status 는 여전히 measured 다. 이것을 오답으로
+            # 세면 타임아웃 하나가 모델 오답 하나로 둔갑한다.
+            {"item_id": "api_failed", "evaluation_status": "measured",
+             "type_of_output": "call", "raw_response": None, "error": "timeout",
+             "ground_truth": None, "model_output": None},
+        ]}), encoding="utf-8")
+        loaded = repro.load_run(run_dir)
+    _assert(loaded["session"] == "s", loaded)
+    _assert(set(loaded["items"]) == {"ok"}, loaded["items"])
+
+
+def test_results_path_reuses_the_existing_directory_spelling():
+    """리눅스에서는 대소문자가 다르면 한 런의 산출물이 두 디렉토리로 갈린다."""
+
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as tmp:
+        base = Path(tmp)
+        (base / "results" / "Google_Gemma_4_26B_A4B_it").mkdir(parents=True)
+        resolved = score.results_model_dir_name(base, "google/gemma-4-26b-a4b-it")
+        _assert(resolved == "Google_Gemma_4_26B_A4B_it", resolved)
+        # 새 모델은 정규화한 이름을 그대로 쓴다
+        _assert(score.results_model_dir_name(base, "new/model:v1") == "new_model_v1", "신규")
+
+
+def test_no_functionchat_entry_point_computes_the_path_by_substitution():
+    for path in (RUNNER_PATH, SCORE_PATH):
+        text = path.read_text(encoding="utf-8")
+        if "safe_model_name" not in text:
+            continue
+        _assert(
+            "results_model_dir_name" in text,
+            f"{path.name} 이 문자열 치환으로 결과 경로를 만든다",
+        )
+
+
+def test_repro_and_scorer_agree_on_which_items_count():
+    """규칙이 두 곳에 흩어지면 한쪽만 고쳐져 조용히 어긋난다."""
+
+    items = [
+        {"item_id": "a", "type_of_output": "call", "raw_response": "{}", "error": None,
+         "ground_truth": None, "model_output": None},
+        {"item_id": "b", "type_of_output": "relevance", "raw_response": "{}", "error": None},
+        {"item_id": "c", "type_of_output": "call", "raw_response": None, "error": "timeout"},
+    ]
+    summary = score.score_items(items)
+    _assert(summary["measured"] == 1, summary)
+    _assert(summary["generation_errors"] == 1, summary)
+    scorable = [i for i in items if score.scorable_status(i) == "scorable"]
+    _assert([i["item_id"] for i in scorable] == ["a"], scorable)
+
+
+def test_served_identity_resets_between_runs_and_merges_a_retry():
+    """모듈 전역이라 리셋하지 않으면 앞선 실행이 다음 산출물로 샌다."""
+
+    # 전역 접근 계약만 객체로 전환하고 reset/재판정 병합 기대값은 보존한다.
+    identity = judge_pilot.ServedIdentity()
+    identity.record({"model": "leftover-from-previous-run"})
+
+    # 새 실행: 이전 기록 없이 시작한다
+    identity.reset(None)
+    _assert(identity.snapshot() == {}, "리셋이 비우지 않았다")
+
+    # 재판정: 기존 judge.json 의 기록을 물려받아야 이미 확정된 항목의 출처가 남는다
+    identity.reset({"model": ["rev-a"], "provider": ["OpenAI"]})
+    identity.record({"model": "rev-b"})
+    snapshot = identity.snapshot()
+    _assert(snapshot["model"] == ["rev-a", "rev-b"], snapshot)
+    _assert(snapshot["provider"] == ["OpenAI"], snapshot)
+    _assert("leftover-from-previous-run" not in snapshot["model"], snapshot)
+    identity.reset(None)
+
+
+def test_repro_says_coverage_differed_instead_of_just_unverified():
+    """항목 집합이 다르면 코호트가 갈린다 — 그 사유를 말하지 않으면
+    "한 번만 돌렸다"로 읽혀 반복 실행이 있었다는 사실이 사라진다."""
+
+    reports = repro.reproducibility_report([
+        _run("r1", "m", "v1", {"i1": True, "i2": True}),
+        _run("r2", "m", "v1", {"i1": True}),          # 항목 하나가 빠졌다
+    ])
+    _assert(len(reports) == 2, reports)
+    _assert(all(r["status"] == "UNVERIFIED" for r in reports), reports)
+    _assert(any("코호트가 2개로 갈렸다" in r["reason"] for r in reports), reports)
+
+
+def test_repro_reports_which_dataset_file_could_not_be_read():
+    """조용히 건너뛰면 읽기 실패가 재현성 결론으로 둔갑한다."""
+
+    import json as _json
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as tmp:
+        run_dir = Path(tmp) / "results" / "m" / "s" / "language" / "functionchat"
+        run_dir.mkdir(parents=True)
+        (run_dir / "summary.json").write_text(
+            _json.dumps({"model": "m", "scoring_version": "v1",
+                         "publish_status": {"publishable": True}}), encoding="utf-8")
+        (run_dir / "singlecall.json").write_text(_json.dumps({"results": [
+            {"item_id": "ok", "evaluation_status": "measured", "type_of_output": "call",
+             "raw_response": "{}", "error": None,
+             "ground_truth": None, "model_output": None}]}), encoding="utf-8")
+        (run_dir / "call_decision.json").write_text("{ 깨진", encoding="utf-8")
+        loaded = repro.load_run(run_dir)
+    _assert(loaded["unreadable_datasets"] == ["call_decision.json: JSONDecodeError"], loaded)
+
+    [report] = repro.reproducibility_report([loaded])
+    _assert("읽지 못한 산출물" in report["reason"], report["reason"])
+
+
+def test_decoding_provenance_records_what_was_sent_not_what_was_asked():
+    """요청값만 적으면 산출물이 거짓을 말한다.
+
+    실제로 커밋된 diffusiongemma agent 런이 `max_tokens: 16384` 이라고 적고 있는데,
+    그 런이 diffusion 엔드포인트에서 성공했다는 것 자체가 서빙 프로파일이 켜져
+    있었다는 증거다 — 프로파일이 켜지면 4096 으로 잘린다.
+    """
+
+    import argparse
+    import os
+
+    from shared.functionchat.runner import run_functionchat as runner_mod
+    saved = {k: os.environ.get(k) for k in (
+        "SERVING_UNSUPPORTED_SAMPLING_PARAMS", "SERVING_MAX_OUTPUT_TOKENS")}
+    os.environ["SERVING_UNSUPPORTED_SAMPLING_PARAMS"] = "temperature,seed"
+    os.environ["SERVING_MAX_OUTPUT_TOKENS"] = "4096"
+    try:
+        got = runner_mod._decoding_provenance(argparse.Namespace(max_tokens=16384))
+    finally:
+        for key, value in saved.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
+
+    _assert(got["available"], got)
+    _assert(got["requested"]["max_tokens"] == 16384, got)
+    _assert(got["effective"]["max_tokens"] == 4096, "실제로 보낸 값이 기록돼야 한다")
+    _assert(got["effective"]["temperature"] is None, "제거된 파라미터는 None 이어야 한다")
+    # 이 한 줄이 결론이다 — 이 런의 단일 숫자는 재현되지 않는다.
+    _assert(got["sampling_controls_removed"] is True, got)
+
+
+def test_decoding_provenance_says_controlled_when_nothing_is_removed():
+    import argparse
+    import os
+
+    from shared.functionchat.runner import run_functionchat as runner_mod
+    saved = os.environ.pop("SERVING_UNSUPPORTED_SAMPLING_PARAMS", None)
+    try:
+        got = runner_mod._decoding_provenance(argparse.Namespace(max_tokens=16384))
+    finally:
+        if saved is not None:
+            os.environ["SERVING_UNSUPPORTED_SAMPLING_PARAMS"] = saved
+    _assert(got["sampling_controls_removed"] is False, got)
+    _assert(got["effective"]["temperature"] == 0.0, got)
+
+
+def test_reproducibility_distinguishes_structural_drift_from_chance():
+    """결정론 제어가 없으면 흔들림은 모델 결함이 아니다."""
+
+    runs = [
+        {"session": "s1", "model": "d", "scoring_version": "v1", "publishable": True,
+         "items": {"a": True, "b": False}, "sampling_controls_removed": True,
+         "removed_sampling_params": ["temperature"]},
+        {"session": "s2", "model": "d", "scoring_version": "v1", "publishable": True,
+         "items": {"a": False, "b": True}, "sampling_controls_removed": True,
+         "removed_sampling_params": ["temperature"]},
+    ]
+    report = repro.reproducibility_report(runs)
+    entry = next(e for e in report if e["model"] == "d")
+    _assert(entry["status"] == "DIVERGED", entry)
+    _assert(entry["sampling_controls_removed"] is True, entry)
+    _assert("temperature" in entry["removed_sampling_params"], entry)
+
+
+def test_reproducibility_does_not_claim_control_for_pre_provenance_runs():
+    # 디코딩 기록이 없는 예전 산출물을 "제어됐다" 로 단정하면 안 된다.
+    runs = [
+        {"session": "s1", "model": "q", "scoring_version": "v1", "publishable": True,
+         "items": {"a": True}, "sampling_controls_removed": None},
+        {"session": "s2", "model": "q", "scoring_version": "v1", "publishable": True,
+         "items": {"a": True}, "sampling_controls_removed": None},
+    ]
+    entry = next(e for e in repro.reproducibility_report(runs) if e["model"] == "q")
+    _assert(entry["sampling_controls_removed"] is None, entry)
+
+
+def test_repro_cohort_never_mixes_recorded_execution_protocols():
+    """같은 모델·문항이라도 도구 경로와 시간 제한이 다르면 같은 측정이 아니다."""
+
+    # 시간 제한은 **실제로 걸렸을 때만** 규약의 일부다. 걸리지 않은 값으로 코호트를
+    # 가르면 같은 측정이 쪼개진다(qwen 5런이 k=4+k=1 로 갈려 뒤집힘 10건이 사라진
+    # 실측이 있다). 그래서 여기서는 타임아웃이 관측된 런으로 검사한다.
+    common = {
+        "session": "s", "model": "m", "scoring_version": "v1", "items": {"a": True},
+        "native_tool_calling": True, "request_timeout": 60, "task_timeout": 120,
+        "removed_parameters": ((),), "endpoint": "http://served-a",
+        "timeouts_observed": True,
+    }
+    baseline = repro.cohort_key(common)
+    for field, changed in (
+        ("native_tool_calling", False),
+        ("request_timeout", 90),
+        ("task_timeout", 180),
+        ("removed_parameters", (("temperature",),)),
+        ("endpoint", "http://served-b"),
+    ):
+        candidate = dict(common)
+        candidate[field] = changed
+        _assert(repro.cohort_key(candidate) != baseline, f"{field} 차이가 코호트에서 사라졌다")
+
+
+def test_repro_cohort_preserves_unknown_legacy_protocol_as_unknown():
+    """메타데이터가 없던 산출물을 '제거 없음'이나 기본 시간 제한으로 단정하지 않는다."""
+
+    legacy = {"model": "m", "scoring_version": "v1", "items": {"a": True}}
+    key = repro.cohort_key(legacy)
+    _assert(key[3:] == (None, None, None, None, None), key)
+    # 타임아웃 기록이 없다고 "걸리지 않았다"로 단정하지도 않는다 — 어느 쪽이든
+    # 정체성에서 빠지므로 예전 산출물끼리는 여전히 한 코호트다.
+
+
+def test_judge_credential_uses_internal_vote_instability_not_exact_runs():
+    """판정기 3표가 갈린 항목은 한 런 안에서도 불안정 예산에 들어간다."""
+
+    cred = repro.judge_credential([
+        {"serial_num": "a", "status": "judged", "verdict": "pass", "unstable": True},
+        {"serial_num": "b", "status": "judged", "verdict": "fail", "unstable": True},
+        {"serial_num": "c", "status": "judged", "verdict": "pass", "unstable": False},
+        {"serial_num": "lost", "status": "judge_error", "verdict": None, "unstable": False},
+    ])
+    _assert(cred["k"] == 1, cred)
+    _assert(cred["measured_items"] == 3, cred)
+    _assert(cred["majority_passed"] == 2, cred)
+    _assert(cred["unstable_items"] == ["a", "b"], cred)
+    _assert(cred["instability_envelope"] == [0, 4], cred)
+
+
+def test_a_subset_run_is_never_publishable():
+    """부분 실행은 진단용이다 — 전량 런과 같은 축에 놓으면 표본 크기가 사라진다."""
+
+    failures, _ = score.validate_summary({
+        "subset_limit": 5,
+        "overall": {"measured": 10, "passed": 8, "failed": 2},
+    })
+    _assert(any("부분 실행" in f for f in failures), failures)
+
+
+def test_a_full_run_is_not_blocked_by_the_subset_gate():
+    failures, _ = score.validate_summary({
+        "subset_limit": None,
+        "overall": {"measured": 600, "passed": 553, "failed": 47},
+    })
+    _assert(not any("부분 실행" in f for f in failures), failures)
+
+
+def test_a_pre_limit_artifact_without_the_field_is_not_treated_as_a_subset():
+    # subset_limit 를 INTEGRITY_FIELDS 에 넣으면 기존 산출물이 전부 죽는다.
+    failures, _ = score.validate_summary({
+        "overall": {"measured": 600, "passed": 553, "failed": 47},
+    })
+    _assert(not any("부분 실행" in f for f in failures), failures)
+
+
+def test_a_category_with_zero_items_does_not_break_the_coverage_cross_check():
+    """선언은 0 을 명시하고 관측은 키를 생략한다 — 그대로 비교하면 죽는다.
+
+    실측: --limit 6 산출물에서 call_decision 의 relevance/slot 이 한 건도 없자
+    coverage={'relevance': 0, 'slot': 0} vs raw={} 로 ValueError 가 났다. 어떤
+    유형이 0 건인 산출물이면 언제든 터진다.
+    """
+
+    _assert(score._nonzero({"relevance": 0, "slot": 0}) == {}, "0 은 지워야 한다")
+    _assert(score._nonzero({}) == {}, "빈 dict 는 그대로")
+    _assert(score._nonzero({"relevance": 0, "slot": 3}) == {"slot": 3}, "0 만 지운다")
+
+
+def test_the_coverage_cross_check_still_catches_a_real_disagreement():
+    # 이 검사가 잡으려던 결함(러너가 시나리오 수 45 를 항목 수 130 대신 적던 것)은
+    # 0 이 아닌 값의 불일치였다 — 정규화 후에도 여전히 잡혀야 한다.
+    _assert(
+        score._nonzero({"multi_turn": 45}) != score._nonzero({"multi_turn": 130}),
+        "0 이 아닌 불일치는 여전히 달라야 한다",
+    )
+
+
+def test_a_limit_larger_than_every_dataset_is_not_a_subset_run():
+    """``items[:1000]`` 은 500개짜리를 그대로 돌려준다 — 전량인데 거부되면 안 된다."""
+
+    import argparse
+
+    from shared.functionchat.runner import run_functionchat as runner_mod
+    args = argparse.Namespace(
+        max_tokens=16384, limit=1000, model="m/x", request_timeout=60.0,
+        task_timeout=120.0, max_retries=2, native_tool_calling=True,
+    )
+    full = runner_mod._metadata(args, _FakeAdapter(), "singlecall", truncated=False)
+    part = runner_mod._metadata(args, _FakeAdapter(), "singlecall", truncated=True)
+    _assert(full["subset_limit"] is None, "실제로 자르지 않았으면 전량이다")
+    _assert(part["subset_limit"] == 1000, part)
+
+
+class _FakeAdapter:
+    sdk_max_retries = 0
+    openai_sdk_version = "test"
+
+
+def test_the_predicate_never_claims_determinism_only_its_absence():
+    # temperature=0 을 보냈다고 결정론이 보장되지 않는다 — 배치 구성, MoE 라우팅,
+    # 부동소수점 비결합성. 이름이 "제어됐는가" 여서는 안 된다.
+    for path in (
+        EXACT_PATH.parent.parent / "runner" / "run_functionchat.py",
+        EXACT_PATH.parent.parent / "scoring" / "repro.py",
+    ):
+        text = path.read_text(encoding="utf-8")
+        _assert("deterministic_controls" not in text, f"{path.name}: 결정론을 주장하는 이름이 남았다")
+        _assert("decoding_controlled" not in text, f"{path.name}: 옛 이름이 남았다")
+
+
+def test_reproducibility_does_not_stop_at_the_first_dataset():
+    # 데이터셋마다 다른 제약으로 돌았다면 그 사실 자체가 중요한데, 하나만 보고
+    # 끝내면 나머지가 사라진다.
+    import json as _json
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as tmp:
+        run = Path(tmp) / "s" / "language" / "functionchat"
+        run.mkdir(parents=True)
+        (run / "summary.json").write_text(_json.dumps({"model": "m", "scoring_version": "v1"}))
+        # 첫 데이터셋은 제거 없음, 두 번째가 temperature 제거.
+        (run / "singlecall.json").write_text(_json.dumps({
+            "metadata": {"decoding": {"available": True, "constraints": {"removed_parameters": []}}},
+            "results": [],
+        }))
+        (run / "call_decision.json").write_text(_json.dumps({
+            "metadata": {"decoding": {"available": True,
+                                      "constraints": {"removed_parameters": ["temperature"]}}},
+            "results": [],
+        }))
+        loaded = repro.load_run(run)
+    _assert(loaded["sampling_controls_removed"] is True, loaded)
+    _assert("temperature" in loaded["removed_sampling_params"], loaded)
+
+
+def test_the_report_refuses_to_rank_a_single_run_model():
+    """1회 실행 숫자가 순위표에 오르던 것이 이 저장소의 결함이었다."""
+
+    from reports import report_agent_tracks as module
+
+    snapshot = {"claim_class": "snapshot", "k": 1, "reason": "반복 1회"}
+    observed = {
+        "claim_class": "repeatability_observed", "k": 3, "measured_items": 10,
+        "majority_passed": 9, "count_range": [9, 9], "unstable_items": [],
+        "instability_envelope": [9, 9],
+    }
+    lines = module.render_claims({
+        "credentials": {("v1", "d", "m1"): snapshot, ("v1", "d", "m2"): observed},
+        "verdicts": [],
+    })
+    text = "\n".join(lines)
+    _assert("snapshot" in text, text)
+    _assert("비교할 대상이 없다" in text, "k<3 모델만 있으면 비교가 없어야 한다")
+
+
+def test_the_report_states_the_rule_is_not_a_significance_test():
+    from reports import report_agent_tracks as module
+    text = "\n".join(module.render_claims({"credentials": {}, "verdicts": []}))
+    _assert("가설검정이 아니다" in text, "면책 문구가 없으면 독자가 유의성으로 읽는다")
+    _assert("같다" in text and "뜻도 아니다" in text, "거절이 동등을 뜻하지 않음을 밝혀야 한다")
+
+
+def test_a_timeout_that_never_fired_does_not_split_a_cohort():
+    """걸리지 않은 타임아웃은 결과에 영향을 주지 않았으므로 규약의 일부가 아니다.
+
+    실측: qwen 5런 중 하나만 task_timeout 600s(나머지 900s)였는데 1106항목에
+    타임아웃 흔적이 0건이었다. 그런데도 코호트 키에 넣자 k=5 가 k=4+k=1 로 갈렸고
+    **뒤집힌 항목 10건이 0건으로 사라졌다** — 이 계층이 존재하는 이유였던 관측이
+    통째로 안 보이게 됐다.
+    """
+
+    base = {
+        "scoring_version": "v1", "model": "m", "items": {"a": True},
+        "native_tool_calling": True, "request_timeout": 120.0,
+        "removed_parameters": None, "endpoint": "http://e/v1",
+    }
+    slow = dict(base, task_timeout=900.0, timeouts_observed=False)
+    fast = dict(base, task_timeout=600.0, timeouts_observed=False)
+    _assert(repro.cohort_key(slow) == repro.cohort_key(fast), "no-op 타임아웃이 코호트를 갈랐다")
+
+
+def test_a_timeout_that_actually_fired_does_split_a_cohort():
+    # 걸렸다면 결과를 바꿨을 수 있다 — 그때는 다른 측정이다.
+    base = {
+        "scoring_version": "v1", "model": "m", "items": {"a": True},
+        "native_tool_calling": True, "request_timeout": 120.0,
+        "removed_parameters": None, "endpoint": "http://e/v1",
+    }
+    slow = dict(base, task_timeout=900.0, timeouts_observed=True)
+    fast = dict(base, task_timeout=600.0, timeouts_observed=True)
+    _assert(repro.cohort_key(slow) != repro.cohort_key(fast), "실제로 걸린 타임아웃은 갈라야 한다")
+
+
+def test_a_real_protocol_difference_still_splits_a_cohort():
+    # 완화가 다른 규약까지 뭉개면 안 된다.
+    base = {
+        "scoring_version": "v1", "model": "m", "items": {"a": True},
+        "request_timeout": 120.0, "task_timeout": 900.0,
+        "removed_parameters": None, "endpoint": "http://e/v1",
+        "timeouts_observed": False,
+    }
+    _assert(
+        repro.cohort_key(dict(base, native_tool_calling=True))
+        != repro.cohort_key(dict(base, native_tool_calling=False)),
+        "툴콜 모드가 다르면 다른 측정이다",
+    )
+
+
+def test_the_report_publishes_verdicts_for_both_axes_and_flags_disagreement():
+    """한 축의 승자만 보이면 그것이 곧 과대 주장이다.
+
+    실측: 같은 두 모델에서 exact 축은 qwen(예산 543–563 vs 529–541), judge 축은
+    gemma(592–604 vs 534–554)가 앞섰다. exact 만 내면 독자는 "qwen 이 낫다"로
+    읽는다.
+    """
+
+    from reports import report_agent_tracks as module
+
+    def cred(lo, hi):
+        return {
+            "claim_class": "repeatability_observed", "k": 3, "measured_items": 600,
+            "majority_passed": (lo + hi) // 2, "count_range": [lo, hi],
+            "unstable_items": [], "instability_envelope": [lo, hi],
+        }
+
+    text = "\n".join(module.render_claims({
+        "credentials": {},
+        "verdicts": [("gemma", "qwen", {"comparable": True, "winner": "right", "reason": "r1"})],
+        "judge_credentials": [],
+        "judge_verdicts": [("gemma", "qwen", {"comparable": True, "winner": "left", "reason": "r2"})],
+    }))
+    _assert("exact-match 축" in text, text)
+    _assert("judge 축" in text, text)
+    _assert("두 축의 승자가 다르다" in text, "축 불일치를 알리지 않으면 한쪽만 인용된다")
+
+
+def test_the_report_stays_quiet_when_both_axes_agree():
+    from reports import report_agent_tracks as module
+    text = "\n".join(module.render_claims({
+        "credentials": {},
+        "verdicts": [("gemma", "qwen", {"comparable": True, "winner": "right", "reason": "r1"})],
+        "judge_credentials": [],
+        "judge_verdicts": [("gemma", "qwen", {"comparable": True, "winner": "right", "reason": "r2"})],
+    }))
+    _assert("두 축의 승자가 다르다" not in text, "승자가 같은데 경고를 내면 경고가 무뎌진다")
+
+
 TESTS = [
+    test_the_report_publishes_verdicts_for_both_axes_and_flags_disagreement,
+    test_the_report_stays_quiet_when_both_axes_agree,
+    test_a_timeout_that_never_fired_does_not_split_a_cohort,
+    test_a_timeout_that_actually_fired_does_split_a_cohort,
+    test_a_real_protocol_difference_still_splits_a_cohort,
+    test_the_report_refuses_to_rank_a_single_run_model,
+    test_the_report_states_the_rule_is_not_a_significance_test,
+    test_a_limit_larger_than_every_dataset_is_not_a_subset_run,
+    test_the_predicate_never_claims_determinism_only_its_absence,
+    test_reproducibility_does_not_stop_at_the_first_dataset,
+    test_a_category_with_zero_items_does_not_break_the_coverage_cross_check,
+    test_the_coverage_cross_check_still_catches_a_real_disagreement,
+    test_a_subset_run_is_never_publishable,
+    test_a_full_run_is_not_blocked_by_the_subset_gate,
+    test_a_pre_limit_artifact_without_the_field_is_not_treated_as_a_subset,
+    test_decoding_provenance_records_what_was_sent_not_what_was_asked,
+    test_decoding_provenance_says_controlled_when_nothing_is_removed,
+    test_reproducibility_distinguishes_structural_drift_from_chance,
+    test_reproducibility_does_not_claim_control_for_pre_provenance_runs,
+    test_repro_cohort_never_mixes_recorded_execution_protocols,
+    test_repro_cohort_preserves_unknown_legacy_protocol_as_unknown,
+    test_judge_credential_uses_internal_vote_instability_not_exact_runs,
+    test_served_identity_resets_between_runs_and_merges_a_retry,
+    test_repro_says_coverage_differed_instead_of_just_unverified,
+    test_repro_reports_which_dataset_file_could_not_be_read,
+    test_repro_and_scorer_agree_on_which_items_count,
+    test_results_path_reuses_the_existing_directory_spelling,
+    test_no_functionchat_entry_point_computes_the_path_by_substitution,
+    test_repro_compares_item_sets_not_counts,
+    test_repro_identical_when_the_same_items_pass,
+    test_repro_never_mixes_scoring_versions,
+    test_repro_separates_models,
+    test_repro_ignores_unmeasured_items_rather_than_failing_them,
+    test_judge_records_what_the_endpoint_actually_served,
+    test_rubric_digest_changes_when_the_rubric_text_changes,
+    test_judge_endpoint_is_recorded_not_hardcoded_at_the_call_site,
     test_three_acceptable_argument_sentinels_are_empty,
     test_hallucinated_argument_key_fails,
     test_real_korean_string_ignores_spaces_and_case,
@@ -392,6 +1089,8 @@ TESTS = [
     test_not_measured_items_still_carry_a_response,
     test_lost_vote_cannot_produce_a_single_vote_verdict,
     test_vote_integrity_records_full_votes,
+    test_retry_selects_and_replaces_only_unresolved_records,
+    test_retry_refuses_ambiguous_or_out_of_scope_records,
     test_non_retryable_http_errors_are_not_retried,
     test_api_failure_is_not_scored_as_a_model_failure,
     test_genuine_no_tool_call_is_still_a_model_failure,

@@ -1,0 +1,260 @@
+[
+  {
+    "rc": 1,
+    "calls": [
+      {
+        "model": "test/model-a:1",
+        "messages": [
+          {
+            "role": "user",
+            "content": [
+              {
+                "type": "text",
+                "text": "질문 0"
+              },
+              {
+                "type": "image_url",
+                "image_url": {
+                  "url": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAADCAIAAAA2iEnWAAAAE0lEQVR4nGP8z8DAwMDAxIBMAQAUQAEF3SN5DgAAAABJRU5ErkJggg=="
+                }
+              }
+            ]
+          }
+        ],
+        "temperature": 0.25,
+        "max_tokens": 37,
+        "seed": 7,
+        "timeout": 4.0
+      },
+      {
+        "model": "test/model-a:1",
+        "messages": [
+          {
+            "role": "user",
+            "content": [
+              {
+                "type": "text",
+                "text": "질문 1"
+              },
+              {
+                "type": "image_url",
+                "image_url": {
+                  "url": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAADCAIAAAA2iEnWAAAAE0lEQVR4nGP8z8DAwMDAxIBMAQAUQAEF3SN5DgAAAABJRU5ErkJggg=="
+                }
+              }
+            ]
+          }
+        ],
+        "temperature": 0.25,
+        "max_tokens": 37,
+        "seed": 7,
+        "timeout": 4.0
+      }
+    ],
+    "constructors": [
+      {
+        "base_url": "http://unused.invalid/v1",
+        "api_key": "synthetic-key"
+      }
+    ],
+    "sleeps": [],
+    "files": {
+      "_derived/.publish.json.lock": "",
+      "_derived/publish.json": "{\n  \"aggregation_allowed\": false,\n  \"benchmark_id\": \"KOFFVQA\",\n  \"benchmark_key\": \"koffvqa\",\n  \"completed_at_source\": \"artifact\",\n  \"completed_at_utc\": \"<TIME>\",\n  \"counts\": {\n    \"attempted\": 2,\n    \"errored\": 1,\n    \"measured\": 1,\n    \"unresolved\": 0\n  },\n  \"failures\": [\n    \"기대 건수 275와 다름\",\n    \"오류 응답이 포함됨\"\n  ],\n  \"metrics\": {\n    \"axes\": []\n  },\n  \"model\": \"test/model-a:1\",\n  \"model_identity\": {\n    \"canonical_id\": \"test/model-a:1\",\n    \"mapped\": false,\n    \"serving_name\": \"test/model-a:1\"\n  },\n  \"protocol\": {\n    \"complete\": false,\n    \"fingerprint\": \"sha256:<HASH>\",\n    \"fingerprint_version\": 2,\n    \"inferred\": {},\n    \"recorded\": {\n      \"benchmark\": \"KOFFVQA\",\n      \"dataset_revision\": \"synthetic-revision\",\n      \"limit\": 2,\n      \"max_tokens\": 37,\n      \"seed\": 7,\n      \"serving_constraints\": {\n        \"force_skip_special_tokens\": null,\n        \"max_output_tokens\": null,\n        \"removed_parameters\": [],\n        \"skip_special_tokens\": null,\n        \"unsupported_sampling_params\": []\n      },\n      \"temperature\": 0.25\n    },\n    \"unknown\": [\n      \"answer_parser_hash\",\n      \"image_preprocessing_version\",\n      \"prompt_template_hash\"\n    ]\n  },\n  \"provisional\": false,\n  \"publishable\": false,\n  \"schema_version\": 1,\n  \"session\": \"r3-session\",\n  \"source\": {\n    \"artifacts\": [\n      {\n        \"path\": \"results/test_model_a_1/r3-session/vision/multimodal/koffvqa/results.json\",\n        \"sha256\": \"sha256:<HASH>\"\n      },\n      {\n        \"path\": \"results/test_model_a_1/r3-session/vision/multimodal/koffvqa/summary.json\",\n        \"sha256\": \"sha256:<HASH>\"\n      },\n      {\n        \"path\": \"results/test_model_a_1/r3-session/vision/multimodal/koffvqa/test_model_a_1_gen.xlsx\",\n        \"sha256\": \"sha256:<HASH>\"\n      }\n    ],\n    \"unit\": \"results/test_model_a_1/r3-session/vision/multimodal/koffvqa\"\n  },\n  \"status\": \"REJECTED\",\n  \"variant\": \"generation\",\n  \"warnings\": [\n    \"모델 정체성 미매핑: test/model-a:1 — 자기 이름을 canonical id로 사용\"\n  ]\n}\n",
+      "results.json": "[\n  {\n    \"index\": \"0\",\n    \"category\": \"table\",\n    \"l2_category\": \"세부\",\n    \"question\": \"질문 0\",\n    \"rubric\": \"루브릭\",\n    \"prediction\": \"첫 응답\",\n    \"error\": null\n  },\n  {\n    \"index\": \"1\",\n    \"category\": \"table\",\n    \"l2_category\": \"세부\",\n    \"question\": \"질문 1\",\n    \"rubric\": \"루브릭\",\n    \"prediction\": {\n      \"error\": \"invalid request\"\n    },\n    \"error\": \"invalid request\"\n  }\n]",
+      "summary.json": "{\n  \"benchmark\": \"KOFFVQA (response generation)\",\n  \"model\": \"test/model-a:1\",\n  \"total\": 2,\n  \"successful\": 1,\n  \"failed\": 1,\n  \"counts\": {\n    \"attempted\": 2,\n    \"measured\": 1,\n    \"errored\": 1,\n    \"unresolved\": 0,\n    \"correct_measured\": 0\n  },\n  \"publish_status\": {\n    \"publishable\": false,\n    \"failures\": [\n      \"오류 응답 1건 포함\"\n    ]\n  },\n  \"predictions_xlsx\": \"<TMP>/results/test_model_a_1/r3-session/vision/multimodal/koffvqa/test_model_a_1_gen.xlsx\",\n  \"judge_step\": \"별도 — koffvqa_api_judge.py 또는 KOFFVQA evaluate.py 로 채점 필요\",\n  \"run_config\": {\n    \"benchmark\": \"KOFFVQA-response-gen\",\n    \"timestamp_utc\": \"<TIME>\",\n    \"model\": {\n      \"name\": \"test/model-a:1\",\n      \"safe_name\": \"test_model_a_1\"\n    },\n    \"endpoint\": {\n      \"base_url\": \"http://unused.invalid/v1/chat/completions/\"\n    },\n    \"decoding\": {\n      \"temperature\": 0.25,\n      \"max_tokens\": 37,\n      \"seed\": 7\n    },\n    \"decoding_requested\": {\n      \"temperature\": 0.25,\n      \"max_tokens\": 37,\n      \"seed\": 7\n    },\n    \"serving_constraints\": {\n      \"unsupported_sampling_params\": [],\n      \"max_output_tokens\": null,\n      \"force_skip_special_tokens\": null,\n      \"removed_parameters\": [],\n      \"skip_special_tokens\": null\n    },\n    \"request_policy\": {\n      \"timeout\": 4.0,\n      \"retry_max\": 2,\n      \"retry_backoff\": 0.0\n    },\n    \"dataset\": {\n      \"huggingface_id\": \"maum-ai/KOFFVQA_Data\",\n      \"revision\": \"synthetic-revision\",\n      \"revision_source\": \"latest_captured\",\n      \"git_repo\": \"<TMP>/data/KOFFVQA\",\n      \"git_commit\": \"synthetic-commit\"\n    },\n    \"judge\": {\n      \"model\": null,\n      \"prompt_version\": null\n    },\n    \"eval_framework\": {\n      \"script_path\": \"<REPO>/shared/multimodal/benches/koffvqa_run.py\",\n      \"script_hash_sha256_16\": \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"\n    },\n    \"environment\": {\n      \"python\": \"<PYTHON>\",\n      \"platform\": \"synthetic-platform\",\n      \"openai_pkg\": \"synthetic-version\",\n      \"datasets_pkg\": \"synthetic-version\",\n      \"pillow_pkg\": \"synthetic-version\",\n      \"huggingface_hub_pkg\": \"synthetic-version\"\n    },\n    \"env_vars\": {\n      \"MODEL_TEST_BASE\": \"<TMP>\",\n      \"EVAL_TIMESTAMP\": \"r3-session\"\n    },\n    \"extra\": {\n      \"limit\": 2,\n      \"tsv_path\": \"<TMP>/synthetic.tsv\"\n    }\n  }\n}",
+      "test_model_a_1_gen.xlsx": [
+        [
+          "index",
+          "question",
+          "answer",
+          "category",
+          "l2-category",
+          "prediction"
+        ],
+        [
+          0,
+          "질문 0",
+          "루브릭",
+          "table",
+          "세부",
+          "첫 응답"
+        ],
+        [
+          1,
+          "질문 1",
+          "루브릭",
+          "table",
+          "세부",
+          null
+        ]
+      ]
+    },
+    "stdout": "[koffvqa] model=test/model-a:1\n[koffvqa] base=<TMP>\n[koffvqa] out=<TMP>/results/test_model_a_1/r3-session/vision/multimodal/koffvqa\n[koffvqa] loaded 2 samples, columns=['index', 'question', 'image', 'answer', 'category', 'l2-category']\n[koffvqa] saved xlsx → <TMP>/results/test_model_a_1/r3-session/vision/multimodal/koffvqa/test_model_a_1_gen.xlsx\n\n[koffvqa] FINAL 1/2 응답 생성 완료\n[koffvqa] judge 채점 필요: koffvqa_api_judge.py --predfile <TMP>/results/test_model_a_1/r3-session/vision/multimodal/koffvqa/test_model_a_1_gen.xlsx\n",
+    "stderr": ""
+  },
+  {
+    "rc": 1,
+    "calls": [
+      {
+        "model": "test/model-a:1",
+        "messages": [
+          {
+            "role": "user",
+            "content": [
+              {
+                "type": "text",
+                "text": "질문 1"
+              },
+              {
+                "type": "image_url",
+                "image_url": {
+                  "url": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAADCAIAAAA2iEnWAAAAE0lEQVR4nGP8z8DAwMDAxIBMAQAUQAEF3SN5DgAAAABJRU5ErkJggg=="
+                }
+              }
+            ]
+          }
+        ],
+        "temperature": 0.25,
+        "max_tokens": 37,
+        "seed": 7,
+        "timeout": 4.0
+      }
+    ],
+    "constructors": [
+      {
+        "base_url": "http://unused.invalid/v1",
+        "api_key": "synthetic-key"
+      }
+    ],
+    "sleeps": [],
+    "files": {
+      "_derived/.publish.json.lock": "",
+      "_derived/publish.json": "{\n  \"aggregation_allowed\": false,\n  \"benchmark_id\": \"KOFFVQA\",\n  \"benchmark_key\": \"koffvqa\",\n  \"completed_at_source\": \"artifact\",\n  \"completed_at_utc\": \"<TIME>\",\n  \"counts\": {\n    \"attempted\": 2,\n    \"errored\": 0,\n    \"measured\": 2,\n    \"unresolved\": 0\n  },\n  \"failures\": [\n    \"기대 건수 275와 다름\"\n  ],\n  \"metrics\": {\n    \"axes\": []\n  },\n  \"model\": \"test/model-a:1\",\n  \"model_identity\": {\n    \"canonical_id\": \"test/model-a:1\",\n    \"mapped\": false,\n    \"serving_name\": \"test/model-a:1\"\n  },\n  \"protocol\": {\n    \"complete\": false,\n    \"fingerprint\": \"sha256:<HASH>\",\n    \"fingerprint_version\": 2,\n    \"inferred\": {},\n    \"recorded\": {\n      \"benchmark\": \"KOFFVQA\",\n      \"dataset_revision\": \"synthetic-revision\",\n      \"limit\": 2,\n      \"max_tokens\": 37,\n      \"seed\": 7,\n      \"serving_constraints\": {\n        \"force_skip_special_tokens\": null,\n        \"max_output_tokens\": null,\n        \"removed_parameters\": [],\n        \"skip_special_tokens\": null,\n        \"unsupported_sampling_params\": []\n      },\n      \"temperature\": 0.25\n    },\n    \"unknown\": [\n      \"answer_parser_hash\",\n      \"image_preprocessing_version\",\n      \"prompt_template_hash\"\n    ]\n  },\n  \"provisional\": false,\n  \"publishable\": false,\n  \"schema_version\": 1,\n  \"session\": \"r3-session\",\n  \"source\": {\n    \"artifacts\": [\n      {\n        \"path\": \"results/test_model_a_1/r3-session/vision/multimodal/koffvqa/results.json\",\n        \"sha256\": \"sha256:<HASH>\"\n      },\n      {\n        \"path\": \"results/test_model_a_1/r3-session/vision/multimodal/koffvqa/summary.json\",\n        \"sha256\": \"sha256:<HASH>\"\n      },\n      {\n        \"path\": \"results/test_model_a_1/r3-session/vision/multimodal/koffvqa/test_model_a_1_gen.xlsx\",\n        \"sha256\": \"sha256:<HASH>\"\n      }\n    ],\n    \"unit\": \"results/test_model_a_1/r3-session/vision/multimodal/koffvqa\"\n  },\n  \"status\": \"REJECTED\",\n  \"variant\": \"generation\",\n  \"warnings\": [\n    \"모델 정체성 미매핑: test/model-a:1 — 자기 이름을 canonical id로 사용\"\n  ]\n}\n",
+      "results.json": "[\n  {\n    \"index\": \"0\",\n    \"category\": \"table\",\n    \"l2_category\": \"세부\",\n    \"question\": \"질문 0\",\n    \"rubric\": \"루브릭\",\n    \"prediction\": \"첫 응답\",\n    \"error\": null\n  },\n  {\n    \"index\": \"1\",\n    \"category\": \"table\",\n    \"l2_category\": \"세부\",\n    \"question\": \"질문 1\",\n    \"rubric\": \"루브릭\",\n    \"prediction\": \"재시도 응답\",\n    \"error\": null\n  }\n]",
+      "summary.json": "{\n  \"benchmark\": \"KOFFVQA (response generation)\",\n  \"model\": \"test/model-a:1\",\n  \"total\": 2,\n  \"successful\": 2,\n  \"failed\": 0,\n  \"counts\": {\n    \"attempted\": 2,\n    \"measured\": 2,\n    \"errored\": 0,\n    \"unresolved\": 0,\n    \"correct_measured\": 0\n  },\n  \"publish_status\": {\n    \"publishable\": false,\n    \"failures\": [\n      \"채점 산출물 없음\"\n    ]\n  },\n  \"predictions_xlsx\": \"<TMP>/results/test_model_a_1/r3-session/vision/multimodal/koffvqa/test_model_a_1_gen.xlsx\",\n  \"judge_step\": \"별도 — koffvqa_api_judge.py 또는 KOFFVQA evaluate.py 로 채점 필요\",\n  \"run_config\": {\n    \"benchmark\": \"KOFFVQA-response-gen\",\n    \"timestamp_utc\": \"<TIME>\",\n    \"model\": {\n      \"name\": \"test/model-a:1\",\n      \"safe_name\": \"test_model_a_1\"\n    },\n    \"endpoint\": {\n      \"base_url\": \"http://unused.invalid/v1/chat/completions/\"\n    },\n    \"decoding\": {\n      \"temperature\": 0.25,\n      \"max_tokens\": 37,\n      \"seed\": 7\n    },\n    \"decoding_requested\": {\n      \"temperature\": 0.25,\n      \"max_tokens\": 37,\n      \"seed\": 7\n    },\n    \"serving_constraints\": {\n      \"unsupported_sampling_params\": [],\n      \"max_output_tokens\": null,\n      \"force_skip_special_tokens\": null,\n      \"removed_parameters\": [],\n      \"skip_special_tokens\": null\n    },\n    \"request_policy\": {\n      \"timeout\": 4.0,\n      \"retry_max\": 2,\n      \"retry_backoff\": 0.0\n    },\n    \"dataset\": {\n      \"huggingface_id\": \"maum-ai/KOFFVQA_Data\",\n      \"revision\": \"synthetic-revision\",\n      \"revision_source\": \"latest_captured\",\n      \"git_repo\": \"<TMP>/data/KOFFVQA\",\n      \"git_commit\": \"synthetic-commit\"\n    },\n    \"judge\": {\n      \"model\": null,\n      \"prompt_version\": null\n    },\n    \"eval_framework\": {\n      \"script_path\": \"<REPO>/shared/multimodal/benches/koffvqa_run.py\",\n      \"script_hash_sha256_16\": \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"\n    },\n    \"environment\": {\n      \"python\": \"<PYTHON>\",\n      \"platform\": \"synthetic-platform\",\n      \"openai_pkg\": \"synthetic-version\",\n      \"datasets_pkg\": \"synthetic-version\",\n      \"pillow_pkg\": \"synthetic-version\",\n      \"huggingface_hub_pkg\": \"synthetic-version\"\n    },\n    \"env_vars\": {\n      \"MODEL_TEST_BASE\": \"<TMP>\",\n      \"EVAL_TIMESTAMP\": \"r3-session\"\n    },\n    \"extra\": {\n      \"limit\": 2,\n      \"tsv_path\": \"<TMP>/synthetic.tsv\"\n    }\n  }\n}",
+      "test_model_a_1_gen.xlsx": [
+        [
+          "index",
+          "question",
+          "answer",
+          "category",
+          "l2-category",
+          "prediction"
+        ],
+        [
+          0,
+          "질문 0",
+          "루브릭",
+          "table",
+          "세부",
+          "첫 응답"
+        ],
+        [
+          1,
+          "질문 1",
+          "루브릭",
+          "table",
+          "세부",
+          "재시도 응답"
+        ]
+      ]
+    },
+    "stdout": "[koffvqa] model=test/model-a:1\n[koffvqa] base=<TMP>\n[koffvqa] out=<TMP>/results/test_model_a_1/r3-session/vision/multimodal/koffvqa\n[koffvqa] loaded 2 samples, columns=['index', 'question', 'image', 'answer', 'category', 'l2-category']\n[koffvqa] resume: 1건 재사용, 나머지 1건 재시도\n[koffvqa] saved xlsx → <TMP>/results/test_model_a_1/r3-session/vision/multimodal/koffvqa/test_model_a_1_gen.xlsx\n\n[koffvqa] FINAL 2/2 응답 생성 완료\n[koffvqa] judge 채점 필요: koffvqa_api_judge.py --predfile <TMP>/results/test_model_a_1/r3-session/vision/multimodal/koffvqa/test_model_a_1_gen.xlsx\n",
+    "stderr": ""
+  },
+  {
+    "rc": 1,
+    "calls": [
+      {
+        "model": "test/model-a:1",
+        "messages": [
+          {
+            "role": "user",
+            "content": [
+              {
+                "type": "text",
+                "text": "질문 0"
+              },
+              {
+                "type": "image_url",
+                "image_url": {
+                  "url": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAADCAIAAAA2iEnWAAAAE0lEQVR4nGP8z8DAwMDAxIBMAQAUQAEF3SN5DgAAAABJRU5ErkJggg=="
+                }
+              }
+            ]
+          }
+        ],
+        "temperature": 0.25,
+        "max_tokens": 37,
+        "seed": 7,
+        "timeout": 4.0
+      },
+      {
+        "model": "test/model-a:1",
+        "messages": [
+          {
+            "role": "user",
+            "content": [
+              {
+                "type": "text",
+                "text": "질문 1"
+              },
+              {
+                "type": "image_url",
+                "image_url": {
+                  "url": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAADCAIAAAA2iEnWAAAAE0lEQVR4nGP8z8DAwMDAxIBMAQAUQAEF3SN5DgAAAABJRU5ErkJggg=="
+                }
+              }
+            ]
+          }
+        ],
+        "temperature": 0.25,
+        "max_tokens": 37,
+        "seed": 7,
+        "timeout": 4.0
+      }
+    ],
+    "constructors": [
+      {
+        "base_url": "http://unused.invalid/v1",
+        "api_key": "synthetic-key"
+      }
+    ],
+    "sleeps": [],
+    "files": {
+      "_derived/.publish.json.lock": "",
+      "_derived/publish.json": "{\n  \"aggregation_allowed\": false,\n  \"benchmark_id\": \"KOFFVQA\",\n  \"benchmark_key\": \"koffvqa\",\n  \"completed_at_source\": \"artifact\",\n  \"completed_at_utc\": \"<TIME>\",\n  \"counts\": {\n    \"attempted\": 2,\n    \"errored\": 0,\n    \"measured\": 2,\n    \"unresolved\": 0\n  },\n  \"failures\": [\n    \"기대 건수 275와 다름\"\n  ],\n  \"metrics\": {\n    \"axes\": []\n  },\n  \"model\": \"test/model-a:1\",\n  \"model_identity\": {\n    \"canonical_id\": \"test/model-a:1\",\n    \"mapped\": false,\n    \"serving_name\": \"test/model-a:1\"\n  },\n  \"protocol\": {\n    \"complete\": false,\n    \"fingerprint\": \"sha256:<HASH>\",\n    \"fingerprint_version\": 2,\n    \"inferred\": {},\n    \"recorded\": {\n      \"benchmark\": \"KOFFVQA\",\n      \"dataset_revision\": \"synthetic-revision\",\n      \"limit\": 2,\n      \"max_tokens\": 37,\n      \"seed\": 7,\n      \"serving_constraints\": {\n        \"force_skip_special_tokens\": null,\n        \"max_output_tokens\": null,\n        \"removed_parameters\": [],\n        \"skip_special_tokens\": null,\n        \"unsupported_sampling_params\": []\n      },\n      \"temperature\": 0.25\n    },\n    \"unknown\": [\n      \"answer_parser_hash\",\n      \"image_preprocessing_version\",\n      \"prompt_template_hash\"\n    ]\n  },\n  \"provisional\": false,\n  \"publishable\": false,\n  \"schema_version\": 1,\n  \"session\": \"r3-session\",\n  \"source\": {\n    \"artifacts\": [\n      {\n        \"path\": \"results/test_model_a_1/r3-session/vision/multimodal/koffvqa/results.json\",\n        \"sha256\": \"sha256:<HASH>\"\n      },\n      {\n        \"path\": \"results/test_model_a_1/r3-session/vision/multimodal/koffvqa/summary.json\",\n        \"sha256\": \"sha256:<HASH>\"\n      },\n      {\n        \"path\": \"results/test_model_a_1/r3-session/vision/multimodal/koffvqa/test_model_a_1_gen.xlsx\",\n        \"sha256\": \"sha256:<HASH>\"\n      }\n    ],\n    \"unit\": \"results/test_model_a_1/r3-session/vision/multimodal/koffvqa\"\n  },\n  \"status\": \"REJECTED\",\n  \"variant\": \"generation\",\n  \"warnings\": [\n    \"모델 정체성 미매핑: test/model-a:1 — 자기 이름을 canonical id로 사용\"\n  ]\n}\n",
+      "results.json": "[\n  {\n    \"index\": \"0\",\n    \"category\": \"table\",\n    \"l2_category\": \"세부\",\n    \"question\": \"질문 0\",\n    \"rubric\": \"루브릭\",\n    \"prediction\": \"새 응답 0\",\n    \"error\": null\n  },\n  {\n    \"index\": \"1\",\n    \"category\": \"table\",\n    \"l2_category\": \"세부\",\n    \"question\": \"질문 1\",\n    \"rubric\": \"루브릭\",\n    \"prediction\": \"새 응답 1\",\n    \"error\": null\n  }\n]",
+      "summary.json": "{\n  \"benchmark\": \"KOFFVQA (response generation)\",\n  \"model\": \"test/model-a:1\",\n  \"total\": 2,\n  \"successful\": 2,\n  \"failed\": 0,\n  \"counts\": {\n    \"attempted\": 2,\n    \"measured\": 2,\n    \"errored\": 0,\n    \"unresolved\": 0,\n    \"correct_measured\": 0\n  },\n  \"publish_status\": {\n    \"publishable\": false,\n    \"failures\": [\n      \"채점 산출물 없음\"\n    ]\n  },\n  \"predictions_xlsx\": \"<TMP>/results/test_model_a_1/r3-session/vision/multimodal/koffvqa/test_model_a_1_gen.xlsx\",\n  \"judge_step\": \"별도 — koffvqa_api_judge.py 또는 KOFFVQA evaluate.py 로 채점 필요\",\n  \"run_config\": {\n    \"benchmark\": \"KOFFVQA-response-gen\",\n    \"timestamp_utc\": \"<TIME>\",\n    \"model\": {\n      \"name\": \"test/model-a:1\",\n      \"safe_name\": \"test_model_a_1\"\n    },\n    \"endpoint\": {\n      \"base_url\": \"http://unused.invalid/v1/chat/completions/\"\n    },\n    \"decoding\": {\n      \"temperature\": 0.25,\n      \"max_tokens\": 37,\n      \"seed\": 7\n    },\n    \"decoding_requested\": {\n      \"temperature\": 0.25,\n      \"max_tokens\": 37,\n      \"seed\": 7\n    },\n    \"serving_constraints\": {\n      \"unsupported_sampling_params\": [],\n      \"max_output_tokens\": null,\n      \"force_skip_special_tokens\": null,\n      \"removed_parameters\": [],\n      \"skip_special_tokens\": null\n    },\n    \"request_policy\": {\n      \"timeout\": 4.0,\n      \"retry_max\": 2,\n      \"retry_backoff\": 0.0\n    },\n    \"dataset\": {\n      \"huggingface_id\": \"maum-ai/KOFFVQA_Data\",\n      \"revision\": \"synthetic-revision\",\n      \"revision_source\": \"latest_captured\",\n      \"git_repo\": \"<TMP>/data/KOFFVQA\",\n      \"git_commit\": \"synthetic-commit\"\n    },\n    \"judge\": {\n      \"model\": null,\n      \"prompt_version\": null\n    },\n    \"eval_framework\": {\n      \"script_path\": \"<REPO>/shared/multimodal/benches/koffvqa_run.py\",\n      \"script_hash_sha256_16\": \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"\n    },\n    \"environment\": {\n      \"python\": \"<PYTHON>\",\n      \"platform\": \"synthetic-platform\",\n      \"openai_pkg\": \"synthetic-version\",\n      \"datasets_pkg\": \"synthetic-version\",\n      \"pillow_pkg\": \"synthetic-version\",\n      \"huggingface_hub_pkg\": \"synthetic-version\"\n    },\n    \"env_vars\": {\n      \"MODEL_TEST_BASE\": \"<TMP>\",\n      \"EVAL_TIMESTAMP\": \"r3-session\"\n    },\n    \"extra\": {\n      \"limit\": 2,\n      \"tsv_path\": \"<TMP>/synthetic.tsv\"\n    }\n  }\n}",
+      "test_model_a_1_gen.xlsx": [
+        [
+          "index",
+          "question",
+          "answer",
+          "category",
+          "l2-category",
+          "prediction"
+        ],
+        [
+          0,
+          "질문 0",
+          "루브릭",
+          "table",
+          "세부",
+          "새 응답 0"
+        ],
+        [
+          1,
+          "질문 1",
+          "루브릭",
+          "table",
+          "세부",
+          "새 응답 1"
+        ]
+      ]
+    },
+    "stdout": "[koffvqa] model=test/model-a:1\n[koffvqa] base=<TMP>\n[koffvqa] out=<TMP>/results/test_model_a_1/r3-session/vision/multimodal/koffvqa\n[koffvqa] loaded 2 samples, columns=['index', 'question', 'image', 'answer', 'category', 'l2-category']\n[koffvqa] saved xlsx → <TMP>/results/test_model_a_1/r3-session/vision/multimodal/koffvqa/test_model_a_1_gen.xlsx\n\n[koffvqa] FINAL 2/2 응답 생성 완료\n[koffvqa] judge 채점 필요: koffvqa_api_judge.py --predfile <TMP>/results/test_model_a_1/r3-session/vision/multimodal/koffvqa/test_model_a_1_gen.xlsx\n",
+    "stderr": ""
+  }
+]

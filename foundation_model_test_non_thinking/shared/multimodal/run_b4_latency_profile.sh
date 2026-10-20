@@ -4,6 +4,7 @@
 # Usage: ./run_b4_latency_profile.sh MODEL [BASE_URL] [REPS]
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CODE_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 MODEL="${1:?'MODEL required: ./run_b4_latency_profile.sh MODEL [BASE_URL] [REPS]'}"
 BASE_URL="${2:-http://172.16.1.81:18090/v1}"
 REPS="${3:-50}"
@@ -11,4 +12,4 @@ REPS="${3:-50}"
 if (($# >= 3)); then shift 3; else shift "$#"; fi
 
 cd "$SCRIPT_DIR/benches"
-python b4_latency_profile.py --model "$MODEL" --base-url "$BASE_URL" --reps "$REPS" "$@"
+PYTHONPATH="$CODE_ROOT${PYTHONPATH:+:$PYTHONPATH}" python -m shared.multimodal.benches.b4_latency_profile --model "$MODEL" --base-url "$BASE_URL" --reps "$REPS" "$@"

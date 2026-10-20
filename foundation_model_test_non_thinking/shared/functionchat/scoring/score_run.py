@@ -5,15 +5,15 @@ import argparse
 import json
 import os
 import sys
-import tempfile
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Mapping, Tuple
 
-if __package__:
-    from .exact_match import CALL, exact_match
-else:
-    sys.path.insert(0, str(Path(__file__).resolve().parent))
-    from exact_match import CALL, exact_match
+from shared.jsonread.object import load_json_object as _load
+from shared.jsonwrite.atomic_json import write_json_atomic
+from shared.resultspath.model_dir import results_model_dir_name, safe_model_name
+from shared.resultspath.run_dir import scoring_results_dir
+
+from shared.functionchat.scoring.exact_match import CALL, exact_match
 
 
 SCORING_VERSION = "functionchat_exact_v2"  # v1=600항목, v2=670항목(dialog call 70턴 추가)
@@ -36,26 +36,35 @@ INTEGRITY_FIELDS = (
 )
 
 
-def safe_model_name(model: str) -> str:
-    return model.replace("/", "_").replace("-", "_").replace(":", "_")
+def scorable_status(item: Mapping[str, Any]) -> str:
+    """항목 하나가 exact 채점 대상인지 가린다.
+
+    ``"scorable"`` / ``"not_measured"`` / ``"generation_error"`` 를 돌려준다.
+    재현성 비교(scoring/repro.py)가 같은 판정을 써야 하므로 함수로 뽑았다 — 규칙이
+    두 곳에 흩어지면 한쪽만 고쳐져 조용히 어긋난다. 실제로 repro 초안이
+    ``evaluation_status`` 만 보고 API 실패를 모델 오답으로 셀 뻔했다.
+    """
+
+    if item.get("type_of_output") != CALL:
+        return "not_measured"
+    # **API 실패를 모델 실패로 세지 않는다.** 러너는 호출이 끝내 실패하면 error 를
+    # 남기고 model_output 을 비운 채 항목을 저장한다. 응답은 정상인데 툴 호출이
+    # 없는 것(raw_response 있음, error 없음)은 진짜 모델 실패이므로 채점한다.
+    if item.get("error") is not None or item.get("raw_response") is None:
+        return "generation_error"
+    return "scorable"
 
 
 def score_items(items: Iterable[Mapping[str, Any]]) -> Dict[str, Any]:
     measured = passed = failed = generation_errors = 0
     not_measured: Dict[str, int] = {}
     for item in items:
-        output_type = item.get("type_of_output")
-        if output_type != CALL:
-            key = str(output_type or "unknown")
+        status = scorable_status(item)
+        if status == "not_measured":
+            key = str(item.get("type_of_output") or "unknown")
             not_measured[key] = not_measured.get(key, 0) + 1
             continue
-        # **API 실패를 모델 실패로 세지 않는다.** 러너는 호출이 끝내 실패하면 error 를
-        # 남기고 model_output 을 비운 채 항목을 저장한다. 그대로 채점하면 타임아웃
-        # 하나가 모델 오답 하나로 둔갑한다.
-        #
-        # 응답은 정상인데 툴 호출이 없는 것(raw_response 있음, error 없음)은 진짜 모델
-        # 실패이므로 그대로 채점한다. 둘을 가르는 것이 error/raw_response 다.
-        if item.get("error") is not None or item.get("raw_response") is None:
+        if status == "generation_error":
             generation_errors += 1
             continue
         measured += 1
@@ -78,6 +87,22 @@ def _identity(value: Any) -> str:
     return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
 
 
+def _nonzero(counts: Mapping[str, Any]) -> Dict[str, Any]:
+    """0 인 항목을 지운 사본.
+
+    선언 쪽(coverage)은 유형을 열거하며 0 도 명시하는데, 관측 쪽은 항목이 없으면
+    키 자체가 생기지 않는다. 그대로 비교하면 ``{'relevance': 0}`` 과 ``{}`` 가
+    다르다고 판정돼, 실제로는 일치하는 커버리지가 불일치로 죽는다. 어떤 유형이
+    한 건도 없는 산출물에서 항상 터진다.
+
+    0 을 지우고 비교해도 교차검증은 그대로다 — 0 이 아닌 값의 불일치는 여전히
+    잡힌다. 이것이 잡으려던 결함(러너가 시나리오 수 45 를 항목 수 130 대신 적던
+    것)은 0 이 아닌 값의 불일치였다.
+    """
+
+    return {key: value for key, value in (counts or {}).items() if value}
+
+
 def _shared_integrity(raw_by_dataset: Mapping[str, Mapping[str, Any]]) -> Dict[str, Any]:
     metadata = {
         name: dict(data.get("metadata") or {}) for name, data in raw_by_dataset.items()
@@ -93,6 +118,31 @@ def _shared_integrity(raw_by_dataset: Mapping[str, Mapping[str, Any]]) -> Dict[s
     return shared
 
 
+def _not_measured_coverage(coverage, by_dataset) -> tuple:
+    """Validate declared unmeasured counts against observed dataset counts."""
+    declared_not_measured = coverage.get("not_measured") or {}
+    decision_declared = dict(declared_not_measured.get("call_decision") or {})
+    decision_observed = by_dataset["call_decision"]["not_measured"]
+    if _nonzero(decision_declared) != _nonzero(decision_observed):
+        raise ValueError(
+            "CallDecision not-measured counts disagree: "
+            f"coverage={decision_declared}, raw={decision_observed}"
+        )
+    dialog_declared = dict(declared_not_measured.get("dialog") or {})
+    # call_decision 과 마찬가지로 선언값을 관측값과 대조한다. 예전에는 dialog 만
+    # 그냥 믿었고, 러너가 시나리오 수(45)를 적는 바람에 판정 필요 항목이 130 대신
+    # 45 로 집계돼 total_items 가 551(실제 636)로 발행됐다.
+    if "dialog" in by_dataset:
+        dialog_observed = by_dataset["dialog"]["not_measured"]
+        if _nonzero(dialog_declared) != _nonzero(dialog_observed):
+            raise ValueError(
+                "Dialog not-measured counts disagree: "
+                f"coverage={dialog_declared}, raw={dialog_observed}"
+            )
+    not_measured_total = sum(decision_declared.values()) + sum(dialog_declared.values())
+    return decision_declared, dialog_declared, not_measured_total
+
+
 def build_summary(
     raw_by_dataset: Mapping[str, Mapping[str, Any]],
     coverage: Mapping[str, Any],
@@ -104,6 +154,15 @@ def build_summary(
 
     present = [name for name in RAW_DATASETS if name in raw_by_dataset]
     integrity = _shared_integrity(raw_by_dataset)
+    # 부분 실행 표시. INTEGRITY_FIELDS 에는 넣지 않는다 — 넣으면 이 필드가 없는
+    # 기존 산출물이 전부 "metadata.subset_limit missing" 으로 죽는다.
+    subset_limits = {
+        name: (raw_by_dataset[name].get("metadata") or {}).get("subset_limit")
+        for name in present
+    }
+    subset_limit = next(
+        (value for value in subset_limits.values() if value is not None), None
+    )
     by_dataset = {
         name: score_items(raw_by_dataset[name].get("results") or [])
         for name in present
@@ -112,26 +171,7 @@ def build_summary(
     passed = sum(entry["passed"] for entry in by_dataset.values())
     failed = sum(entry["failed"] for entry in by_dataset.values())
 
-    declared_not_measured = coverage.get("not_measured") or {}
-    decision_declared = dict(declared_not_measured.get("call_decision") or {})
-    decision_observed = by_dataset["call_decision"]["not_measured"]
-    if decision_declared != decision_observed:
-        raise ValueError(
-            "CallDecision not-measured counts disagree: "
-            f"coverage={decision_declared}, raw={decision_observed}"
-        )
-    dialog_declared = dict(declared_not_measured.get("dialog") or {})
-    # call_decision 과 마찬가지로 선언값을 관측값과 대조한다. 예전에는 dialog 만
-    # 그냥 믿었고, 러너가 시나리오 수(45)를 적는 바람에 판정 필요 항목이 130 대신
-    # 45 로 집계돼 total_items 가 551(실제 636)로 발행됐다.
-    if "dialog" in by_dataset:
-        dialog_observed = by_dataset["dialog"]["not_measured"]
-        if dialog_declared != dialog_observed:
-            raise ValueError(
-                "Dialog not-measured counts disagree: "
-                f"coverage={dialog_declared}, raw={dialog_observed}"
-            )
-    not_measured_total = sum(decision_declared.values()) + sum(dialog_declared.values())
+    decision_declared, dialog_declared, not_measured_total = _not_measured_coverage(coverage, by_dataset)
 
     return {
         "benchmark": "kakao/FunctionChat-Bench (call exact match)",
@@ -143,6 +183,8 @@ def build_summary(
         ),
         "native_tool_calling": integrity["native_tool_calling"],
         "harness_integrity": integrity,
+        # None 이면 전량. 값이 있으면 진단용 부분 실행이며 발행 대상이 아니다.
+        "subset_limit": subset_limit,
         "overall": {
             "accuracy": passed / measured if measured else None,
             "measured": measured,
@@ -166,38 +208,9 @@ def build_summary(
     }
 
 
-def _load(path: Path) -> Dict[str, Any]:
-    with path.open("r", encoding="utf-8") as handle:
-        data = json.load(handle)
-    if not isinstance(data, dict):
-        raise ValueError(f"expected JSON object: {path}")
-    return data
-
-
-def _write_atomic(path: Path, data: Mapping[str, Any]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    fd, temp_name = tempfile.mkstemp(prefix=f".{path.name}.", dir=str(path.parent))
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as handle:
-            json.dump(data, handle, ensure_ascii=False, indent=2)
-            handle.write("\n")
-        os.replace(temp_name, path)
-    except Exception:
-        try:
-            os.unlink(temp_name)
-        except FileNotFoundError:
-            pass
-        raise
-
-
 def _results_dir(args: argparse.Namespace) -> Path:
-    if args.results_dir:
-        return args.results_dir.resolve()
-    base = Path(os.environ.get("MODEL_TEST_BASE") or Path(__file__).resolve().parents[3])
-    timestamp = args.timestamp or os.environ.get("EVAL_TIMESTAMP")
-    if not args.model or not timestamp:
-        raise ValueError("--model and --timestamp (or EVAL_TIMESTAMP) are required")
-    return base / "results" / safe_model_name(args.model) / timestamp / "language" / args.track
+    # 유지: __file__의 깊이에 묶인 기본 루트이므로 공용 모듈로 옮기지 않는다.
+    return scoring_results_dir(args, Path(__file__).resolve().parents[3])
 
 
 def parse_args(argv: List[str] = None) -> argparse.Namespace:
@@ -229,6 +242,14 @@ def validate_summary(summary: dict) -> tuple:
     """
     failures = []
     warnings = []
+
+    if summary.get("subset_limit") is not None:
+        # 부분 실행은 진단용이다. 전량 런의 점수와 같은 축에 놓으면 표본 크기가
+        # 사라진 수를 비교하게 된다. 산출물은 남기되 발행은 막는다.
+        failures.append(
+            f"부분 실행 산출물이다 (--limit {summary['subset_limit']}) — "
+            "전량 런의 점수와 같은 축에 놓을 수 없다"
+        )
 
     overall = summary.get("overall") or {}
     measured = overall.get("measured")
@@ -274,30 +295,49 @@ def validate_summary(summary: dict) -> tuple:
     return failures, warnings
 
 
+def _load_raw_artifacts(results_dir):
+    """원시 산출물을 선언 순서로 읽으며 필수 파일 누락은 즉시 전파한다."""
+    raw = {}
+    for name in RAW_DATASETS:
+        path = results_dir / f"{name}.json"
+        if path.exists():
+            raw[name] = _load(path)
+        elif name in REQUIRED_DATASETS:
+            raise FileNotFoundError(f"required raw artifact missing: {path}")
+    return raw
+
+
+def _print_scores(summary):
+    """데이터셋별 점수와 총점을 순서대로 출력한다."""
+    for name, entry in summary["by_dataset"].items():
+        accuracy = (
+            "n/a (measured=0)" if entry["accuracy"] is None
+            else f"{entry['accuracy']:.6f}"
+        )
+        print(
+            f"[functionchat-scoring] {name}: {entry['passed']}/{entry['measured']} "
+            f"accuracy={accuracy}"
+        )
+    overall = summary["overall"]
+    accuracy = (
+        "n/a (measured=0)" if overall["accuracy"] is None
+        else f"{overall['accuracy']:.6f}"
+    )
+    print(
+        f"[functionchat-scoring] overall: {overall['passed']}/{overall['measured']} "
+        f"accuracy={accuracy}; "
+        f"not_measured={summary['not_measured']['total_items']}"
+    )
+
+
 def main(argv: List[str] = None) -> int:
     try:
         args = parse_args(argv)
         results_dir = _results_dir(args)
-        raw = {}
-        for name in RAW_DATASETS:
-            path = results_dir / f"{name}.json"
-            if path.exists():
-                raw[name] = _load(path)
-            elif name in REQUIRED_DATASETS:
-                raise FileNotFoundError(f"required raw artifact missing: {path}")
+        raw = _load_raw_artifacts(results_dir)
         coverage = _load(results_dir / "coverage.json")
         summary = build_summary(raw, coverage, args.track)
-        for name, entry in summary["by_dataset"].items():
-            print(
-                f"[functionchat-scoring] {name}: {entry['passed']}/{entry['measured']} "
-                f"accuracy={entry['accuracy']:.6f}"
-            )
-        overall = summary["overall"]
-        print(
-            f"[functionchat-scoring] overall: {overall['passed']}/{overall['measured']} "
-            f"accuracy={overall['accuracy']:.6f}; "
-            f"not_measured={summary['not_measured']['total_items']}"
-        )
+        _print_scores(summary)
         failures, warnings = validate_summary(summary)
         for warning in warnings:
             print(f"[functionchat-scoring] WARN: {warning}", file=sys.stderr)
@@ -312,7 +352,7 @@ def main(argv: List[str] = None) -> int:
         }
         if not args.dry_run:
             # 발행 불가여도 산출물은 남긴다 — 진단에 필요하다.
-            _write_atomic(results_dir / "summary.json", summary)
+            write_json_atomic(results_dir / "summary.json", summary)
             print(f"[functionchat-scoring] wrote {results_dir / 'summary.json'}")
 
         if failures:

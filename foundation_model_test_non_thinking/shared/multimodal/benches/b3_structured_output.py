@@ -32,6 +32,7 @@ Manifest 항목 형식:
 
 import json
 import re
+import sys
 from pathlib import Path
 
 try:
@@ -39,10 +40,11 @@ try:
 except ImportError as e:
     raise SystemExit("pillow 패키지 미설치 — `uv pip install pillow`") from e
 
-from common import (
+from shared.multimodal.benches.common import (
     standard_argparser, make_client, chat_with_image,
     get_base_dir, get_timestamp, get_results_dir, save_json,
     safe_model_name, build_run_config, normalize_text, normalize_number,
+    native_sidecar_from_source, write_sidecar,
 )
 
 
@@ -213,14 +215,19 @@ def check_values(parsed, value_checks: list) -> dict:
     }
 
 
-def main():
+def _parse_args():
+    """Parse args."""
     parser = standard_argparser()
     parser.add_argument(
         "--manifest", type=str, default=None,
         help="Manifest JSON 경로 (default: <multimodal>/data/structured_output/manifest.json)",
     )
     args = parser.parse_args()
+    return args
 
+
+def _load_manifest(args):
+    """Read the manifest and apply the existing limit."""
     bench_root = Path(__file__).resolve().parent.parent  # multimodal/
     manifest_path = Path(args.manifest) if args.manifest \
         else bench_root / "data" / "structured_output" / "manifest.json"
@@ -234,7 +241,11 @@ def main():
     items = json.loads(manifest_path.read_text(encoding="utf-8"))
     if args.limit:
         items = items[:args.limit]
+    return manifest_path, items
 
+
+def _prepare_output(args, manifest_path, items):
+    """Create output paths and print startup messages."""
     base_dir = get_base_dir(__file__)
     ts = get_timestamp(base_dir)
     out_dir = get_results_dir(
@@ -245,9 +256,11 @@ def main():
     print(f"[b3] model={args.model}")
     print(f"[b3] manifest={manifest_path} ({len(items)} items)")
     print(f"[b3] out={out_dir}")
+    return base_dir, out_dir
 
-    client = make_client(args.base_url, args.api_key)
 
+def _run_items(args, manifest_path, items, client):
+    """Load images, request responses and check local schemas and values."""
     results = []
     parse_ok = 0
     schema_ok = 0
@@ -271,10 +284,10 @@ def main():
             )
             err = None
         except Exception as e:
-            response = ""
             err = str(e)
+            response = {"error": err}
 
-        parsed_ok, parsed = extract_json(response)
+        parsed_ok, parsed = extract_json(response) if isinstance(response, str) else (False, None)
         if parsed_ok:
             parse_ok += 1
 
@@ -308,8 +321,20 @@ def main():
         })
 
         print(f"[b3] {i+1}/{len(items)} {cat} parse={parsed_ok} schema={schema['required_fields_present']}")
+    return results, parse_ok, schema_ok, value_match_total, value_match_count, by_category
 
+
+def _build_summary(args, manifest_path, items, results, parse_ok, schema_ok, value_match_total, value_match_count, by_category):
+    """Build metrics and run metadata."""
     n = len(results)
+    failures = []
+    if n == 0:
+        failures.append("total=0")
+    if n != len(items):
+        failures.append(f"manifest 기대 건수 {len(items)} 미달")
+    error_count = sum(1 for row in results if row.get("error"))
+    if error_count:
+        failures.append(f"오류 응답 {error_count}건 포함")
     summary = {
         "benchmark": "B-3 Structured Output",
         "model": args.model,
@@ -317,6 +342,7 @@ def main():
         "json_parse_rate": (parse_ok / n) if n else 0.0,
         "schema_pass_rate": (schema_ok / n) if n else 0.0,
         "value_match_rate": (value_match_total / value_match_count) if value_match_count else None,
+        "publish_status": {"publishable": not failures, "failures": failures},
         "by_category": {
             cat: {
                 "total": stats["total"],
@@ -343,14 +369,42 @@ def main():
             },
         ),
     }
+    return summary
 
+
+def _save_results(out_dir, base_dir, results, summary):
+    """Write records, summary and source-derived sidecar."""
     save_json(out_dir / "results.json", results)
     save_json(out_dir / "summary.json", summary)
+    sidecar_path, sidecar = native_sidecar_from_source(out_dir, base_dir)
+    write_sidecar(sidecar_path, sidecar)
+    return sidecar
 
+
+def _print_summary(summary, sidecar):
+    """Print metrics and return the publication status."""
     print(f"\n[b3] FINAL parse={summary['json_parse_rate']:.3f} "
           f"schema={summary['schema_pass_rate']:.3f} "
           f"value={summary['value_match_rate']}")
+    return 0 if summary["publish_status"]["publishable"] and sidecar["publishable"] else 1
+
+
+def main():
+    """Coordinate manifest loading, requests, storage and reporting."""
+    args = _parse_args()
+    manifest_path, items = _load_manifest(args)
+    base_dir, out_dir = _prepare_output(args, manifest_path, items)
+    client = make_client(args.base_url, args.api_key)
+    results, parse_ok, schema_ok, value_total, value_count, by_category = _run_items(
+        args, manifest_path, items, client,
+    )
+    summary = _build_summary(
+        args, manifest_path, items, results, parse_ok, schema_ok,
+        value_total, value_count, by_category,
+    )
+    sidecar = _save_results(out_dir, base_dir, results, summary)
+    return _print_summary(summary, sidecar)
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

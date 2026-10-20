@@ -28,20 +28,14 @@ def majority(verdicts):
     return top if n * 2 > len(vs) else None
 
 
-def main(argv=None) -> int:
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--pilot", required=True, type=Path)
-    args = ap.parse_args(argv)
-    d = json.loads(args.pilot.read_text(encoding="utf-8"))
-    models = d["models"]
-    weak, strong = models[0], (models[1] if len(models) > 1 else None)
-
+def _analyze_records(records, weak, strong):
+    """표본 판정에서 실패·뒤집힘·불일치·모델별 점수를 집계한다."""
     errors = Counter()
     flips = defaultdict(lambda: [0, 0])      # type -> [뒤집힌 항목, 전체]
     disagree = defaultdict(lambda: [0, 0])   # type -> [불일치, 비교가능]
     score = defaultdict(lambda: Counter())
 
-    for r in d["records"]:
+    for r in records:
         kind = r["type_of_output"]
         for model, runs in r["judges"].items():
             for run in runs:
@@ -67,7 +61,11 @@ def main(argv=None) -> int:
                 disagree[kind][1] += 1
                 if wmaj != smaj:
                     disagree[kind][0] += 1
+    return errors, flips, disagree, score
 
+
+def _print_analysis(d, models, weak, strong, errors, flips, disagree, score):
+    """집계 결과를 순서대로 출력하며 빈 표본의 부분 출력 계약을 유지한다."""
     print(f"  판정기: 약={weak}  강={strong}")
     print(f"  표본 {len(d['records'])}건, 약한 판정기 반복 {d['repeats']}회\n")
 
@@ -98,6 +96,17 @@ def main(argv=None) -> int:
             p = c[kind + ":pass"]; f = c[kind + ":fail"]
             parts.append(f"{kind} {p}/{p+f}" if p + f else f"{kind} -")
         print(f"     {model:<24} {'  '.join(parts)}")
+
+
+def main(argv=None) -> int:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--pilot", required=True, type=Path)
+    args = ap.parse_args(argv)
+    d = json.loads(args.pilot.read_text(encoding="utf-8"))
+    models = d["models"]
+    weak, strong = models[0], (models[1] if len(models) > 1 else None)
+    statistics = _analyze_records(d["records"], weak, strong)
+    _print_analysis(d, models, weak, strong, *statistics)
     return 0
 
 

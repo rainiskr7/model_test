@@ -1,0 +1,50 @@
+{
+  "model": "google_diffusiongemma_26B_A4B_it",
+  "prompt_file": "shared/nlu/prompt/carwash.yaml",
+  "prompt": "세차장이 집에서 100m 떨어져 있어. 세차장까지 세차하러 걸어가야 할까, 운전해서 가야 할까?",
+  "response": "세차장이 집에서 100m라면 매우 가까운 거리지만, 상황에 따라 선택이 달라질 수 있습니다.\n\n먼저 **걸어가는 경우**를 고려해보면, 100m는 도보로 1~2분이면 도착하는 짧은 거리입니다. 차를 끌고 가서 주차하고, 다시 차를 타는 번거로움보다는 가볍게 산책하듯 걸어가는 것이 훨씬 효율적일 수 있습니다. 특히 날씨가 좋고 몸을 좀 움직이고 싶다면 걷는 것을 추천합니다.\n\n반면, **운전해서 가는 경우**가 좋을 때도 있습니다. 날씨가 너무 덥거나 추울 때, 혹은 세차 용품(무거운 샴푸나 왁스 등)을 많이 챙겨가야 한다면 차를 이용하는 것이 편합니다. 또한, 세차를 마치자마자 바로 다른 곳으로 이동해야 하는 급한 일정이 있다면 운전해서 가는 것이 낫습니다.\n\n결론적으로, 날씨와 짐의 유무에 따라 결정하되 단순히 세차만 하고 올 것이라면 걷는 것이과을 아끼는 방법이 될 것입니다.\n\n[ANSWER]\ncarwash_choice: walk\n[/ANSWER]",
+  "prompt_sha256": "8d430ae6bcf9361cbbd5510b05837abffcefdfb8e897bf59c7ae06eddb621907",
+  "prompt_sent_sha256": "c1f4cb24e51277717f81df9f19624b5fce3869733660fa98006d727bf6c4893f",
+  "answer_contract": {
+    "version": 1,
+    "sha256": "8080d810bb11d8f17aeb6644790306d9c31ff39356daec01d39e9124c5858f9a",
+    "items": [
+      "carwash_choice"
+    ]
+  },
+  "endpoint": "http://192.168.0.8:18023/v1/chat/completions",
+  "served_identity": {
+    "model": "google_diffusiongemma_26B_A4B_it",
+    "id": "chatcmpl-a58c60f9-1cbd-499d-a88f-6e8e118910d0",
+    "system_fingerprint": "vllm-0.26.1rc1.dev553+g51562de5a.d20260810-334c9803",
+    "usage": {
+      "prompt_tokens": 133,
+      "total_tokens": 405,
+      "completion_tokens": 272,
+      "prompt_tokens_details": {
+        "cached_tokens": 0,
+        "created_cache_tokens": 133,
+        "multimodal_tokens": null
+      }
+    }
+  },
+  "request": {
+    "model": "google_diffusiongemma_26B_A4B_it",
+    "max_tokens": 4096,
+    "top_p": null,
+    "skip_special_tokens": false
+  },
+  "serving_constraints": {
+    "unsupported_sampling_params": [
+      "allowed_token_ids",
+      "bad_words",
+      "logit_bias",
+      "min_p",
+      "min_tokens",
+      "seed",
+      "temperature"
+    ],
+    "max_output_tokens": 4096,
+    "force_skip_special_tokens": false
+  }
+}

@@ -12,9 +12,8 @@ import os
 import signal
 import sys
 import tempfile
-from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict
 
 
 PARSER_PATH = (
@@ -70,32 +69,13 @@ def _load_adapter_parse_class():
 
 
 def _load_save_detailed_results():
-    """벤치 선택 의존성 없이 실제 artifact 저장 함수를 로드한다."""
-    parsed = ast.parse(RUNNER_PATH.read_text(encoding="utf-8"), filename=str(RUNNER_PATH))
-    function = next(
-        node
-        for node in parsed.body
-        if isinstance(node, ast.FunctionDef) and node.name == "save_detailed_results"
-    )
-    namespace = {
-        "Any": Any,
-        "Dict": Dict,
-        "List": List,
-        "Optional": Optional,
-        "Path": Path,
-        "datetime": datetime,
-        "json": json,
-        "os": os,
-        "simplify_result": lambda result: dict(result),
-        "build_observability_metadata": lambda _results: {
-            "tasks_with_length_finish_reason": 0
-        },
-    }
-    exec(
-        compile(ast.Module(body=[function], type_ignores=[]), str(RUNNER_PATH), "exec"),
-        namespace,
-    )
-    return namespace["save_detailed_results"]
+    """Import the complete runner, including its real persistence helpers."""
+    import pytest
+    from shared.agent.tests._agent_fakes import load_runner
+
+    with pytest.MonkeyPatch.context() as monkeypatch:
+        module = load_runner(monkeypatch, Path(tempfile.gettempdir()))
+    return module.save_detailed_results
 
 
 AdapterTextParser = _load_adapter_parse_class()
@@ -254,6 +234,7 @@ def test_unparsed_candidate_counter_is_persisted_in_level_metadata():
             request_timeout=60,
             task_timeout=120,
             max_tokens=1024,
+            temperature=0.0,
             max_retries=2,
             openai_sdk_version="test",
             sdk_max_retries=0,
@@ -263,6 +244,62 @@ def test_unparsed_candidate_counter_is_persisted_in_level_metadata():
         artifact["metadata"]["unparsed_tool_call_candidates"] == 3,
         "unparsed candidate counter missing from level metadata",
     )
+
+
+def test_save_detailed_results_requires_temperature(tmp_path):
+    import pytest
+
+    with pytest.raises(TypeError, match="required keyword-only argument: 'temperature'"):
+        save_detailed_results(
+            [{}], "test/model", "L1", str(tmp_path), "test_timestamp",
+            request_timeout=60, task_timeout=120, max_tokens=1024,
+            max_retries=2, openai_sdk_version="test", sdk_max_retries=0,
+        )
+
+
+def test_artifact_records_what_was_sent_not_only_what_was_asked():
+    """서빙 제약이 요청을 바꾸면 산출물이 그 사실을 말해야 한다.
+
+    커밋된 diffusiongemma 런이 `max_tokens: 16384` 이라고 적고 있는데, 그 런이
+    diffusion 엔드포인트에서 성공했다는 것 자체가 프로파일이 켜져 있었다는
+    증거다 — 켜지면 4096 으로 잘린다. 요청값만 적힌 산출물은 거짓을 말한다.
+    """
+
+    save_detailed_results = _load_save_detailed_results()
+    saved = {k: os.environ.get(k) for k in (
+        "SERVING_UNSUPPORTED_SAMPLING_PARAMS", "SERVING_MAX_OUTPUT_TOKENS")}
+    os.environ["SERVING_UNSUPPORTED_SAMPLING_PARAMS"] = "temperature,seed"
+    os.environ["SERVING_MAX_OUTPUT_TOKENS"] = "4096"
+    try:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = save_detailed_results(
+                [{}], "test/model", "L1", tmpdir, "test_timestamp",
+                unparsed_tool_call_candidates=0, request_timeout=60,
+                task_timeout=120, max_tokens=16384, max_retries=2,
+                temperature=0.7,
+                openai_sdk_version="test", sdk_max_retries=0,
+            )
+            metadata = json.loads(Path(path).read_text(encoding="utf-8"))["metadata"]
+    finally:
+        for key, value in saved.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
+
+    decoding = metadata.get("decoding") or {}
+    _assert(decoding.get("available"), "디코딩 프로비넌스가 없다")
+    _assert(decoding["requested"]["max_tokens"] == 16384, decoding)
+    _assert(decoding["effective"]["max_tokens"] == 4096, "실제로 보낸 값이 기록돼야 한다")
+    _assert(decoding["requested"]["temperature"] == 0.7, decoding)
+    _assert(decoding["effective"]["temperature"] is None, decoding)
+    _assert("temperature" in decoding["constraints"]["removed_parameters"], decoding)
+    # 이 한 줄이 결론이다 — 이 런의 단일 숫자는 재현되지 않는다.
+    # 이름이 "제거됐는가" 여야 한다. temperature=0 을 보냈다고 결정론이 보장되지
+    # 않으므로(배치 구성·MoE 라우팅·부동소수점) 그 방향의 주장은 하지 않는다.
+    _assert(decoding["sampling_controls_removed"] is True, decoding)
+    source = RUNNER_PATH.read_text(encoding="utf-8")
+    _assert("deterministic_controls" not in source, "결정론을 주장하는 이름이 남았다")
 
 
 def test_unparsed_candidate_counter_is_wired_from_adapter_to_artifact():
@@ -299,6 +336,7 @@ def test_unparsed_candidate_counter_is_wired_from_adapter_to_artifact():
         if isinstance(node, ast.FunctionDef) and node.name == "run_benchmark_on_dataset"
     )
     wired = False
+    temperature_wired = False
     for call in (node for node in ast.walk(run_function) if isinstance(node, ast.Call)):
         if not isinstance(call.func, ast.Name) or call.func.id != "save_detailed_results":
             continue
@@ -313,7 +351,19 @@ def test_unparsed_candidate_counter_is_wired_from_adapter_to_artifact():
             and isinstance(value.value, ast.Name)
             and value.value.id == "adapter"
         )
+        keyword = next(
+            (item for item in call.keywords if item.arg == "temperature"),
+            None,
+        )
+        value = keyword.value if keyword is not None else None
+        temperature_wired = (
+            isinstance(value, ast.Attribute)
+            and value.attr == "temperature"
+            and isinstance(value.value, ast.Name)
+            and value.value.id == "adapter"
+        )
     _assert(wired, "adapter counter is not passed to level artifact persistence")
+    _assert(temperature_wired, "adapter temperature is not passed to level artifact persistence")
 
 
 def test_broken_json_warns_without_raising():
@@ -416,6 +466,7 @@ TESTS = [
     test_truncated_text_forms_are_unparsed_candidates,
     test_ordinary_prose_is_not_unparsed_candidate,
     test_unparsed_candidate_counter_is_persisted_in_level_metadata,
+    test_artifact_records_what_was_sent_not_only_what_was_asked,
     test_unparsed_candidate_counter_is_wired_from_adapter_to_artifact,
     test_broken_json_warns_without_raising,
     test_missing_name_is_skipped,

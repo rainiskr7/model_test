@@ -1,0 +1,37 @@
+# 평가 모델 설정 — Qwen3.8-27B (vsm, dense, vision 포함)
+# ⚠️ model 필드는 gpustack /v1/models 의 served-id 와 정확히 일치해야 함 (소문자).
+#    확인값(2026-09-27): qwen_qwen3.8_27b @ aitopatom-22c3 (192.168.0.8:18023, 키 OPENAI_API_KEY)
+
+model: qwen_qwen3.8_27b
+tokenizer_path: /home/rainis/Desktop/workplace/models/Qwen_Qwen3.8_27B
+class: vsm
+
+endpoint:
+  chat: http://127.0.0.1:18023/v1/chat/completions
+  v1: http://127.0.0.1:18023/v1
+
+tracks:
+  - harness
+  - nlu
+  - functionchat
+  - taubench
+  - multimodal
+
+agent:
+  native_tool_calling: true
+
+backend_reference:
+  engine: vllm
+  notes: |
+    서빙 확인(2026-09-27, docker inspect): config.json arch=Qwen3_5ForConditionalGeneration,
+    model_type=qwen3_5, vision_config 있음.
+      --served-model-name qwen_qwen3.8_27b
+      --max-model-len 65536                       # KRETA 하한 24576 충족
+      --enable-auto-tool-choice --tool-call-parser qwen3_coder
+      --reasoning-parser qwen3
+      --default-chat-template-kwargs '{"enable_thinking": false}'
+    스모크(2026-09-27): chat 1s, reasoning_content 비어 있음(non-thinking 확인),
+    tool_calls 정상(get_weather{"city":"서울"}), 이미지 OCR 정상("ABC 123"),
+    /v1/completions logprobs HTTP 200 (harness 경로).
+    Mac 에서 harness 를 돌릴 때는 로컬 토크나이저 사본
+    /Users/rainis/Desktop/workplace/models/Qwen_Qwen3.8_27B (sha256 8/8 일치) 를 run_harness.sh 에 직접 준다.

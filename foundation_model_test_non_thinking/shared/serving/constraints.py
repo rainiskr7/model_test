@@ -44,6 +44,8 @@ __all__ = [
     "unsupported_sampling_params",
     "max_output_tokens",
     "force_skip_special_tokens",
+    "constraint_snapshot",
+    "effective_decoding",
     "apply",
 ]
 
@@ -78,6 +80,54 @@ def force_skip_special_tokens() -> bool | None:
     if raw in ("true", "1", "yes"):
         return True
     return None
+
+
+def constraint_snapshot() -> dict[str, Any]:
+    """Return the canonical, JSON-serializable final SERVING_* values."""
+
+    return {
+        "unsupported_sampling_params": sorted(unsupported_sampling_params()),
+        "max_output_tokens": max_output_tokens(),
+        "force_skip_special_tokens": force_skip_special_tokens(),
+    }
+
+
+def effective_decoding(
+    *,
+    temperature: float | None,
+    max_tokens: int | None,
+    seed: int | None,
+) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
+    """Return requested decoding, effective decoding, and applied constraints.
+
+    This follows the SDK request path used by multimodal runners.  Explicitly
+    removed parameters remain visible in ``removed_parameters`` rather than
+    becoming indistinguishable from metadata that was never recorded.
+    """
+
+    requested = {
+        "temperature": temperature,
+        "max_tokens": max_tokens,
+        "seed": seed,
+    }
+    payload = {key: value for key, value in requested.items() if value is not None}
+    apply(payload, sdk=True)
+    effective = {
+        key: payload.get(key) if key in payload else None
+        for key in requested
+    }
+    constraints = constraint_snapshot()
+    constraints["removed_parameters"] = sorted(
+        key for key, value in requested.items()
+        if value is not None and key not in payload
+    )
+    extra_body = payload.get("extra_body")
+    constraints["skip_special_tokens"] = (
+        extra_body.get("skip_special_tokens")
+        if isinstance(extra_body, MutableMapping)
+        else None
+    )
+    return requested, effective, constraints
 
 
 def apply(payload: MutableMapping[str, Any], *, sdk: bool = False) -> MutableMapping[str, Any]:

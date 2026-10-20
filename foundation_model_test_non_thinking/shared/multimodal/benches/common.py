@@ -1,6 +1,6 @@
 """Shared utilities for vsm/multimodal Korean benchmark runners — facade.
 
-기능별 모듈로 분리하고 여기서 re-export 한다 (기존 `from common import ...` 호환 유지):
+기능별 모듈로 분리하고 여기서 re-export 한다 (`from shared.multimodal.benches.common import ...` 호환 유지):
   - paths.py     : safe_model_name / get_base_dir / get_timestamp / get_results_dir / save_json / append_jsonl
   - client.py    : make_client / image_to_data_url / chat_with_image
   - cli.py       : standard_argparser
@@ -14,22 +14,29 @@ __main__ 은 셸 wrapper(KRETA, KOFFVQA, KO-VLM-Benchmark)용 run_config.json �
 import argparse
 from pathlib import Path
 
-from paths import (
+from shared.multimodal.benches.paths import (
     safe_model_name, get_base_dir, get_timestamp, get_results_dir,
     save_json, append_jsonl,
 )
-from client import (
+from shared.multimodal.benches.client import (
     make_client, image_to_data_url, chat_with_image,
 )
-from cli import (
+from shared.multimodal.benches.cli import (
     standard_argparser,
 )
-from textnorm import (
+from shared.multimodal.benches.textnorm import (
     normalize_text, normalize_number,
 )
-from metadata import (
+from shared.multimodal.benches.metadata import (
     get_hf_dataset_revision, get_git_commit, get_package_version,
     get_eval_script_hash, resolve_dataset_revision, build_run_config,
+    build_resume_context,
+)
+from shared.multimodal.publish import (
+    native_sidecar_from_records,
+    native_sidecar_from_source,
+    summarize_records,
+    write_sidecar,
 )
 
 __all__ = [
@@ -40,12 +47,43 @@ __all__ = [
     "normalize_text", "normalize_number",
     "get_hf_dataset_revision", "get_git_commit", "get_package_version",
     "get_eval_script_hash", "resolve_dataset_revision", "build_run_config",
+    "build_resume_context",
+    "native_sidecar_from_records", "native_sidecar_from_source",
+    "summarize_records", "write_sidecar",
+    "prepare_native_output", "save_native_results",
 ]
+
+
+def prepare_native_output(script_path, model, benchmark_id, *, get_base_dir,
+                          get_timestamp, get_results_dir, print_base=False):
+    """Resolve output paths and print the native runner startup messages."""
+    base_dir = get_base_dir(script_path)
+    ts = get_timestamp(base_dir)
+    out_dir = get_results_dir(base_dir, model, ts, benchmark_id)
+    print(f"[{benchmark_id}] model={model}")
+    if print_base:
+        print(f"[{benchmark_id}] base={base_dir}")
+    print(f"[{benchmark_id}] out={out_dir}")
+    return base_dir, out_dir
+
+
+def save_native_results(out_dir, base_dir, results, summary, *, benchmark_id,
+                        expected_count, save_json, native_sidecar_from_records,
+                        write_sidecar):
+    """Save native records, summary and sidecar in their existing order."""
+    save_json(out_dir / "results.json", results)
+    save_json(out_dir / "summary.json", summary)
+    sidecar_path, sidecar = native_sidecar_from_records(
+        out_dir, base_dir, results,
+        benchmark_id=benchmark_id, expected_count=expected_count,
+    )
+    write_sidecar(sidecar_path, sidecar)
+    return sidecar
 
 
 # ── CLI: 셸 wrapper(KRETA, KOFFVQA, KO-VLM-Benchmark)에서 run_config.json 작성 ──
 # Usage:
-#   python common.py --out PATH --benchmark NAME --model M --base-url URL \
+#   python -m shared.multimodal.benches.common --out PATH --benchmark NAME --model M --base-url URL \
 #                    [--dataset-id ID] [--repo-dir DIR] \
 #                    [--temperature T] [--max-tokens N]
 if __name__ == "__main__":

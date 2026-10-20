@@ -3,10 +3,11 @@
 # Usage: ./run_mtvqa_kr.sh MODEL [BASE_URL]
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CODE_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 MODEL="${1:?'MODEL required: ./run_mtvqa_kr.sh MODEL [BASE_URL]'}"
 BASE_URL="${2:-http://172.16.1.81:18090/v1}"
 # shift 만큼만 안전하게 (인자 부족 시 fail 방지)
 if (($# >= 2)); then shift 2; else shift "$#"; fi
 
 cd "$SCRIPT_DIR/benches"
-python mtvqa_kr.py --model "$MODEL" --base-url "$BASE_URL" "$@"
+PYTHONPATH="$CODE_ROOT${PYTHONPATH:+:$PYTHONPATH}" python -m shared.multimodal.benches.mtvqa_kr --model "$MODEL" --base-url "$BASE_URL" "$@"

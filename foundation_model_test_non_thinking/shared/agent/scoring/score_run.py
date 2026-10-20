@@ -8,33 +8,19 @@ import tempfile
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-if __package__:
-    from .aggregate import (
-        ALL_LEVELS,
-        L4_FIXTURE_COVERAGE_NOTICE,
-        SCORABLE_LEVELS,
-        V4_HEADLINE_LEVELS,
-        build_summary_from_loaded,
-        safe_model_name,
-    )
-    from . import SCORING_VERSION, SCORING_VERSION_V3, SCORING_VERSION_V4
-    from .context import load_metrics_module
-    from .level_spec import LEVEL_SPECS, LEVEL_SPECS_V3
-    from .validate_run import validate_summary
-else:
-    sys.path.insert(0, str(Path(__file__).resolve().parent))
-    from aggregate import (
-        ALL_LEVELS,
-        L4_FIXTURE_COVERAGE_NOTICE,
-        SCORABLE_LEVELS,
-        V4_HEADLINE_LEVELS,
-        build_summary_from_loaded,
-        safe_model_name,
-    )
-    from __init__ import SCORING_VERSION, SCORING_VERSION_V3, SCORING_VERSION_V4
-    from context import load_metrics_module
-    from level_spec import LEVEL_SPECS, LEVEL_SPECS_V3
-    from validate_run import validate_summary
+from shared.agent.scoring.aggregate import (
+    ALL_LEVELS,
+    L4_FIXTURE_COVERAGE_NOTICE,
+    SCORABLE_LEVELS,
+    V4_HEADLINE_LEVELS,
+    build_summary_from_loaded,
+    safe_model_name,
+    results_model_dir_name,
+)
+from shared.agent.scoring import SCORING_VERSION, SCORING_VERSION_V3, SCORING_VERSION_V4
+from shared.agent.scoring.context import load_metrics_module
+from shared.agent.scoring.level_spec import LEVEL_SPECS, LEVEL_SPECS_V3
+from shared.agent.scoring.validate_run import validate_summary
 
 
 PREFIX = "[agent-scoring]"
@@ -106,7 +92,7 @@ def _result_dir_from_args(args) -> Path:
     return (
         Path(base).resolve()
         / "results"
-        / safe_model_name(args.model)
+        / results_model_dir_name(Path(base), args.model)
         / args.timestamp
         / "language"
         / args.track
@@ -134,11 +120,8 @@ def build_summary(results_dir: Path) -> Dict[str, Any]:
     return build_summary_from_loaded(loaded, results_dir)
 
 
-def print_table(summary: Dict[str, Any], skipped_count: int) -> None:
-    print(f"{PREFIX} model={summary['model']} track={summary['track']}")
-    cache_by_level = (
-        (summary.get("cache_miss_diagnostics") or {}).get("by_level") or {}
-    )
+def _print_level_scores(summary: Dict[str, Any], cache_by_level: dict) -> None:
+    """v2 레벨별 점수와 캐시 진단을 출력한다."""
     for level in ALL_LEVELS:
         result = summary["by_level"].get(level)
         if not result:
@@ -165,6 +148,10 @@ def print_table(summary: Dict[str, Any], skipped_count: int) -> None:
                 else ""
             )
         )
+
+
+def _print_v2_headline(summary: Dict[str, Any]) -> None:
+    """v2 총점과 분모를 출력한다."""
     scored_levels = summary.get(
         "scored_levels",
         sum(
@@ -180,7 +167,10 @@ def print_table(summary: Dict[str, Any], skipped_count: int) -> None:
         f"status={summary.get('agent_score_status', 'unknown')} "
         f"scored_levels={scored_levels}/{required_levels}"
     )
-    v3 = summary.get("scoring_v3")
+
+
+def _print_v3_scores(v3: Any) -> None:
+    """v3 L6와 총점을 출력한다."""
     if isinstance(v3, dict):
         l6 = (v3.get("by_level") or {}).get("L6")
         if isinstance(l6, dict):
@@ -200,7 +190,10 @@ def print_table(summary: Dict[str, Any], skipped_count: int) -> None:
             f"status={v3.get('agent_score_status', 'unknown')} "
             f"scored_levels={v3.get('scored_levels')}/{v3.get('required_levels')}"
         )
-    v4 = summary.get("scoring_v4")
+
+
+def _print_v4_scores(summary: Dict[str, Any], v3: Any, v4: Any, cache_by_level: dict) -> None:
+    """v4 총점과 버전별 레벨 행렬을 출력한다."""
     if isinstance(v4, dict):
         print(
             f"{PREFIX} version={SCORING_VERSION_V4} "
@@ -232,6 +225,19 @@ def print_table(summary: Dict[str, Any], skipped_count: int) -> None:
                 f"{cache_token}"
             )
         print(f"{PREFIX} NOTE {L4_FIXTURE_COVERAGE_NOTICE}")
+
+
+def print_table(summary: Dict[str, Any], skipped_count: int) -> None:
+    print(f"{PREFIX} model={summary['model']} track={summary['track']}")
+    cache_by_level = (
+        (summary.get("cache_miss_diagnostics") or {}).get("by_level") or {}
+    )
+    _print_level_scores(summary, cache_by_level)
+    _print_v2_headline(summary)
+    v3 = summary.get("scoring_v3")
+    _print_v3_scores(v3)
+    v4 = summary.get("scoring_v4")
+    _print_v4_scores(summary, v3, v4, cache_by_level)
     cache_overall = (
         (summary.get("cache_miss_diagnostics") or {}).get("overall") or {}
     )
@@ -241,6 +247,7 @@ def print_table(summary: Dict[str, Any], skipped_count: int) -> None:
 
 
 def _write_json_atomic(path: Path, payload: Dict[str, Any]) -> None:
+    # jsonwrite.atomic_json과 달리 끝 LF 없이 기록하고 fsync로 동기화한다.
     fd, temp_name = tempfile.mkstemp(
         dir=path.parent, prefix=f".{path.name}.", suffix=".tmp"
     )
@@ -355,6 +362,39 @@ def parse_args(argv=None):
     return parser.parse_args(argv)
 
 
+def _check_summary(stored_summary, summary, failures) -> int:
+    """저장된 요약과의 차이를 먼저 판정하고 일치하면 검증 결과를 반환한다."""
+    differences = _json_differences(stored_summary, summary)
+    if differences:
+        _print_differences(differences)
+        return 1
+    if failures:
+        print(
+            f"{PREFIX} CHECK summary.json matches computed summary "
+            "but validation failed"
+        )
+        return 3
+    print(f"{PREFIX} CHECK summary.json matches computed summary")
+    return 0
+
+
+def _save_summary(results_dir, summary, failures, dry_run) -> int:
+    """거부된 요약은 sidecar로 쓰고 정상 요약은 sidecar 삭제 후 저장한다."""
+    if failures:
+        if not dry_run:
+            invalid_out = results_dir / "summary.invalid.json"
+            _write_json_atomic(invalid_out, summary)
+            print(f"{PREFIX} wrote {invalid_out}")
+        return 1
+    if not dry_run:
+        out = results_dir / "summary.json"
+        invalid_out = results_dir / "summary.invalid.json"
+        invalid_out.unlink(missing_ok=True)
+        _write_json_atomic(out, summary)
+        print(f"{PREFIX} wrote {out}")
+    return 0
+
+
 def main(argv=None) -> int:
     try:
         args = parse_args(argv)
@@ -379,31 +419,8 @@ def main(argv=None) -> int:
             for failure in failures:
                 print(f"{PREFIX} FAIL {failure}")
         if args.check:
-            differences = _json_differences(stored_summary, summary)
-            if differences:
-                _print_differences(differences)
-                return 1
-            if failures:
-                print(
-                    f"{PREFIX} CHECK summary.json matches computed summary "
-                    "but validation failed"
-                )
-                return 3
-            print(f"{PREFIX} CHECK summary.json matches computed summary")
-            return 0
-        if failures:
-            if not args.dry_run:
-                invalid_out = results_dir / "summary.invalid.json"
-                _write_json_atomic(invalid_out, summary)
-                print(f"{PREFIX} wrote {invalid_out}")
-            return 1
-        if not args.dry_run:
-            out = results_dir / "summary.json"
-            invalid_out = results_dir / "summary.invalid.json"
-            invalid_out.unlink(missing_ok=True)
-            _write_json_atomic(out, summary)
-            print(f"{PREFIX} wrote {out}")
-        return 0
+            return _check_summary(stored_summary, summary, failures)
+        return _save_summary(results_dir, summary, failures, args.dry_run)
     except Exception as exc:
         print(f"{PREFIX} error: {type(exc).__name__}: {exc}", file=sys.stderr)
         return 2

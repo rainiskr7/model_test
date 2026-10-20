@@ -1,23 +1,26 @@
 """K-MMBench (NCSOFT) — Korean multimodal benchmark, 20 categories, multiple-choice.
 
-4,330 samples (dev split), A/B/C/D, accuracy.
+4,329 samples (dev split), A/B/C/D, accuracy.
 Source: https://huggingface.co/datasets/NCSOFT/K-MMBench
 
 기본 동작: 전체 카테고리. 특정 카테고리만 평가하려면 --categories 인자 사용.
 plan #2의 "선별" 운영을 위해 --categories 옵션 제공.
 """
 
-import re
+from shared.multimodal.benches.choice import extract_choice
+import sys
 
 try:
     from datasets import load_dataset
 except ImportError as e:
     raise SystemExit("datasets 패키지 미설치 — `uv pip install datasets`") from e
 
-from common import (
+from shared.multimodal.benches.common import (
     standard_argparser, make_client, chat_with_image,
     get_base_dir, get_timestamp, get_results_dir, save_json,
     build_run_config, resolve_dataset_revision,
+    native_sidecar_from_records, summarize_records, write_sidecar,
+    prepare_native_output, save_native_results,
 )
 
 
@@ -32,32 +35,11 @@ PROMPT_TEMPLATE_HINT = """Hint: {hint}
 Options: A: {A}, B: {B}, C: {C}, D: {D}
 
 주어진 선택지 중 해당 옵션의 문자로 바로 답하세요."""
+EXPECTED_COUNT = 4329
 
 
-def extract_choice(response: str) -> str:
-    """Extract A/B/C/D from response (한국어 답변 패턴 포함). Returns '' if not found."""
-    if not response:
-        return ""
-    s = response.strip()
-    s_up = s.upper()
-    if s_up and s_up[0] in "ABCD":
-        return s_up[0]
-    patterns = [
-        r'정답[은:]?\s*[\(\[]?\s*([ABCD])',
-        r'답[은:]?\s*[\(\[]?\s*([ABCD])',
-        r'[\(\[]([ABCD])[\)\]]',
-        r'\b([ABCD])\s*번',
-        r'\b([ABCD])\s*[\)\]\.]',
-        r'\b([ABCD])\b',
-    ]
-    for pat in patterns:
-        m = re.search(pat, s_up)
-        if m:
-            return m.group(1)
-    return ""
-
-
-def main():
+def _parse_args():
+    """Parse the existing command line."""
     parser = standard_argparser()
     parser.add_argument(
         "--categories",
@@ -75,14 +57,11 @@ def main():
              "(stratified=카테고리별 균등 [default], random=무작위, head=앞에서부터)",
     )
     args = parser.parse_args()
+    return args
 
-    base_dir = get_base_dir(__file__)
-    ts = get_timestamp(base_dir)
-    out_dir = get_results_dir(base_dir, args.model, ts, "k_mmbench")
 
-    print(f"[k_mmbench] model={args.model}")
-    print(f"[k_mmbench] out={out_dir}")
-
+def _load_inputs(args):
+    """Resolve revision and load the selected dataset."""
     revision, rev_source = resolve_dataset_revision(
         "NCSOFT/K-MMBench", args.revision, "K_MMBENCH_REVISION",
     )
@@ -133,9 +112,11 @@ def main():
             chosen.sort()  # 원본 순서 유지
             print(f"[k_mmbench] stratified sampling: {n_cats} categories × ~{per_cat_base} = {len(chosen)}")
         ds = ds.select(chosen)
+    return ds, revision, rev_source
 
-    client = make_client(args.base_url, args.api_key)
 
+def _run_samples(args, ds, client):
+    """Request and score samples in their original order."""
     results = []
     correct = 0
     by_category: dict[str, list[int]] = {}
@@ -162,11 +143,11 @@ def main():
             )
             err = None
         except Exception as e:
-            response = ""
             err = str(e)
+            response = {"error": err}
 
-        pred = extract_choice(response)
-        is_correct = pred == row["answer"]
+        pred = extract_choice(response) if isinstance(response, str) else ""
+        is_correct = isinstance(response, str) and pred == row["answer"]
         if is_correct:
             correct += 1
 
@@ -190,17 +171,27 @@ def main():
 
         if (i + 1) % 50 == 0:
             print(f"[k_mmbench] {i+1}/{len(ds)} acc={correct/(i+1):.3f}")
+    return results
 
+
+def _build_summary(args, ds, results, revision, rev_source):
+    """Build the aggregate and reproducibility metadata."""
+    selected_variant = bool(args.categories or args.limit)
+    expected_count = len(ds) if selected_variant else EXPECTED_COUNT
+    aggregate = summarize_records("k_mmbench", results, expected_count=expected_count)
+    correct = aggregate["correct"]
     summary = {
         "benchmark": "K-MMBench",
         "model": args.model,
         "total": len(results),
         "correct": correct,
         "accuracy": correct / len(results) if results else 0.0,
-        "by_category": {
-            cat: {"correct": c, "total": t, "accuracy": (c / t) if t else 0.0}
-            for cat, (c, t) in by_category.items()
-        },
+        "by_category": aggregate["by_category"],
+        "counts": aggregate["counts"],
+        "accuracy_strict": aggregate["accuracy_strict"],
+        "accuracy_conditional": aggregate["accuracy_conditional"],
+        "publish_status": aggregate["publish_status"],
+        "publish_expected_count": expected_count,
         "run_config": build_run_config(
             benchmark="K-MMBench",
             model=args.model,
@@ -222,15 +213,37 @@ def main():
             },
         ),
     }
+    return summary, aggregate, expected_count
 
-    save_json(out_dir / "results.json", results)
-    save_json(out_dir / "summary.json", summary)
 
-    print(f"\n[k_mmbench] FINAL acc={summary['accuracy']:.3f} ({correct}/{summary['total']})")
+def _print_summary(summary, aggregate, sidecar):
+    """Print the summary and return the publication status."""
+    print(f"\n[k_mmbench] FINAL acc={summary['accuracy']:.3f} ({summary['correct']}/{summary['total']})")
     for cat in sorted(summary["by_category"].keys()):
         s = summary["by_category"][cat]
         print(f"  {cat}: {s['accuracy']:.3f} ({s['correct']}/{s['total']})")
+    return 0 if aggregate["publish_status"]["publishable"] and sidecar["publishable"] else 1
+
+
+def main():
+    """Coordinate input loading, requests, storage and reporting."""
+    args = _parse_args()
+    base_dir, out_dir = prepare_native_output(
+        __file__, args.model, "k_mmbench",
+        get_base_dir=get_base_dir, get_timestamp=get_timestamp,
+        get_results_dir=get_results_dir, print_base=False,
+    )
+    ds, revision, rev_source = _load_inputs(args)
+    client = make_client(args.base_url, args.api_key)
+    results = _run_samples(args, ds, client)
+    summary, aggregate, expected_count = _build_summary(args, ds, results, revision, rev_source)
+    sidecar = save_native_results(
+        out_dir, base_dir, results, summary, benchmark_id="k_mmbench",
+        expected_count=expected_count, save_json=save_json,
+        native_sidecar_from_records=native_sidecar_from_records, write_sidecar=write_sidecar,
+    )
+    return _print_summary(summary, aggregate, sidecar)
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

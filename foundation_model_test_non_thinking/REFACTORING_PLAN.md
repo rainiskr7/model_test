@@ -1,5 +1,7 @@
 # 코드 리팩토링 계획
 
+> 상태: 역사 기록 — 클래스별 자급자족·공유 금지 전제는 shared 통합(`6d62b93`)으로 대체; 현행 규칙은 [CONVENTIONS.md:33](CONVENTIONS.md#L33).
+
 > 향후 참고용. 우선순위·시간 추정·구체 변경 내역 기록.
 
 ## 현재 상태 요약
@@ -55,7 +57,7 @@
 사용자 메모리 ("자급자족 분리") 와 정합 → **클래스 폴더 안에서는 자유로이 import**.
 
 **파일 영향**:
-- `vsm/nlu/nlu-gpustack.py` — `get_timestamp` 단일화
+- `vsm/nlu/nlu_gpustack.py` — `get_timestamp` 단일화
 - `vsm/agent/gpustack_custom/run_gpustack_benchmark_with_logging.py` — 동일
 - 4 클래스 sync
 

@@ -1,0 +1,194 @@
+#!/usr/bin/env python3
+"""Derive multimodal publication sidecars; dry-run unless --write is given."""
+
+from __future__ import annotations
+
+import argparse
+import json
+import sys
+from functools import partial
+from pathlib import Path
+
+from shared.multimodal.publish.derive import (
+    derive_all,
+    derive_source,
+    derived_sidecar_path,
+    inspect_native_sidecar,
+    native_sidecar_from_source,
+    preflight_kreta_source,
+    rejected_sidecar_from_source,
+    migrate_stale_native,
+    reject_native_artifact_damage,
+    write_legacy_sidecar,
+    write_sidecar,
+)
+
+
+def _parse_args(argv: list[str] | None) -> argparse.Namespace:
+    """CLI 인자를 해석하고 배타 조건을 검사한다."""
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--base", type=Path, default=Path("."))
+    parser.add_argument("--write", action="store_true", help="write sidecars below _derived")
+    parser.add_argument("--source", type=Path, help="derive only this source path")
+    parser.add_argument("--native", action="store_true", help="mark a clean single source as NATIVE")
+    parser.add_argument("--preflight-kreta", action="store_true", help="validate KRETA JSONL before evaluate.py")
+    parser.add_argument("--reject-reason", help="force a single source to REJECTED with this runner failure")
+    parser.add_argument("--force", action="store_true", help="allow passive derive to overwrite existing NATIVE sidecars")
+    args = parser.parse_args(argv)
+    if (args.native or args.preflight_kreta or args.reject_reason) and args.source is None:
+        parser.error("--native/--preflight-kreta/--reject-reason requires --source")
+    if args.reject_reason and (args.native or args.preflight_kreta):
+        parser.error("--reject-reason cannot be combined with --native/--preflight-kreta")
+    return args
+
+
+def _record_native_skip(path: Path, sidecar: dict, *, out: list[Path]) -> None:
+    """건너뛴 NATIVE 경로를 호출자의 목록에 추가한다."""
+    out.append(path)
+
+
+def native_overwrite_warning(path: Path, sidecar: dict) -> None:
+    """덮어쓸 NATIVE의 시각과 프로토콜을 stderr에 출력한다."""
+    protocol = sidecar.get("protocol") or {}
+    provenance = {
+        "recorded": protocol.get("recorded") or {},
+        "inferred": protocol.get("inferred") or {},
+        "unknown": protocol.get("unknown") or [],
+    }
+    print(
+        f"WARNING: --force overwriting NATIVE {path}; "
+        f"completed_at_utc={sidecar.get('completed_at_utc')!r}; "
+        f"protocol provenance={json.dumps(provenance, ensure_ascii=False, sort_keys=True)}",
+        file=sys.stderr,
+    )
+
+
+def _preflight_kreta(args: argparse.Namespace) -> int:
+    """KRETA 사전 검증 결과와 거부 sidecar를 처리한다."""
+    ok, failures = preflight_kreta_source(args.source, args.base)
+    if ok:
+        print(f"KRETA preflight OK: {args.source}")
+        return 0
+    try:
+        path, sidecar = derive_source(args.source, args.base)
+        if args.write:
+            write_sidecar(path, sidecar)
+    except Exception as exc:
+        print(f"KRETA rejected sidecar failed: {exc}", file=sys.stderr)
+    for failure in failures:
+        print(f"KRETA preflight REJECTED: {failure}", file=sys.stderr)
+    return 1
+
+
+def _derive_single(args: argparse.Namespace, native_skip) -> list[tuple[Path, dict]]:
+    """단일 source의 NATIVE 보호와 마이그레이션을 적용한다."""
+    path = derived_sidecar_path(args.source)
+    existing, native_damage = (
+        inspect_native_sidecar(path, args.base) if path.exists() else (None, None)
+    )
+    passive_downgrade = existing is not None and not (args.native or args.reject_reason)
+    if passive_downgrade and not args.force:
+        native_skip(path, existing)
+        derived = []
+    else:
+        if passive_downgrade and not args.write:
+            native_overwrite_warning(path, existing)
+        derived = [
+            rejected_sidecar_from_source(args.source, args.base, args.reject_reason)
+            if args.reject_reason
+            else native_sidecar_from_source(args.source, args.base)
+            if args.native
+            else derive_source(args.source, args.base)
+        ]
+        migrated = (
+            migrate_stale_native(args.source, args.base, native_damage)
+            if not (args.native or args.reject_reason)
+            else None
+        )
+        if migrated is not None:
+            derived, native_damage = [migrated], None
+        if native_damage and not (args.native or args.reject_reason):
+            derived = [
+                (derived_path, reject_native_artifact_damage(sidecar, native_damage))
+                for derived_path, sidecar in derived
+            ]
+    return derived
+
+
+def _write_derived(args: argparse.Namespace, derived: list[tuple[Path, dict]], native_skip) -> list[tuple[Path, dict]]:
+    """NATIVE 보호 조건에 따라 sidecar를 쓰고 기록을 반환한다."""
+    written: list[tuple[Path, dict]] = []
+    for path, sidecar in derived:
+        if args.native or args.reject_reason:
+            write_sidecar(path, sidecar)
+            written.append((path, sidecar))
+            continue
+        did_write, native_at_write = write_legacy_sidecar(
+            path, sidecar, args.base, force=args.force,
+        )
+        if not did_write:
+            native_skip(path, native_at_write or {})
+        else:
+            if native_at_write is not None:
+                native_overwrite_warning(path, native_at_write)
+            written.append((path, sidecar))
+    derived = written
+    return derived
+
+
+def _report_derivation(args: argparse.Namespace, derived: list[tuple[Path, dict]], skipped_native: list[Path]) -> int:
+    """파생 결과와 건너뛴 경로를 출력하고 종료 코드를 정한다."""
+    if skipped_native:
+        for path in skipped_native:
+            print(f"skipped existing NATIVE {path}")
+        print(f"skipped {len(skipped_native)} existing NATIVE sidecar(s)")
+    if not derived and not skipped_native:
+        print("multimodal 산출물이 없습니다.", file=sys.stderr)
+        return 2
+    action = "wrote" if args.write else "would write"
+    for path, sidecar in derived:
+        counts = sidecar.get("counts") or {}
+        status = sidecar["status"]
+        status_text = status.value if hasattr(status, "value") else status
+        print(
+            f"{action} {path}: {status_text} "
+            f"(attempted={counts.get('attempted')}, errored={counts.get('errored')}, "
+            f"unresolved={counts.get('unresolved')})"
+        )
+    print(
+        f"{len(derived)} sidecar(s); {'write complete' if args.write else 'dry-run'}; "
+        f"native skipped={len(skipped_native)}"
+    )
+    if args.native and any(sidecar["status"] != "NATIVE" for _, sidecar in derived):
+        return 1
+    return 0
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = _parse_args(argv)
+    skipped_native: list[Path] = []
+
+    native_skip = partial(_record_native_skip, out=skipped_native)
+    if args.preflight_kreta:
+        return _preflight_kreta(args)
+    try:
+        if args.source is not None:
+            derived = _derive_single(args, native_skip)
+            if args.write:
+                derived = _write_derived(args, derived, native_skip)
+        else:
+            derived = derive_all(
+                args.base,
+                write=args.write,
+                force=args.force,
+                on_native_skip=native_skip,
+                on_native_overwrite=native_overwrite_warning,
+            )
+    except Exception as exc:
+        print(f"derive failed: {exc}", file=sys.stderr)
+        return 2
+    return _report_derivation(args, derived, skipped_native)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

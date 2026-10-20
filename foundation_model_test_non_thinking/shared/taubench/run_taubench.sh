@@ -4,6 +4,7 @@
 
 set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CODE_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 BASE_DIR="${MODEL_TEST_BASE:-$(cd "$SCRIPT_DIR/../.." && pwd)}"
 export MODEL_TEST_BASE="$BASE_DIR"
 
@@ -67,6 +68,13 @@ RUN_ARGS=(
   --max-tokens "${AGENT_MAX_TOKENS:-16384}"
   --max-concurrency "${TAUBENCH_MAX_CONCURRENCY:-1}"
   --max-steps "${TAUBENCH_MAX_STEPS:-100}"
+  # 사용자 시뮬레이터 인자는 후보(AGENT_*)와 **독립**이다. 예전에는 러너가
+  # 후보 인자를 복사해 사용자에게도 썼고, 그래서 후보 설정이 다르면 사용자
+  # 프로토콜까지 갈렸다(실측: 같은 gpt-4.1-mini 가 600s/8192 와 120s/16384).
+  # 모든 후보에 같은 값을 쓸 것 — 다르면 그 비교는 모델 비교가 아니다.
+  --trials "${TAUBENCH_TRIALS:-1}"
+  --user-request-timeout "${TAUBENCH_USER_REQUEST_TIMEOUT:-120}"
+  --user-max-tokens "${TAUBENCH_USER_MAX_TOKENS:-16384}"
 )
 
 # 사용자 시뮬레이터 (standard 모드 필수). 모든 후보에 **같은** 모델을 써야 비교가 성립한다.
@@ -79,8 +87,8 @@ if [ -n "${TAUBENCH_USER_BASE_URL:-}" ]; then
   RUN_ARGS+=(--user-base-url "$TAUBENCH_USER_BASE_URL")
 fi
 
-"$TAU_PY" "$SCRIPT_DIR/runner/run_taubench.py" "${RUN_ARGS[@]}"
-"$TAU_PY" "$SCRIPT_DIR/scoring/score_run.py" \
+PYTHONPATH="$CODE_ROOT${PYTHONPATH:+:$PYTHONPATH}" "$TAU_PY" -m shared.taubench.runner.run_taubench "${RUN_ARGS[@]}"
+PYTHONPATH="$CODE_ROOT${PYTHONPATH:+:$PYTHONPATH}" "$TAU_PY" -m shared.taubench.scoring.score_run \
   --model "$MODEL" \
   --timestamp "$RUN_TIMESTAMP" \
   --track "$TRACK_NAME"

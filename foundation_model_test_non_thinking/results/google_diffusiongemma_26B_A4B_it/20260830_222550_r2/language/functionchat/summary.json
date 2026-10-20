@@ -1,0 +1,101 @@
+{
+  "benchmark": "kakao/FunctionChat-Bench (call exact match)",
+  "model": "google_diffusiongemma_26B_A4B_it",
+  "track": "functionchat",
+  "scoring_version": "functionchat_exact_v2",
+  "native_tool_calling": true,
+  "harness_integrity": {
+    "model": "google_diffusiongemma_26B_A4B_it",
+    "request_timeout": 60.0,
+    "task_timeout": 120.0,
+    "max_retries": 2,
+    "max_tokens": 16384,
+    "native_tool_calling": true,
+    "sdk_max_retries": 0,
+    "openai_sdk_version": "2.54.0"
+  },
+  "subset_limit": null,
+  "overall": {
+    "accuracy": 0.9,
+    "measured": 670,
+    "passed": 603,
+    "failed": 67
+  },
+  "by_dataset": {
+    "singlecall": {
+      "accuracy": 0.888,
+      "measured": 500,
+      "passed": 444,
+      "failed": 56,
+      "generation_errors": 0,
+      "not_measured": {}
+    },
+    "call_decision": {
+      "accuracy": 0.95,
+      "measured": 100,
+      "passed": 95,
+      "failed": 5,
+      "generation_errors": 0,
+      "not_measured": {
+        "relevance": 100,
+        "slot": 406
+      }
+    },
+    "dialog": {
+      "accuracy": 0.9142857142857143,
+      "measured": 70,
+      "passed": 64,
+      "failed": 6,
+      "generation_errors": 0,
+      "not_measured": {
+        "completion": 71,
+        "relevance": 23,
+        "slot": 36
+      }
+    }
+  },
+  "not_measured": {
+    "score": null,
+    "status": "judge_missing",
+    "in_score": false,
+    "reason": "These output types require an LLM judge and are outside this exact-match track.",
+    "total_items": 636,
+    "by_dataset": {
+      "call_decision": {
+        "relevance": 100,
+        "slot": 406
+      },
+      "dialog": {
+        "completion": 71,
+        "relevance": 23,
+        "slot": 36
+      }
+    }
+  },
+  "coverage": {
+    "singlecall": {
+      "source_lines": 25,
+      "expanded_items": 500,
+      "measured_items": 500
+    },
+    "call_decision": {
+      "source_lines": 606,
+      "measured_items": 100
+    },
+    "dialog": {
+      "source_records": 45,
+      "expanded_items": 200,
+      "measured_items": 70
+    }
+  },
+  "source": {
+    "repository": "kakao/FunctionChat-Bench",
+    "commit": "5ddb0b5bb37d6423e1f3381ef693cda811a7847e"
+  },
+  "publish_status": {
+    "publishable": true,
+    "failures": [],
+    "warnings": [],
+    "gate_scoring_version": "functionchat_exact_v2"
+  }
+}

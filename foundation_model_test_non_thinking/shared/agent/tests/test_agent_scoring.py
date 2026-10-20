@@ -1,6 +1,6 @@
 """agent scoring 단독 실행 테스트.
 
-패키지 import 없이 파일 경로에서 직접 로드한다.
+채점·보고서는 정식 패키지 import, 외부 배치 파일은 파일 로더로 검증한다.
 """
 
 import ast
@@ -15,10 +15,8 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
-from typing import Any, Dict, List
 
 
-SCORING_DIR = Path(__file__).resolve().parents[1] / "scoring"
 TREE_ROOT = Path(__file__).resolve().parents[3]
 CUSTOM_DIR = Path(__file__).resolve().parents[1] / "gpustack_custom"
 TIMEOUT_CONFIG_PATH = (
@@ -32,30 +30,20 @@ FRESH_RESULTS_SCRIPT = TREE_ROOT.parent / "check_results_fresh.sh"
 REPORT_LEVELS = ("L1", "L2", "L3", "L4", "L5", "L6")
 
 
-def _load_module(name):
-    path = SCORING_DIR / f"{name}.py"
-    spec = importlib.util.spec_from_file_location(f"{name}_under_test", path)
-    module = importlib.util.module_from_spec(spec)
-    sys.path.insert(0, str(SCORING_DIR))
-    try:
-        spec.loader.exec_module(module)
-    finally:
-        try:
-            sys.path.remove(str(SCORING_DIR))
-        except ValueError:
-            pass
-    return module
+from reports import report_agent_tracks
+from shared.agent.scoring import (
+    aggregate,
+    cache_diagnostics,
+    context as scoring_context,
+    extra_metrics,
+    level_spec,
+    repro,
+    score_run,
+    task_data,
+    validate_run,
+)
 
-
-extra_metrics = _load_module("extra_metrics")
-cache_diagnostics = _load_module("cache_diagnostics")
-level_spec = _load_module("level_spec")
-aggregate = _load_module("aggregate")
-score_run = _load_module("score_run")
-validate_run = _load_module("validate_run")
-scoring_context = _load_module("context")
-task_data = _load_module("task_data")
-
+# These files are copied into Ko-AgentBench for external deployment.
 _timeout_spec = importlib.util.spec_from_file_location(
     "runner_timeout_config_under_test", TIMEOUT_CONFIG_PATH
 )
@@ -70,24 +58,13 @@ _result_spec.loader.exec_module(result_observability)
 
 
 def _load_runner_helpers():
-    """Load pure runner helpers without importing optional benchmark dependencies."""
-    parsed = ast.parse(RUNNER_PATH.read_text(encoding="utf-8"), filename=str(RUNNER_PATH))
-    wanted = {"convert_dataset_to_tasks", "simplify_result"}
-    functions = [
-        node
-        for node in parsed.body
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name in wanted
-    ]
-    namespace = {
-        "Any": Any,
-        "Dict": Dict,
-        "List": List,
-        "json": json,
-        "completion_latency_from_task": result_observability.completion_latency_from_task,
-        "finish_reason_fields": result_observability.finish_reason_fields,
-    }
-    exec(compile(ast.Module(body=functions, type_ignores=[]), str(RUNNER_PATH), "exec"), namespace)
-    return namespace
+    """Import the complete runner so extracted helpers remain covered."""
+    import pytest
+    from shared.agent.tests._agent_fakes import load_runner
+
+    with pytest.MonkeyPatch.context() as monkeypatch:
+        module = load_runner(monkeypatch, Path(tempfile.gettempdir()))
+    return vars(module)
 
 
 runner_helpers = _load_runner_helpers()
@@ -3603,7 +3580,7 @@ def test_arg_f1_det_or_skip():
         print("SKIP test_arg_f1_det_or_skip: vendored Ko-AgentBench not available")
         return
 
-    context = _load_module("context")
+    context = scoring_context
     task = {
         "task_id": "x",
         "golden_action": [{"tool": "A", "args": {"q": "x"}}],
@@ -4080,7 +4057,219 @@ def test_level_report_says_when_all_five_diagnostics_are_zero_or_absent():
     )
 
 
+def _track_row(track, model, run, axis, den, num=1):
+    return {
+        "model": model, "run": run, "track": track, "publishable": True,
+        "failures": [], "has_gate_record": True,
+        "axes": [(axis, num, den, False)],
+    }
+
+
+def test_agent_tracks_report_never_breaks_ties_by_run_name():
+    """분모가 같으면 이름 정렬이 대표를 정하고 있었다.
+
+    실측: taubench qwen/telecom 은 분모 40 인 런이 5개였고 점수가 0.900 과 0.475 로
+    갈렸다. 어느 쪽이 대표가 되는지를 런 이름이 정하면 근거가 없다.
+    """
+
+    module = report_agent_tracks
+    rows = [
+        _track_row("functionchat", "m", "aaa_run", "exact", 600, num=500),
+        _track_row("functionchat", "m", "zzz_run", "exact", 600, num=300),
+    ]
+    markdown = module.render_markdown(rows)
+    assert "대표 선정 불가" in markdown, markdown
+    # 어느 쪽 수치도 대표로 발행되지 않는다
+    assert "500/600" not in markdown.split("## 발행 가능한 수치")[1].split("## ")[0]
+    assert "`aaa_run`" in markdown and "`zzz_run`" in markdown
+
+
+def test_agent_tracks_report_still_picks_the_widest_coverage():
+    module = report_agent_tracks
+    rows = [
+        _track_row("functionchat", "m", "small", "exact", 600, num=500),
+        _track_row("functionchat", "m", "full", "exact", 670, num=600),
+    ]
+    markdown = module.render_markdown(rows)
+    assert "대표 선정 불가" not in markdown
+    assert "600/670" in markdown
+
+
+def test_agent_tracks_report_leaves_taubench_to_its_own_layer():
+    """한 트랙을 두 스크립트가 다른 규칙으로 보고하면 반드시 어긋난다."""
+
+    module = report_agent_tracks
+    source = (TREE_ROOT / "reports" / "report_agent_tracks.py").read_text(encoding="utf-8")
+    assert 'track != "functionchat"' in source, "taubench 를 다시 끌어들이면 안 된다"
+    collected = module.collect(TREE_ROOT)
+    assert collected, "functionchat 산출물을 하나도 못 찾았다"
+    assert {row["track"] for row in collected} == {"functionchat"}
+
+
+def test_agent_tracks_report_tie_state_survives_every_input_order():
+    """동률 -> 더 큰 분모 -> 다시 동률 순서에서 ambiguous 가 낡으면 안 된다.
+
+    collect 은 glob 정렬 순서로 런을 넘기므로 입력 순서를 고를 수 없다. 어떤 순열로
+    들어와도 같은 결론이어야 한다.
+    """
+
+    import itertools
+
+    module = report_agent_tracks
+    rows = [
+        _track_row("functionchat", "m", "a", "exact", 600),
+        _track_row("functionchat", "m", "b", "exact", 600),
+        _track_row("functionchat", "m", "c", "exact", 670),
+        _track_row("functionchat", "m", "d", "exact", 670),
+    ]
+    seen = set()
+    for perm in itertools.permutations(rows):
+        segment = module.render_markdown(list(perm)).split("## 발행 가능한 수치")[1].split("## ")[0]
+        seen.add(tuple(sorted(l for l in segment.splitlines() if l.startswith("| functionchat"))))
+    assert len(seen) == 1, f"입력 순서에 따라 결과가 달라진다: {seen}"
+    only = next(iter(seen))
+    assert any("670" in line and "대표 선정 불가" in line for line in only), only
+    assert not any("600" in line for line in only), "작은 분모의 동률이 남아 있다"
+
+
+def test_agent_tracks_report_lists_every_tied_run_when_three_share_a_denominator():
+    module = report_agent_tracks
+    rows = [_track_row("functionchat", "m", name, "exact", 600) for name in ("a", "b", "c")]
+    markdown = module.render_markdown(rows)
+    assert "대표 선정 불가" in markdown
+    for name in ("a", "b", "c"):
+        assert f"`{name}`" in markdown, name
+
+
+def test_agent_tracks_report_surfaces_reproducibility_divergence():
+    """대표 런 표만으로는 반복 실행의 흔들림이 보이지 않는다."""
+
+    module = report_agent_tracks
+    rows = [_track_row("functionchat", "m", "fcfull", "exact", 670, num=600)]
+    repro = [{
+        "model": "m", "scoring_version": "functionchat_exact_v1",
+        "runs": ["r1", "r2"], "status": "DIVERGED",
+        "passed_counts": [553, 553], "count_spread": 0, "stable_passed": 548,
+        "unstable_items": ["i%d" % i for i in range(10)],
+        "reason": "통과 항목이 런마다 다르다 (10건)",
+    }]
+    markdown = module.render_markdown(rows, repro)
+    assert "## 재현성" in markdown
+    assert "DIVERGED" in markdown
+    assert "[553, 553]" in markdown, "건수가 같다는 사실도 보여야 한다"
+    assert "뒤집힌 항목 10건" in markdown
+
+
+def test_agent_tracks_report_keeps_judge_claims_off_the_exact_axis():
+    """judge 의 내부 표 갈림을 exact-match 반복 런의 뒤집힘으로 표시하면 안 된다."""
+
+    module = report_agent_tracks
+    claims = {
+        "credentials": {}, "verdicts": [],
+        "judge_credentials": [{
+            "model": "m", "run": "r", "provisional": True,
+            "credential": {
+                "claim_class": "repeatability_observed", "k": 1,
+                "majority_passed": 5, "measured_items": 7,
+                "unstable_items": ["a"], "instability_envelope": [4, 6],
+            },
+        }],
+    }
+    markdown = module.render_markdown([_track_row("functionchat", "m", "r", "exact", 7)], claims=claims)
+    assert "### exact-match 축" in markdown
+    assert "### judge 축 — 런 내부 3표" in markdown
+    assert "PROVISIONAL — 판정기 기준, 인간 검증 없음" in markdown
+
+
+def test_agent_tracks_report_omits_the_section_when_there_is_nothing_to_compare():
+    module = report_agent_tracks
+    rows = [_track_row("functionchat", "m", "only", "exact", 600)]
+    assert "## 재현성" not in module.render_markdown(rows, [])
+    assert "## 재현성" not in module.render_markdown(rows)
+
+
+def test_agent_tracks_reproducibility_reads_real_artifacts():
+    """모듈이 실제 산출물에서 반복 런을 찾아내는지 — 배선이 끊기면 조용히 빈다."""
+
+    module = report_agent_tracks
+    report = module.collect_functionchat_reproducibility(TREE_ROOT)
+    assert report, "functionchat 반복 런을 하나도 못 찾았다"
+    assert any(check["status"] == "DIVERGED" for check in report), report
+
+
+def test_agent_tracks_report_flags_judged_axes_without_provenance():
+    """판정 점수는 판정기가 만든 값이다 — 무엇이 만들었는지 없으면 재확인할 수 없다."""
+
+    module = report_agent_tracks
+    row = _track_row("functionchat", "m", "run", "judged", 636, num=544)
+    row["axes"] = [("judged", 544, 636, True)]
+    row["judge_provenance_missing"] = ["endpoint", "rubric_sha256"]
+    markdown = module.render_markdown([row])
+    assert "프로비넌스 없음(endpoint, rubric_sha256)" in markdown, markdown
+
+    row["judge_provenance_missing"] = []
+    assert "프로비넌스 없음" not in module.render_markdown([row])
+
+
+def test_agent_tracks_report_survives_a_broken_reproducibility_layer(tmp_path=None):
+    """외부 base의 깨진 코드는 실행하지 않으며, 결과 폴더가 없으면 빈 목록이다."""
+
+    import tempfile
+
+    module = report_agent_tracks
+    with tempfile.TemporaryDirectory() as tmp:
+        base = Path(tmp)
+        scoring = base / "shared" / "functionchat" / "scoring"
+        scoring.mkdir(parents=True)
+        (scoring / "repro.py").write_text("this is not python(", encoding="utf-8")
+        with contextlib.redirect_stderr(io.StringIO()) as stderr:
+            assert module.collect_functionchat_reproducibility(base) == []
+        assert stderr.getvalue() == ""
+
+
+def test_agent_repro_uses_level_qualified_task_vectors_and_protocol_cohorts():
+    """같은 task_id 가 레벨마다 있어도 서로 다른 측정 항목으로 남아야 한다."""
+
+    with tempfile.TemporaryDirectory() as tmp:
+        run = Path(tmp) / "results" / "m" / "r1" / "language" / "agent_v4run"
+        run.mkdir(parents=True)
+        metadata = {"model": "m", "native_tool_calling": True,
+                    "decoding": {"constraints": {"removed_parameters": []}}}
+        for level, success in (("L1", True), ("L2", False)):
+            (run / f"{level}.json").write_text(json.dumps({
+                "metadata": metadata,
+                "results": [{"task_id": "same-id", "success": success}],
+            }), encoding="utf-8")
+        loaded = repro.load_run(run)
+    assert loaded is not None
+    assert loaded["items"] == {"L1:same-id": True, "L2:same-id": False}
+    assert repro.cohort_key(loaded)[0:4] == ("agent_v4run", "m", True, ((),))
+
+
+def test_agent_repro_treats_missing_decoding_as_unknown_not_no_removals():
+    """예전 산출물의 미기록을 제약 없음으로 바꾸면 다른 코호트와 섞인다."""
+
+    base = {"track": "agent_v4run", "model": "m", "native_tool_calling": True,
+            "items": {"L1:t": True}}
+    unknown = repro.cohort_key(base)
+    known = repro.cohort_key({**base, "removed_parameters": ((),)})
+    assert unknown != known
+
+
 TESTS = [
+    test_agent_tracks_report_flags_judged_axes_without_provenance,
+    test_agent_tracks_report_survives_a_broken_reproducibility_layer,
+    test_agent_tracks_report_surfaces_reproducibility_divergence,
+    test_agent_tracks_report_keeps_judge_claims_off_the_exact_axis,
+    test_agent_tracks_report_omits_the_section_when_there_is_nothing_to_compare,
+    test_agent_tracks_reproducibility_reads_real_artifacts,
+    test_agent_repro_uses_level_qualified_task_vectors_and_protocol_cohorts,
+    test_agent_repro_treats_missing_decoding_as_unknown_not_no_removals,
+    test_agent_tracks_report_tie_state_survives_every_input_order,
+    test_agent_tracks_report_lists_every_tied_run_when_three_share_a_denominator,
+    test_agent_tracks_report_never_breaks_ties_by_run_name,
+    test_agent_tracks_report_still_picks_the_widest_coverage,
+    test_agent_tracks_report_leaves_taubench_to_its_own_layer,
     test_level_report_prefers_clean_run_over_newer_errored_run,
     test_level_report_lists_model_with_only_errored_run_and_note,
     test_level_report_has_no_composite_or_rank_field,

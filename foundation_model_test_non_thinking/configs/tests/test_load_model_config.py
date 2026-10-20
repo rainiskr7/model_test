@@ -6,6 +6,8 @@ import io
 import os
 import sys
 import tempfile
+import unittest
+from unittest import mock
 from pathlib import Path
 
 
@@ -35,7 +37,7 @@ def endpoint_override_env(values):
         os.environ.update(saved)
 
 
-def test_config(extra_cfg):
+def make_config(extra_cfg):
     cfg = {
         "model": "test_model",
         "tokenizer_path": "/tmp/test-tokenizer",
@@ -51,7 +53,7 @@ def test_config(extra_cfg):
 
 
 def capture_emit_shell(module, extra_cfg):
-    cfg = test_config(extra_cfg)
+    cfg = make_config(extra_cfg)
 
     stdout = io.StringIO()
     with endpoint_override_env({}), contextlib.redirect_stdout(stdout):
@@ -69,7 +71,7 @@ def capture_endpoint_override(module, overrides):
         contextlib.redirect_stderr(stderr),
     ):
         try:
-            module.emit_shell(test_config({}))
+            module.emit_shell(make_config({}))
         except SystemExit as exc:
             error = str(exc)
     return stdout.getvalue().splitlines(), stderr.getvalue(), error
@@ -107,7 +109,7 @@ def load_fixture(module, cfg):
             module.__file__ = previous_file
 
 
-def main():
+def legacy_cases():
     module = load_module()
     cases = [
         (
@@ -225,7 +227,7 @@ def main():
     validation_cases = 3
     _, error = load_fixture(
         module,
-        test_config({"agent": {}}),
+        make_config({"agent": {}}),
     )
     expected_fragment = "agent.native_tool_calling을 true 또는 false로 명시"
     if error is None or expected_fragment not in error:
@@ -233,7 +235,7 @@ def main():
 
     loaded, error = load_fixture(
         module,
-        test_config({"agent": {"native_tool_calling": False}}),
+        make_config({"agent": {"native_tool_calling": False}}),
     )
     if error is not None or loaded["agent"]["native_tool_calling"] is not False:
         failures.append(f"explicit native_tool_calling false did not load: {error!r}")
@@ -258,6 +260,95 @@ def main():
 
     print(f"OK {len(cases) + endpoint_cases + validation_cases} cases")
     return 0
+
+
+class LoadModelConfigTests(unittest.TestCase):
+    def setUp(self):
+        self.module = load_module()
+        self.tmpdir = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmpdir.cleanup)
+        self.config_dir = Path(self.tmpdir.name) / "models"
+        self.config_dir.mkdir()
+        self.module.__file__ = str(Path(self.tmpdir.name) / "load_model_config.py")
+
+    def write_config(self, stem):
+        path = self.config_dir / f"{stem}.yaml"
+        path.write_text("model: fixture\n", encoding="utf-8")
+        return path
+
+    def assert_load_error(self, name, available):
+        with self.assertRaises(SystemExit) as caught:
+            self.module.load(name)
+        self.assertIn("ERROR: config 없음 ", str(caught.exception))
+        self.assertIn(f"사용 가능: {available}", str(caught.exception))
+
+    def test_exact_match_precedes_casefold_collision(self):
+        path = self.write_config("qwen_x")
+        opened = []
+        read_text = Path.read_text
+
+        def record_read(candidate, *args, **kwargs):
+            opened.append(candidate)
+            return read_text(candidate, *args, **kwargs)
+
+        with (
+            mock.patch.object(self.module, "_candidate_stems", return_value=["qwen_x", "Qwen_X"]),
+            mock.patch.object(Path, "read_text", record_read),
+        ):
+            self.assertEqual(self.module.load("qwen_x"), {"model": "fixture"})
+        self.assertEqual(opened, [path])
+
+    def test_unique_casefold_match(self):
+        self.write_config("qwen_x")
+        self.assertEqual(self.module.load("Qwen_X"), {"model": "fixture"})
+
+    def test_ambiguous_casefold_match_is_rejected(self):
+        # 대소문자 비구분 FS에서도 실제 파일 두 개 없이 충돌을 검증한다.
+        available = ["qwen_x", "Qwen_X"]
+        with (
+            mock.patch.object(self.module, "_candidate_stems", return_value=available),
+            mock.patch.object(Path, "read_text") as read_text,
+        ):
+            self.assert_load_error("QWEN_X", available)
+        read_text.assert_not_called()
+
+    def test_missing_name_lists_available_configs(self):
+        self.write_config("qwen_x")
+        self.assert_load_error("missing", ["qwen_x"])
+
+    def test_only_basenames_are_allowed(self):
+        self.write_config("qwen_x")
+        with mock.patch.object(Path, "read_text") as read_text:
+            for name in ("../x", "a/b", ".hidden", "a..b", "/x", "", ".yaml"):
+                with self.subTest(name=name):
+                    self.assert_load_error(name, ["qwen_x"])
+        read_text.assert_not_called()
+
+    def test_yaml_suffixes(self):
+        self.write_config("qwen_x")
+        for name in ("qwen_x.yaml", "qwen_x.YAML", "Qwen_X.yaml", "Qwen_X.YAML"):
+            with self.subTest(name=name):
+                self.assertEqual(self.module.load(name), {"model": "fixture"})
+
+    def test_candidates_are_files_or_links_to_files_with_lowercase_suffix(self):
+        path = self.write_config("qwen_x")
+        (self.config_dir / "alias.yaml").symlink_to(path)
+        (self.config_dir / "directory.yaml").mkdir()
+        (self.config_dir / "directory_link.yaml").symlink_to(self.config_dir / "directory.yaml")
+        (self.config_dir / "broken.yaml").symlink_to(self.config_dir / "absent")
+        (self.config_dir / "ignored.YAML").write_text("model: ignored\n", encoding="utf-8")
+        (self.config_dir / "ignored.txt").write_text("model: ignored\n", encoding="utf-8")
+        self.assertEqual(self.module._candidate_stems(self.config_dir), ["alias", "qwen_x"])
+        self.assertEqual(self.module.load("ALIAS"), {"model": "fixture"})
+
+    def test_existing_shell_and_validation_contracts(self):
+        self.assertEqual(legacy_cases(), 0)
+
+
+def main():
+    suite = unittest.defaultTestLoader.loadTestsFromTestCase(LoadModelConfigTests)
+    result = unittest.TextTestRunner(verbosity=2).run(suite)
+    return 0 if result.wasSuccessful() else 1
 
 
 if __name__ == "__main__":

@@ -63,11 +63,20 @@ check_tree() {
       continue
     fi
 
-    output="$(
-      MODEL_TEST_BASE="$tree_dir" \
-        "$PYTHON" "$tree_dir/shared/agent/scoring/score_run.py" \
-        --results-dir "$results_dir" --check 2>&1
-    )"
+    # non_thinking 은 10-14 부터 `shared.*` 패키지(-m 실행); thinking 은 아직 파일 실행이다.
+    if [[ -f "$tree_dir/shared/__init__.py" ]]; then
+      output="$(
+        MODEL_TEST_BASE="$tree_dir" PYTHONPATH="$tree_dir${PYTHONPATH:+:$PYTHONPATH}" \
+          "$PYTHON" -m shared.agent.scoring.score_run \
+          --results-dir "$results_dir" --check 2>&1
+      )"
+    else
+      output="$(
+        MODEL_TEST_BASE="$tree_dir" \
+          "$PYTHON" "$tree_dir/shared/agent/scoring/score_run.py" \
+          --results-dir "$results_dir" --check 2>&1
+      )"
+    fi
     rc=$?
 
     if (( rc == 0 )); then

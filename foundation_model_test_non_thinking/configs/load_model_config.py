@@ -16,14 +16,29 @@ from pathlib import Path
 import yaml
 
 
+def _candidate_stems(config_dir: Path) -> list[str]:
+    """실제 파일(파일로 가는 링크 포함)의 정확한 .yaml stem 목록."""
+    return sorted(
+        path.stem
+        for path in config_dir.iterdir()
+        if path.name.endswith(".yaml") and path.is_file()
+    )
+
+
 def load(config_name: str) -> dict:
     config_dir = Path(__file__).parent / "models"
-    # 확장자 없이도 받음
-    name = config_name if config_name.endswith(".yaml") else f"{config_name}.yaml"
-    path = config_dir / name
-    if not path.exists():
-        available = sorted(p.stem for p in config_dir.glob("*.yaml"))
+    stem = config_name[:-5] if config_name.endswith((".yaml", ".YAML")) else config_name
+    available = _candidate_stems(config_dir)
+    path = config_dir / f"{stem}.yaml"
+    # 파일시스템의 대소문자 구분 여부에 기대지 않고 목록의 정확한 철자로 판정한다.
+    if not stem or "/" in config_name or ".." in config_name or config_name.startswith("."):
         sys.exit(f"ERROR: config 없음 {path}\n사용 가능: {available}")
+    if stem not in available:
+        matches = [candidate for candidate in available if candidate.casefold() == stem.casefold()]
+        if len(matches) != 1:
+            sys.exit(f"ERROR: config 없음 {path}\n사용 가능: {available}")
+        stem = matches[0]
+    path = config_dir / f"{stem}.yaml"
     cfg = yaml.safe_load(path.read_text()) or {}
     cfg = apply_serving_profile(cfg)
     validate_agent_native_tool_calling(cfg)
@@ -41,9 +56,10 @@ def load_serving_profile(profile_name: str) -> dict:
     return yaml.safe_load(path.read_text()) or {}
 
 
-# skip_benches 에 쓸 수 있는 이름 = run_all.sh 에 실제로 skip 훅이 달린 벤치.
-# 훅 없는 이름을 적으면 조용히 무시되어 "제외했다고 생각했는데 돌아간" 상태가
-# 되므로, 여기서 즉시 실패시킨다. run_all.sh 에 훅을 추가하면 여기에도 추가할 것.
+# YAML·serving_profile의 skip_benches는 이 모델에서 숫자가 의미 없는 벤치를
+# 아예 재지 않는 측정 제외 정책이며, 현재 b4_latency_profile만 허용한다.
+# run_all.sh의 다른 재개용 훅은 허용하지 않는다. 발행 strict는 결과 원천이
+# 전혀 없는 벤치의 부재를 검사하지 않으므로, 훅 추가가 정책 허용을 뜻하지 않는다.
 SKIPPABLE_BENCHES = frozenset({"b4_latency_profile"})
 
 

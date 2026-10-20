@@ -4,14 +4,20 @@
 import argparse
 import json
 import os
+import re
 import sys
-import tempfile
 from collections import Counter
 from pathlib import Path
-from typing import Any, Iterable, Mapping, Optional
+from typing import Any, Iterable, Mapping, NamedTuple, Optional
+
+from shared.jsonwrite.atomic_json import write_json_atomic
+from shared.resultspath.run_dir import scoring_results_dir
+from shared.resultspath.model_dir import results_model_dir_name, safe_model_name
+from shared.jsonread.object import load_json_object as _load
+from shared.taubench.scoring.passk import pass_hat_k_table
 
 
-SCORING_VERSION = "taubench_state_v1"
+SCORING_VERSION = "taubench_state_v2"  # v2: 후보 프로토콜 실패(도구 미호출)를 측정된 실패로 센다
 JUDGE_BASES = frozenset({"NL_ASSERTION", "COMMUNICATE"})
 PROGRAMMATIC_BASES = frozenset({"DB", "ENV_ASSERTION", "ACTION"})
 DECLARED_INVENTORY = {
@@ -20,16 +26,14 @@ DECLARED_INVENTORY = {
         "reward_basis_counts": {"ENV_ASSERTION": 4524, "ACTION+ENV_ASSERTION": 66},
     },
     "banking_knowledge": {
-        "total_records": 98,
+        # 실측 97 (tasks.json 고유 id 97개). 예전에는 98 로 적혀 있어 자기 구성요소
+        # 합(88+9=97)과도 어긋났다.
+        "total_records": 97,
         "reward_component_counts": {"DB": 88, "ACTION": 9},
     },
     "retail": {"total_records": 116},
     "airline": {"total_records": 52},
 }
-
-
-def safe_model_name(model: str) -> str:
-    return model.replace("/", "_").replace("-", "_").replace(":", "_")
 
 
 def classify_task(task: Mapping[str, Any]) -> tuple[str, Optional[str]]:
@@ -87,6 +91,7 @@ def _validate_upstream_integrity(
     agent = info.get("agent_info") or {}
     user = info.get("user_info") or {}
     args = agent.get("llm_args") or {}
+    user_args = user.get("llm_args") or {}
     integrity = manifest.get("harness_integrity") or {}
     expected = {
         # 하드코딩하지 않는다 — 매니페스트가 기록한 모드에서 파생시킨다.
@@ -113,38 +118,105 @@ def _validate_upstream_integrity(
         )
     if "temperature" in args:
         raise ValueError("upstream results show that temperature was sent")
+    user_observed = _validate_user_protocol(user, user_args, integrity)
     return {
         **observed,
         "temperature_sent": False,
+        "user_protocol": user_observed,
         "source": "tau2 results.info.agent_info/user_info",
     }
 
 
-def score_domain(
-    domain: str,
-    raw: Optional[Mapping[str, Any]],
-    runnable_tasks: int,
-    unavailable_reason: Optional[str] = None,
+def _validate_user_protocol(
+    user: Mapping[str, Any],
+    user_args: Mapping[str, Any],
+    integrity: Mapping[str, Any],
 ) -> dict[str, Any]:
-    if runnable_tasks == 0:
-        return {
-            "status": "not_measured",
-            "reason": unavailable_reason or "zero runnable tasks",
-            "pass_rate": None,
-            "runnable_tasks": 0,
-            "result_records": 0,
-            "measured": 0,
-            "passed": 0,
-            "failed": 0,
-            "task_results": [],
-        }
-    if raw is None:
-        raise ValueError(f"missing upstream results for runnable domain {domain}")
+    """사용자 시뮬레이터의 실제 요청 설정을 매니페스트와 대조한다.
 
+    모델 비교가 성립하려면 **후보만 달라야 한다.** 상류 제출 요건도 "모든
+    도메인에서 동일한 agent 모델과 사용자 시뮬레이터를 identical arguments 로"
+    를 요구한다. 예전 러너는 사용자 인자를 후보 인자에서 복사했기 때문에 후보
+    설정이 바뀌면 사용자 프로토콜도 따라 바뀌었다 — 같은 gpt-4.1-mini 인데 한쪽은
+    timeout 600s/8192 tokens, 다른 쪽은 120s/16384 tokens 로 돌아간 실측이 있다.
+    구버전 산출물은 매니페스트에 사용자 인자가 없으므로 관측값만 남기고 통과시킨다.
+    """
+
+    # 모델·타임아웃·토큰만 보면 "고정" 이 아니다. 러너는 사용자에게 temperature 와
+    # api_base 도 보낸다 — 엔드포인트가 다르면 같은 alias 라도 다른 백엔드이고,
+    # temperature 가 다르면 사용자 발화가 결정론적이지 않다. 둘 다 대조 대상이다.
+    observed = {
+        "user_model": user.get("llm"),
+        "user_request_timeout": user_args.get("timeout"),
+        "user_max_tokens": user_args.get("max_tokens"),
+        "user_temperature": user_args.get("temperature"),
+        "user_api_base": user_args.get("api_base"),
+    }
+    declared_timeout = integrity.get("user_request_timeout")
+    declared_max_tokens = integrity.get("user_max_tokens")
+    if declared_timeout is None and declared_max_tokens is None:
+        observed["pinned"] = False
+        observed["reason"] = (
+            "사용자 인자를 기록하지 않는 구버전 러너가 만든 산출물이다. "
+            "다른 런과 같은 사용자 프로토콜이었다는 증거가 없다."
+        )
+        return observed
+    # 사용자 **모델**이 비교의 핵심이다. 인자만 대조하고 모델을 빼면, 시뮬레이터가
+    # 통째로 바뀌어도 pinned 로 통과한다. 이 트랙은 사용자 시뮬레이터 교체만으로
+    # 같은 모델 점수가 0.475 -> 0.900 으로 뛴 전례가 있다.
+    expected = {
+        "user_model": integrity.get("user_model_sent_to_litellm"),
+        "user_request_timeout": declared_timeout,
+        "user_max_tokens": declared_max_tokens,
+    }
+    actual = {
+        "user_model": observed["user_model"],
+        "user_request_timeout": observed["user_request_timeout"],
+        "user_max_tokens": observed["user_max_tokens"],
+    }
+    # 선언한 적 없는 항목은 대조하지 않되, 관측값은 남겨 코호트가 읽을 수 있게 한다.
+    for key in ("user_temperature", "user_api_base"):
+        declared = integrity.get(key)
+        if declared is not None:
+            expected[key] = declared
+            actual[key] = observed[key]
+    observed["pinned"] = True
+    if actual != expected:
+        # **예외를 던지지 않는다.** build_summary 안에서 터지면 main 이 exit 2 로
+        # 끝나며 summary.json 을 아예 쓰지 않는다. 이 파일의 원칙은 "발행 불가여도
+        # 산출물은 남긴다 — 진단에 필요하다" 이고, 후보도 아닌 사용자 시뮬레이터
+        # 설정 때문에 진단 근거를 없애는 것은 그 원칙과 어긋난다.
+        # 게이트(validate_summary)가 이 필드를 읽어 발행을 막는다.
+        observed["mismatch"] = {"declared": expected, "observed": actual}
+    return observed
+
+
+def _trials_per_task(task_results):
+    """과제별 시행 수의 분포. 값이 하나면 균일하게 돌린 것이다."""
+
+    counts = Counter(str(record["task_id"]) for record in task_results)
+    return sorted(set(counts.values())) if counts else []
+
+
+class _SimulationScores(NamedTuple):
+    """시뮬레이션 판정 벡터와 집계 수치를 함께 전달한다."""
+
+    task_results: list[dict[str, Any]]
+    passed: int
+    failed: int
+    measured: int
+    not_measured: Counter
+    protocol_failures: Counter
+    simulations: list[Mapping[str, Any]]
+
+
+def _score_simulations(raw: Mapping[str, Any]) -> _SimulationScores:
+    """시뮬레이션별 보상과 후보 프로토콜 실패를 집계한다."""
     tasks = {str(task["id"]): task for task in raw.get("tasks") or []}
     task_results: list[dict[str, Any]] = []
     passed = failed = measured = 0
     not_measured = Counter()
+    protocol_failures = Counter()
     simulations = list(raw.get("simulations") or [])
     for simulation in simulations:
         task_id = str(simulation.get("task_id"))
@@ -160,9 +232,17 @@ def score_domain(
             "upstream_reward": reward,
             "termination_reason": simulation.get("termination_reason"),
         }
+        protocol_failure = _candidate_protocol_failure(simulation)
         if status != "measured":
             record["not_measured_reason"] = reason
             not_measured[str(reason)] += 1
+        elif protocol_failure is not None:
+            # 후보가 규약을 어겨 시뮬레이션이 죽었다 — 보상은 없지만 측정된 실패다.
+            record["passed"] = False
+            record["protocol_failure"] = protocol_failure
+            protocol_failures[f"{protocol_failure}@agent"] += 1
+            measured += 1
+            failed += 1
         elif not isinstance(reward, (int, float)):
             record["evaluation_status"] = "not_measured"
             record["not_measured_reason"] = "upstream_reward_missing"
@@ -177,10 +257,13 @@ def score_domain(
             else:
                 failed += 1
         task_results.append(record)
+    return _SimulationScores(
+        task_results, passed, failed, measured, not_measured, protocol_failures, simulations
+    )
 
-    terminations = Counter(str(sim.get("termination_reason")) for sim in simulations)
-    candidate_attr, env_attr, unclassified_attr = _classify_incompletions(simulations)
 
+def _strict_pass_rate(measured: int, passed: int, candidate_attr: Mapping, env_attr: Mapping, unclassified_attr: Mapping) -> tuple:
+    """미완주 귀책에 따른 strict 분모와 점수를 계산한다."""
     # pass_rate_strict: 모델 귀책 미완주를 실패로 세는 분모. 서빙 의사결정용이다
     # ("이 모델을 붙이면 몇 %가 실제로 끝나는가"). upstream 의 pass_rate 를 덮어쓰지
     # 않는다 — 두 숫자는 서로 다른 질문에 답한다.
@@ -201,42 +284,11 @@ def score_domain(
     else:
         pass_rate_strict = None
         strict_reason = "완주한 시뮬레이션이 없다"
-
-    return {
-        "status": "measured" if measured else "not_measured",
-        "reason": None if measured else "no upstream records had a runnable numeric reward",
-        "pass_rate": passed / measured if measured else None,
-        "pass_rate_source": "tau2 results.simulations[].reward_info.reward",
-        "pass_rate_strict": pass_rate_strict,
-        "pass_rate_strict_denominator": strict_denominator,
-        "pass_rate_strict_reason": strict_reason,
-        "pass_rate_strict_definition": (
-            "passed / (measured + 모델 귀책 미완주). upstream pass_rate 와 달리 모델이 "
-            "스스로 망가져 못 끝낸 태스크를 실패로 센다. 환경 귀책 오류가 있으면 null."
-        ),
-        # 키는 "<error_type>@<actor>" 다. actor 는 traceback 에서 뽑는다.
-        "incompletion_attribution": {
-            "candidate": dict(sorted(candidate_attr.items())),
-            "environment": dict(sorted(env_attr.items())),
-            "unclassified": dict(sorted(unclassified_attr.items())),
-        },
-        "runnable_tasks": runnable_tasks,
-        "result_records": len(simulations),
-        "measured": measured,
-        "passed": passed,
-        "failed": failed,
-        "not_measured_result_records": dict(sorted(not_measured.items())),
-        "termination_reasons": dict(sorted(terminations.items())),
-        "request_observability": _successful_call_observability(simulations),
-        "task_results": task_results,
-    }
+    return pass_rate_strict, strict_denominator, strict_reason
 
 
-def build_summary(
-    raw_by_domain: Mapping[str, Mapping[str, Any]],
-    manifest: Mapping[str, Any],
-    track: str,
-) -> dict[str, Any]:
+def _validated_split(raw_by_domain: Mapping, manifest: Mapping) -> tuple:
+    """완료 상태와 split 건수 및 상류 task ID를 검증한다."""
     if manifest.get("status") != "completed":
         raise ValueError("run manifest is not completed")
     split = dict(manifest.get("split") or {})
@@ -269,20 +321,29 @@ def build_summary(
             "manifest split ids disagree with tasks actually loaded by tau2: "
             f"manifest={len(task_ids)}, upstream={len(upstream_task_ids)}"
         )
+    return split, runnable_task_count, not_measured_tasks, not_measured_task_count, run_domain, domain_raw
 
+
+def _score_selected_domains(manifest: Mapping, run_domain: str, domain_raw: Any, runnable_task_count: int) -> dict:
+    """실행 도메인을 먼저 채점하고 미실행 도메인을 추가한다."""
     domain_scope = manifest.get("domain_scope") or {}
     # 실행 도메인을 먼저 넣고, **미실행 도메인만** 사유와 함께 채운다.
     # (예전에는 retail/airline 을 뒤에 무조건 넣어서, retail 을 실행하면 그 결과가
     #  하드코딩된 not_measured 로 덮어써졌다 — 2026-08-23 retail 첫 런에서 29건을
     #  돌려놓고 0건 측정으로 집계됐다.)
+    # 실행하지 않은 도메인의 사유는 **"이번 런에서 고르지 않았다"** 뿐이다.
+    # 예전에는 판정 필요 여부를 여기에 하드코딩했는데 그게 거짓이 됐다:
+    #   airline = "LLM judge required for every task in the test split"
+    # 실제 airline test 는 20건이고 전부 판정 불필요다(tbair 런이 20/20 측정).
+    # 커밋 4cf6eb7 이 이미 "airline 은 판정이 필요 없다" 로 바로잡았는데 이 문자열만
+    # 남아, telecom 을 돌릴 때마다 보고서에 거짓이 출력됐다. 도메인별 판정 필요
+    # 여부는 그 도메인을 실제로 고를 때 resolve_task_split 이 내용으로 판정한다.
+    # banking 은 매니페스트가 사유를 적었으면 그것을 쓴다 — 모드에 따라 다르다.
     _fallback_reasons = {
-        "banking_knowledge": (
-            (domain_scope.get("banking_knowledge") or {}).get("reason")
-            or "banking_knowledge has no supported no-user mode"
-        ),
-        "retail": "not selected for this run",
-        "airline": "LLM judge required for every task in the test split",
-        "telecom": "not selected for this run",
+        name: (
+            (domain_scope.get(name) or {}).get("reason") or "not selected for this run"
+        )
+        for name in ("banking_knowledge", "retail", "airline", "telecom")
     }
     domains = {
         run_domain: score_domain(
@@ -292,6 +353,31 @@ def build_summary(
     for name, reason in _fallback_reasons.items():
         if name != run_domain:
             domains[name] = score_domain(name, None, 0, reason)
+    return domains
+
+
+def _annotate_domain_coverage(split: Mapping, runnable_task_count: int, entry: dict) -> None:
+    """실행 도메인에 공식 split 대비 발행 자격을 추가한다."""
+    # 완주와 "도메인을 다 쟀다"는 다르다. runnable 은 우리가 돌리기로 고른 판정
+    # 불필요 부분집합이고, split.task_count 가 공식 크기다. 실측: retail test 는
+    # 40 중 29 만 판정 없이 채점된다. 부분집합 점수를 도메인 이름으로 발행하면
+    # 공식 split 성적으로 오독되므로, 자격을 산출물에 새긴다.
+    official = split.get("task_count")
+    if official and runnable_task_count:
+        entry["benchmark_eligible"] = int(runnable_task_count) == int(official)
+        entry["coverage"] = {
+            "measured": entry.get("measured"),
+            "runnable_task_count": int(runnable_task_count),
+            "official_task_count": int(official),
+        }
+        if not entry["benchmark_eligible"]:
+            entry["coverage"]["reason"] = (
+                "판정 불필요 부분집합만 측정했다 — 공식 도메인 점수가 아니다"
+            )
+
+
+def _summary_payload(manifest: Mapping, track: str, split: dict, domains: dict, domain_raw: Any, not_measured_task_count: int, not_measured_tasks: list) -> dict:
+    """채점된 도메인과 상류 증거로 최종 요약을 구성한다."""
     measured = sum(entry["measured"] for entry in domains.values())
     passed = sum(entry["passed"] for entry in domains.values())
     failed = sum(entry["failed"] for entry in domains.values())
@@ -351,38 +437,109 @@ def build_summary(
     }
 
 
-def _load(path: Path) -> dict[str, Any]:
-    with path.open("r", encoding="utf-8") as handle:
-        data = json.load(handle)
-    if not isinstance(data, dict):
-        raise ValueError(f"expected JSON object: {path}")
-    return data
+def _domain_summary(runnable_tasks: int, scores: _SimulationScores) -> dict[str, Any]:
+    """시뮬레이션 집계에 미완주 귀책과 시행별 지표를 결합한다."""
+    task_results, passed, failed, measured, not_measured, protocol_failures, simulations = scores
+
+    terminations = Counter(str(sim.get("termination_reason")) for sim in simulations)
+    # 프로토콜 실패로 이미 측정된 시뮬레이션은 미완주 귀책 분류에서 뺀다.
+    candidate_attr, env_attr, unclassified_attr = _classify_incompletions(
+        [sim for sim in simulations if _candidate_protocol_failure(sim) is None]
+    )
+
+    pass_rate_strict, strict_denominator, strict_reason = _strict_pass_rate(
+        measured, passed, candidate_attr, env_attr, unclassified_attr
+    )
+
+    return {
+        "status": "measured" if measured else "not_measured",
+        "reason": None if measured else "no upstream records had a runnable numeric reward",
+        "pass_rate": passed / measured if measured else None,
+        "pass_rate_source": "tau2 results.simulations[].reward_info.reward",
+        "pass_rate_note": "후보 프로토콜 실패(candidate_protocol_failures)는 보상 0 의 측정된 실패로 분모·실패에 포함",
+        "pass_rate_strict": pass_rate_strict,
+        "pass_rate_strict_denominator": strict_denominator,
+        "pass_rate_strict_reason": strict_reason,
+        "pass_rate_strict_definition": (
+            "passed / (measured + 모델 귀책 미완주). upstream pass_rate 와 달리 모델이 "
+            "스스로 망가져 못 끝낸 태스크를 실패로 센다. 환경 귀책 오류가 있으면 null."
+        ),
+        # 키는 "<error_type>@<actor>" 다. actor 는 traceback 에서 뽑는다.
+        "incompletion_attribution": {
+            "candidate": dict(sorted(candidate_attr.items())),
+            "environment": dict(sorted(env_attr.items())),
+            "unclassified": dict(sorted(unclassified_attr.items())),
+        },
+        "runnable_tasks": runnable_tasks,
+        "result_records": len(simulations),
+        # 반복 시행이면 시뮬레이션 수와 과제 수가 다르다. 커버리지는 **과제** 단위로
+        # 봐야 한다 — 20과제를 4회 돌린 것을 "80과제를 쟀다" 로 세면 게이트가
+        # 무의미해진다. Pass^k 도 과제별 성공 횟수에서 나온다.
+        "distinct_tasks": len({str(record["task_id"]) for record in task_results}),
+        "distinct_tasks_measured": len({
+            str(record["task_id"])
+            for record in task_results
+            if record.get("evaluation_status") == "measured"
+        }),
+        "trials": _trials_per_task(task_results),
+        "pass_hat_k": pass_hat_k_table(task_results),
+        "measured": measured,
+        "passed": passed,
+        "failed": failed,
+        "not_measured_result_records": dict(sorted(not_measured.items())),
+        # 측정된 실패로 센 후보 프로토콜 실패. termination_reasons 의 infrastructure_error
+        # 에는 그대로 포함돼 있다(상류 기록을 바꾸지 않는다) — 게이트가 이 수를 뺀다.
+        "candidate_protocol_failures": dict(sorted(protocol_failures.items())),
+        "termination_reasons": dict(sorted(terminations.items())),
+        "request_observability": _successful_call_observability(simulations),
+        "task_results": task_results,
+    }
 
 
-def _write_atomic(path: Path, data: Mapping[str, Any]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    fd, temp_name = tempfile.mkstemp(prefix=f".{path.name}.", dir=str(path.parent))
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as handle:
-            json.dump(data, handle, ensure_ascii=False, indent=2)
-            handle.write("\n")
-        os.replace(temp_name, path)
-    except Exception:
-        try:
-            os.unlink(temp_name)
-        except FileNotFoundError:
-            pass
-        raise
+def score_domain(
+    domain: str,
+    raw: Optional[Mapping[str, Any]],
+    runnable_tasks: int,
+    unavailable_reason: Optional[str] = None,
+) -> dict[str, Any]:
+    if runnable_tasks == 0:
+        return {
+            "status": "not_measured",
+            "reason": unavailable_reason or "zero runnable tasks",
+            "pass_rate": None,
+            "runnable_tasks": 0,
+            "result_records": 0,
+            "measured": 0,
+            "passed": 0,
+            "failed": 0,
+            "task_results": [],
+        }
+    if raw is None:
+        raise ValueError(f"missing upstream results for runnable domain {domain}")
+
+    return _domain_summary(runnable_tasks, _score_simulations(raw))
+
+
+def build_summary(
+    raw_by_domain: Mapping[str, Mapping[str, Any]],
+    manifest: Mapping[str, Any],
+    track: str,
+) -> dict[str, Any]:
+    split, runnable_task_count, not_measured_tasks, not_measured_task_count, run_domain, domain_raw = _validated_split(raw_by_domain, manifest)
+
+    domains = _score_selected_domains(manifest, run_domain, domain_raw, runnable_task_count)
+
+    _annotate_domain_coverage(split, runnable_task_count, domains[run_domain])
+
+    return _summary_payload(
+        manifest, track, split, domains, domain_raw,
+        not_measured_task_count, not_measured_tasks,
+    )
 
 
 def _results_dir(args: argparse.Namespace) -> Path:
-    if args.results_dir:
-        return args.results_dir.resolve()
-    base = Path(os.environ.get("MODEL_TEST_BASE") or Path(__file__).resolve().parents[3])
-    timestamp = args.timestamp or os.environ.get("EVAL_TIMESTAMP")
-    if not args.model or not timestamp:
-        raise ValueError("--model and --timestamp (or EVAL_TIMESTAMP) are required")
-    return base / "results" / safe_model_name(args.model) / timestamp / "language" / args.track
+    # 유지: __file__의 깊이에 묶인 기본 루트이므로 공용 모듈로 옮기지 않는다.
+    return scoring_results_dir(args, Path(__file__).resolve().parents[3])
 
 
 def parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
@@ -418,6 +575,48 @@ EXIT_CODE_HELP = """exit codes:
 #   APIError                    9x   환경
 # 평가 대상(후보 모델)에게 귀책시킬 수 있는 error_type. 화이트리스트다.
 CANDIDATE_ATTRIBUTABLE_ERROR_TYPES = frozenset({"ContextWindowExceededError"})
+
+# 후보의 **프로토콜 실패** — 후보 모델의 응답 자체가 실행 규약을 어겨 tau2 가 시뮬레이션을
+# 죽인 경우. solo 모드는 도구 호출만 받는데(tau2 llm_agent.py LLMSoloAgent, tool_choice=
+# "required" 로 요청해도) 모델이 텍스트로 답하면 ValueError 로 끝난다. 서버 장애가 아니라
+# 모델의 행동이므로 "측정된 실패(보상 0)" 로 센다 — 2026-09-26 결정 (diffusion 3런 16/40,
+# gemma 2런 10/40 이 이 유형이었다). error_type 과 메시지가 **둘 다** 맞고, traceback 이
+# 후보 에이전트 호출을 가리킬 때만 인정한다. 사용자 시뮬레이터 쪽이면 후보 탓이 아니다.
+CANDIDATE_PROTOCOL_FAILURES = {
+    ("ValueError", "LLMSoloAgent only supports tool calls."): "no_tool_call",
+}
+
+# 설치된 tau2/orchestrator/orchestrator.py:858-861: 후보 생성이 반환된 뒤
+# step()에서 agent_msg.validate()를 호출하므로 생성 호출은 traceback에 없다.
+# 사용자 반환값은 user/user_simulator.py:246의 UserMessage이고 검증은
+# orchestrator/orchestrator.py:837-840의 user_msg.validate()다. 다만 사용자도
+# 내부적으로 AssistantMessage를 만들므로(user/user_simulator_base.py:71),
+# 타입명만으로 귀책시키지 않고 파일·함수·검증 호출이 같은 프레임인지 확인한다.
+# data_model/message.py:284-288은 오류 뒤에 가변적인 str(self)를 붙인다.
+EMPTY_ASSISTANT_MESSAGE_PREFIX = "AssistantMessage must have either content or tool_calls"
+AGENT_MESSAGE_VALIDATION_FRAME = re.compile(
+    r'^\s*File "[^"\n]*/tau2/orchestrator/orchestrator\.py", line \d+, in step\n'
+    r'[ \t]+agent_msg\.validate\(\)[ \t]*(?:\n|$)',
+    re.MULTILINE,
+)
+
+
+def _candidate_protocol_failure(sim: Mapping[str, Any]) -> Optional[str]:
+    """후보 프로토콜 실패면 그 라벨을, 아니면 None 을 돌려준다."""
+    if str(sim.get("termination_reason")) != "infrastructure_error":
+        return None
+    info = sim.get("info") or {}
+    if (
+        info.get("error_type") == "ValueError"
+        and str(info.get("error") or "").startswith(EMPTY_ASSISTANT_MESSAGE_PREFIX)
+        and AGENT_MESSAGE_VALIDATION_FRAME.search(str(info.get("error_traceback") or ""))
+    ):
+        return "empty_message"
+    key = (str(info.get("error_type") or ""), str(info.get("error") or "").strip())
+    label = CANDIDATE_PROTOCOL_FAILURES.get(key)
+    if label is None or _failure_actor(sim) != "agent":
+        return None
+    return label
 
 # 원인이 확정된 환경 귀책 유형. 여기에도 없으면 unclassified 로 남긴다 —
 # "환경 탓" 이라고 단정하는 것도 근거 없는 주장이기 때문이다.
@@ -481,22 +680,27 @@ def _classify_incompletions(simulations) -> tuple:
     return candidate, environment, unclassified
 
 
-def validate_summary(summary: dict) -> tuple:
-    """발행 가능 여부를 판정한다. (failures, warnings) 를 돌려준다.
-
-    tau2 는 시뮬레이션이 인프라 오류로 죽어도 "Successfully completed all simulations!"
-    를 찍고 0 으로 나간다. 2026-08-19 에 telecom test 40/40 이 infrastructure_error 로
-    끝났는데도 전체 파이프라인이 성공으로 보였다. 그 구멍을 여기서 막는다.
-    """
-    failures = []
-    warnings = []
-
-    overall = summary.get("overall") or {}
-    if overall.get("pass_rate") is None or not overall.get("measured"):
+def _validate_observed_user_protocol(summary, *, failures, warnings) -> None:
+    """Append observed user-protocol mismatch or missing-pin diagnostics."""
+    user_protocol = (
+        ((summary.get("harness_integrity") or {}).get("upstream_result_evidence") or {})
+        .get("user_protocol") or {}
+    )
+    if user_protocol.get("mismatch"):
         failures.append(
-            "overall.pass_rate 가 없다 — 보상값을 낸 태스크가 하나도 없다"
+            "사용자 시뮬레이터 프로토콜이 선언과 다르다 — 다른 런과 비교할 수 없다: "
+            f"{user_protocol['mismatch']}"
+        )
+    elif user_protocol and not user_protocol.get("pinned"):
+        # 측정 자체는 유효하므로 거부하지 않는다. 다만 이 런은 다른 후보와
+        # 나란히 놓을 수 없다 — 같은 사용자 프로토콜이었다는 증거가 없다.
+        warnings.append(
+            "사용자 시뮬레이터 인자가 기록돼 있지 않다 — 이 런은 모델 간 비교에 쓸 수 없다"
         )
 
+
+def _validate_domain_coverage(summary, *, failures, warnings) -> None:
+    """Append per-domain completion, trial-count and attribution diagnostics."""
     for domain, entry in (summary.get("by_domain") or {}).items():
         if not isinstance(entry, dict):
             continue
@@ -511,13 +715,40 @@ def validate_summary(summary: dict) -> tuple:
                 f"by_domain.{domain}.status = not_measured "
                 f"({entry.get('reason') or '사유 미기록'})"
             )
-        elif runnable and measured != runnable:
-            failures.append(
-                f"by_domain.{domain}: {runnable}건 중 {measured}건만 측정됐다 — 부분 실행이다"
+        else:
+            # 반복 시행이면 measured 는 시뮬레이션 수다. 커버리지는 과제 수로 본다.
+            covered = entry.get("distinct_tasks_measured")
+            covered = measured if covered is None else covered
+            if runnable and covered != runnable:
+                failures.append(
+                    f"by_domain.{domain}: {runnable}개 과제 중 {covered}개만 측정됐다 — 부분 실행이다"
+                )
+            # 과제 하나에 측정 기록이 하나라도 있으면 통과시키면 안 된다. 4회 시행에서
+            # 과제마다 1건만 살아남아도 "모든 과제를 쟀다"가 되고, Pass^k 는 죽은
+            # 시행을 분모에서 빼므로 pass^1=100% 까지 나올 수 있다. 상류 검증기도
+            # 과제마다 정확히 num_trials 건을 요구한다
+            # (verify_trajectories_public.check_num_trials).
+            declared_trials = (summary.get("harness_integrity") or {}).get("trials")
+            observed_trials = entry.get("trials") or []
+            if declared_trials and observed_trials and set(observed_trials) != {int(declared_trials)}:
+                failures.append(
+                    f"by_domain.{domain}: 시행 수가 과제마다 다르다 "
+                    f"(선언 {declared_trials}, 관측 {observed_trials}) — Pass^k 를 낼 수 없다"
+                )
+
+        # 자격은 build_summary 가 이미 새겼다. 게이트는 읽기만 한다 — 검증 함수가
+        # 요약을 변형하면 "무엇이 계산이고 무엇이 판정인가" 가 흐려진다.
+        coverage = entry.get("coverage") or {}
+        if entry.get("benchmark_eligible") is False and coverage.get("official_task_count"):
+            warnings.append(
+                f"by_domain.{domain}: 공식 split {coverage['official_task_count']}건 중 "
+                f"{runnable}건만 대상이다 — 도메인 점수가 아니라 부분집합 점수로만 인용할 것"
             )
 
-        infra = (entry.get("termination_reasons") or {}).get("infrastructure_error")
-        if infra:
+        infra = (entry.get("termination_reasons") or {}).get("infrastructure_error") or 0
+        # 후보 프로토콜 실패는 측정된 실패로 이미 셌다 — 미완주로 다시 세지 않는다.
+        infra -= sum((entry.get("candidate_protocol_failures") or {}).values())
+        if infra > 0:
             # 귀책은 incompletion_attribution 이 말해준다. "전부 하네스 탓" 이라고
             # 단정하지 않는다 — 후보 모델이 스스로 컨텍스트를 넘긴 경우도 여기 섞인다.
             attr = entry.get("incompletion_attribution") or {}
@@ -530,6 +761,27 @@ def validate_summary(summary: dict) -> tuple:
             failures.append(
                 f"by_domain.{domain}: 완주 실패 {infra}건 ({detail}) — 완전 측정이 아니다"
             )
+
+
+def validate_summary(summary: dict) -> tuple:
+    """발행 가능 여부를 판정한다. (failures, warnings) 를 돌려준다.
+
+    tau2 는 시뮬레이션이 인프라 오류로 죽어도 "Successfully completed all simulations!"
+    를 찍고 0 으로 나간다. 2026-08-19 에 telecom test 40/40 이 infrastructure_error 로
+    끝났는데도 전체 파이프라인이 성공으로 보였다. 그 구멍을 여기서 막는다.
+    """
+    failures = []
+    warnings = []
+
+    _validate_observed_user_protocol(summary, failures=failures, warnings=warnings)
+
+    overall = summary.get("overall") or {}
+    if overall.get("pass_rate") is None or not overall.get("measured"):
+        failures.append(
+            "overall.pass_rate 가 없다 — 보상값을 낸 태스크가 하나도 없다"
+        )
+
+    _validate_domain_coverage(summary, failures=failures, warnings=warnings)
 
     return failures, warnings
 
@@ -568,7 +820,7 @@ def main(argv: Optional[list[str]] = None) -> int:
             print(json.dumps(summary, ensure_ascii=False, indent=2))
         else:
             # 발행 불가여도 산출물은 남긴다 — 진단에 필요하다.
-            _write_atomic(results_dir / "summary.json", summary)
+            write_json_atomic(results_dir / "summary.json", summary)
             print(f"[taubench/score] wrote {results_dir / 'summary.json'}")
 
         if failures:

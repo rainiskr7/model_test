@@ -44,15 +44,14 @@ LEVEL_CAVEATS = {
 
 
 def _load_scoring_contract(root_dir: Path):
-    scoring_dir = (
-        root_dir / "foundation_model_test_non_thinking" / "shared" / "agent" / "scoring"
-    )
-    sys.path.insert(0, str(scoring_dir))
+    # non_thinking 의 scoring 은 `shared.*` 패키지라 그 저장소 루트를 올린다(10-14 패키지화).
+    tree = root_dir / "foundation_model_test_non_thinking"
+    sys.path.insert(0, str(tree))
     try:
-        from aggregate import V4_HEADLINE_LEVELS
-        from level_spec import LEVEL_SPECS
+        from shared.agent.scoring.aggregate import V4_HEADLINE_LEVELS
+        from shared.agent.scoring.level_spec import LEVEL_SPECS
     finally:
-        sys.path.remove(str(scoring_dir))
+        sys.path.remove(str(tree))
     return LEVEL_SPECS, V4_HEADLINE_LEVELS
 
 

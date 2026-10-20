@@ -1,7 +1,7 @@
 """재현성 메타데이터 + run_config 빌더 — 단일 책임 모듈.
 
 HF revision / git commit / 패키지 버전 / 스크립트 해시 캡처 + build_run_config.
-common.py 가 re-export 하므로 기존 `from common import ...` 도 그대로 동작.
+common.py 가 re-export 하므로 `from shared.multimodal.benches.common import ...` 도 그대로 동작.
 """
 
 import os
@@ -13,7 +13,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
-from paths import safe_model_name
+from shared.multimodal.benches.paths import safe_model_name
+from shared.serving.constraints import effective_decoding
 
 
 def get_hf_dataset_revision(dataset_id: str) -> Optional[str]:
@@ -84,6 +85,31 @@ def resolve_dataset_revision(dataset_id: str, cli_arg: Optional[str], env_var: s
     return sha, "latest_captured" if sha else "latest_unknown"
 
 
+def _resolve_provenance(dataset_id, dataset_revision, dataset_revision_source, repo_dir, repo_commit, eval_script_path, eval_script_hash) -> tuple:
+    """Resolve missing dataset, repository and script provenance from external sources."""
+    if dataset_id and dataset_revision is None:
+        dataset_revision = get_hf_dataset_revision(dataset_id)
+        if dataset_revision_source is None:
+            dataset_revision_source = "latest_captured" if dataset_revision else "latest_unknown"
+    if repo_dir is not None and repo_commit is None:
+        repo_commit = get_git_commit(repo_dir)
+    if eval_script_path and eval_script_hash is None:
+        eval_script_hash = get_eval_script_hash(eval_script_path)
+    return dataset_revision, dataset_revision_source, repo_commit, eval_script_hash
+
+
+def _capture_environment() -> dict:
+    """Read interpreter, platform and installed package versions."""
+    return {
+        "python": sys.version.split()[0],
+        "platform": platform.platform(),
+        "openai_pkg": get_package_version("openai"),
+        "datasets_pkg": get_package_version("datasets"),
+        "pillow_pkg": get_package_version("pillow"),
+        "huggingface_hub_pkg": get_package_version("huggingface_hub"),
+    }
+
+
 def build_run_config(
     *,
     benchmark: str,
@@ -110,15 +136,15 @@ def build_run_config(
 
     summary.json 의 'run_config' 필드에 그대로 박아 넣음.
     """
-    if dataset_id and dataset_revision is None:
-        dataset_revision = get_hf_dataset_revision(dataset_id)
-        if dataset_revision_source is None:
-            dataset_revision_source = "latest_captured" if dataset_revision else "latest_unknown"
-    if repo_dir is not None and repo_commit is None:
-        repo_commit = get_git_commit(repo_dir)
-    if eval_script_path and eval_script_hash is None:
-        eval_script_hash = get_eval_script_hash(eval_script_path)
-
+    dataset_revision, dataset_revision_source, repo_commit, eval_script_hash = _resolve_provenance(
+        dataset_id, dataset_revision, dataset_revision_source, repo_dir, repo_commit,
+        eval_script_path, eval_script_hash,
+    )
+    requested_decoding, applied_decoding, serving_constraints = effective_decoding(
+        temperature=temperature,
+        max_tokens=max_tokens,
+        seed=seed,
+    )
     cfg = {
         "benchmark": benchmark,
         "timestamp_utc": datetime.now(timezone.utc).isoformat(),
@@ -129,11 +155,9 @@ def build_run_config(
         "endpoint": {
             "base_url": base_url,
         },
-        "decoding": {
-            "temperature": temperature,
-            "max_tokens": max_tokens,
-            "seed": seed,
-        },
+        "decoding": applied_decoding,
+        "decoding_requested": requested_decoding,
+        "serving_constraints": serving_constraints,
         "request_policy": {
             "timeout": timeout,
             "retry_max": retry_max,
@@ -154,14 +178,7 @@ def build_run_config(
             "script_path": eval_script_path,
             "script_hash_sha256_16": eval_script_hash,
         },
-        "environment": {
-            "python": sys.version.split()[0],
-            "platform": platform.platform(),
-            "openai_pkg": get_package_version("openai"),
-            "datasets_pkg": get_package_version("datasets"),
-            "pillow_pkg": get_package_version("pillow"),
-            "huggingface_hub_pkg": get_package_version("huggingface_hub"),
-        },
+        "environment": _capture_environment(),
         "env_vars": {
             "MODEL_TEST_BASE": os.environ.get("MODEL_TEST_BASE"),
             "EVAL_TIMESTAMP": os.environ.get("EVAL_TIMESTAMP"),
@@ -170,3 +187,19 @@ def build_run_config(
     if extra:
         cfg["extra"] = extra
     return cfg
+
+
+def build_resume_context(run_config: dict, *, setting: str, session: str) -> dict:
+    """Build the exact KRETA checkpoint request identity from run_config."""
+
+    decoding = run_config.get("decoding") or {}
+    return {
+        "model": (run_config.get("model") or {}).get("name"),
+        "setting": setting,
+        "base_url": (run_config.get("endpoint") or {}).get("base_url"),
+        "session": session,
+        "max_tokens": decoding.get("max_tokens"),
+        "decoding": decoding,
+        "decoding_requested": run_config.get("decoding_requested") or {},
+        "serving_constraints": run_config.get("serving_constraints") or {},
+    }

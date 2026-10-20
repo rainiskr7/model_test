@@ -1,0 +1,42 @@
+{
+  "rc": 10,
+  "calls": [
+    {
+      "model": "alias",
+      "messages": [
+        {
+          "role": "user",
+          "content": "아래는 한국어 시각 질의응답에 대한 객관적 채점 작업입니다.\n\n질문:\n질문\n\n평가 기준 (rubric / criteria):\n루브릭\n\n모델 응답:\n응답\n\n위 평가 기준에 따라 모델 응답을 0~10점 정수로 채점하세요.\n\n점수 anchor (반드시 준수):\n- 0~2점: 응답이 질문과 무관하거나 명백히 틀림. 평가 기준을 거의 충족하지 못함.\n- 3~5점: 부분 정답. 일부 평가 기준만 충족. 사실 오류·환각 일부 존재.\n- 6~8점: 대체로 정답. 대부분 기준 충족. 사소한 오류·누락 존재.\n- 9~10점: 완전 정답 + 모든 평가 기준 충족 + 추가 가치 있는 설명.\n\n채점 케이스 예시 (한국어 시각 VQA 도메인):\n- 예 1) OCR 일부 오인식 (단어 1개 누락 또는 1글자 오타) → 4~6점 (부분정답).\n- 예 2) 시각 근거 부족 (이미지를 보지 않고 말로만 짐작한 답) → 0~2점, reason 에 \"시각 근거 부족\" 명시.\n- 예 3) 정답이지만 평가 기준 외 부가 설명만 풍부 → 평가 기준 자체로만 채점, 부가 설명은 가산점 안 줌.\n- 예 4) 환각 (이미지에 없는 객체·텍스트 인용) → 즉시 0~2점, reason 에 \"환각\" 명시.\n\n응답 시 주의:\n- score 는 반드시 0~10 정수.\n- reason 은 어느 기준이 충족·미충족인지 1~2 문장으로 명시 (단순히 \"좋다/나쁘다\" 금지).\n- 시각 근거 부족·환각인 경우 reason 에 명시할 것.\n- 평가 기준 외의 주관 평가 (말투, 길이) 는 채점 사유에서 제외.\n\n반드시 다음 JSON 한 줄로만 답하세요:\n{\"score\": <0-10 integer>, \"reason\": \"<채점 근거 1~2 문장>\"}"
+        }
+      ],
+      "temperature": 0.0,
+      "max_tokens": 37,
+      "seed": 7
+    },
+    {
+      "model": "alias",
+      "messages": [
+        {
+          "role": "user",
+          "content": "아래는 한국어 시각 질의응답에 대한 객관적 채점 작업입니다.\n\n질문:\n질문2\n\n평가 기준 (rubric / criteria):\n기준2\n\n모델 응답:\n응답2\n\n위 평가 기준에 따라 모델 응답을 0~10점 정수로 채점하세요.\n\n점수 anchor (반드시 준수):\n- 0~2점: 응답이 질문과 무관하거나 명백히 틀림. 평가 기준을 거의 충족하지 못함.\n- 3~5점: 부분 정답. 일부 평가 기준만 충족. 사실 오류·환각 일부 존재.\n- 6~8점: 대체로 정답. 대부분 기준 충족. 사소한 오류·누락 존재.\n- 9~10점: 완전 정답 + 모든 평가 기준 충족 + 추가 가치 있는 설명.\n\n채점 케이스 예시 (한국어 시각 VQA 도메인):\n- 예 1) OCR 일부 오인식 (단어 1개 누락 또는 1글자 오타) → 4~6점 (부분정답).\n- 예 2) 시각 근거 부족 (이미지를 보지 않고 말로만 짐작한 답) → 0~2점, reason 에 \"시각 근거 부족\" 명시.\n- 예 3) 정답이지만 평가 기준 외 부가 설명만 풍부 → 평가 기준 자체로만 채점, 부가 설명은 가산점 안 줌.\n- 예 4) 환각 (이미지에 없는 객체·텍스트 인용) → 즉시 0~2점, reason 에 \"환각\" 명시.\n\n응답 시 주의:\n- score 는 반드시 0~10 정수.\n- reason 은 어느 기준이 충족·미충족인지 1~2 문장으로 명시 (단순히 \"좋다/나쁘다\" 금지).\n- 시각 근거 부족·환각인 경우 reason 에 명시할 것.\n- 평가 기준 외의 주관 평가 (말투, 길이) 는 채점 사유에서 제외.\n\n반드시 다음 JSON 한 줄로만 답하세요:\n{\"score\": <0-10 integer>, \"reason\": \"<채점 근거 1~2 문장>\"}"
+        }
+      ],
+      "temperature": 0.0,
+      "max_tokens": 37,
+      "seed": 7
+    }
+  ],
+  "constructors": [
+    {
+      "base_url": "http://unused.invalid/v1",
+      "api_key": "synthetic-key"
+    }
+  ],
+  "sleeps": [],
+  "files": {
+    "results.json": "[\n  {\n    \"idx\": 0,\n    \"dataset_item_id\": \"one\",\n    \"question\": \"질문\",\n    \"response\": \"응답\",\n    \"criteria\": \"루브릭\",\n    \"score\": 8,\n    \"reason\": \"충족\",\n    \"raw_judge_output\": \"{\\\"score\\\": 8, \\\"reason\\\": \\\"충족\\\"}\",\n    \"error\": null\n  },\n  {\n    \"idx\": 1,\n    \"dataset_item_id\": \"two\",\n    \"question\": \"질문2\",\n    \"response\": \"응답2\",\n    \"criteria\": \"기준2\",\n    \"score\": null,\n    \"reason\": null,\n    \"raw_judge_output\": \"no JSON\",\n    \"error\": \"no JSON in judge response\"\n  }\n]",
+    "summary.json": "{\n  \"benchmark\": \"KOFFVQA (API judge)\",\n  \"judge_model\": \"alias\",\n  \"judge_prompt_version\": \"v3-anchored-with-examples\",\n  \"judge_prompt_template_sha256\": \"sha256:<HASH>\",\n  \"judge_base_url\": \"http://unused.invalid/v1/chat/completions\",\n  \"judge_served_identity\": {\n    \"model\": [\n      \"served\"\n    ],\n    \"system_fingerprint\": [\n      \"fp\"\n    ],\n    \"provider\": [\n      \"provider\"\n    ]\n  },\n  \"target_model\": \"target\",\n  \"predfile\": \"<TMP>/synthetic.xlsx\",\n  \"prediction_sha256\": \"sha256:<HASH>\",\n  \"total\": 2,\n  \"scored\": 1,\n  \"avg_score\": 8.0,\n  \"max_possible_score\": 10,\n  \"run_config\": {\n    \"benchmark\": \"KOFFVQA-API-judge\",\n    \"timestamp_utc\": \"<TIME>\",\n    \"model\": {\n      \"name\": \"target\",\n      \"safe_name\": \"target\"\n    },\n    \"endpoint\": {\n      \"base_url\": \"http://unused.invalid/v1/chat/completions\"\n    },\n    \"decoding\": {\n      \"temperature\": 0.0,\n      \"max_tokens\": 37,\n      \"seed\": 7\n    },\n    \"decoding_requested\": {\n      \"temperature\": 0.0,\n      \"max_tokens\": 37,\n      \"seed\": 7\n    },\n    \"serving_constraints\": {\n      \"unsupported_sampling_params\": [],\n      \"max_output_tokens\": null,\n      \"force_skip_special_tokens\": null,\n      \"removed_parameters\": [],\n      \"skip_special_tokens\": null\n    },\n    \"request_policy\": {\n      \"timeout\": null,\n      \"retry_max\": null,\n      \"retry_backoff\": null\n    },\n    \"dataset\": {\n      \"huggingface_id\": null,\n      \"revision\": null,\n      \"revision_source\": null,\n      \"git_repo\": null,\n      \"git_commit\": null\n    },\n    \"judge\": {\n      \"model\": \"alias\",\n      \"prompt_version\": \"v3-anchored-with-examples\"\n    },\n    \"eval_framework\": {\n      \"script_path\": \"<REPO>/shared/multimodal/benches/koffvqa_api_judge.py\",\n      \"script_hash_sha256_16\": \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"\n    },\n    \"environment\": {\n      \"python\": \"<PYTHON>\",\n      \"platform\": \"synthetic-platform\",\n      \"openai_pkg\": \"synthetic-version\",\n      \"datasets_pkg\": \"synthetic-version\",\n      \"pillow_pkg\": \"synthetic-version\",\n      \"huggingface_hub_pkg\": \"synthetic-version\"\n    },\n    \"env_vars\": {\n      \"MODEL_TEST_BASE\": \"<TMP>\",\n      \"EVAL_TIMESTAMP\": \"r3-session\"\n    },\n    \"extra\": {\n      \"predfile\": \"<TMP>/synthetic.xlsx\",\n      \"limit\": null\n    }\n  }\n}"
+  },
+  "stdout": "[koffvqa_judge] loaded <TMP>/synthetic.xlsx: 2 rows / cols: ['index', 'question', 'answer', 'prediction']\n[koffvqa_judge] columns: q=question criteria=answer response=prediction\n[koffvqa_judge] judge=alias\n[koffvqa_judge] target=target\n[koffvqa_judge] out=<TMP>/results/target/r3-session/vision/multimodal/koffvqa_api_judge\n\n[koffvqa_judge] avg score = 8.0\n[koffvqa_judge] saved → <TMP>/results/target/r3-session/vision/multimodal/koffvqa_api_judge\n",
+  "stderr": "[koffvqa_judge] incomplete: scored 1/2, rows=2\n"
+}
