@@ -4,7 +4,7 @@ import json
 import pytest
 
 from orchestration.tests.laneconf_support import REPO, SAMPLE
-from orchestration.tests.registry_support import RegistryComparison
+from orchestration.tests.registry_support import RegistryComparison, with_completion_check
 
 
 class V8Comparison(RegistryComparison):
@@ -27,8 +27,8 @@ def test_cd3_five_lane_bytes_match_pre_v8(tmp_path, model, track):
         assert result.returncode == 0, result.stderr
         outputs.append((result.stdout, result.stderr, result.returncode))
         fx.assert_dry()
-    assert outputs[0] == outputs[1]
-    print(f'CD3 {model}/{track}: identical stdout/stderr/rc; {fx.base}/evidence')
+    assert with_completion_check(outputs[0]) == outputs[1]
+    print(f'CD3 {model}/{track}: identical except C7 follow-up; {fx.base}/evidence')
 
 
 def test_ch1_pre_v8_missing_run_false_success_then_rejected(tmp_path):

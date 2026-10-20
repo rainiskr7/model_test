@@ -6,6 +6,7 @@ import pytest
 from orchestration.tests.laneconf_support import (
     BASELINE_REVISION, Comparison, REPO, SAMPLE, assignments, host_line,
 )
+from orchestration.tests.registry_support import with_completion_check
 
 MODELS = ['qwen38', 'qwenfp8', 'qwen35fp8', 'qwen36']
 LANES = [(model, 'kmmlu') for model in MODELS] + [('qwen35fp8', 'full')]
@@ -92,5 +93,5 @@ def test_ca3_same_path_head_bytes(tmp_path, model, track):
         assert result.returncode == 0, result.stderr
         results.append((result.stdout, result.stderr, result.returncode))
         fx.assert_dry()
-    assert results[0] == results[1]
-    print(f'CA3 {model}/{track}: stdout/stderr/rc identical; {fx.base}/evidence')
+    assert with_completion_check(results[0]) == results[1]
+    print(f'CA3 {model}/{track}: identical except C7 follow-up; {fx.base}/evidence')

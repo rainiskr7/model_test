@@ -55,6 +55,12 @@ case "$1" in
     case "$2" in
       shared.functionchat.judge.run_judge) stage=functionchat_judge ;;
       shared.multimodal.benches.koffvqa_api_judge) stage=koffvqa_judge ;;
+      shared.multimodal.benches.koffvqa_judge_complete)
+        # Follow-up of derive: preserve the seven-stage recording contract.
+        printf '%s\n' "$@" > "$MODEL_TEST_BASE/dump/$EVAL_TIMESTAMP.derive/check_argv"
+        rcfile="$MODEL_TEST_BASE/rc/$EVAL_TIMESTAMP.complete"
+        if [ -f "$rcfile" ]; then exit "$(cat "$rcfile")"; fi
+        exit 0 ;;
       *) exit 98 ;;
     esac ;;
   derive_multimodal_publish.py) stage=derive ;;
@@ -171,8 +177,8 @@ failure_case() {
   expect_rc "$expected_rc" || return 1
   if [ "$stop" = yes ]; then
     all_calls 1 | sed "/ $stage\$/q" > "$FX/expected_calls"
-  elif [ "$stage" = koffvqa_judge ]; then
-    # A failed KOFFVQA judge leaves nothing to derive: derive is skipped for that rep only.
+  elif [ "$stage" = koffvqa_judge ] && [ "$code" -ne 10 ]; then
+    # Only rc 10 guarantees saved incomplete artifacts; other failures skip derive.
     all_calls 1 2 3 | sed '/^20261015_full_r1 derive$/d' > "$FX/expected_calls"
   else
     all_calls 1 2 3 > "$FX/expected_calls"
@@ -194,6 +200,11 @@ f3() {
     failure_case "F3_$stage" "$stage" 1 1 no || return 1
     has "$FX/stdout" '=== qwen3.5 27B FP8 full 레인 종료 (판정 실패 1건) ===' || return 1
   done
+  failure_case F3_incomplete koffvqa_judge 10 1 no || return 1
+  fixture F3_complete_check
+  set_rc 1 complete 10
+  run_lane
+  expect_rc 1 && has "$FX/stdout" '[20261015_full_r1] derive 종료 rc=10' || return 1
   for stage in nlu functionchat taubench multimodal functionchat_judge koffvqa_judge derive; do
     for code in 3 130; do
       failure_case "F3_${stage}_$code" "$stage" "$code" "$code" yes || return 1
@@ -274,7 +285,12 @@ check_stage_argv() {
       printf '%s\n' derive_multimodal_publish.py --base . --write --source \
         "$FX/results/fixture_model/$ts/vision/multimodal/koffvqa_api_judge" ;;
   esac > "$FX/expected_argv"
-  diff -u "$FX/expected_argv" "$FX/dump/$ts.$stage/argv"
+  diff -u "$FX/expected_argv" "$FX/dump/$ts.$stage/argv" || return 1
+  if [ "$stage" = derive ]; then
+    printf '%s\n' -m shared.multimodal.benches.koffvqa_judge_complete \
+      "$FX/results/fixture_model/$ts/vision/multimodal/koffvqa_api_judge" > "$FX/expected_check_argv"
+    diff -u "$FX/expected_check_argv" "$FX/dump/$ts.$stage/check_argv"
+  fi
 }
 
 f5() {

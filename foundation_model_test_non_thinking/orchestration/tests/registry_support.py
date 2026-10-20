@@ -7,6 +7,19 @@ from orchestration.tests.laneconf_support import Comparison, REPO, head_bytes
 REGISTRY_BASELINE = '587919d3ff568a08c94a59bd7c341506c0bd9bbe'
 
 
+def with_completion_check(output):
+    """C7 intentionally adds one follow-up per derive; retain every older byte."""
+    stdout, stderr, rc = output
+    lines = []
+    for line in stdout.splitlines(keepends=True):
+        lines.append(line)
+        if line.startswith(b"COMMAND[if-exists]=python derive_multimodal_publish.py "):
+            source = line.split(b" --source ", 1)[1]
+            lines.append(b"COMMAND[if-derive-rc=0]=python -m "
+                         b"shared.multimodal.benches.koffvqa_judge_complete " + source)
+    return b"".join(lines), stderr, rc
+
+
 class RegistryComparison(Comparison):
     revision = REGISTRY_BASELINE
 

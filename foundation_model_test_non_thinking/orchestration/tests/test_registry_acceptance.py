@@ -7,7 +7,9 @@ import pytest
 from orchestration.tests.laneconf_support import REPO, SAMPLE, assignments
 from orchestration.tests.lane_guard_check.fixture import Fixture as GuardFixture
 from orchestration.tests.lane_guard_check.model_cases import process
-from orchestration.tests.registry_support import REGISTRY_BASELINE, RegistryComparison, common_hashes
+from orchestration.tests.registry_support import (
+    REGISTRY_BASELINE, RegistryComparison, common_hashes, with_completion_check,
+)
 
 LANES = [(model, 'kmmlu') for model in ('qwen38', 'qwenfp8', 'qwen35fp8', 'qwen36')] + [('qwen35fp8', 'full')]
 
@@ -76,8 +78,8 @@ def test_cb3_five_lanes_match_bundle_b_head_bytes(tmp_path, model, track):
         assert result.returncode == 0, result.stderr
         outputs.append((result.stdout, result.stderr, result.returncode))
         fx.assert_dry()
-    assert outputs[0] == outputs[1]
-    print(f'CB3 {model}/{track} HEAD={REGISTRY_BASELINE} bytes equal: {fx.base}/evidence')
+    assert with_completion_check(outputs[0]) == outputs[1]
+    print(f'CB3 {model}/{track} HEAD={REGISTRY_BASELINE} bytes equal except C7 follow-up: {fx.base}/evidence')
 
 
 @pytest.mark.parametrize('track', ['kmmlu', 'full'])
@@ -105,7 +107,7 @@ def test_cb3_config_paths_match_bundle_b_head_bytes(tmp_path, track, change):
         assert outputs[0] == (b'', f'run_lane: {message}: DISPLAY\n'.encode(), 2)
         assert outputs[1] == (b'', f'run_lane: {message}: LANE_DISPLAY\n'.encode(), 2)
     else:
-        assert outputs[0] == outputs[1]
+        assert with_completion_check(outputs[0]) == outputs[1]
     assert outputs[1][2] == (2 if change in ('unknown', 'duplicate', 'prefix', 'empty', 'space') else 0)
 
 

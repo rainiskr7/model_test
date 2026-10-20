@@ -82,6 +82,12 @@ full_command_text() {
   done
 }
 
+full_complete_command() {
+  # A follow-up command within derive, not an additional resume stage.
+  FULL_CMD=(python -m shared.multimodal.benches.koffvqa_judge_complete
+    "$RD/$TS/vision/multimodal/koffvqa_api_judge")
+}
+
 track_dry_run() {
   # Symbolic RD deliberately avoids results_model_dir and filesystem queries.
   local RD='<RD>' stage prefix
@@ -94,6 +100,10 @@ track_dry_run() {
       full_command "$stage" "$RD/$TS/vision/multimodal/koffvqa/<latest *_gen.xlsx>"
       case "$stage" in *_judge|derive) prefix='COMMAND[if-exists]=' ;; *) prefix='COMMAND=' ;; esac
       printf '%s%s\n' "$prefix" "$(full_command_text)"
+      if [ "$stage" = derive ]; then
+        full_complete_command
+        printf 'COMMAND[if-derive-rc=0]=%s\n' "$(full_command_text)"
+      fi
     done
     N=$((N + 1))
   done
@@ -110,6 +120,10 @@ full_stage_ready() {
         [ -f "$candidate" ] || continue
         if [ -z "$FULL_PREDFILE" ] || [ "$candidate" -nt "$FULL_PREDFILE" ]; then FULL_PREDFILE=$candidate; fi
       done
+      if [ -z "$FULL_PREDFILE" ] && [ "$N" -eq "$FULL_RESUME_REP" ] && [ "$FULL_RESUME_INDEX" -eq 6 ]; then
+        log "[$TS] koffvqa_judge 재개 불가 — prediction xlsx 없음"
+        exit 2
+      fi
       [ -n "$FULL_PREDFILE" ] ;;
     derive)
       if [ "$N" -eq "$FULL_RESUME_REP" ] && [ "$FULL_RESUME_INDEX" -eq 7 ]; then
@@ -143,9 +157,15 @@ full_run_stage() {
   log "[$TS] $stage 시작: $(full_command_text)"
   full_invoke "$stage" >>"$BASE/logs/$TS/$stage.log" 2>&1
   rc=$?
+  if [ "$stage" = derive ] && [ "$rc" -eq 0 ]; then
+    full_complete_command
+    log "[$TS] derive 완전성 확인: $(full_command_text)"
+    full_invoke "$stage" >>"$BASE/logs/$TS/$stage.log" 2>&1
+    rc=$?
+  fi
   log "[$TS] $stage 종료 rc=$rc"
-  # Normal flow derives after judge rc 0; explicit derive resume checks saved files instead.
-  if [ "$stage" = koffvqa_judge ] && [ "$rc" -eq 0 ]; then FULL_KOFFVQA_RAN=1; fi
+  # rc 10 has saved artifacts too; derive preserves their publication rejection.
+  if [ "$stage" = koffvqa_judge ] && { [ "$rc" -eq 0 ] || [ "$rc" -eq 10 ]; }; then FULL_KOFFVQA_RAN=1; fi
   if [ "$rc" -eq 3 ] || [ "$rc" -ge 129 ]; then exit "$rc"; fi
   [ "$rc" -ne 0 ] || return 0
   case "$stage" in

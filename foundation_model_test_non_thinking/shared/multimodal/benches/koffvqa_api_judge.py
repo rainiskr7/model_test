@@ -27,6 +27,8 @@ import sys
 from pathlib import Path
 from typing import Optional
 
+from shared.multimodal.benches.koffvqa_judge_complete import completion_rc, valid_score
+
 try:
     import pandas as pd
 except ImportError as e:
@@ -71,10 +73,6 @@ JUDGE_PROMPT = """아래는 한국어 시각 질의응답에 대한 객관적 �
 
 반드시 다음 JSON 한 줄로만 답하세요:
 {{"score": <0-10 integer>, "reason": "<채점 근거 1~2 문장>"}}"""
-
-
-def valid_score(score) -> bool:
-    return not isinstance(score, bool) and isinstance(score, int) and 0 <= score <= 10
 
 
 def judge_one(client, judge_model: str, question: str, response: str, criteria,
@@ -327,6 +325,7 @@ def main():
     results, scores, identity = _judge_rows(args, df, q_col, crit_col, resp_col, client)
     summary = _build_summary(args, results, scores, identity, build_run_config)
     _save_results(out_dir, results, summary, save_json)
+    return completion_rc(results, summary)
 
 
 if __name__ == "__main__":

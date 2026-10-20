@@ -31,7 +31,7 @@ def judge_run(monkeypatch, tmp_path, fresh_import):
 def test_named_environment_key_reaches_client(judge_run, monkeypatch):
     monkeypatch.setenv("TEST_JUDGE_KEY", "synthetic-env-key")
     judge_run.argv += ["--judge-api-key-env", "TEST_JUDGE_KEY"]
-    assert judge_run.judge.main() is None
+    assert judge_run.judge.main() == 10  # Key accepted; the synthetic workbook is empty.
     judge_run.client.assert_called_once_with("https://unused.invalid/v1", "synthetic-env-key")
 
 
@@ -53,10 +53,10 @@ def test_explicit_key_wins_even_if_named_environment_is_invalid(judge_run, monke
     if value is not None:
         monkeypatch.setenv("TEST_JUDGE_KEY", value)
     judge_run.argv += ["--judge-api-key-env", "TEST_JUDGE_KEY", "--judge-api-key", "synthetic-direct-key"]
-    assert judge_run.judge.main() is None
+    assert judge_run.judge.main() == 10
     judge_run.client.assert_called_once_with("https://unused.invalid/v1", "synthetic-direct-key")
 
 
 def test_no_key_options_keep_existing_client_fallback(judge_run):
-    assert judge_run.judge.main() is None
+    assert judge_run.judge.main() == 10
     judge_run.client.assert_called_once_with("https://unused.invalid/v1", None)

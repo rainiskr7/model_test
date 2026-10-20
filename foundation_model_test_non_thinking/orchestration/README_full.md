@@ -61,7 +61,9 @@ FULL_KRETA_RESUME=1
 
 r1의 7단계와 r2의 앞 3단계는 `skip (resume)` 로그만 남기고 건너뛴다. r2 multimodal에만 `KRETA_RESUME=1`이 들어가며 r3에는 들어가지 않는다. KRETA_RESUME=0이면 해당 단계도 새 KRETA 실행이다. 재개 지점이 다른 단계면 KRETA_RESUME=1을 설정해도 multimodal에 전달하지 않는다. RESUME_FROM이 지정된 실행은 명세대로 세션 존재 충돌 거부를 적용하지 않는다.
 
-`RESUME_FROM=rK:derive`이면 rK의 `vision/multimodal/koffvqa_api_judge/results.json`과 `summary.json`이 둘 다 파일로 있을 때 judge를 다시 호출하지 않고 derive를 1회 실행한다. 하나라도 없거나 파일 대신 디렉터리이면 `[<TS>] derive 재개 불가 — judge 산출 없음`을 기록하고 rc 2로 즉시 종료한다. 파일 내용의 검증은 derive가 맡는다. 이후 반복은 기존대로 해당 반복의 judge가 rc 0으로 끝났을 때 derive를 호출한다. 판정부터 다시 진행하려면 `rK:koffvqa_judge`를 사용한다. dry-run은 파일 존재를 검사하지 않으며 기존 명령과 `SKIP=` 표시를 유지한다.
+모델 conf에 `FULL_RESUME_FROM=rK:derive`를 지정하면 rK의 `vision/multimodal/koffvqa_api_judge/results.json`과 `summary.json`이 둘 다 파일로 있을 때 judge를 다시 호출하지 않고 derive를 1회 실행한다. 하나라도 없거나 파일 대신 디렉터리이면 `[<TS>] derive 재개 불가 — judge 산출 없음`을 기록하고 rc 2로 즉시 종료한다. derive rc 0 뒤에는 저장된 judge 파일의 완전성을 검사한다. 정상 진행과 이후 반복도 judge rc 0 또는 10이면 같은 derive·검사를 실행한다. 셸 환경변수만 지정하면 conf 로딩에서 덮어쓰므로 재개 설정은 conf에 둔다.
+
+판정부터 다시 진행하려면 conf에 `FULL_RESUME_FROM=rK:koffvqa_judge`를 지정한다. 해당 반복에 prediction xlsx가 없으면 rc 2로 종료한다. 재판정은 실패 행만 이어서 처리하지 않고 xlsx 전체를 다시 채점한다. 10-05의 246/275(크레딧 부족), 10-06의 274/275(JSON parse 오류) 같은 불완전 판정은 원인을 해결한 뒤 이 경로로 재채점한다. `rK:derive`는 저장된 불완전 판정을 복구하지 않는다.
 
 ## 실패 정책
 
@@ -69,6 +71,7 @@ r1의 7단계와 r2의 앞 3단계는 `skip (resume)` 로그만 남기고 건너
 - nlu/functionchat/multimodal의 그 외 nonzero도 즉시 중단하고 STOP_LABEL을 포함한 수동 재개 안내를 남긴다.
 - solo taubench의 일반 실패는 기록하고 계속한다.
 - judge/derive의 일반 실패는 기록하고 누적하며 다음 단계/반복을 계속한다.
+- KOFFVQA judge는 먼저 기존 산출물을 저장하고, `total == scored == raw 행 수 > 0` 및 모든 행의 오류 없음·0~10 정수 점수를 검사한다. 불완전이면 rc 10이며 derive는 계속 실행한다. derive 성공 뒤 같은 검사 CLI가 rc 10을 반환하면 derive 실패도 1건 누적한다(따라서 judge와 derive가 각각 실패할 수 있다). 파일 읽기·JSON 오류는 검사 CLI rc 2다. 발행 게이트·측정값·저장 내용은 바꾸지 않는다.
 - 정상적으로 루프가 끝나면 `=== <END_LABEL> 레인 종료 (판정 실패 n건) ===`을 남긴다. n>0이면 rc 1, 아니면 rc 0이다. solo taubench만 실패해도 이 정책상 최종 rc는 0일 수 있다. 이를 전 단계 성공으로 표기하지 않으며 단계 종료 rc로 확인한다.
 
 ## 코드 확인 사항과 명세의 전제 보정
@@ -82,7 +85,7 @@ r1의 7단계와 r2의 앞 3단계는 `skip (resume)` 로그만 남기고 건너
 
 ## Dry-run과 격리 시험
 
-`LANE_DRY_RUN=1`은 BASE/conf/HOST 다음에 반복별 SESSION과 7개 COMMAND를 출력한다. 조건부 단계는 `COMMAND[if-exists]=`, 재개 skip은 `SKIP=<TS> <stage>`다. `<RD>`와 `<latest *_gen.xlsx>`는 고정 계획 표기다. 결과 폴더/helper, `.env`, preflight에 접근하지 않고 로그도 쓰지 않는다. venv activation과 config loader는 기존 계약대로 사용한다.
+`LANE_DRY_RUN=1`은 BASE/conf/HOST 다음에 반복별 SESSION과 7단계 COMMAND를 출력한다. 조건부 단계는 `COMMAND[if-exists]=`, 재개 skip은 `SKIP=<TS> <stage>`다. derive 뒤에는 `COMMAND[if-derive-rc=0]=`로 완전성 확인 명령도 표시한다. 별도 재개 단계는 추가하지 않는다. `<RD>`와 `<latest *_gen.xlsx>`는 고정 계획 표기다. 결과 폴더/helper, `.env`, preflight에 접근하지 않고 로그도 쓰지 않는다. venv activation과 config loader는 기존 계약대로 사용한다.
 
 ```bash
 /bin/bash -n orchestration/run_lane.sh
@@ -91,6 +94,14 @@ r1의 7단계와 r2의 앞 3단계는 `skip (resume)` 로그만 남기고 건너
 ```
 
 F1..F9는 temp에 orchestration을 복사해 실행한다. stub loader/러너/judge/derive/curl과 합성 키/결과만 사용하고 `env -i`, 외부 cwd에서 실행한다. 실제 `results_model_dir` helper는 복사해서 합성 results에 대해서만 호출한다. 네트워크 접근은 없다. 기대 파일은 `fixtures_full/dry_run.txt`이며 임시 BASE만 치환한다. 각 단계 argv/env/cwd/EVAL_TIMESTAMP, 로그 append, 최신 xlsx, 조건부 skip, 실패 누적, 모든 단계의 rc 3/130을 검증한다.
+
+C7 결함 재현은 아래 동일 시험을 작업 트리와 `KOFFVQA_COMPLETE_REVISION=3b5377e`에서 실행한다. revision 지정 시 judge·full 파일만 `git show`로 임시 checkout에 복사하며 운영 파일을 교체하지 않는다. HEAD에서는 세 사례가 rc 0 때문에 FAIL, 수정본에서는 PASS가 기대값이다. 실제 judge·derive CLI를 사용하되 client는 가짜이고 소켓 연결은 차단한다.
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -B -m pytest -q -p no:cacheprovider \
+  shared/multimodal/tests/test_koffvqa_completion_cli.py \
+  orchestration/tests/test_koffvqa_completion_lane.py -k 'test_c71 or test_c72'
+```
 
 등가성 시험 `test_run_lane_equivalence.sh`는 harness/taubench의 argv·환경·결과 경로를 비교하며, LANE_DISPLAY로 바뀐 orchestrator 로그 문구는 비교하지 않는다. 5b부터 fixture curl 어댑터가 200·500·다른 모델 응답을 재현하므로 소켓을 열지 않는다. `.venv`와 `configs` symlink는 기존 시험이 필요로 하는 읽기용 참조다.
 활성화 전 파서 실행을 위해 fixture에 `orchestration/laneconf`도 복사한다. 실제 러너/결과/키를 사용하지 않는다.
