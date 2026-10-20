@@ -6,6 +6,22 @@ set -u
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
+# Full-eval accepts integer seconds, like the full lane; the runners allow floats.
+# Resolve caller values before activation/.env, and reject errors before activation, secrets or HTTP.
+FULL_EVAL_REQUEST_TIMEOUT="${AGENT_REQUEST_TIMEOUT:-300}"
+FULL_EVAL_TASK_TIMEOUT="${AGENT_TASK_TIMEOUT:-900}"
+export -n FULL_EVAL_REQUEST_TIMEOUT FULL_EVAL_TASK_TIMEOUT
+if ! [[ "$FULL_EVAL_REQUEST_TIMEOUT" =~ ^[0-9]+$ ]] ||
+   ! [ "$FULL_EVAL_REQUEST_TIMEOUT" -gt 0 ] 2>/dev/null; then
+  echo '[full_eval] ERROR: AGENT_REQUEST_TIMEOUT must be a positive integer' >&2
+  exit 2
+fi
+if ! [[ "$FULL_EVAL_TASK_TIMEOUT" =~ ^[0-9]+$ ]] ||
+   ! [ "$FULL_EVAL_TASK_TIMEOUT" -gt "$FULL_EVAL_REQUEST_TIMEOUT" ] 2>/dev/null; then
+  echo '[full_eval] ERROR: AGENT_TASK_TIMEOUT must be an integer greater than AGENT_REQUEST_TIMEOUT' >&2
+  exit 2
+fi
+
 # 부모 죽으면 자식까지 일괄 cleanup
 # (이전 run 에서 wrapper 죽은 뒤 ko-agentbench 자식이 살아남아 결과 폴더 오염시킨 사례 있음)
 # 자기 자신을 setsid 로 재실행해 새 session leader 가 되게 만든 뒤,
@@ -154,7 +170,10 @@ run_track() {
   echo "[$(date +%H:%M:%S)] === ${NAME} 시작 ===" | tee -a "$LOG_DIR/_master.log"
   echo "  CMD: $*" | tee -a "$LOG_DIR/_master.log"
   local RC
-  ( "$@" ) >>"$LOG" 2>&1 </dev/null &
+  (
+    unset AGENT_REQUEST_TIMEOUT AGENT_TASK_TIMEOUT
+    "$@"
+  ) >>"$LOG" 2>&1 </dev/null &
   TRACK_PID=$!
   wait "$TRACK_PID"; RC=$?; TRACK_PID=""
   LAST_TRACK_RC=$RC
@@ -173,6 +192,7 @@ run_track() {
 }
 
 echo "[full_eval] EVAL_TIMESTAMP=$EVAL_TIMESTAMP" | tee "$LOG_DIR/_master.log"
+echo "[full_eval] AGENT_REQUEST_TIMEOUT=$FULL_EVAL_REQUEST_TIMEOUT AGENT_TASK_TIMEOUT=$FULL_EVAL_TASK_TIMEOUT (functionchat·taubench only)" | tee -a "$LOG_DIR/_master.log"
 echo "[full_eval] MODEL=$MODEL" | tee -a "$LOG_DIR/_master.log"
 echo "[full_eval] NUM_CONCURRENT=$NUM_CONCURRENT" | tee -a "$LOG_DIR/_master.log"
 echo "[full_eval] PID=$$ PGID=$PGID" | tee -a "$LOG_DIR/_master.log"
@@ -196,9 +216,11 @@ for track in $TRACKS; do
     # (측정 0건 / 부분 실행 / infrastructure_error) exit 1 로 나가면 run_track 이
     # TRACK_FAILURES 에 기록한다 — 실패한 측정이 조용히 성공으로 지나가지 않는다.
     functionchat)
-      run_track functionchat bash "$TRACK_BASE/functionchat/run_functionchat.sh" "$MODEL" "$BASE_URL_CHAT" ;;
+      run_track functionchat env "AGENT_REQUEST_TIMEOUT=$FULL_EVAL_REQUEST_TIMEOUT" "AGENT_TASK_TIMEOUT=$FULL_EVAL_TASK_TIMEOUT" \
+        bash "$TRACK_BASE/functionchat/run_functionchat.sh" "$MODEL" "$BASE_URL_CHAT" ;;
     taubench)
-      run_track taubench     bash "$TRACK_BASE/taubench/run_taubench.sh" "$MODEL" "$BASE_URL_CHAT" ;;
+      run_track taubench env "AGENT_REQUEST_TIMEOUT=$FULL_EVAL_REQUEST_TIMEOUT" "AGENT_TASK_TIMEOUT=$FULL_EVAL_TASK_TIMEOUT" \
+        bash "$TRACK_BASE/taubench/run_taubench.sh" "$MODEL" "$BASE_URL_CHAT" ;;
     *) echo "[full_eval] WARN: unknown track '$track' (configs/models/$MODEL_CONFIG.yaml)" ;;
   esac
 done
