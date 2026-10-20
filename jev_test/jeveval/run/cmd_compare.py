@@ -2,6 +2,7 @@
 
 from jeveval.contract.stages import stage_names, supports_extra
 from jeveval.io.set_config import entry
+from jeveval.score.set_metrics import metric_spec
 from jeveval.io import run_files
 from jeveval.io.paths import inside
 from jeveval.run import context
@@ -19,30 +20,32 @@ def _metadata(ctx, stages):
                 test_logical_ids=[f.logical_id for f in stages["test"].finals])
 
 
-def _f1(stages, stage_names, seed, set_name):
+def _f1(stages, stage_names, seed, set_name, spec):
     rows = {m: [r for name in stage_names for r in data[name].outcomes] for m, data in stages.items()}
     items = {m: {lid: item for name in stage_names for lid, item in data[name].items.items()}
              for m, data in stages.items()}
     cohort = common_cohort(rows, "test" if stage_names == ("test",) else "all_rows")
-    obs = {m: observations(value, items[m]) for m, value in rows.items()}
-    qids = sorted({q for value in items.values() for q in question_ids(value)})
-    return {q: f1_diff(obs, cohort, seed=seed, set_name=set_name, question_id=q) for q in qids}
+    obs = {m: observations(value, items[m], spec=spec) for m, value in rows.items()}
+    qids = sorted({q for value in items.values() for q in question_ids(value, spec=spec)})
+    return {q: f1_diff(obs, cohort, seed=seed, set_name=set_name, question_id=q,
+                       f1_defined=all(x.label not in spec.f1_undefined_labels for value in items.values()
+                                      for item in value.values() for x in item.questions if x.id == q)) for q in qids}
 
 
 def _result(contexts, stages, thresholds):
     first = next(iter(contexts.values()))
     set_name, variant, seed = first.task.set, first.task.variant, first.plan.seed
-    family_name = entry(first.root, set_name).family
+    spec = metric_spec(entry(first.root, set_name).family)
     rows = {m: data["test"].outcomes for m, data in stages.items()}
     cohort = common_cohort(rows)
     populations = {m: population(outcomes=[r for r in rows[m] if r.logical_id in cohort],
         finals=[f for f in data["test"].finals if f.logical_id in cohort], items=data["test"].items,
-        certified=False, unit="group_representative", set_name=set_name, family_name=family_name) for m, data in stages.items()}
+        certified=False, unit="group_representative", set_name=set_name, spec=spec) for m, data in stages.items()}
     bootstrap = dict(coverage={"0.02": coverage_diff(rows,
         {m: t.by_tau["0.02"].t_star for m, t in thresholds.items()}, seed=seed, set_name=set_name)},
-        f1={"test": _f1(stages, ("test",), seed, set_name)})
+        f1={"test": _f1(stages, ("test",), seed, set_name, spec)})
     if supports_extra(set_name):
-        bootstrap["f1"]["all_rows"] = _f1(stages, stage_names(set_name), seed, set_name)
+        bootstrap["f1"]["all_rows"] = _f1(stages, stage_names(set_name), seed, set_name, spec)
     return compare_file(models=contexts, set=set_name, variant=variant, cohort_ids=cohort,
         per_model_population=populations, bootstrap=bootstrap,
         t0_status={m: ctx.cfg.t0["status"] for m, ctx in contexts.items()})

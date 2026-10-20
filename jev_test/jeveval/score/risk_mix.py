@@ -1,6 +1,9 @@
 """무엇: 위험 세부 분포 · 입력: 시험 outcome·Item·수락 ID · 출력: 집계 dict · 계약 §7-4·§8-6 D."""
 
 
+from jeveval.types.length_buckets import LENGTH_LIMITS
+from jeveval.score.set_metrics import MetricSpec
+
 LENGTH_BUCKETS = ("le_4096", "le_8192", "le_16384", "gt_16384", "unmeasured")
 
 
@@ -10,7 +13,7 @@ def length_bucket(n):
         return "unmeasured"
     if type(n) is not int or n < 0:
         raise ValueError("length must be a nonnegative integer")
-    for limit in (4096, 8192, 16384):
+    for limit in LENGTH_LIMITS:
         if n <= limit:
             return f"le_{limit}"
     return "gt_16384"
@@ -23,11 +26,10 @@ def _add(table, key, accepted, wrong):
     cell["k"] += int(accepted and wrong)
 
 
-def distributions(test, test_items, accepted_ids, family_name=None):
+def distributions(test, test_items, accepted_ids, *, spec: MetricSpec):
     """빈 마스크를 제외하고 요청 오류를 모든 소속 칸에 센다. 진단은 질문 오류다."""
-    sets = {family_name or item.set for item in test_items.values()}
-    mix = dict(by_class={}, by_service={} if "kosgd" in sets else None,
-               by_stratum={} if "klue_mrc_answerable" in sets else None, by_n_questions={})
+    mix = dict(by_class={}, by_service={} if test_items and spec.mix_service else None,
+               by_stratum={} if test_items and spec.mix_stratum else None, by_n_questions={})
     lengths = {key: dict(sampled=0, n_valid=0, n=0, k=0) for key in LENGTH_BUCKETS}
     diagnostic = {}
     for row in test:
@@ -46,10 +48,10 @@ def distributions(test, test_items, accepted_ids, family_name=None):
         for qid in success:
             if row.gold[qid] is not None:
                 _add(mix["by_class"].setdefault(qid, {}), row.gold[qid], accepted, row.wrong)
-        if (family_name or test_items[row.logical_id].set) == "kosgd":
+        if spec.mix_service:
             for service in set(row.meta["service"] or []):
                 _add(mix["by_service"], service, accepted, row.wrong)
-        if (family_name or test_items[row.logical_id].set) == "klue_mrc_answerable":
+        if spec.mix_stratum:
             _add(mix["by_stratum"], row.meta["stratum"], accepted, row.wrong)
         for qid, role in row.roles.items():
             if role == "diagnostic" and row.gold[qid] is not None:

@@ -118,6 +118,6 @@ def test_empty_metrics_are_null_and_tool_f1_is_rejected():
     result = coverage_diff(dict(a=[], b=[]), dict(a=None, b=.5), seed=1, set_name="s", reps=2)
     assert result["pairs"][0]["estimate"] is None and result["pairs"][0]["ci95"] is None
     with pytest.raises(ValueError, match="tool"):
-        f1_diff(dict(a=[], b=[]), [], seed=1, set_name="fc_call_decision", question_id="tool")
+        f1_diff(dict(a=[], b=[]), [], seed=1, set_name="fc_call_decision", question_id="tool", f1_defined=False)
     obs = Observation("i", "g", "q", "a", "a")
     assert Observation.from_dict(obs.to_dict()) == obs

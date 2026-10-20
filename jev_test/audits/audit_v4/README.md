@@ -44,7 +44,12 @@ python -B -I audits/audit_v4/offline_check.py -- audits/audit_v4/run.py --set ko
 
 부분 run은 대조한 호출 수를 기록하되 전체 저장 호출 증거는 INCOMPLETE다. 과거 FAIL/PASS 모두
 기존 실행을 수정하지 않으며 사전 감사로 소급하지 않는다. 서빙 후 재감사 결과는 새 파일명으로
-보존한다. 보고 연동 기본 위치는 out/<set>.json이며 다른 판으로 교체하려면 별도 검토가 필요하다.
+보존한다. 보고 연동 기본 위치는 out/<set>.json이다. 다른 판은 report의 반복 가능한
+`--audit-evidence <set>=<path>`로 명시 지정하며 적격 검사 통과 시에만 연결한다.
+경로는 audits/audit_v4/out/ 아래 JSON으로 제한하고 자동 최신 선택은 하지 않는다.
+사전 감사는 동결 입력 SHA, 사후 감사는 추가로 정확한 model/set/variant/run_id의 호출 PASS를
+요구한다. v4 호출 항목의 set은 최상위 set을 상속한다. 다른 profile·호출 대조 FAIL·INCOMPLETE는
+연결 미확인이다. 보고에는 모델·선택 파일명·파일 SHA 앞 12자를 남긴다.
 
 `--oracle-source /absolute/path/ongoing_two_oracle.py`를 주면 실행하지 않고 소스 SHA만 기록한다.
 `oracle_verification.status`는 자동 대조 API가 없으므로 INCOMPLETE로 남는다. Claude가 별도로

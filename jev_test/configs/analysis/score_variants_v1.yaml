@@ -1,0 +1,18 @@
+schema: score_variants_policy/1
+status: registered
+candidates: [min, product, iso_min, iso_product]
+unit: success_question_slots_min_bundle
+missing: include_in_score
+fit: dev_valid_labelled_per_unit
+isotonic: pav_nondecreasing_ties_mean
+fallback: identity_empty_single_class_or_unseen
+apply: step_floor_clip_endpoints
+select: max_dev_accepted_candidate_order
+no_threshold: min
+taus: ['0.01', '0.02', '0.05']
+claims:
+  scope: per_cell_marginal
+  confidence_level: 0.95
+  simultaneous: false
+  score_is_probability: false
+  dev_is_generalization: false

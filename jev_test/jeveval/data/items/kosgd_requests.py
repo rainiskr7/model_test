@@ -1,4 +1,4 @@
-"""무엇: 라벨 없는 KoSGD 요청 · 입력: prefix/catalog/task/options · 출력: Request · 계약 판 5 보정 2 WP3."""
+"""무엇: 라벨 없는 KoSGD 요청 · 입력: prefix/catalog/task/options · 출력: Request · 계약 §8-7 판 5 보정 2 WP3."""
 
 from copy import deepcopy
 

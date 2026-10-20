@@ -1,6 +1,6 @@
 """무엇: 역사 읽기 경계 · 입력: 저장 산출물 · 출력: 불변 읽기/검사 값 · 계약 §5-1b."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from .records import FinalRecord
@@ -24,6 +24,7 @@ class History:
     stages: list[HistoryStage]
     errors: list[str]
     task: TaskSpec | None = None
+    aux: dict = field(default_factory=dict)
 
 
 @dataclass(frozen=True)

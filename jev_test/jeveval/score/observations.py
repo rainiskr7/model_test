@@ -2,10 +2,11 @@
 
 from jeveval.score.kosgd_slots import fixed_gold
 from jeveval.score.tasks import SLOT_LABELS
+from jeveval.score.set_metrics import MetricSpec
 from jeveval.types import Observation
 
 
-def observations(outcomes, items):
+def observations(outcomes, items, *, spec: MetricSpec):
     """ok·정답 있는 성공 질문만, KoSGD 고정 칸과 KorFin pooled 관측을 보존한다."""
     result = []
     for row in outcomes:
@@ -20,18 +21,18 @@ def observations(outcomes, items):
             gold.update(zip((q.id for q in slots), values))
         for q in item.questions:
             if q.role != "success" or gold[q.id] is None or (
-                    item.set == "fc_call_decision" and q.label == "fc:tool"):
+                    q.label in spec.observation_excluded_labels):
                 continue
             result.append(Observation(row.logical_id, row.group_id, q.id, row.answer[q.id], gold[q.id]))
-            if item.set == "korfin_asc" and q.label == "korfin:sentiment":
+            if spec.pooled_aspect_label and q.label == spec.pooled_aspect_label:
                 result.append(Observation(row.logical_id, row.group_id, "aspect", row.answer[q.id], gold[q.id]))
     return result
 
 
-def question_ids(items):
+def question_ids(items, *, spec: MetricSpec):
     """빈 코호트에서도 성공 질문의 null F1 셀을 남긴다."""
     ids = {q.id for item in items.values() for q in item.questions if q.role == "success"
-           and not (item.set == "fc_call_decision" and q.label == "fc:tool")}
-    if any(item.set == "korfin_asc" for item in items.values()):
+           and not (q.label in spec.observation_excluded_labels)}
+    if items and spec.pooled_aspect_label:
         ids.add("aspect")
     return sorted(ids)

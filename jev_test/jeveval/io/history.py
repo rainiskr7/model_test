@@ -3,7 +3,7 @@
 from pathlib import Path
 
 from jeveval.contract.stages import stage_names
-from jeveval.io import records, run_files
+from jeveval.io import records, run_files, auxiliary
 from jeveval.data.split import check_split_plan
 from jeveval.io.hashes import sha256_file
 from jeveval.io.paths import inside
@@ -76,7 +76,8 @@ def read(root, run_dir):
                 task = load_taskspec(path)
         except (ValueError, TypeError, KeyError, OSError):
             errors.append("invalid_task_evidence")
-    return History(directory, artifacts, hashes, stages, errors, task)
+    return History(directory, artifacts, hashes, stages, errors, task,
+                   dict(selective=auxiliary.selective(root, directory, artifacts, hashes)))
 
 
 def variants(root, results, model, run_id):

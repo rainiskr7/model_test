@@ -2,10 +2,11 @@
 
 from dataclasses import replace
 
-from jeveval.io import audit_evidence, history, report_inputs, report_markdown, run_files
+from jeveval.io import audit_evidence as audit_io, history, report_inputs, report_markdown, run_files
 from jeveval.io.paths import identifier, inside
-from jeveval.run import history_check, history_stage, layout, question_report
+from jeveval.run import auxiliary_report, history_check, history_stage, layout, question_report
 from jeveval.score.kosgd_decompose import decompose
+from jeveval.score.set_metrics import metric_spec
 from jeveval.score.report_extras import comparison, supplementary
 from jeveval.score.report_tables import common_errors, variant
 from jeveval.types.report import Report, ReportComparison, ReportVariant
@@ -22,7 +23,7 @@ def _variant(root, directory):
     if result.status == "damaged":
         return result
     decompositions, notes, registration = [], [], "exploratory"
-    if family == "kosgd" and result.variant == "full":
+    if metric_spec(family).kosgd_decompose and result.variant == "full":
         for stage in checked.stages:
             if stage.status != "verified_complete":
                 continue
@@ -42,10 +43,12 @@ def _variant(root, directory):
                 notes += supplementary(value)
         except (ValueError, KeyError, TypeError):
             notes.append("질문 위험 표 검증 실패 — 수치 비공개")
-    return replace(result, decompositions=decompositions, supplementary=notes, supplementary_status=registration)
+    result = replace(result, decompositions=decompositions, supplementary=notes, supplementary_status=registration)
+    return auxiliary_report.attach(root, saved, result)
 
 
-def run(*, root, run_id, models, results="results", compare_id=None, out=None, note_unrun=None):
+def run(*, root, run_id, models, results="results", compare_id=None, out=None, note_unrun=None, audit_evidence=None):
+    audits = audit_io.overrides(root, audit_evidence)
     run_id = identifier(run_id)
     models = [identifier(m) for m in models]
     if not models or len(models) != len(set(models)):
@@ -60,7 +63,7 @@ def run(*, root, run_id, models, results="results", compare_id=None, out=None, n
         directories = history.variants(root, results, model, run_id)
         variants.extend(_variant(root, directory) for directory in directories)
         for directory in directories:
-            note = audit_evidence.summary(root, directory)
+            note = audit_io.summary(root, directory, audits.get(directory.parent.name))
             if note is not None and note not in audit_notes:
                 audit_notes.append(note)
         if not directories:

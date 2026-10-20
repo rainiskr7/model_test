@@ -6,6 +6,7 @@ from functools import lru_cache
 from scipy.stats import beta
 
 from jeveval.score.risk_mix import distributions
+from jeveval.score.set_metrics import MetricSpec
 from jeveval.score.threshold import TAUS, UNIT
 from jeveval.types import Item, RequestOutcome, RiskCell, Threshold
 
@@ -82,7 +83,7 @@ def cell_status(tau, t_star, n, u):
 
 
 def risk_cell(*, tau: str, threshold: Threshold, dev: list[RequestOutcome],
-              test: list[RequestOutcome], test_items: dict[str, Item], family_name=None) -> RiskCell:
+              test: list[RequestOutcome], test_items: dict[str, Item], spec: MetricSpec) -> RiskCell:
     """봉인 임계값을 적용한다. 호출자는 분할의 대표 집합과 입력 완료를 먼저 대조한다."""
     target, minimum = _tau(tau), n_min(tau)
     if threshold.tau != tau or threshold.status not in ("SELECTED", "NO_THRESHOLD"):
@@ -109,7 +110,7 @@ def risk_cell(*, tau: str, threshold: Threshold, dev: list[RequestOutcome],
     by_status = {s: sum(r.status == s and not r.mask_empty for r in test)
                  for s in ("ok", "rejected", "truncated", "error")}
     accepted_ids = {r.logical_id for r in _accepted(test, t)}
-    mix, lengths, diagnostic = distributions(test, test_items, accepted_ids, family_name)
+    mix, lengths, diagnostic = distributions(test, test_items, accepted_ids, spec=spec)
     return RiskCell(tau, status, len(test) < minimum, UNIT, t, development, trial,
                     by_status, mix, lengths, diagnostic)
 

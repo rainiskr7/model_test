@@ -4,6 +4,7 @@ from dataclasses import replace
 
 import pytest
 
+from jeveval.score.set_metrics import MetricSpec
 from jeveval.score.question_risk import calculate
 from jeveval.types.outcomes import QuestionOutcome
 
@@ -74,6 +75,6 @@ def test_single_question_core_exactly_matches_original_request_risk_all_taus(mod
     cells = calculate(projected["dev"], projected["test"])["questions"]["q"]["by_tau"]
     dev, test = ([r for _, _, r in stages[s]] for s in ("dev", "test"))
     for tau in TAUS:
-        request = risk_cell(tau=tau, threshold=select(dev, tau), dev=dev, test=test, test_items=items)
+        request = risk_cell(spec=MetricSpec(), tau=tau, threshold=select(dev, tau), dev=dev, test=test, test_items=items)
         expected = {k: getattr(request, k) if k in ("status", "t_star") else request.test[k] for k in cells[tau]}
         assert cells[tau] == expected

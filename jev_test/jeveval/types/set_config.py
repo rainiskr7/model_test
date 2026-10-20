@@ -11,4 +11,4 @@ class SetEntry:
     split_rules: dict
     overlay_path: str | None
     task_files: tuple[str, ...]
-    analysis: str | None = None
+    analysis: dict[str, str] | None = None

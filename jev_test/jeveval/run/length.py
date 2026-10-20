@@ -3,6 +3,7 @@
 from typing import Literal, Protocol
 
 from jeveval.types import CallPlan, LengthInfo
+from jeveval.types.length_buckets import LENGTH_LIMITS
 
 
 class Measurer(Protocol):
@@ -65,7 +66,7 @@ def length_bucket(n: int) -> Literal["le_4096", "le_8192", "le_16384", "gt_16384
     """논리 요청 호출들의 최대 입력 길이에 적용할 구간 이름을 반환한다."""
     if type(n) is not int or n < 0:
         raise ValueError("length must be a nonnegative integer")
-    for limit in (4096, 8192, 16384):
+    for limit in LENGTH_LIMITS:
         if n <= limit:
             return f"le_{limit}"
     return "gt_16384"

@@ -5,6 +5,7 @@ from pathlib import Path
 
 import yaml
 
+from jeveval.contract.analysis_declarations import normalize_declarations
 from jeveval.contract.set_overlay import task_names, validate_overlay
 from jeveval.io.config import load_taskspec, read_yaml
 from jeveval.io.datasets import dataset_entry, family
@@ -67,7 +68,7 @@ def _overlay(root, path, data, rules, ids):
     name = value["id"]
     return SetEntry(name, value["dataset"]["family"], deepcopy(value["dataset"]),
                     deepcopy(value["split_rules"]), Path(path).as_posix(),
-                    tuple("configs/tasks/" + n for n in value["tasks"]), value.get("analysis"))
+                    tuple("configs/tasks/" + n for n in value["tasks"]), normalize_declarations(value.get("analysis")) or None)
 
 
 def entry(root, set_id, *, datasets=DATASETS, rules=RULES) -> SetEntry:
@@ -100,7 +101,7 @@ def evidence_paths(selected) -> tuple[str, ...]:
     pool = selected.split_rules.get("pool", {})
     paths = [selected.overlay_path, *selected.task_files]
     if selected.analysis is not None:
-        paths.append(selected.analysis)
+        paths.extend(selected.analysis.values())
     if "path" in pool:
         paths.append(pool["path"])
     for rule in pool.get("exclude", []):

@@ -2,6 +2,8 @@
 
 import re
 
+from jeveval.contract.analysis_declarations import normalize_declarations
+
 
 def _identifier(value):
     return isinstance(value, str) and re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", value) is not None
@@ -35,9 +37,13 @@ def validate_overlay(value, stem, base_ids, base_families, tasks_on_disk) -> lis
     if not isinstance(value, dict) or set(value) - {"analysis"} != {"schema", "id", "tasks", "dataset", "split_rules"}:
         return ["overlay requires exactly schema/id/tasks/dataset/split_rules"]
     errors = []
-    if "analysis" in value and (not isinstance(value["analysis"], str) or
-            re.fullmatch(r"configs/analysis/[A-Za-z0-9][A-Za-z0-9_-]*\.yaml", value["analysis"]) is None):
-        errors.append("analysis must name a confined analysis YAML")
+    if "analysis" in value:
+        try:
+            if value["analysis"] is None:
+                raise ValueError("null analysis")
+            normalize_declarations(value["analysis"])
+        except ValueError:
+            errors.append("analysis must name confined analysis YAML policies")
     if value["schema"] != "set_overlay/1":
         errors.append("invalid overlay schema")
     if not _identifier(stem) or value["id"] != stem or stem in base_ids:

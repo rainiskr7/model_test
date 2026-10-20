@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 from jeveval.io.run_files import json_bytes
+from jeveval.score.set_metrics import MetricSpec
 from jeveval.score.risk import b_flip, n_min, risk_cell, risk_file, upper
 from jeveval.score.threshold import TAUS, select
 from jeveval.types import Item, RequestOutcome, RiskCell, Threshold
@@ -47,7 +48,7 @@ def test_risk_fixture_statuses_counts_and_flip():
         n, k = expected["test"]["n_accepted"] or 0, expected["test"]["k_errors"] or 0
         test = [row(i, "test", s=.9 if i < n else .8, wrong=i < k)
                 for i in range(expected["test"]["n_groups"])]
-        result = risk_cell(tau=tau, threshold=select(dev, tau), dev=dev, test=test, test_items=items(test))
+        result = risk_cell(spec=MetricSpec(), tau=tau, threshold=select(dev, tau), dev=dev, test=test, test_items=items(test))
         actual = result.to_dict()
         # 기존 fixture는 세부 분포 입력이 없는 집계 예다. 채워진 인증 필드를 대조한다.
         for key in ("tau", "unit", "status", "insufficient_by_design", "t_star", "dev", "by_status"):
@@ -73,7 +74,7 @@ def test_threshold_fixtures_dev_blocks_and_immutable_test_threshold():
             for variant in variants:
                 test = [row(i, "test", **r, status="ok" if r["valid"] else "error")
                         for i, r in enumerate(variant)]
-                cell = risk_cell(tau=tau, threshold=threshold, dev=dev, test=test, test_items=items(test))
+                cell = risk_cell(spec=MetricSpec(), tau=tau, threshold=threshold, dev=dev, test=test, test_items=items(test))
                 assert cell.dev["n_groups"] == len(dev)
                 assert cell.dev["n_denom"] == threshold.coverage["den"]
                 assert cell.dev["n_accepted"] == threshold.n_accepted
@@ -83,7 +84,7 @@ def test_threshold_fixtures_dev_blocks_and_immutable_test_threshold():
 
 def test_risk_file_json_boundary_and_input_checks():
     dev, test = [row(0)], [row(1, "test")]
-    cells = {tau: risk_cell(tau=tau, threshold=select(dev, tau), dev=dev,
+    cells = {tau: risk_cell(spec=MetricSpec(), tau=tau, threshold=select(dev, tau), dev=dev,
                            test=test, test_items=items(test)) for tau in TAUS}
     args = dict(model="m", set="synthetic", variant="full", run_id="r", threshold_sha256="a" * 64)
     result = risk_file(**args, cells=cells)
@@ -93,12 +94,12 @@ def test_risk_file_json_boundary_and_input_checks():
     with pytest.raises(ValueError, match="TAUS"):
         risk_file(**args, cells={})
     with pytest.raises(ValueError, match="representatives"):
-        risk_cell(tau="0.02", threshold=select(dev, "0.02"), dev=dev,
+        risk_cell(spec=MetricSpec(), tau="0.02", threshold=select(dev, "0.02"), dev=dev,
                   test=test * 2, test_items=items(test))
     with pytest.raises(ValueError, match="tau/status"):
-        risk_cell(tau="0.02", threshold=select(dev, "0.01"), dev=dev, test=[], test_items={})
+        risk_cell(spec=MetricSpec(), tau="0.02", threshold=select(dev, "0.01"), dev=dev, test=[], test_items={})
     with pytest.raises(ValueError, match="counts"):
-        risk_cell(tau="0.02", threshold=Threshold("0.02", "SELECTED", .9, 99, 0, {}),
+        risk_cell(spec=MetricSpec(), tau="0.02", threshold=Threshold("0.02", "SELECTED", .9, 99, 0, {}),
                   dev=dev, test=[], test_items={})
 
 

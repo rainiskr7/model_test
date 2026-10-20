@@ -69,12 +69,12 @@ def coverage_diff(per_model: dict[str, list[RequestOutcome]], thresholds: dict[s
 
 
 def f1_diff(per_model_obs: dict[str, list[Observation]], cohort_ids, *, seed, set_name,
-            question_id, reps=2000) -> dict:
+            question_id, reps=2000, f1_defined=True) -> dict:
     """cohort_ids는 common_cohort의 결과. gold 있는 ok 관측만 넘기며 aspect 중복 관측을 보존한다."""
     cohort = set(cohort_ids)
     if len(cohort) != len(cohort_ids):
         raise ValueError("duplicate cohort logical_id")
-    if set_name == "fc_call_decision" and question_id == "tool":
+    if not f1_defined:
         raise ValueError("FunctionChat tool macro-F1 is not defined")
     grouped, reference, membership = {}, None, {}
     for model, observations in per_model_obs.items():

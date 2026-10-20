@@ -342,6 +342,12 @@ summary 없이도 다른 필수 증거가 충족되면 완료로 분류한다. �
 
 역사 단계 목록은 저장 fingerprint의 set 정체성만 사용한다. fc_call_decision은 dev/test/extra, 그 밖은 dev/test이며 현재 rules·overlay의 존재나 extra 값으로 과거 단계를 다시 정하지 않는다. fingerprint 부재·손상은 기존 incomplete/damaged 판정 경로를 유지한다. (판 5 보정 3)
 
+
+보정 5의 selective.json은 주 required 목록 밖의 선택 파일이다. 별도 aux 상태는
+missing / valid / invalid이며 schema·identity·입력 SHA·수치 범위를 검사한다. 파싱·검증 실패는
+주 errors에 합치지 않고 해당 보조 절만 숨긴다. certify·compare는 이 파일을 읽지 않는다.
+archive는 존재할 때 명시 수집하며 ops/status는 완료 판정과 별개로 보조 파일 유무를 표시한다.
+
 ### 5-2. 식별자 세 단계
 - `logical_id` = `<set>:<group_id>:<item_id>` (§6).
 - `call_id` = `logical_id` (결정 모델) 또는 `logical_id + "/" + question_id` (B1).
@@ -617,7 +623,7 @@ kosgd2 full은 성공 10·진단 3, actions_only는 성공 8·진단 2다. 진�
 
 판정 해석 (판 5 보정 4): 칸 하나(모델·셋·판·τ)에 대해 dev 선택을 고정한 조건에서, test 묶음 대표들을 같은 원천 분포의 독립 표본으로 볼 때 P(MEETS ∧ 참 위험 > τ) ≤ 5%로 해석한다. 유한 평가 풀 자체를 섞어 dev/test로 비복원 분할한 설계에 대한 보장으로 주장하지 않는다. 여러 칸의 동시 보장이나 중간 결과를 보고 멈추는 방식의 보장이 아니며, 사후확률이나 처리율의 신뢰하한도 아니다.
 
-상태 결정 순서는 NO_THRESHOLD → UNDERPOWERED(n < n_min) → U ≤ τ이면 MEETS → 그 밖 FAILS다. FAILS는 t*가 있고 n ≥ n_min인데 U > τ인 인증 실패이며, 위험이 τ를 넘는다는 입증이 아니다. n_min은 오류 0일 때 인증 가능한 최소 수락 수이고 검정력이 아니다. 예를 들어 수락 수 149가 고정되고 요청 오류가 독립적으로 1%이면 통과 확률은 0.99^149 ≈ 22%다. 검정력 표는 2단계 보고서에서 다룬다.
+상태 결정 순서는 NO_THRESHOLD → UNDERPOWERED(n < n_min) → U ≤ τ이면 MEETS → 그 밖 FAILS다. FAILS는 t*가 있고 n ≥ n_min인데 U > τ인 인증 실패이며, 위험이 τ를 넘는다는 입증이 아니다. n_min은 오류 0일 때 인증 가능한 최소 수락 수이고 검정력이 아니다. 예를 들어 수락 수 149가 고정되고 요청 오류가 독립적으로 1%이면 통과 확률은 0.99^149 ≈ 22%다. 관측 n에 조건부인 가정상 통과 확률은 §7-4c에서 다룬다.
 
 요청 확신은 성공 질문 confidence의 최솟값으로 정의한 수락 순위 점수다. 요청 정답 확률이나 그 상한으로 해석하지 않는다. 정답 없는 성공 질문도 점수에 포함되지만 오류는 정답 있는 질문으로 계산한다. b_flip은 판정 민감도이며 라벨 오류율의 추정이 아니다. 인증은 공개 라벨(정답지) 기준이다. 상태 이름과 계산은 바꾸지 않는다.
 
@@ -634,18 +640,22 @@ claims는 per_question_marginal, confidence_level=0.95, simultaneous=false. 질�
 
 (판 5)
 
-overlay는 선택적 최상위 `analysis: configs/analysis/<name>.yaml`을 허용한다.
+overlay의 선택적 `analysis`는 문자열(기존 question_risk 선언) 또는
+`{question_risk: <path>, score_variants: <path>}` 매핑이다. 두 키 중 선언할 것만 둔다.
+정규화 시 중복·미지 키·빈 매핑·중복 경로를 거부하고 정책 schema와 선언 종류를 대조한다.
 SetEntry.analysis와 evidence_paths가 manifest를 첫 fingerprint에 넣으며 task·구현 code SHA도
 기존 fingerprint가 결합한다. 공용 셋에는 선언을 추가하지 않으며 항상 exploratory다.
 전역 v1 기본 정책은 유지하고 overlay의 v2만 registered를 선언한다.
 
-순서: dev 완료 → 일반 threshold → question-threshold → 첫 test 진입.
+순서: dev 완료 → 일반 threshold → question-threshold(선언 시) →
+score-variants threshold(선언 시) → 첫 test 진입. 선언 종류로 각 gate를 선택한다.
 question_threshold/1은 identity·fingerprint SHA·manifest 경로/SHA·dev final SHA·질문/τ 집합·
-by_question t_star를 기록한다. 기존 파일을 덮어쓰지 않는다. test 아래 seal/question_seal/
+by_question t_star를 기록한다. 기존 파일을 덮어쓰지 않는다. test 아래 seal/question_seal/variant_seal/
 attempts/final/derived/replay 중 하나라도 있으면 빈 파일도 시작으로 보아 새 등록을 거부한다.
 등록을 선언한 overlay의 test는 question_threshold가 없으면 거부한다(누락을 조용히 탐색적으로 내리지 않음).
 
-모든 선검사 후 question_seal을 주 seal보다 먼저 쓴다. 둘 사이 중단, 주 seal 삭제,
+선언된 정책 전부의 선검사와 직렬화를 완료한 뒤 question_seal → variant_seal → 주 seal
+순서로 해당 파일만 쓴다. 선검사 실패 시 새 파일은 0개다. 봉인 사이 중단, 주 seal 삭제,
 질문 seal 삭제·교체·다른 실행 복사는 손상이며 사후 봉인으로 복구하지 않는다.
 현재 run 질문 위험은 registered/exploratory/registration_damaged를 구분한다. registered는
 봉인된 threshold 파일의 t_star를 적용하며 dev 재계산이 같아야 한다. 손상은 수치를 쓰지 않는다.
@@ -657,6 +667,54 @@ report도 같은 순수 사슬 검사와 독립 재계산을 사용한다. 주 c
 (판 5 보정 2)
 
 manifest 경로와 실제 SHA를 기록한다. 현재 run은 context.completed, 역사 분석은 verified_complete 역사만 허용한다. 공용 셋과 역사 분석의 exploratory, 유효한 overlay 사슬의 registered, 손상 사슬의 registration_damaged를 구분한다. 등록 선언 셋의 threshold 누락을 exploratory로 낮추지 않는다. Phase A의 “항상 exploratory”와 “증거 없으면 exploratory”는 당시 미등록 범위의 설명이다. (판 5·보정 2)
+
+### 7-4c. 선택적 예측 보조 지표 (판 5 보정 5)
+
+주 점수·임계값·CP 인증과 별개다. test 대표의 유효·비빈 마스크 요청을 s 내림차순으로
+정렬하고 동일 s를 한 묶음으로 수락해 경계 (n_j,k_j)를 만든다. D는 risk.json의 n_denom
+(무효 포함, 빈 마스크 제외)이다. coverage 격자 0.1,…,1.0에서는 n_j/D가 격자 이하인
+최대 경계의 실제 coverage와 risk를 낸다. 첫 묶음 이전은 coverage=0, risk=null이다.
+D=0 또는 유효 비빈 요청 0이면 모든 격자 수치·부분 AURC·최대 coverage·AUROC는 null이다.
+부분 AURC = Σ (n_j−n_(j−1))/D × k_j/n_j이며 [0,c_max]만 적분한다.
+c_max=n_valid_nonempty/D를 함께 기록하고 나머지 구간을 외삽하지 않는다.
+AUROC는 유효·비빈 요청의 정답/오류를 s로 구별하는 Mann–Whitney 값(동점 0.5)이며
+한 클래스뿐이면 null이다. 무효·빈 마스크·유효 수를 별도 기록한다.
+
+max_passing_errors(n,τ)는 단측 95% CP 상한 U(k,n)≤τ인 최대 k, 없으면 None이다.
+관측 n에 조건부인 가정상 통과 확률은 P(Binom(n,r)≤k_max), r∈{τ/4,τ/2,3τ/4}다.
+NO_THRESHOLD의 n=None은 null, n=0 또는 통과 k 없음은 0이다. 표본 수의 검정력이나
+관측 오류율 추정값으로 이름 붙이지 않는다. 옛 run도 risk.json만으로 이 표를 계산한다.
+
+score는 모든 출력 직렬화 검사 후 selective.json을 추가한다. selective/1은 identity,
+definition_version=tied-partial-1, risk.json 및 test/final.jsonl SHA256, 위 집계와 power를 담는다.
+scores/1·risk/1은 불변이다. 보고의 “선택적 예측(보조, 인증과 별개)”는 별도 자료형·절을
+사용하고 aux valid일 때만 RC·부분 AURC·AUROC를 공개한다(§5-1b).
+
+### 7-4d. 확신 변형 등록 (판 5 보정 5)
+
+닫힌 정책 configs/analysis/score_variants_v1.yaml과 구현 규칙이 같아야 한다.
+후보 순서는 min, product, iso_min, iso_product다. 성공 질문 하나를 단위로 삼고 KoSGD
+두 칸은 min confidence의 한 단위로 합친 뒤 보정·결합한다. 정답 없는 성공 질문도 점수에
+포함한다. min 후보는 주 outcome.s와 정확히 같아야 한다. 무효 요청은 수락하지 않는다.
+
+isotonic은 dev의 해당 단위 유효·정답 있는 관측만 쓴다. 같은 x를 먼저 평균한 비감소
+PAV이며 관측 0 또는 한 클래스는 항등(raw)이다. 적용은 학습 x 이하 최대 x의 계단값,
+양 끝은 끝값으로 고정한다. test에만 있는 단위도 항등이다. 후보마다 기존 threshold.select를
+적용하고 τ별 dev n_accepted 최대, 동률은 후보 순서 앞을 고른다. 모두 NO_THRESHOLD면 min이다.
+
+dev를 적합·후보 선택·임계값에 함께 사용하므로 dev 성능을 일반화 주장으로 쓰지 않는다.
+정책을 test 전에 고정한 조건의 단일 셀 test CP 주장만 허용하며 τ·모델 동시 보장은 없다.
+보정값·곱을 정답 확률로 해석하지 않고 pplx confidence도 순위 입력으로 사용한다.
+
+score-variants threshold는 주 threshold 뒤·test 시작 전에 variant_threshold.json을 새로 쓴다.
+identity·fingerprint·정책·dev final·주 threshold 해시와 calibrators/by_tau를 묶는다.
+첫 test gate는 §7-4b의 전부 선검사 후 variant_seal을 주 seal 전에 쓴다. 등록 test replay도
+시작이므로 threshold 명령들을 끝낸 뒤 replay한다. replay는 복사 선검사 후 같은 gate를
+호출하여 봉인부터 쓰고 replay 표식·attempts를 복사한다. 중간 중단은 손상 정지이며 복구하지 않는다.
+score-variants risk는 봉인 사슬·dev 재계산을 확인하고 score_variants.json에 test 셀을 낸다.
+선언 없는 현재 실행·사후 봉인은 등록되지 않는다. --history는 항상 exploratory이고 기존
+산출물 덮어쓰기를 거부한다. 파생 actions_only separate의 역사 복원은 우회하지 않으며 보고에
+“파생 변형: 확신 변형 역사 분석 미지원”을 낸다. 등록 손상은 수치를 숨긴다.
 
 ### 7-5. 임계값 (`threshold.json`, 판 3)
 ```
@@ -729,7 +787,14 @@ SHA가 보고 run과 같을 때만 요약하며 불일치는 “감사 증거 �
 
 (판 5 보정 2)
 
-보고는 감사의 고정 경로 out/<set>.json만 읽는다. 역사로 이동한 감사 파일을 자동 탐색하지 않으며, 사후 호출 연결은 model/variant/run_id가 맞는 저장 호출 대조를 요구한다. 감사 source SHA가 바뀌면 script 출처도 바뀐다. 보정 3 운영은 재채점 → 감사 및 새 run 연결 검증 → KLUE question-risk → 새 파일 report 순서다. 기존 보고서·감사 증거를 덮어쓰지 않는다. (판 5 보정 3)
+감사 기본 경로는 audits/audit_v4/out/<set>.json이다. 다른 판은 report의 반복 가능한
+`--audit-evidence <set>=<path>`로 명시하며 out/ 아래 JSON만 허용한다. 자동 최신 선택은 없다.
+사전 감사는 동결 task/split/b1/lists 해시를 연결한다. 사후 감사는 이 연결과 정확한
+(model, set, variant, run_id)의 historical_calls PASS를 요구한다. v4의 호출 항목에 set이
+없으면 검증된 최상위 set을 상속한다. 다른 set/profile 또는 호출 대조 FAIL/INCOMPLETE는 연결 미확인이다.
+감사 줄에는 모델·선택 파일명·파일 SHA 앞 12자를 표시하며 script SHA 출처도 보존한다.
+보정 5 운영은 새 run 재채점·보조 역사 분석 → 새 이름의 사전/사후 감사 → 명시 증거로 새 report다.
+기존 보고서·감사 증거를 덮어쓰지 않는다. (판 5 보정 5)
 
 #### 7-6b. 채점 호출자의 입력·모집단 경계
 
@@ -742,12 +807,34 @@ risk_file은 세 tau의 RiskCell을 일반 JSON dict로 복사한다. cost_by_st
 cost 호출자는 완료 final과 연결된 시도, 명시적 kind(b1/systemone), 단계 derived.json의 출처를 전달한다. 토큰은 CallRecord.usage가 아닌 마지막 terminal의 원문에서 읽고 미측정 호출도 missing에 센다.
 
 ⑥a-2b population 호출자는 test 대표 또는 FunctionChat dev+test+extra를 골라 outcomes/finals를 넘긴다. 두 ID 집합은 같아야 하며 Item은 빈 공통 코호트에도 질문 틀을 남기도록 상위 집합을 허용한다. outcome을 final/Item에서 재계산해 대조한다. 요청 오류와 KoSGD 묶음 정답은 칸별 고정 정답 점수와 분리한다. 칸 없는 행동판 set_specific은 {}다. 질문 경고는 ok ParsedAnswer의 answer/probs에서 다시 세며 정답 MISSING도 경고 집계에는 남는다.
-qstats의 tool은 동결 FunctionChat 도구 질문 ID다. population은 fc:tool 라벨로도 이를 식별한다. KorFin은 관측을 먼저 합쳐 pooled.aspect를 계산하고 aspect_not_in_text.wrong도 {num,den}으로 남긴다.
+qstats와 bootstrap의 F1 정의 여부는 호출자가 spec의 라벨로 계산한 f1_defined 인자다.
+FC의 fc:tool은 F1 미정의·관측 제외이며 질문 ID가 tool인 비FC 질문은 정상 F1 대상이다. KorFin은 관측을 먼저 합쳐 pooled.aspect를 계산하고 aspect_not_in_text.wrong도 {num,den}으로 남긴다.
 compare 호출자는 check_comparable로 분할/task sha와 시험 ID 집합을 확인한 뒤 common_cohort(..., "test")를 사용한다. FunctionChat 전체 행 F1에는 common_cohort(..., "all_rows")를 별도로 쓴다. compare_file의 공통 Population은 test 기준이며 bootstrap 결과는 별도 전달한다. ID 해시는 정렬 ID를 LF로 연결한 UTF-8 바이트(끝 LF 없음)의 SHA-256이다.
 F1 입력은 gold 있는 ok Observation만 만든다. KoSGD gold는 고정 칸 정답, KorFin pooled 관측은 question_id="aspect"로 바꾸되 요청당 여러 관측을 유지한다. f1_diff는 전달된 코호트·질문의 관측을 묶음 단위로 재표집하며 모델별 정답/관측 다중집합이 다르면 거부한다. coverage_diff는 같은 시험 대표 ID·묶음·마스크를 요구하고 빈 마스크만 제거한다. 실패는 수락 0, NO_THRESHOLD도 수락 0이다.
 bootstrap 반환은 {models, n_groups, reps, pairs}; F1은 question_id도 포함한다. pairs의 각 셀은 {models: [a,b], estimate: a-b, ci95: [lo,hi], n_defined}이며 모델·묶음은 정렬한다. 95% 백분위는 비용 백분위와 같은 (n-1)p 선형 보간이다. 정의되지 않는 빈 모집단의 estimate/CI는 null이며, 정의되지 않은 반복을 버려 조건부 CI로 만들지 않는다.
 
 (기존 구현 기록의 현행 규칙을 통합, 판 5 보정 3)
+
+#### 7-6c. family 지표 의미 등록표 (판 5 보정 5)
+
+score/set_metrics의 frozen MetricSpec과 읽기 전용 METRICS가 의미를 소유한다.
+run 조립에서 family로 조회하고 계산에는 spec을 전달한다. 아래에 없는 값은 빈 tuple,
+None 또는 false다. 미등록 family도 빈 의미다.
+
+| family | F1 미정의 / 관측 제외 라벨 | pooled / aspect flag prefix | true 플래그 |
+|---|---|---|---|
+| kosgd | 없음 | 없음 | slot_specific, mix_service, kosgd_decompose |
+| fc_call_decision | 각각 fc:tool | 없음 | 없음 |
+| korfin_asc | 없음 | korfin:sentiment / aspect_not_in_text: | 없음 |
+| klue_mrc_answerable | 없음 | 없음 | mix_stratum |
+| kmhas, kote_escalation 및 미등록 | 없음 | 없음 | 없음 |
+
+kosgd2와 합성 별칭은 family 의미를 승계한다. 단계 목록은 contract/stages의 set ID 규칙을
+유지하므로 FC 별칭에 extra/all_rows/extra F1은 없다. bootstrap seed 문자열은
+f"{seed}:boot:{set_name}" 그대로이며 compare ID 해시도 실제 셋의 ID를 쓴다.
+빈 test_items의 service/stratum은 None이다. SLOT_LABELS는 질문 라벨 의미로 유지한다.
+길이 경계 (4096,8192,16384)는 types/length_buckets 한 곳에 두되 run wrapper는 None을
+거부하고 score wrapper는 unmeasured로 분류한다. 기존 여섯 셋의 점수·비교 바이트는 보존한다.
 
 ### 7-7. 통계 설정
 - 모델 간 차이: 묶음 단위 paired bootstrap, 2,000 회, `random.Random(f"{seed}:boot:{set}")`, 임계값은 고정(다시 고르지 않는다). 처리율·F1 차이에만.
@@ -1037,6 +1124,20 @@ all 무출력·무쓰기, overlay 의존성 해시와 역사 변조 거부, D1a�
 보정 3은 기존 nodeid/skip/xfail을 보존한다. pyarrow 차단 하위 프로세스의 고정 여섯 파일은 test_policy/test_outcome/test_plan_calls/test_length/test_derive/test_layout이며 pytest·PyYAML은 허용한다. 보정 4는 이 고정 여섯 파일을 유지하고 file_support 분리로 가벼워진 tests/io/test_datasets.py·tests/io/test_t0_policy.py를 별도 목록으로 차단 검증한다. CLI import도 차단하며 기존 nodeid는 유지한다. 공개 실행기의 sink 예외·복구·fsync 순서, 6셋 Item/systemone/B1 바이트, 현재/역사 단계와 history/report/score/archive/compare의 판정·분모를 합성 기준값과 비교한다. (판 5 보정 3)
 
 구현 종료는 오프라인 구현 검토만 뜻한다. 재채점·실데이터 감사·B 중재·W1 파일럿·최종 primary 확정·실험 동결 완료는 별도 운영 수용이며, 이전 판의 C1~C7 번호와 이번 수용 번호는 판별로 구분한다. (판 5 보정 2·보정 3)
+
+### 9b. 2단계 수용 도구 (판 5 보정 5)
+
+C1은 audits/stage2_20261021/shape_check.py로 200줄/50줄·모듈 계약 docstring·AST 의존·
+셋 이름 의미 조건·짝 시험을 검사하고 수집 manifest로 기존 nodeid 삭제·새 skip/xfail을 거부한다.
+C2 compare_runs.py는 dev 원본 SHA/크기·주 threshold/봉인/risk 연결을 먼저 검증한다.
+최상위 run_id, 검증된 risk.threshold_sha256, 파생 출처의 run 경로 성분과 종속 dev_input
+sha256/nbytes만 정규화한다. 수치·분모·상태·seed는 제외하지 않는다. compare 7개는 바이트 비교다.
+보고서의 보조 절·감사 줄 및 명시 출처 줄(code/시각/replay) 이외 기존 지표는 같아야 한다.
+C3 oracle.py는 jeveval의 selective/power를 import하지 않고 cutoff·정답/오류 쌍·이항 PMF를
+직접 열거한다. 정수·null은 정확히, 실수는 1e-12로 비교한다. 경계 fixture와 비교 도구 자체
+시험은 tests/audits에 둔다. 실 run 대조는 운영자가 명시 경로를 지정해 별도 실행한다.
+등록 4조합·봉인 중단/손상, 보조 파일 격리, family 별칭, 감사 적격 경계는 합성 시험으로 확인한다.
+사용법·정규화 경로 전체 목록·독립성 범위는 audits/stage2_20261021/README.md를 따른다.
 
 ## 10. P0 에서 확인해 이 문서를 고칠 것
 

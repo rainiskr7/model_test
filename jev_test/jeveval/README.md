@@ -1,4 +1,4 @@
-# jeveval — P1 계약 판 5 보정 3 기능 지도
+# jeveval — P1 계약 판 5 보정 5 기능 지도
 
 P1_CONTRACT.md 보정 12와 ⑥b-2 R1–R8 기준으로 compare·archive·참조 구현 호출 층까지 구현했다.
 시험은 합성 fixture·tmp_path·가짜 참조 모듈·127.0.0.1 서버를 사용한다.
@@ -105,10 +105,10 @@ P1_CONTRACT.md 보정 12와 ⑥b-2 R1–R8 기준으로 compare·archive·참조
 - `score/observations.py`: 성공 질문의 F1 관측·KoSGD 고정 칸·KorFin pooled 관측.
 - `run/cli.py`: run(--offline)·replay·threshold·score·certify·compare·archive 인자와 원문 없는 오류 출력.
 - `run/cmd_run.py`: 설정 복원·check-config·인증 헤더·파생/전송 분기·gate 뒤 실행 조립.
-- `run/cmd_replay.py`: 출처·대상 선검사 후 replay.json 기록과 attempts 바이트 복사를 조립한다.
+- `run/cmd_replay.py`: 출처·대상 선검사, 등록 test gate의 봉인, replay.json 기록과 attempts 바이트 복사를 조립한다.
 - `run/replay_check.py`: fingerprint 허용 차이·attempts 파일 완결성·reason 형식의 순수 검사.
 - `run/cmd_threshold.py`: 봉인 전 dev 임계값 재계산·기록.
-- `run/cmd_score.py`: 봉인 확인·risk/scores/summary 조립과 순서 있는 쓰기.
+- `run/cmd_score.py`: 봉인 확인·risk/scores/selective/summary 조립·전부 직렬화 선검사 뒤 순서 있는 쓰기.
 - `run/cmd_certify.py`: 봉인 (a)(b)(c) 재계산·시간대·mtime 경고.
 - `run/derived_resume.py`: 파생 단계 재개 가능 판정(기존 final 접두 일치·attempts 없음·출처 일치) — 상태기계 모듈군.
 - `run/cmd_compare.py`: C4 검사·전체 시험 처리율·공통 성공 F1·T0 상태 출력 조립.
@@ -121,8 +121,28 @@ P1_CONTRACT.md 보정 12와 ⑥b-2 R1–R8 기준으로 compare·archive·참조
 - `reference/README.md`: API의 file:line 근거·temperature seam·P0 경계.
 - `README.md`, `NOTES.md`: 기능 지도·명령·세부 규칙과 이전 결정.
 
+## 보정 5 기능 지도
+
+각 새 모듈의 짝 시험은 `tests/<층>/test_<모듈>.py`다. 명령은 입력 복원·순수 계산·쓰기만 조립한다.
+
+- `types/length_buckets.py`: 공통 길이 경계. `types/report.py`: ReportSelective·ReportScoreVariants.
+- `score/set_metrics.py`: frozen MetricSpec·MappingProxyType 등록표; run에서만 조회해 population·observations·bootstrap·risk_mix에 전달.
+- `score/selective.py`: 동점 묶음 RC·격자·부분 AURC·AUROC. `score/power.py`: 관측 n에 조건부인 가정상 통과 확률.
+- `score/selective_artifact.py`: selective/1 조립·identity/입력 해시/수치 계약 검증. `io/auxiliary.py`: missing/valid/invalid 독립 읽기.
+- `contract/analysis_declarations.py`: 문자열/복수 선언 정규화. `io/analysis.py`: 첫 fingerprint에 묶인 선언 읽기와 종류별 정책 선택.
+- `io/variant_policy.py`: 닫힌 score_variants_v1 정책 검증. `configs/sets/kosgd2.yaml`: question_risk와 score_variants를 함께 선언.
+- `score/isotonic.py`: PAV 적합·계단 적용. `score/variant_scores.py`: 성공 단위 후보 점수 투영.
+- `score/variant_selection.py`: dev의 τ별 후보 선택. `score/variant_risk.py`: 고정 정책의 test CP 셀.
+- `run/variant_calculation.py`: 단위 복원·적합/선택/적용 조립. `run/variant_registration.py`: 등록 사슬 순수 검증.
+- `io/analysis_artifacts.py`: 선언·threshold·봉인·결과 읽기/덮어쓰기 거부. `run/analysis_gate.py`: 선언 전부 선검사·봉인 쓰기 계획.
+- `run/cmd_score_variants.py`: threshold/risk/--history 명령. `run/cli.py`: score-variants와 반복 --audit-evidence 인자.
+- `run/auxiliary_report.py`: 검증된 보조 결과의 보고 자료형 조립. `io/report_analysis.py`: 선택적 예측·확신 변형의 독립 절 렌더.
+- `score/audit_selection.py`: 사전/사후 감사 적격 판정. `io/audit_evidence.py`: 기본/명시 파일 하나만 읽고 출처를 표시.
+- `io/history.py`: aux 오류를 주 errors와 분리. `io/archive.py`: selective.json 선택 수집. `ops/status.py`: kosgd2·별도 selective 열.
+- `audits/stage2_20261021/`: C1 형태/nodeid 검사, C2 명시 필드 경로 비교, C3 독립 oracle과 자체 시험(`tests/audits/`). 운영법은 해당 README.
+
 의존 방향은 `run → io/data → score/types`, `io → contract → types`, `score → types`다. 전체 예정 방향은 `run → client/io → score/data/contract → types`다.
-data/items는 io·contract·run을 import하지 않는다. expand·items·labels는 파일·난수를 사용하지 않는다. types는 jeveval의 다른 패키지를 import하지 않는다.
+data/items는 io·run을 import하지 않는다. 기존 data/items/kosgd_requests→contract.render, data/split→contract.stages, data/t0_fixture→t0.request는 명시된 기존 경계이며 새 계산은 이를 확장하지 않는다. expand·items·labels는 파일·난수를 사용하지 않는다. types는 jeveval의 다른 패키지를 import하지 않는다.
 contract·score는 서로 import하지 않으며 파일·네트워크·시계에 접근하지 않는다. score/bootstrap의 난수는 지역 random.Random(f"{seed}:boot:{set_name}")만 쓴다. data도 파일·네트워크·시계에 접근하지 않고, 난수는 계약의 문자열 seed로 만든 random.Random만 쓴다.
 run/encoders의 의존은 types·io.tokenizers·io.reference·io.run_files·run.length·표준 라이브러리로 제한한다(transformers 는 io/tokenizers 안에서만 import; Clef 규칙은 체크포인트 사본의 참조 모듈을 io.reference.source_module 로 읽는다). 로드는 HF_HUB_OFFLINE=1·TRANSFORMERS_OFFLINE=1, local_files_only=True·trust_remote_code=False다.
 
@@ -381,3 +401,37 @@ python -m jeveval.run.cli report --run-id RUN --models MODEL --out results/_repo
 감사·파일럿 도구 지도와 실행 명령은 `audits/README.md`, 각 도구 폴더 README에 있다.
 `tests/run/registration_support.py`는 합성 등록 run, `tests/audits/pilot_support.py`는 라벨 없는
 3,000대화/200 요청과 원응답 fixture를 만든다. 각 신규 모듈의 짝 시험은 해당 tests 디렉터리에 있다.
+
+## 보정 5 보조 분석 운영
+
+주 score/certify와 보조 분석은 별도다. 기존 여섯 셋의 새 replay run은 주 재채점 뒤
+`score-variants --history`로 항상 exploratory 분석한다. 파생 actions_only separate는 역사
+확신 분석에서 제외하고 보고에 미지원으로 표시한다. selective.json 없는 옛 run도 risk의 n으로
+조건부 통과 확률을 표시하며 보조 파일 손상은 주 역사 상태·인증·비교를 바꾸지 않는다.
+
+새 등록 overlay는 첫 fingerprint 전에 선언을 고정한다. dev 완료 뒤 아래 순서로 실행한다.
+`RUN_DIR`은 해당 모델/run/A/set/variant 폴더다.
+
+```sh
+python -m jeveval.run.cli threshold --run-dir "$RUN_DIR"
+python -m jeveval.run.cli question-threshold --run-dir "$RUN_DIR"
+python -m jeveval.run.cli score-variants threshold --run-dir "$RUN_DIR"
+# 이후 test run 또는 test replay → offline. 선언하지 않은 threshold 명령은 생략한다.
+python -m jeveval.run.cli score --run-dir "$RUN_DIR"
+python -m jeveval.run.cli certify --run-dir "$RUN_DIR"
+python -m jeveval.run.cli score-variants risk --run-dir "$RUN_DIR"
+# 기존/미등록 역사 run의 별도 분석:
+python -m jeveval.run.cli score-variants --history --run-dir "$HISTORY_RUN_DIR"
+```
+
+첫 test는 선언된 봉인 전부를 선검사한 뒤 question_seal → variant_seal → test/seal 순서로
+쓴다. 등록 test replay도 복사 전 이 gate를 호출하므로 threshold들을 먼저 완료해야 한다.
+빈 attempts/replay 표식도 시작이며 봉인 사이 중단은 손상 정지다. 선언 누락을 사후 등록하지 않는다.
+정책을 test 전에 고정한 단일 셀 CP 주장만 허용하며 보정값·곱은 정답 확률이 아니다.
+
+감사는 기본 out/<set>.json을 쓰며 새 판은 report에 반복 옵션으로 명시한다.
+예: `--audit-evidence kosgd=audits/audit_v4/out/kosgd.20261021.json`
+및 `--audit-evidence kosgd2=audits/audit_v4/out/kosgd2.20261021.json`.
+파일을 자동 최신 선택하지 않고 적격 검사 실패는 연결 미확인으로 표시한다. 기존 보고서를
+덮어쓰지 않는 새 출력 경로를 사용한다. 코드/overlay 해시가 바뀐 kosgd2는 새 사전 감사,
+새 replay kosgd는 정확한 세 run을 포함한 새 사후 감사가 필요하다.

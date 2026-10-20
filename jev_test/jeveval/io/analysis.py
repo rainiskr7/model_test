@@ -1,6 +1,8 @@
 """무엇: 질문 분석 등록 파일 읽기 · 입력: root · 출력: schema 객체/해시 · 계약 §7-4b."""
 
 from jeveval.io.config import read_yaml
+from jeveval.contract.analysis_declarations import normalize_declarations
+from jeveval.io import variant_policy
 from jeveval.io.hashes import sha256_file
 from jeveval.io.paths import inside
 
@@ -27,3 +29,34 @@ def policy(root, name=MANIFEST):
     if any(value.get(k) != v for k, v in expected.items()) or value.get("claims") != claims:
         raise ValueError("analysis policy differs from implemented rules")
     return value, sha256_file(path)
+
+
+def declared_paths(root, fp):
+    """동결 overlay만 읽으며 미선언 기본 셋은 현재 overlay를 찾지 않는다."""
+    name = f"configs/sets/{fp.get('set')}.yaml"
+    if name not in fp.get("files", {}):
+        return {}
+    path = inside(root, name)
+    if sha256_file(path) != fp["files"][name]:
+        raise ValueError("registered overlay changed")
+    return normalize_declarations(read_yaml(path).get("analysis"))
+
+
+def load_policy(root, kind, name):
+    """선언 종류별 schema와 닫힌 정책을 확인한다."""
+    if kind == "question_risk":
+        return policy(root, name)
+    if kind == "score_variants":
+        return variant_policy.policy(root, name)
+    raise ValueError("unknown analysis kind")
+
+
+def declaration(root, fp, kind):
+    """정책 경로와 바이트가 첫 fingerprint에 묶였는지 확인한다."""
+    name = declared_paths(root, fp).get(kind)
+    if name is None:
+        return None, None, None
+    value, digest = load_policy(root, kind, name)
+    if digest != fp["files"].get(name):
+        raise ValueError("manifest not frozen")
+    return name, digest, value

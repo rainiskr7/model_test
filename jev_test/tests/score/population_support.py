@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 
 from jeveval.score.tasks import outcome
+from jeveval.score.set_metrics import metric_spec
 from jeveval.types import BoundQuestion, CallRecord, FinalRecord, Item, ParsedAnswer
 
 
@@ -34,4 +35,4 @@ def record(questions, answers, *, set_name="synthetic", gid="g", iid="i", stage=
 def population_args(records, set_name="synthetic", certified=True, unit="group_representative"):
     return dict(items={f.logical_id: i for i, f, _ in records},
                 finals=[f for _, f, _ in records], outcomes=[r for _, _, r in records],
-                set_name=set_name, certified=certified, unit=unit)
+                set_name=set_name, certified=certified, unit=unit, spec=metric_spec(set_name))

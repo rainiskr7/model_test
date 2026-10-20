@@ -1,4 +1,4 @@
-"""명령 모듈의 검증 및 쓰기 경계."""
+"""무엇: score 명령 경계 · 입력: 합성 단계 · 출력: 집계·쓰기 순서 · 계약 §7."""
 
 import pytest
 
@@ -85,4 +85,4 @@ def test_all_outputs_validated_before_ordered_writes(h, monkeypatch):
     monkeypatch.setattr(run_files, "json_bytes", checked_bytes)
     monkeypatch.setattr(run_files, "write_json", tracked_write)
     assert cmd_score.run(root=h.root, run_dir=h.directory)["ok"]
-    assert written == ["risk.json", "scores.json", "summary.json"]
+    assert written == ["risk.json", "scores.json", "selective.json", "summary.json"]

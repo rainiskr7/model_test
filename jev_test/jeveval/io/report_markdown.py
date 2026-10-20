@@ -1,6 +1,9 @@
 """무엇: 공개 Markdown 렌더 · 입력: Report dataclass · 출력: 문자열 · 계약 §7-6; 파일 I/O 없음."""
 
 
+from jeveval.io import report_analysis
+
+
 def _number(value):
     if value is None:
         return "—"
@@ -39,6 +42,10 @@ def _variant(v):
     if v.supplementary:
         title = {"registered": "등록", "exploratory": "탐색적", "registration_damaged": "등록 손상"}[v.supplementary_status]
         lines += ["", f"질문 단위({title}; 주 지표 인증과 별개)", *v.supplementary]
+    if v.selective is not None:
+        lines += report_analysis.selective(v.selective)
+    if v.score_variants is not None:
+        lines += report_analysis.score_variants(v.score_variants)
     return lines + [""]
 
 

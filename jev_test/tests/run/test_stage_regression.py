@@ -16,6 +16,9 @@ def test_history_report_score_archive_compare_keep_baseline(tmp_path, monkeypatc
     """정상 완료 run의 단계·판정·분모를 변경 전 코드에서 만든 고정값과 대조한다."""
     expected = json.loads(Path(__file__).with_name("stage_d41e8b9.json").read_text())
     h, actual = observed(tmp_path, monkeypatch, name)
+    auxiliary = f"results/synthetic/r1/A/{name}/default/selective.json"
+    assert auxiliary in actual["archive_members"]
+    actual["archive_members"].remove(auxiliary)
     assert actual == expected[name]
     before = deepcopy(history_check.check(history.read(tmp_path, h.directory)))
     # 역사 집계는 현재 rules의 누락/손상을 읽지 않는다. 새로운 설정 의존성도 금지한다.

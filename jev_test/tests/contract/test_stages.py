@@ -28,12 +28,7 @@ def test_stage_literal_only_in_owner_or_explicit_semantic_registry_sites():
         ("io/sources/__init__.py", "<module>"): 1,
         ("io/sources/functionchat.py", "read_rows"): 1,
         ("run/stage_inputs.py", "<module>"): 1,
-        ("score/population.py", "_specific"): 1,
-        ("score/population.py", "_set_rows"): 1,
-        ("score/population.py", "population"): 1,
-        ("score/observations.py", "observations"): 1,
-        ("score/observations.py", "question_ids"): 1,
-        ("score/bootstrap.py", "f1_diff"): 1,
+        ("score/set_metrics.py", "<module>"): 1,
     }
     found = {}
     for path in (root / "jeveval").rglob("*.py"):

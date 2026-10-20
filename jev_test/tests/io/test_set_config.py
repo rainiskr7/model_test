@@ -79,6 +79,7 @@ def test_explicit_public_config_paths_keep_external_path_support(tmp_path):
 
 def test_registered_overlay_manifest_is_evidence_without_changing_base():
     selected = set_config.entry(REPO, "kosgd2")
-    assert selected.analysis == "configs/analysis/question_risk_v2.yaml"
-    assert selected.analysis in set_config.evidence_paths(selected)
+    assert selected.analysis == {"question_risk": "configs/analysis/question_risk_v2.yaml",
+                                 "score_variants": "configs/analysis/score_variants_v1.yaml"}
+    assert set(selected.analysis.values()) <= set(set_config.evidence_paths(selected))
     assert set_config.entry(REPO, "kosgd").analysis is None

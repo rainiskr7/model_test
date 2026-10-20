@@ -9,6 +9,7 @@ import pytest
 
 from jeveval.run.length import length_bucket as run_bucket
 from jeveval.score.risk import risk_cell
+from jeveval.score.set_metrics import metric_spec
 from jeveval.score.risk_mix import length_bucket
 from jeveval.score.tasks import outcome
 from jeveval.score.threshold import select
@@ -36,7 +37,8 @@ def cell(pairs, dev=None):
     if dev is None:
         dev = [replace(sample()[1], stage="dev")]
     return risk_cell(tau="0.02", threshold=select(dev, "0.02"), dev=dev,
-                     test=[row for _, row in pairs], test_items={row.logical_id: item for item, row in pairs})
+                     test=[row for _, row in pairs], test_items={row.logical_id: item for item, row in pairs},
+                     spec=metric_spec(pairs[0][0].set if pairs else None))
 
 
 def test_missing_mask_fixture_through_tasks_threshold_and_risk():

@@ -74,6 +74,20 @@ class ReportComparison:
 
 
 @dataclass(frozen=True)
+class ReportSelective:
+    status: str
+    metrics: dict | None
+    power: dict
+
+
+@dataclass(frozen=True)
+class ReportScoreVariants:
+    status: str
+    cells: dict
+    note: str = ""
+
+
+@dataclass(frozen=True)
 class ReportVariant:
     model: str
     set_name: str
@@ -91,6 +105,8 @@ class ReportVariant:
     decompositions: list[KosgdDecomposition] = field(default_factory=list)
     supplementary: list[str] = field(default_factory=list)
     supplementary_status: str = "exploratory"
+    selective: ReportSelective | None = None
+    score_variants: ReportScoreVariants | None = None
 
 
 @dataclass(frozen=True)

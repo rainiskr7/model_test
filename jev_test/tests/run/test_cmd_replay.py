@@ -154,3 +154,29 @@ def test_derived_replay_rejected_without_changes(tmp_path, monkeypatch):
     with pytest.raises(ValueError, match="derived variants"):
         cmd_replay.run(**args)
     assert output_files(h.root) == before
+
+
+def test_registered_test_replay_seals_before_copy(tmp_path, monkeypatch):
+    from jeveval.run import cli, cmd_run
+    from tests.run.analysis_support import prepared, thresholds
+    h = prepared(tmp_path, monkeypatch); thresholds(h); h.run('test')
+    target = run_dir(h.root / 'results', 'synthetic', 'r2', h.set, h.variant)
+    args = dict(h.args, run_id='r2', source_run_dir=str(h.directory))
+    assert cmd_replay.run(**args, stage='dev')['ok']
+    cmd_run.run(**dict(h.args, run_id='r2'), stage='dev', offline=True, measurer=h)
+    assert cli.main(['threshold', '--run-dir', str(target)]) == 0
+    before = output_files(target)
+    with pytest.raises(ValueError): cmd_replay.run(**args, stage='test')
+    assert output_files(target) == before
+    for name in ('question-threshold', 'score-variants'):
+        mode = ['threshold'] if name == 'score-variants' else []
+        assert cli.main([name, *mode, '--run-dir', str(target)]) == 0
+    writes, original = [], run_files.write_json
+    def track(path, value):
+        writes.append(path.name); return original(path, value)
+    monkeypatch.setattr(run_files, 'write_json', track)
+    assert cmd_replay.run(**args, stage='test')['ok']
+    assert writes == ['question_seal.json', 'variant_seal.json', 'seal.json', 'replay.json']
+    assert not (target / 'test/final.jsonl').exists()
+    cmd_run.run(**dict(h.args, run_id='r2'), stage='test', offline=True, measurer=h)
+    assert (target / 'test/final.jsonl').read_bytes() == (h.directory / 'test/final.jsonl').read_bytes()

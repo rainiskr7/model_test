@@ -6,7 +6,7 @@ from hashlib import sha256
 from jeveval.contract.stages import supports_extra
 from jeveval.io import records, run_files
 from jeveval.io.paths import identifier, inside
-from jeveval.run import context, replay_check, stage_inputs
+from jeveval.run import context, replay_check, stage_inputs, gate
 from jeveval.run.fingerprint import same_fingerprint
 from jeveval.run.layout import run_dir as result_dir
 from jeveval.run.plan_calls import plan_calls
@@ -83,6 +83,9 @@ def run(*, root, model, task, stage, run_id, source_run_dir, results="results", 
     metadata = _metadata(ctx, source, fp, fp_bytes, payload, stamp, reason)
     metadata = _target(ctx, directory, stage, current, metadata)
     run_files.json_bytes(metadata)
+    if stage == "test" and any(p.startswith("configs/analysis/") for p in current["files"]):
+        gate.prepare_stage(run_dir=directory, stage=stage, fingerprint=current,
+                           plan=ctx.plan, now=stamp, root=ctx.root)
     run_files.make_directory(destination.parent)
     run_files.write_json(inside(ctx.root, destination.parent / "replay.json"), metadata)
     run_files.copy_bytes(attempt_path, destination)

@@ -1,4 +1,4 @@
-"""무엇: status/dry-run 무전송·무쓰기. 입력: 합성 split/기록. 출력: 트리 바이트와 mtime 동일."""
+"""무엇: status/dry-run 무전송·무쓰기. 입력: 합성 split/기록. 출력: 트리 바이트와 mtime 동일 · 계약 §5-5."""
 
 from dataclasses import replace
 from pathlib import Path
@@ -76,15 +76,16 @@ def test_invalid_scoring_rejected_before_dry_run_commands(sandbox, scoring, scri
 
 
 def test_status_observes_empty_records_without_writes(sandbox):
-    names = ("klue_mrc_answerable", "korfin_asc", "fc_call_decision", "kmhas", "kote_escalation", "kosgd")
+    names = ("klue_mrc_answerable", "korfin_asc", "fc_call_decision", "kmhas", "kote_escalation", "kosgd", "kosgd2")
     for name in names:
         plan = SplitPlan(name, 1, {}, {}, {"g": ["i"]}, {"g": f"{name}:g:i"}, ["g"], [], [], [], {})
         write_split_plan(plan, sandbox.root / f"configs/splits/{name}.json")
     before = snapshot(sandbox.root)
     result = sandbox.run("status", ["model", "r1"], JEV_PY=sys.executable)
     assert result.returncode == 0, result.stdout + result.stderr
-    assert len(result.stdout.splitlines()) == 16  # 7 variants × 2 stages + FC extra + header
+    assert len(result.stdout.splitlines()) == 20  # 9 variants × 2 stages + FC extra + header
     assert "parsed_attempt_lines" in result.stdout and "response_raw" not in result.stdout
+    assert "selective" in result.stdout and "kosgd2" in result.stdout
     assert snapshot(sandbox.root) == before
     assert not sandbox.curls.exists() and not sandbox.calls.exists()
 
@@ -94,7 +95,7 @@ def test_status_counts_retries_and_final_without_exposing_response(sandbox):
     from jeveval.types import FinalRecord
     from tests.types.samples import attempt, call
 
-    names = ("klue_mrc_answerable", "korfin_asc", "fc_call_decision", "kmhas", "kote_escalation", "kosgd")
+    names = ("klue_mrc_answerable", "korfin_asc", "fc_call_decision", "kmhas", "kote_escalation", "kosgd", "kosgd2")
     for name in names:
         plan = SplitPlan(name, 1, {}, {}, {"g": ["i"]}, {"g": f"{name}:g:i"}, ["g"], [], [], [], {})
         write_split_plan(plan, sandbox.root / f"configs/splits/{name}.json")

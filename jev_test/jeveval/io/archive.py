@@ -72,6 +72,8 @@ def entries_for(root, contexts):
             entries["_external/" + name] = source
         paths = [inside(root, name) for name in ctx.fingerprint["files"]]
         paths.append(ctx.directory / "fingerprint.json")
+        paths.extend(ctx.directory / name for name in ("selective.json",)
+                     if (ctx.directory / name).is_file())
         for stage in ("dev", "test", "extra"):
             folder = ctx.directory / stage
             if (folder / "replay.json").exists():

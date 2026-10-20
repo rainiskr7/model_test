@@ -10,7 +10,7 @@ from jeveval.io.hashes import sha256_file
 from jeveval.io.paths import inside
 
 ARTIFACTS = ("fingerprint.json", "question_threshold.json", "test/question_seal.json", "test/seal.json")
-START = ("seal.json", "question_seal.json", "attempts.jsonl", "final.jsonl", "derived.json", "replay.json")
+START = ("seal.json", "question_seal.json", "variant_seal.json", "attempts.jsonl", "final.jsonl", "derived.json", "replay.json")
 
 
 def started(directory):
@@ -20,19 +20,7 @@ def started(directory):
 
 def declaration(root, fp):
     """저장 fingerprint가 동결한 자기 overlay와 manifest만 읽는다."""
-    name = f"configs/sets/{fp.get('set')}.yaml"
-    if name not in fp.get("files", {}):
-        return None, None, None
-    path = inside(root, name)
-    if sha256_file(path) != fp["files"][name]:
-        raise ValueError("registered overlay changed")
-    manifest = read_yaml(path).get("analysis")
-    if manifest is None:
-        return None, None, None
-    value, digest = analysis.policy(root, manifest)
-    if digest != fp["files"].get(manifest):
-        raise ValueError("manifest not frozen")
-    return manifest, digest, value
+    return analysis.declaration(root, fp, "question_risk")
 
 
 def read(root, directory):

@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from jeveval.io import environment, hashes
+from jeveval.io import environment, hashes, analysis
 from jeveval.io.config import load_taskspec
 from jeveval.io.models import load_model_config
 from jeveval.io.set_config import entry, evidence_paths
@@ -30,6 +30,8 @@ def build_fingerprint(*, root, run_id, model_cfg_path, task_path, set_name,
              dataset / "SHA256SUMS", *hashes.glob_files(root / "configs/tasks/lists", "*.json")]
     selected = entry(root, set_name)
     require_task(root, selected, task_path)
+    for kind, name in (selected.analysis or {}).items():
+        analysis.load_policy(root, kind, name)
     paths.extend(inside(root, name) for name in evidence_paths(selected))
     files = {p.relative_to(root).as_posix(): hashes.sha256_file(p) for p in sorted(set(paths))}
     rule, encoder = cfg.encoder["rule"], None
