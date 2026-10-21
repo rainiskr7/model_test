@@ -7,6 +7,7 @@ import re
 
 from jeveval.types import ScoreTable, ThresholdFile
 from jeveval.run.history_statistics import validate
+from jeveval.score.derived_provenance import check_derived_origin
 from jeveval.types.history import HistoryCheck, StageCheck
 
 IDENTITY = ("model", "set", "variant", "run_id")
@@ -74,15 +75,7 @@ def _origins(history, fp):
     """파생 출처 연결을 검사하되 자유 경로·reason은 공개 결과로 넘기지 않는다."""
     for stage in history.stages:
         marker = history.artifacts.get(f"{stage.name}/derived.json")
-        origin = None if marker is None else marker["derived_from"]
-        if any(f.derived_from != origin for f in stage.finals):
-            raise ValueError("derived provenance differs")
-        if origin is not None:
-            path = PurePosixPath(origin)
-            if path.is_absolute() or ".." in path.parts or path.as_posix() != origin:
-                raise ValueError("derived source path")
-            if path.parts[-5:] != (fp["model"], fp["run_id"], "A", fp["set"], "full"):
-                raise ValueError("derived source identity")
+        check_derived_origin(stage.finals, marker, fp)
         replay = history.artifacts.get(f"{stage.name}/replay.json")
         if replay is not None:
             if replay.get("schema") != "replay/1" or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", replay["source_run_id"]):

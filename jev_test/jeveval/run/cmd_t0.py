@@ -38,44 +38,76 @@ def configure(commands):
                 stage.add_argument("--no-reference", action="store_true")
 
 
-def run(*, root, stage, model=None, run_id=None, fixture="configs/t0/fixture_v1.json",
-        results="results", reference_name=None, run_dir=None, checkpoint=None, device="cuda",
-        base_url=None, timeout=600, rounding=None, no_reference=False, sources=None,
-        boundary_builder=None, measurer=None, runtime=None, post=None,
-        tolerance_policy="configs/t0/tolerance_v1.yaml"):
+def run_inputs(*, root, model, run_id, fixture="configs/t0/fixture_v1.json", results="results",
+               reference_name=None, sources=None, boundary_builder=None, measurer=None,
+               tolerance_policy="configs/t0/tolerance_v1.yaml"):
+    """입력 동결만 조립하며 측정 seam은 이 단계에만 받는다."""
     root = Path(root)
     policy = read_t0_policy(inside(root, tolerance_policy))
-    if stage == "inputs":
-        cfg = load_model_config(inside(root, model))
-        if measurer is None and cfg.encoder["rule"] is not None:
-            # 모델 yaml 에 인코더 규칙이 있으면 본시험과 같은 인코더로 길이·경계 요청을 만든다 (주입 seam 은 시험용).
-            encoder = measurer_for(cfg)
-            measurer = t0_measure.measure_with(encoder)
-            boundary_builder = boundary_builder or t0_measure.boundary_builder_with(encoder)
-        directory = inside(root, f"{results}/_t0/{t0_inputs.identifier(cfg.id)}/{t0_inputs.identifier(run_id)}")
-        bundle = t0_inputs.freeze(directory / "inputs.jsonl", inside(root, fixture), cfg, root, run_id, policy=policy,
-            sources=sources, reference_name=reference_name, boundary_builder=boundary_builder, measurer=measurer)
-        t0_fingerprint.initialize(directory, bundle, root)
-        return dict(ok=True, cases=len(bundle.rows), inputs_sha256=bundle.sha256)
+    cfg = load_model_config(inside(root, model))
+    if measurer is None and cfg.encoder["rule"] is not None:
+        # 모델 yaml 에 인코더 규칙이 있으면 본시험과 같은 인코더로 길이·경계 요청을 만든다 (주입 seam 은 시험용).
+        encoder = measurer_for(cfg)
+        measurer = t0_measure.measure_with(encoder)
+        boundary_builder = boundary_builder or t0_measure.boundary_builder_with(encoder)
+    directory = inside(root, f"{results}/_t0/{t0_inputs.identifier(cfg.id)}/{t0_inputs.identifier(run_id)}")
+    bundle = t0_inputs.freeze(directory / "inputs.jsonl", inside(root, fixture), cfg, root, run_id, policy=policy,
+        sources=sources, reference_name=reference_name, boundary_builder=boundary_builder, measurer=measurer)
+    t0_fingerprint.initialize(directory, bundle, root)
+    return dict(ok=True, cases=len(bundle.rows), inputs_sha256=bundle.sha256)
+
+
+def load_verified_t0_bundle(root, run_dir, tolerance_policy):
+    """기존 순서대로 정책 읽기와 저장 입력 지문 검사를 수행한다."""
+    policy = read_t0_policy(inside(root, tolerance_policy))
     directory = inside(root, run_dir)
     bundle = t0_inputs.load(directory / "inputs.jsonl")
     t0_chain.fingerprint(directory, bundle)
-    if stage == "reference":
-        if checkpoint is None:
-            raise ValueError("local checkpoint required")
-        limit = bundle.metadata["config"]["limit"]["tokens"]
-        if type(limit) is not int or limit <= 0:
-            raise ValueError("limit.tokens is required for reference execution")
-        # 실제 가중치는 GPU 장비의 저장소 밖 폴더에 있다 — 로컬 폴더이기만 하면 된다 (H·I, 다운로드 금지).
-        path = Path(checkpoint)
-        checkpoint = local_checkpoint(path if path.is_absolute() else root / path)
-        runtime = runtime or t0_runner.load(bundle.metadata["model"], checkpoint, device=device, max_length=limit)
-        return t0_reference.execute(directory, bundle, runtime, checkpoint, device, policy)
-    if stage == "server":
-        options = {} if post is None else {"post": post}
-        return t0_server.execute(directory, bundle, base_url, timeout=timeout, **options)
-    if stage == "tolerance":
-        return t0_evaluate.tolerance(directory, bundle, rounding, policy)
-    if stage == "judge":
-        return t0_evaluate.evaluate(directory, bundle, rounding, no_reference, policy)
-    raise ValueError("unknown T0 stage")
+    return directory, bundle, policy
+
+
+def run_reference(*, root, run_dir, checkpoint=None, device="cuda", runtime=None,
+                  tolerance_policy="configs/t0/tolerance_v1.yaml"):
+    directory, bundle, policy = load_verified_t0_bundle(root, run_dir, tolerance_policy)
+    if checkpoint is None:
+        raise ValueError("local checkpoint required")
+    limit = bundle.metadata["config"]["limit"]["tokens"]
+    if type(limit) is not int or limit <= 0:
+        raise ValueError("limit.tokens is required for reference execution")
+    # 실제 가중치는 GPU 장비의 저장소 밖 폴더에 있다 — 로컬 폴더이기만 하면 된다 (H·I, 다운로드 금지).
+    path = Path(checkpoint)
+    checkpoint = local_checkpoint(path if path.is_absolute() else Path(root) / path)
+    runtime = runtime or t0_runner.load(bundle.metadata["model"], checkpoint, device=device, max_length=limit)
+    return t0_reference.execute(directory, bundle, runtime, checkpoint, device, policy)
+
+
+def run_server(*, root, run_dir, base_url, timeout=600, post=None,
+               tolerance_policy="configs/t0/tolerance_v1.yaml"):
+    directory, bundle, _ = load_verified_t0_bundle(root, run_dir, tolerance_policy)
+    options = {} if post is None else {"post": post}
+    return t0_server.execute(directory, bundle, base_url, timeout=timeout, **options)
+
+
+def run_tolerance(*, root, run_dir, rounding=None, tolerance_policy="configs/t0/tolerance_v1.yaml"):
+    directory, bundle, policy = load_verified_t0_bundle(root, run_dir, tolerance_policy)
+    return t0_evaluate.tolerance(directory, bundle, rounding, policy)
+
+
+def run_judge(*, root, run_dir, rounding=None, no_reference=False,
+              tolerance_policy="configs/t0/tolerance_v1.yaml"):
+    directory, bundle, policy = load_verified_t0_bundle(root, run_dir, tolerance_policy)
+    return t0_evaluate.evaluate(directory, bundle, rounding, no_reference, policy)
+
+
+def stage_handler(stage):
+    """CLI와 기존 Python 호출자가 같은 단계별 진입점을 선택한다."""
+    handlers = dict(inputs=run_inputs, reference=run_reference, server=run_server,
+                    tolerance=run_tolerance, judge=run_judge)
+    if stage not in handlers:
+        raise ValueError("unknown T0 stage")
+    return handlers[stage]
+
+
+def run(*, stage, **kwargs):
+    """기존 Python 호출 호환용 dispatch. 단계 외 인자는 TypeError로 거부한다."""
+    return stage_handler(stage)(**kwargs)

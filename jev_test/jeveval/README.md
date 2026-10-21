@@ -435,3 +435,23 @@ python -m jeveval.run.cli score-variants --history --run-dir "$HISTORY_RUN_DIR"
 파일을 자동 최신 선택하지 않고 적격 검사 실패는 연결 미확인으로 표시한다. 기존 보고서를
 덮어쓰지 않는 새 출력 경로를 사용한다. 코드/overlay 해시가 바뀐 kosgd2는 새 사전 감사,
 새 replay kosgd는 정확한 세 run을 포함한 새 사후 감사가 필요하다.
+
+## 서버 없는 작업의 기능 지도 (계약 §9c)
+
+| 기능 | 진입점·소유 |
+|---|---|
+| kosgd2 운영 순서 | `../ops/lane.sh` → `kosgd2_steps.sh`; `registration_status.py`가 기존 등록 검사기를 호출 |
+| 파생 감사 범위 | `io/audit_evidence.py`는 파일을 읽고 `score/audit_selection.py`는 연결 종류·규칙 범위를 판정 |
+| 파생 출처 공유 | `score/derived_provenance.py`가 출처·원천 호출·정체성만 검사; history/io/선택기가 공유 |
+| 등록 dev 검증 | `run/variant_registration.check_development`를 analysis_gate와 ops 상태기가 공유 |
+| T0 단계 | `run/cmd_t0.py`: `run_inputs`, `run_reference`, `run_server`, `run_tolerance`, `run_judge` |
+| 수용 도구 | [지도·중복·독립 T0 비교](../audits/serverless_20261021/README.md); 기존 compare_runs의 감사 전용 모드 |
+
+`run/cmd_run.py:read_resume_inputs`는 기존 직접·파생 resume 선검사를 공유한다.
+run의 tail 복구 정책은 유지하며 ops는 완료 단계를 건너뛰기 전에 엄격 모드로 호출한다.
+CLI는 모든 명령에서 handler.run을 호출하고 T0 단계 분배는 cmd_t0.stage_handler 한 곳에 둔다.
+
+파생 actions_only의 원천 full 저장 호출 연결 PASS는 자체 전송 PASS가 아니다. 원천 SHA를
+보존한 결과의 출처와 가상 직접 요청 감사 범위를 구분한다. 해당 판의 per_variant 규칙은 바꾸지 않는다.
+기존 report는 역사 경로를 사용하므로 이 문구 변경에 replay가 필요하지 않다. 현재 코드로
+기존 run을 resume하거나 compare를 다시 계산하려면 현재 fingerprint 일치가 필요하다.

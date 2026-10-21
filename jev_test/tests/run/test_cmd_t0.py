@@ -1,4 +1,4 @@
-"""T0 명령 분기와 입력 실행 경로. limit 경계는 tests/t0_io/test_reference_limit.py에서 유지."""
+"""무엇: T0 단계 진입 시험 · 입력: 합성 bundle/seam · 출력: 단계 인자 격리 · 계약 §8-7."""
 
 import pytest
 
@@ -41,3 +41,14 @@ def test_reference_requires_checkpoint_without_writes(setup):
     with pytest.raises(ValueError, match="^local checkpoint required$"):
         stage(ctx, "reference", runtime=ctx.runtime)
     assert output_files(ctx.directory) == before
+
+
+@pytest.mark.parametrize("stage_name,foreign", [
+    ("inputs", "runtime"), ("reference", "post"), ("server", "sources"),
+    ("tolerance", "runtime"), ("judge", "measurer")])
+def test_stage_entrypoints_reject_foreign_seams(stage_name, foreign):
+    import inspect
+    handler = cmd_t0.stage_handler(stage_name)
+    assert foreign not in inspect.signature(handler).parameters
+    with pytest.raises(TypeError):
+        handler(**{foreign: object()})

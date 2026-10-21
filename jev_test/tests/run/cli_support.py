@@ -25,7 +25,7 @@ REPO = Path(__file__).resolve().parents[2]
 
 
 class Harness:
-    def __init__(self, root, set_name="klue_mrc_answerable", variant="default", kind="systemone"):
+    def __init__(self, root, set_name="klue_mrc_answerable", variant="default", kind="systemone", question_scoring="separate"):
         self.family = entry(REPO, set_name).family
         self.root, self.set, self.variant, self.sent = root, set_name, variant, []
         root.mkdir(parents=True, exist_ok=True)
@@ -36,7 +36,7 @@ class Harness:
         self.markers = json.loads((REPO / "tests/fixtures/canary/input.json").read_text())["markers"]
         rules = self._write_source(root, set_name)
         self._write_split(root, set_name, rules)
-        self._write_model(root, kind)
+        self._write_model(root, kind, question_scoring)
 
     def _write_source(self, root, set_name):
         marker = self.markers
@@ -97,7 +97,7 @@ class Harness:
                 entries.append(data)
         file_support.put_yaml(root / "configs/datasets.yaml", {"sets": entries})
 
-    def _write_model(self, root, kind):
+    def _write_model(self, root, kind, question_scoring):
         tokenizer = root / "tokenizer"
         tokenizer.mkdir()
         (tokenizer / "tokens.json").write_text("{}")
@@ -106,7 +106,7 @@ class Harness:
         encoder.write_bytes((REPO / "jeveval/run/encoders/hf_chat_template.py").read_bytes())
         cfg = yaml.safe_load((REPO / "configs/models/clef.yaml").read_text())
         cfg.update(id="synthetic", kind=kind, served_name="fake", base_url="http://127.0.0.1:1",
-                   auth_env="JEV_TEST_KEY", question_scoring="separate",
+                   auth_env="JEV_TEST_KEY", question_scoring=question_scoring,
                    limit={"tokens": 1000, "overflow": "reject"},
                    encoder={"rule": "hf_chat_template_no_think"},
                    tokenizer={"path": "tokenizer", "files_sha256": {

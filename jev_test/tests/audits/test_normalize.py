@@ -18,3 +18,10 @@ def test_report_removes_only_new_sections_and_provenance():
     new = '# 실행 보고서 new\n### m / s / v\ncode_sha256: def; started_at: later\n| .02 | FAILS |\n선택적 예측(보조, 인증과 별개)\nnew data\n확신 변형(등록; 주 지표 인증과 별개)\nnew data\n미완·한계: new'
     assert normalize.report(old, 'old') == normalize.report(new, 'new')
     assert normalize.report(old, 'old') != normalize.report(new.replace('FAILS', 'MEETS'), 'new')
+
+
+def test_report_can_preserve_audits_and_exact_lines():
+    text = '# title\n\n미완·한계: audit\n선택적 예측(보조, new)\nvalue\n'
+    from audits.stage2_20261021.normalize import report
+    assert '미완·한계: audit' in report(text, '', preserve_audit=True)
+    assert ''.join(report(text, '', preserve_audit=True, strict=True)) == text

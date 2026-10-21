@@ -1,7 +1,7 @@
 """무엇: 다중 분석 test gate · 입력: run/동결 선언 · 출력: 순서 있는 봉인 계획 · 계약 §7-4d."""
 
 from jeveval.io import analysis_artifacts, run_files
-from jeveval.run import context, question_gate, variant_registration, variant_calculation
+from jeveval.run import context, question_gate, variant_registration
 
 
 def prepare(root, directory, fingerprint, now):
@@ -21,8 +21,7 @@ def prepare(root, directory, fingerprint, now):
     dev = context.stage(ctx, "dev")
     if dev.warnings:
         raise ValueError("undamaged dev required")
-    recomputed = variant_calculation.development(dev)
-    if variant_registration.check(e, recomputed, sealed=e["started"]) != "registered":
+    if variant_registration.check_development(e, dev, sealed=e["started"]) != "registered":
         raise ValueError("variant threshold or seals damaged")
     if not e["started"]:
         writes.append(("test/variant_seal.json", dict(**variant_registration.seal_fields(e), sealed_at=now)))

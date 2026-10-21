@@ -41,8 +41,10 @@ def final(value, identity):
     return result
 
 
-def report(text, run_id):
+def report(text, run_id, *, preserve_audit=False, strict=False):
     """추가 보조 절·감사 줄 및 명시 provenance 줄만 제외한다. 기존 수치는 남긴다."""
+    if strict:
+        return text.splitlines(keepends=True)
     lines, auxiliary = [], False
     boundaries = ('### ', '공통 오류 ', '비교 ', '미완·한계:', '사용자가 지정한', '판 4:')
     for line in text.splitlines():
@@ -50,7 +52,7 @@ def report(text, run_id):
             auxiliary = True
         if line.startswith(boundaries):
             auxiliary = False
-        if auxiliary or not line.strip() or line.startswith('미완·한계:'):
+        if auxiliary or not line.strip() or (not preserve_audit and line.startswith('미완·한계:')):
             continue
         if line.startswith('code_sha256: ') or line.startswith(('replay dev: ', 'replay test: ', 'replay extra: ')):
             continue

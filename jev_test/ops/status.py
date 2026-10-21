@@ -29,7 +29,8 @@ def rows(root, model, run_id):
             counts = Counter(f.status for f in finals)
             presence = [run_files.exists(directory / path) for path in
                         ("test/seal.json", "threshold.json", "risk.json", "scores.json", "summary.json",
-                         f"{stage}/derived.json", f"{stage}/replay.json", "selective.json")]
+                         f"{stage}/derived.json", f"{stage}/replay.json", "selective.json",
+                         "test/question_seal.json", "test/variant_seal.json")]
             yield [name, variant, stage, len(expected), len(ids), ids == set(expected),
                    ",".join(f"{s}:{counts[s]}" for s in sorted(counts)), len(attempts),
                    len({a.call_id for a in attempts}), ",".join(fw + aw) or "-", *presence]
@@ -37,7 +38,7 @@ def rows(root, model, run_id):
 
 def main():
     print("set\tvariant\tstage\texpected_logical\tunique_final\tids_equal\tfinal_statuses\t"
-          "parsed_attempt_lines\tunique_calls\twarnings\tseal\tthreshold\trisk\tscores\tsummary\tderived\treplay\tselective")
+          "parsed_attempt_lines\tunique_calls\twarnings\tseal\tthreshold\trisk\tscores\tsummary\tderived\treplay\tselective\tquestion_seal_present\tvariant_seal_present")
     try:
         for row in rows(Path.cwd(), *sys.argv[1:]):
             print("\t".join(map(str, row)))

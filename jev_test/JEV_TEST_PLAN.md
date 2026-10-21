@@ -493,7 +493,7 @@ jev_test/
 
 - Clef 실제 입력 상한 (카드 16,384 vs 블로그 64k) — 경계 근처에서 실제로 무엇이 잘리는지 (T0 긴 state fixture) · LBox 정답이 다중인지 · KoBEST 라벨 방향. (KoSGD active_intent 시점은 감사 v3 R6 으로 판정 끝.)
 - 각 결정 모델 서버가 Clef 참조 구현처럼 4자리 반올림하는지, logit·log 확률을 따로 주는지 (진단 열용). 점수 1.0 동률 건수는 P0 에서 재지 않는다 — 평가 풀 출력이 필요하고, 계약은 이미 동결했다 (§4-1).
-- B1 진입 조건 (§2-3): 실서버 vLLM 0.19.0 실효 설정, `top_logprobs=64`, 마스크 처리, chat 템플릿 답 위치의 단일 토큰.
+- B1 진입 조건 (§2-3): vLLM 0.28.0 확인(계약 §10·모델 설정). `top_logprobs=64`·processed_logprobs 설정과 chat 템플릿 답 위치의 단일 토큰 조건을 유지한다.
 - 운영에서 상한 초과 요청을 거절하는지, Clef 응답을 그대로 쓰는지 (§4-4 ③).
 - 셋마다 라벨 출처(`label_source`): 생성·검수 방식. FunctionChat 시나리오 계보(원 시나리오 ID)가 있으면 연결요소 대신 그것을 묶음 키로 (출력 보기 전에만).
 - 라이선스: KOLD·kor_unsmile(이제 미사용), WorkflowEvals 3종 데이터(HF 미기재), Decision Index 스위트 개별 조건, KoSGD (감사 예시 출력의 저장소 반입 여부).

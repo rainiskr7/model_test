@@ -80,3 +80,32 @@ compare는 일곱 판을 만들며 같은 compare ID에서 참여 모델 집합�
 ```
 
 결과 커밋은 공개 집계·검증된 보고서만 명시적으로 선택한다. `.gitignore`의 attempts/final, T0 원기록, dataset, archive, `.work`는 포함하지 않는다. 로그·last.out·잠금·STOP은 `.work/ops/`에 둔다. `.gitignore`는 이미 추적된 파일이나 과거 커밋을 제거하지 않으므로 공개 전에 [publish_check](../audits/publish_check/README.md)로 최종 커밋 범위를 검사한다.
+
+## kosgd2 등록 경로 (계약 §9c)
+
+`kosgd2`는 `OPTIONAL_SETS`에만 있으며 기본 실행에 들지 않는다. kosgd2 는 SETS=kosgd2 로만 명시 실행한다.
+
+명시적으로 `SETS=kosgd2 ops/lane.sh "$MODEL" "$HOST" "$FALLBACK" "$PORT" "$KEY_VAR" "$RUN_ID"`를 사용한다.
+기본 셋 목록에는 자동으로 추가하지 않는다. 실행 진입점과 lock/STOP/stop now는 기존 lane 그대로다.
+`kosgd2_steps.sh`는 source되는 순서 모듈이며 직접 실행용 파일이 아니다.
+
+두 판의 상태 선검사 → full dev → actions_only dev → 일반 threshold 두 판 → question-threshold 두 판
+→ score-variants threshold 두 판 → full test → actions_only test → 두 판 score/certify
+→ 두 판 question-risk·score-variants risk 순서다. separate의 actions_only는 offline 파생이고 joint는 직접 실행이다.
+kind(systemone/B1)와 question_scoring(separate/joint)은 별개 축이며 실제 run의 모델 유효성 검사는 기존 CLI가 담당한다.
+
+registration_status.py의 read_registration_state는 기존 context·등록 검사기와 dev 재계산을 재사용한다.
+변형 dev 검증은 analysis_gate와 같은 variant_registration.check_development를 호출한다.
+kosgd2_needed가 stage/threshold의 action·skip 공통 처리를 맡으며 실행 명령의 종료 코드를 그대로 반환한다.
+완료 dev/test 생략은 cmd_run.read_resume_inputs의 직접·파생 resume 검사도 통과해야 한다.
+생략 판정에서는 손상 tail을 거부하며 일반 run의 기존 tail 복구 정책은 바꾸지 않는다.
+next_registration_action은 missing→create, ready/sealed→skip, damaged/미지→stop만 결정한다.
+정상 완료 dev/test와 유효 threshold는 건너뛴다. 부분 seal·변조된 threshold는 평가 파일 쓰기·전송 전에 중단한다.
+운영 lock/로그의 생성·정리는 그대로이며 score/보조 결과는 정상 재실행 시 동일 값으로 다시 쓸 수 있다.
+셋 안 실패 단계 뒤에는 진행하지 않는다. 기존 run 3회 재시도와 셋 실패 뒤 다음 셋 처리는 유지한다.
+
+OPS_DRY_RUN=1은 상태 판독 없이 처음 실행할 명령 순서만 표시한다. 실행 완료를 주장하지 않는다.
+status의 question_seal_present/variant_seal_present는 존재 관측뿐이다. registered 확인은 실제 question-risk와
+score-variants risk의 결과에서 한다. 봉인 사이 중단을 파일 삭제나 사후 봉인으로 복구하지 않는다.
+합성 검증 범위는 tests/ops/test_kosgd2_steps.py, test_registration_status.py와
+ tests/run/test_serverless_pipeline.py이며 실데이터 경로 검증은 포함하지 않는다.

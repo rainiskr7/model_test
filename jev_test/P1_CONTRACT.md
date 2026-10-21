@@ -1139,6 +1139,41 @@ C3 oracle.py는 jeveval의 selective/power를 import하지 않고 cutoff·정답
 등록 4조합·봉인 중단/손상, 보조 파일 격리, family 별칭, 감사 적격 경계는 합성 시험으로 확인한다.
 사용법·정규화 경로 전체 목록·독립성 범위는 audits/stage2_20261021/README.md를 따른다.
 
+### 9c. 서버 없는 수용과 운영 경계 (계획 2판)
+
+- kosgd2 운영 진입점은 기존 lane.sh다. 기본 실행에서 제외하고 SETS로 명시 선택한다.
+  두 판의 등록 상태를 쓰기·전송 전에 선검사하고,
+  dev 두 판 → 일반 threshold 두 판 → question-threshold 두 판 → score-variants threshold 두 판
+  → test 두 판 → score/certify → question-risk·score-variants risk 순서로 처리한다.
+  없는 threshold만 생성하고 기존 threshold는 dev 재계산·선언·SHA를 검사한 뒤 건너뛴다.
+  완료 dev/test도 기존 직접·파생 resume 검사와 기록 tail 무손상을 확인한 뒤 건너뛴다.
+  부분 봉인은 손상 정지이며 새 봉인으로 복구하지 않는다. 기존 셋의 재시도·셋 경계 STOP은 유지한다.
+  status의 seal 열은 파일 존재 관측이며 registered 판정을 뜻하지 않는다.
+  변형 dev 재계산·등록 판정은 gate와 운영 상태기가 같은 check_development를 사용한다.
+- 파생 출처 검사는 score/derived_provenance의 순수 함수로 분리한다. 파생 감사는
+  stage marker/final 출처 검사(역사 검사와 공유), 원천 호출 SHA 연결,
+  separate 설정 및 원천 full의 사후 저장 호출 PASS를 모두 요구한다. 이때만 자체 전송 없음,
+  파생 출처 검증 PASS, 원천 full 연결 PASS를 표시한다. actions_only per_variant는 그대로 유지하되
+  "이어지는 actions_only 규칙은 가상 직접 요청 감사이며 파생 판 자체 전송의 증거가 아님."으로
+  한 줄 안의 규칙 범위를 명시한다. joint·출처 검증 실패·
+  원천 연결 미확인은 기존 직접 연결 경로에 남는다. run 간 코드 SHA를 감사 연결 조건으로 추가하지 않는다.
+- cmd_t0는 inputs/reference/server/tolerance/judge의 단계별 진입점을 제공한다. CLI는 모든
+  명령에서 handler.run을 호출하고 단계 분배는 cmd_t0.stage_handler 한 곳에서 한다.
+  기존 Python run(stage=...)도 같은 분배를 쓴다. 단계 구현·CLI 옵션·help는 유지한다.
+- 현재 run 재개와 compare는 현재 fingerprint 일치를 요구한다. 역사 집계/report는 현재 code SHA
+  비교 없이 기존 증거를 읽는다. 이번 보고 문구 수용을 위해 기존 여섯 셋 replay를 요구하지 않는다.
+- audits/serverless_20261021 도구는 여섯 보존 블록의 정확 바이트, 원문 앵커 첫 40 Unicode 문자,
+  fence 밖 현행 절, 지도 21/5/7행을 검사한다. 원문 그대로 남은 extra 절도 원문 앵커로 허용한다.
+  이 구조 검사는 문장 의미의 전수 반영을 자동 인증하지 않는다.
+- 중복 검사는 Python 함수의 docstring 제외 최상위 문 3개 이상 본문에서 인자·지역 이름만
+  정규화하고 shell은 함수 이름 중복을 검사한다. base 대비 새 그룹과 기존 그룹의 새 구성원이 실패다.
+- 보고 비교는 감사 줄을 보존하고 정확히 지정한 수의 파생 연결 문구 변경만 허용한다. 그 밖의
+  공백·줄 끝·출처 파일명·SHA도 동일해야 한다. 새 감사 파일 출처가 달라진 보고서는 이 검사를 통과하지 않는다.
+- T0 비교는 두 트리를 독립 프로세스에서 기존 합성 runtime/post로 실행한다. 실제 import한 트리의
+  Python을 임시 root에도 복사하여 지문을 맞추고, fingerprint 실제 SHA 연결을 검증한 다음
+  fingerprint.json.code_sha256와 t0.json.fingerprint_sha256만 정규화한다. 나머지 산출물·help는 바이트 비교다.
+  이 비교와 등록 사슬 합성 통합은 실데이터·실서빙 검증의 증거가 아니다.
+
 ## 10. P0 에서 확인해 이 문서를 고칠 것
 
 - 10-19 pplx v1.1 confidence 정의 확인(Claude 실측 — HF 사본 autojev/model.py:130 과 실응답 4,825개 대조): 선택 확률의 우연 대비 여유 `(p - 1/n)/(1 - 1/n)`을 0–1로 자른 값. 수락 점수에는 API confidence를 유지하고 ECE만 선택 확률로 분리한다.
@@ -1148,7 +1183,7 @@ C3 oracle.py는 jeveval의 selective/power를 import하지 않고 cutoff·정답
 - 서버 vLLM **0.28.0** (계획의 0.19.0 과 다름). `--max-logprobs 64`·`--logprobs-mode processed_logprobs` **필수** — 없을 때 실측: 선택지 39 개 칸 `400 max allowed: 20`, raw 모드라 top_logprobs 에 `<|im_end|>` 가 끼어 라벨 누락 9/123. 넣은 뒤 129/129 ok, 라벨 아닌 토큰 0, 뽑힌 토큰 129/129 라벨.
 - 인코더 규칙 `hf_chat_template_no_think` (로컬 토크나이저 `apply_chat_template(add_generation_prompt=True, enable_thinking=False)` 길이) == `usage.prompt_tokens` 129/129.
 - 상한 65,536 (입력+출력) → 입력 상한 65,535, 넘치면 **HTTP 400** `This model's maximum context length is 65536 tokens ...` 거부.
-- **보정 11 (예정, 다음 작업)**: `input_limit_response.status` 를 422 고정에서 모델별 값(400·422)으로 — B1 길이 거부가 400 이라 지금은 `error/http_400` 이 된다. `base_url` 은 네트워크마다 바뀌어 yaml 에 null 로 두고 실행 인자로 받는다 (⑥b cli `--base-url`).
+- **보정 11 (구현됨)**: `input_limit_response.status` 는 모델별 400·422를 지원한다(`contract/model_config.py`, `tests/contract/test_model_config.py`). B1 설정은 400과 상한 오류 정규식을 사용한다. `base_url` 은 네트워크마다 바뀌어 yaml 에 null 로 두고 실행 인자로 받는다 (⑥b cli `--base-url`).
 
 - pplx: 길이 초과 응답 형태(422 메시지) · 반올림 · 문자열 state 처리 · `choice` 가 확률표 argmax 인지. Clef(SGLang): `usage.input_tokens` · 길이 초과 동작. 각 서버의 `served_name`.
 - 모델별 인코더 규칙(래퍼 포함)·$L_m$·`fixed_tokens` 계산법·문자 위치 → 토큰 위치 변환.

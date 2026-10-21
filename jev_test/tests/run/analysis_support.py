@@ -7,8 +7,9 @@ from tests.run.cli_support import Harness, REPO
 from tests.run.file_support import put_yaml
 
 
-def prepared(tmp_path, monkeypatch, kinds=('question_risk', 'score_variants')):
-    h = Harness(tmp_path, 'kosgd2', 'full')
+def prepared(tmp_path, monkeypatch, kinds=('question_risk', 'score_variants'), *,
+             kind='systemone', question_scoring='separate', start=True):
+    h = Harness(tmp_path, 'kosgd2', 'full', kind=kind, question_scoring=question_scoring)
     shutil.copytree(REPO / 'configs/analysis', tmp_path / 'configs/analysis')
     path = tmp_path / 'configs/sets/kosgd2.yaml'
     value = read_yaml(path)
@@ -18,7 +19,8 @@ def prepared(tmp_path, monkeypatch, kinds=('question_risk', 'score_variants')):
     put_yaml(path, value)
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv('JEV_TEST_KEY', 'synthetic')
-    h.run('dev'); assert h.command('threshold') == 0
+    if start:
+        h.run('dev'); assert h.command('threshold') == 0
     return h
 
 

@@ -12,3 +12,14 @@ def test_variants_threshold_and_history_dispatch(monkeypatch):
     assert seen[-1]['mode'] == 'threshold' and not seen[-1]['history']
     assert cli.main(['score-variants', '--history', '--run-dir', 'synthetic']) == 0
     assert seen[-1]['mode'] == 'risk' and seen[-1]['history']
+
+
+def test_t0_uses_common_command_dispatch(monkeypatch):
+    from jeveval.run import cmd_t0
+    seen = {}
+    def run(**kwargs):
+        seen.update(kwargs)
+        return dict(ok=True)
+    monkeypatch.setattr(cmd_t0, 'run', run)
+    assert cli.main(['t0', 'judge', '--run-dir', 'synthetic']) == 0
+    assert seen['stage'] == 'judge' and seen['run_dir'] == 'synthetic'

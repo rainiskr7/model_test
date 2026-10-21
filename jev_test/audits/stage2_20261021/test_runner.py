@@ -6,9 +6,9 @@ from pathlib import Path
 import sys
 
 
-def main():
-    """실저장소 데이터 접근을 거부하고 tmp_path 합성 시험만 실행한다."""
-    root = Path(__file__).resolve().parents[2]
+def protect(root):
+    """시험과 독립 T0 worker가 같은 접근 차단 경계를 쓴다."""
+    root = Path(root).resolve()
     blocked = tuple(root / p for p in ("dataset", ".work", "results"))
     def guard(event, args):
         if event in ("socket.connect", "socket.bind", "socket.getaddrinfo"):
@@ -21,6 +21,12 @@ def main():
         if any(path == p or p in path.parents for p in blocked):
             raise PermissionError("production data access forbidden by stage2 tests")
     sys.addaudithook(guard)
+
+
+def main():
+    """실저장소 데이터 접근을 거부하고 tmp_path 합성 시험만 실행한다."""
+    root = Path(__file__).resolve().parents[2]
+    protect(root)
     sys.path.insert(0, str(root))
     import pytest
     class Manifest:

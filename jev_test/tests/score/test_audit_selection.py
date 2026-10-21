@@ -42,3 +42,18 @@ def test_failed_rule_is_kept_after_eligible_link():
     audit['per_variant']['full']['R4']['status'] = 'FAIL'
     rules, _, linked = select_audit_evidence(audit, fp)
     assert linked and rules['R4']['status'] == 'FAIL'
+
+
+def test_explicit_selection_scope_and_joint_fallback():
+    from jeveval.score.audit_selection import select_direct_audit_evidence, select_derived_audit_evidence
+    audit, source = evidence(True)
+    fp = dict(source, variant='actions_only')
+    audit['models']['m']['variants']['actions_only'] = dict(measurement_config=False, request_mode='hypothetical_direct')
+    audit['per_variant']['actions_only'] = {r: dict(status='FAIL') for r in RULES}
+    provenance = dict(fingerprint=source, question_scoring='separate')
+    value = select_derived_audit_evidence(audit, fp, provenance)
+    assert value['kind'] == 'derived' and value['scope'] == 'hypothetical_direct'
+    assert all(r['status'] == 'FAIL' for r in value['rules'].values())
+    assert select_direct_audit_evidence(audit, fp)['linked'] is False
+    provenance['question_scoring'] = 'joint'
+    assert select_derived_audit_evidence(audit, fp, provenance)['kind'] == 'direct'

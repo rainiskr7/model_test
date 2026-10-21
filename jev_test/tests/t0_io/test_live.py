@@ -74,7 +74,7 @@ def test_cli_requires_checkpoint_and_base_url(capsys):
 def test_cli_error_never_prints_exception_state(monkeypatch, capsys):
     def fail(**kwargs):
         raise ValueError("PRIVATE_ERROR_CANARY")
-    monkeypatch.setattr(cmd_t0, "run", fail)
+    monkeypatch.setattr(cmd_t0, "run_judge", fail)
     assert main(["t0", "judge", "--run-dir", "missing"]) == 1
     assert "PRIVATE_ERROR_CANARY" not in capsys.readouterr().out
 

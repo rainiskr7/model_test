@@ -1,7 +1,8 @@
 #!/bin/bash
-# 무엇: 새 본시험·같은 run 재개. 입력: model host fallback port key_var run_id. 출력: CLI 기록·로그.
+# 무엇: 새 본시험·같은 run 재개. 입력: model host fallback port key_var run_id. 출력: CLI 기록·로그. 계약 §9c.
 source "$(dirname "$0")/lib.sh"
 source ops/locks.sh
+source ops/kosgd2_steps.sh
 [ "$#" = 6 ] || { echo 'usage: lane.sh model host fallback port key_var run_id'; exit 2; }
 M=$1 HOST=$2 FALLBACK=$3 PORT=$4 KEYVAR=$5 RID=$6 MY=configs/models/$1.yaml
 identifier "$M" && identifier "$RID" && [[ "$PORT" =~ ^[0-9]+$ ]] && check_sets || exit 2
@@ -22,7 +23,7 @@ kosgd() {
 rc=0
 for S in ${SETS:-$DEFAULT_SETS}; do
   if [ -e "$W/STOP" ] || [ -e "$W/STOP.$M" ]; then log "STOP — 셋 경계에서 중단"; exit 4; fi
-  if [ "$S" = kosgd ]; then kosgd; else one_set "$S"; fi
+  case "$S" in kosgd) kosgd;; kosgd2) run_kosgd2;; *) one_set "$S";; esac
   code=$?
   if [ "$code" != 0 ]; then rc=$code; log "셋 $S 실패 ($code)"; fi
 done

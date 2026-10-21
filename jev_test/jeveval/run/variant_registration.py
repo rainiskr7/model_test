@@ -4,8 +4,15 @@ from jeveval.score.isotonic import apply_isotonic
 from jeveval.score.threshold import TAUS
 from jeveval.score.variant_scores import CANDIDATES
 from jeveval.types import Threshold
+from jeveval.run import variant_calculation
 
 IDENTITY = ("model", "set", "variant", "run_id")
+
+
+def check_development(evidence, dev, *, sealed):
+    """gate와 운영 상태기가 같은 dev 재계산·등록 판정을 사용한다."""
+    recomputed = variant_calculation.development(dev)
+    return check(evidence, recomputed, sealed=sealed)
 
 
 def seal_fields(evidence):

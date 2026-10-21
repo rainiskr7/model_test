@@ -26,10 +26,28 @@
 | family 의미 | jeveval/score/set_metrics.py; jeveval/score/population.py; jeveval/score/observations.py; jeveval/score/risk_mix.py; jeveval/types/length_buckets.py | family의 라벨·분포·분해 승계 | 기존 6셋 바이트·bootstrap RNG·stages·SLOT_LABELS | tests/score/test_set_metrics.py; tests/score/test_observations.py; tests/types/test_length_buckets.py | 계산 spec 전달; 공용 동결 설정 불변 | §7-6b·§7-6c |
 | 확신 변형 | jeveval/score/isotonic.py; jeveval/score/variant_scores.py; jeveval/score/variant_selection.py; jeveval/score/variant_risk.py; jeveval/run/variant_calculation.py; jeveval/run/cmd_score_variants.py | dev 선택·고정 test 보조 셀 | 주 s=min·threshold/risk·test 라벨로 dev 선택 금지 | tests/score/test_isotonic.py; tests/score/test_variant_scores.py; tests/run/test_cmd_score_variants.py | 역사 비파생만 exploratory. 결과 덮어쓰기 거부 | §7-4d |
 | 복수 선언·봉인 | jeveval/contract/analysis_declarations.py; jeveval/io/analysis.py; jeveval/io/analysis_artifacts.py; jeveval/io/variant_policy.py; jeveval/run/analysis_gate.py; jeveval/run/variant_registration.py; configs/analysis/score_variants_v1.yaml; configs/sets/kosgd2.yaml | 선언 4조합·전부 선검사·순서 봉인 | 공용 셋 지문·기존 question 등록·사후 복구 금지 | tests/contract/test_analysis_declarations.py; tests/run/test_analysis_gate.py; tests/run/test_variant_registration.py | kosgd2 overlay 해시 변경·새 사전 감사 필요. 등록 test replay도 복사 전 gate | §7-4b·§7-4d |
-| 명시 감사 선택 | jeveval/score/audit_selection.py; jeveval/io/audit_evidence.py; jeveval/run/cmd_report.py; audits/audit_v4/README.md | 정확한 tuple의 새 감사 연결·모델/파일/SHA 표시 | 감사 계산·기존 out 파일·다른 set/profile | tests/score/test_audit_selection.py; tests/io/test_audit_evidence.py | 새 사후 감사는 새 run 3개 명시. report 반복 --audit-evidence | §7-6a |
+| 명시 감사 선택 | jeveval/score/audit_selection.py; jeveval/io/audit_evidence.py; jeveval/run/cmd_report.py; audits/audit_v4/README.md | 정확한 tuple의 새 감사 연결·모델/파일/SHA 표시 | 감사 계산·기존 out 파일·다른 set/profile | tests/score/test_audit_selection.py; tests/io/test_audit_evidence.py | 역사 report만 변경하면 replay 불필요. 원천 저장 호출 PASS와 파생 자체 전송 증거는 구별 | §7-6a |
 | C1/C2/C3 수용 도구 | audits/stage2_20261021/*.py | AST·명시 필드 정규화·독립 수치 대조 | 실제 원자료·run은 구현 시험 중 접근 금지 | tests/audits/test_shape_check.py; tests/audits/test_compare_runs.py; tests/audits/test_oracle.py | 운영자가 실제 run 경로로 별도 실행; 방법은 같은 폴더 README | §9·§7-4c |
 | 시험 지원 | tests/run/cli_support.py; tests/run/file_support.py; tests/t0_io/support.py; tests/run/conftest.py; tests/t0_io/conftest.py | 합성 파일·fixture 공유 | nodeid·단언·기준값·기존 여섯 격리 파일 | tests/run/test_unit_isolation.py; tests/run/test_cmd_t0.py; tests/io/test_datasets.py; tests/io/test_t0_policy.py; tests/t0_io/test_pipeline.py | 코드 해시 무관. cli_support 소비 통합 시험·T0 support 소비 시험 전체 영향; import 소비 목록은 rg로 확인 | §9a |
 | 운영 스크립트 | ops/lib.sh; ops/locks.sh; ops/lane.sh; ops/replay.sh; ops/compare.sh; ops/status.py; ops/stop.sh; ops/watch.py | 실행 순서·잠금·관측·중단 | 동결 설정·원기록·평가 요청 의미 | tests/ops/test_lane.py; tests/ops/test_replay_compare.py; tests/ops/test_readonly.py | code_sha256 무관. JEV_PY의 Python·패키지 환경 지문은 재개에 영향 | §5-5·§5-7·§8-6 |
 | 구조 보호 시험 | tests/contract/test_stages.py; jeveval/contract/stages.py; audits/replay_20261019/c3_compare_runs.py | 단계 소유 경계 검증 | 문자열 이동으로 숨긴 의미 변경 | tests/contract/test_stages.py | jeveval 전체 fc_call_decision 문자열의 파일·소유 함수·횟수 및 감사 스크립트 금지를 고정 | §6-1·§9a |
 
 문서·tests만 변경하면 jeveval code_sha256는 바뀌지 않는다. Python 변경으로 restore가 막혀도 replay가 항상 가능한 것은 아니다. replay는 code/env/run_id/started_at 외의 지문·입력 일치를 요구한다. 이번 R3~R5는 요청·공용 files·encoder 불변을 검증한 뒤 한 번의 새 run 재판정에 묶는다. 실데이터·실서빙 수용은 합성 시험과 구별한다.
+
+서버 없는 수용 추가(계약 §9c):
+
+| 기능 | 소유·책임 | 짝 시험·영향 |
+|---|---|---|
+| 파생 감사 연결 | score/derived_provenance.py의 출처 검사을 run/history_check.py와 io/audit_evidence.py가 공유; 호출 SHA 부분집합 확인 | tests/score/test_derived_provenance.py; tests/score/test_audit_selection.py; tests/io/test_audit_evidence.py; tests/run/test_history_check.py. 규칙·전송·원기록 불변 |
+| 단계별 T0 | run/cmd_t0.py의 다섯 진입점과 load_verified_t0_bundle; cmd_t0.stage_handler의 단일 단계 dispatch | tests/run/test_cmd_t0.py; tests/t0_io/test_live.py; 기존 T0 시험. code SHA 및 그 파일을 가리키는 t0 SHA 변경 |
+| kosgd2 운영 | ops/kosgd2_steps.sh 순서; ops/registration_status.py 판독/결정; 기존 lane/lib/lock/stop 재사용 | tests/ops/test_kosgd2_steps.py; tests/ops/test_registration_status.py; tests/run/test_serverless_pipeline.py. 부분 봉인 복구 금지 |
+| 수용 도구 | audits/serverless_20261021의 지도·중복·독립 T0 비교; 기존 normalize/compare_runs의 감사 줄 보존 비교 | tests/audits/test_contract_map_check.py, test_dup_check.py, test_function_shapes.py, test_t0_compare.py, test_t0_worker.py; 기존 compare/normalize 시험 |
+| 현재/역사 경계 | 기존 context.restore·history.read·history_stage.restore 유지 | tests/run/test_serverless_fingerprint.py. 코드 변경 뒤 현재 재개/compare 거부·역사 report 허용 |
+
+이번 묶음은 기존 run의 재판정이나 감사 out 갱신을 실행하지 않는다. 등록 상태 판독은 기존
+question/variant 검사기와 dev 재계산을 사용하며 파일 존재만으로 유효성을 주장하지 않는다.
+완료 단계 생략도 cmd_run.read_resume_inputs의 기존 직접/파생 resume 검사를 통과해야 한다.
+일반 run은 기존 tail 복구 허용을 유지하고 ops의 생략 판정은 손상 tail을 거부한다.
+
+variant_registration.check_development는 analysis_gate와 ops가 공유하는 기존 dev 재계산·등록 판정이다.
+짝 시험 test_variant_registration·test_analysis_gate·test_registration_status로 결과/예외/봉인 순서를 확인한다.

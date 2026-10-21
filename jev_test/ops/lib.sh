@@ -1,5 +1,5 @@
 #!/bin/bash
-# 무엇: 운영 명령 공통 실행. 입력: lane 인자·JEV_* 환경. 출력: CLI JSON·운영 로그.
+# 무엇: 운영 명령 공통 실행. 입력: lane 인자·JEV_* 환경. 출력: CLI JSON·운영 로그. 계약 §9c.
 set -u
 OPS_ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd) || exit 2
 cd "$OPS_ROOT" || exit 2
@@ -10,6 +10,7 @@ R=results
 BOOT='import runpy, sys; from pathlib import Path; sys.path.insert(0, str(Path.cwd())); runpy.run_module("jeveval.run.cli", run_name="__main__")'
 HELPER='import runpy, sys; from pathlib import Path; sys.path.insert(0, str(Path.cwd())); runpy.run_path(sys.argv.pop(1), run_name="__main__")'
 DEFAULT_SETS="klue_mrc_answerable korfin_asc fc_call_decision kmhas kote_escalation kosgd"
+OPTIONAL_SETS="kosgd2"
 CHILD= WATCH_PID= LAST=
 
 dry() { [ "${OPS_DRY_RUN:-0}" = 1 ]; }
@@ -17,12 +18,12 @@ log() { printf '%s [%s] %s\n' "$(date '+%m-%d %H:%M:%S')" "${M:-ops}" "$*"; }
 show() { printf 'DRY'; printf ' %q' "$@"; printf '\n'; }
 identifier() { [[ "$1" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]]; }
 helper() { "$PY" -I -B -c "$HELPER" "ops/$1.py" "${@:2}"; }
-set_of() { case "$1" in kosgd_*) echo kosgd;; *) echo "$1";; esac; }
-variant_of() { case "$1" in kosgd_full) echo full;; kosgd_actions_only) echo actions_only;; *) echo default;; esac; }
+set_of() { case "$1" in kosgd2_*) echo kosgd2;; kosgd_*) echo kosgd;; *) echo "$1";; esac; }
+variant_of() { case "$1" in kosgd_full|kosgd2_full) echo full;; kosgd_actions_only|kosgd2_actions_only) echo actions_only;; *) echo default;; esac; }
 dir_of() { echo "$R/$M/$RID/A/$(set_of "$1")/$(variant_of "$1")"; }
 check_sets() {
   for S in ${SETS:-$DEFAULT_SETS}; do
-    case " $DEFAULT_SETS " in *" $S "*) ;; *) log "지원하지 않는 셋"; return 2;; esac
+    case " $DEFAULT_SETS $OPTIONAL_SETS " in *" $S "*) ;; *) log "지원하지 않는 셋"; return 2;; esac
   done
 }
 url() {
@@ -37,7 +38,7 @@ read_model() {
   meta=$(helper metadata model "$MY") || return $?
   IFS=$'\t' read -r KIND SERVED AUTH QUESTION_SCORING <<< "$meta"
 }
-derived_task() { [ "$1" = kosgd_actions_only ] && [ "$QUESTION_SCORING" = separate ]; }
+derived_task() { [[ "$1" = kosgd_actions_only || "$1" = kosgd2_actions_only ]] && [ "$QUESTION_SCORING" = separate ]; }
 load_model() {
   read_model || return $?
   [ "$AUTH" = "$KEYVAR" ] || { log "key_var와 모델 auth_env 불일치"; return 2; }

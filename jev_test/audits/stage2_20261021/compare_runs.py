@@ -59,14 +59,54 @@ def compare_tables(old, new, expected=7):
     return [str(p) for p in sorted(inventories[0]) if (old / p).read_bytes() != (new / p).read_bytes()]
 
 
+def compare_audit_report(before, after, expected=3):
+    """행 끝·공백 포함 바이트를 유지하며 연결 미확인→파생 근거 문구만 허용한다."""
+    left = normalize.report(before, '', preserve_audit=True, strict=True)
+    right = normalize.report(after, '', preserve_audit=True, strict=True)
+    if expected < 1 or len(left) != len(right):
+        return ['report line inventory']
+    differences, changed, identities = [], 0, set()
+    old_tail = ' 저장 호출과의 연결 미확인: 기존 실행 입력에 대한 뒷받침이 부족하다.'
+    required = ('파생 변형: 자체 전송 없음.', '파생 출처 검증 PASS.', '원천 full 저장 호출 연결 PASS.',
+                '이어지는 actions_only 규칙은 가상 직접 요청 감사이며 파생 판 자체 전송의 증거가 아님.')
+    for number, (a, b) in enumerate(zip(left, right), 1):
+        if a == b: continue
+        changed += 1
+        prefix, separator, ending = a.partition(old_tail)
+        valid = (separator and ending in ('\n', '\r\n', '') and '/actions_only 사후 감사 v4;' in prefix and
+                 prefix.startswith('미완·한계: ') and b.startswith(prefix + ' 파생 변형:') and
+                 all(s in b for s in required) and b.endswith(ending))
+        if not valid or prefix in identities: differences.append(f'report line {number}')
+        identities.add(prefix)
+    if changed != expected: differences.append(f'derived changes: {changed}, expected {expected}')
+    return differences
+
+
+def report_result(args):
+    if not args.old_report or not args.new_report or args.old_run or args.new_run or args.old_compare or args.new_compare:
+        raise ValueError('report-only requires exactly two report paths')
+    # read_bytes는 newline 정규화도 허용하지 않는다.
+    differences = compare_audit_report(args.old_report.read_bytes().decode(),
+        args.new_report.read_bytes().decode(), args.expected_derived_lines)
+    print(json.dumps(dict(ok=not differences, differences=differences, report_checked=True,
+                          compare_checked=False), ensure_ascii=False, sort_keys=True))
+    return 1 if differences else 0
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser()
-    parser.add_argument('--old-run', type=Path, action='append', required=True)
-    parser.add_argument('--new-run', type=Path, action='append', required=True)
+    parser.add_argument('--old-run', type=Path, action='append', default=[])
+    parser.add_argument('--new-run', type=Path, action='append', default=[])
     for name in ('old-compare', 'new-compare', 'old-report', 'new-report'):
         parser.add_argument('--' + name, type=Path)
+    parser.add_argument('--audit-only-report', action='store_true')
+    parser.add_argument('--expected-derived-lines', type=int, default=3)
     args = parser.parse_args(argv)
     try:
+        if args.audit_only_report:
+            return report_result(args)
+        if not args.old_run:
+            raise ValueError('run pairs required')
         if len(args.old_run) != len(args.new_run):
             raise ValueError('run pairs differ')
         differences = [f'model[{i}]/{p}' for i, (old, new) in enumerate(zip(args.old_run, args.new_run))

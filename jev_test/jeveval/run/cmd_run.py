@@ -27,7 +27,7 @@ def _common(fp):
     return result
 
 
-def _derived(ctx, stage, items):
+def _derived(ctx, stage, items, *, allow_tail=True):
     source = context.restore(ctx.root, ctx.directory.parent / "full")
     if source.task.variant != "full" or source.task.set != ctx.task.set:
         raise ValueError("invalid full variant")
@@ -39,8 +39,20 @@ def _derived(ctx, stage, items):
     provenance = source.directory.relative_to(ctx.root).as_posix()
     finals = derive_stage(full.finals, list(full.items.values()),
                           [q.id for q in ctx.task.questions], provenance)
-    derived_resume.resume_derived(ctx.directory, stage, finals, provenance, allow_tail=True)
+    derived_resume.resume_derived(ctx.directory, stage, finals, provenance, allow_tail=allow_tail)
     return finals, provenance
+
+
+def read_resume_inputs(ctx, stage, items, *, allow_tail=True):
+    """기록을 읽고 기존 resume 검사기로 검증한다. 쓰기·전송은 하지 않는다."""
+    if ctx.task.variant == "actions_only" and ctx.cfg.question_scoring == "separate":
+        return _derived(ctx, stage, items, allow_tail=allow_tail)
+    plans = [p for item in items for p in plan_calls(item, ctx.task, ctx.cfg, ctx.b1)]
+    attempts, aw = records.read_attempts(stage_inputs.attempts_path(ctx.directory, stage))
+    existing, fw = records.read_finals(stage_inputs.final_path(ctx.directory, stage))
+    if (not allow_tail and (aw or fw)) or check_resume(plans, attempts, existing, ctx.policy.max_attempts):
+        raise ValueError("resume input mismatch")
+    return None, None
 
 
 def _headers(cfg):
@@ -83,14 +95,7 @@ def run(*, root, model, task, stage, run_id, base_url=None, results="results",
     items = stage_inputs.load_items(root=ctx.root, task_path=ctx.task_path, stage=stage)
     stamp = datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
     ctx = replace(ctx, directory=directory, fingerprint=context.fingerprint(ctx, run_id, stamp))
-    if derived:
-        finals, provenance = _derived(ctx, stage, items)
-    else:
-        plans = [p for item in items for p in plan_calls(item, ctx.task, ctx.cfg, ctx.b1)]
-        attempts, _ = records.read_attempts(stage_inputs.attempts_path(directory, stage))
-        existing, _ = records.read_finals(stage_inputs.final_path(directory, stage))
-        if check_resume(plans, attempts, existing, ctx.policy.max_attempts):
-            raise ValueError("resume input mismatch")
+    finals, provenance = read_resume_inputs(ctx, stage, items)
     warnings = gate.prepare_stage(run_dir=directory, stage=stage,
         fingerprint=ctx.fingerprint, plan=ctx.plan, now=stamp, root=ctx.root)
     if derived:

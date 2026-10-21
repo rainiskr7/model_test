@@ -13,7 +13,7 @@ from audits.stage2_20261021.shape_rules import violations
 
 def changed(root):
     """코드 경로만 git에 질의하며 실결과·데이터 트리는 열거하지 않는다."""
-    scopes = ['jeveval', 'tests', 'audits/stage2_20261021', 'ops/status.py']
+    scopes = ['jeveval', 'tests', 'audits/stage2_20261021', 'audits/serverless_20261021', 'ops/status.py', 'ops/registration_status.py']
     commands = [['git', 'diff', '--relative', '--name-only', 'HEAD', '--', *scopes],
                 ['git', 'ls-files', '--others', '--exclude-standard', '--', *scopes]]
     return {p for cmd in commands for p in subprocess.check_output(cmd, cwd=root, text=True).splitlines()
@@ -23,6 +23,8 @@ def changed(root):
 def check(root):
     paths = {p.relative_to(root).as_posix() for p in (root / 'jeveval').rglob('*.py')}
     paths |= {p.relative_to(root).as_posix() for p in (root / 'audits/stage2_20261021').glob('*.py')}
+    paths |= {p.relative_to(root).as_posix() for p in (root / 'audits/serverless_20261021').glob('*.py')}
+    paths |= {'ops/registration_status.py'} if (root / 'ops/registration_status.py').exists() else set()
     edits = changed(root)
     paths |= edits
     errors = [f'{name}: {e}' for name in sorted(paths) for e in violations(name, (root / name).read_text())]
@@ -30,8 +32,10 @@ def check(root):
         path = Path(name)
         if path.parts[0] == 'jeveval' and path.name != '__init__.py':
             paired = root / 'tests' / path.relative_to('jeveval').parent / ('test_' + path.name)
-        elif path.parts[:2] == ('audits', 'stage2_20261021'):
+        elif path.parts[0] == 'audits' and path.parts[1] in ('stage2_20261021', 'serverless_20261021'):
             paired = root / 'tests/audits' / ('test_' + path.name)
+        elif name == 'ops/registration_status.py':
+            paired = root / 'tests/ops/test_registration_status.py'
         else:
             continue
         if not paired.is_file():
