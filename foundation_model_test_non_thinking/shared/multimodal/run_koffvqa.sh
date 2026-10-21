@@ -107,7 +107,7 @@ elif [ "${API_JUDGE:-0}" = "1" ]; then
   echo "[koffvqa] === API judge ($JUDGE_MODEL @ $JUDGE_BASE_URL) ==="
   cd "$SCRIPT_DIR/benches"
   JUDGE_KEY_ARG=""
-  if [ -n "$JUDGE_API_KEY" ]; then JUDGE_KEY_ARG="--judge-api-key $JUDGE_API_KEY"; fi
+  if [ -n "$JUDGE_API_KEY" ]; then JUDGE_KEY_ARG="--judge-api-key-env JUDGE_API_KEY"; fi
   PYTHONPATH="$CODE_ROOT${PYTHONPATH:+:$PYTHONPATH}" "$PY" -m shared.multimodal.benches.koffvqa_api_judge \
     --predfile "$PRED_XLSX" \
     --target-model "$MODEL" \
