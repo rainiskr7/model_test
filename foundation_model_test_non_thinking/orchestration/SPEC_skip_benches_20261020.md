@@ -1,5 +1,7 @@
 # SPEC: SKIP_BENCHES 이름 검사·정책 주석 — 트리 검토 6번 (2026-10-20)
 
+> 상태: 채택 범위 완료(`3b5377e`) — run_all 재개용 skip 이름 검사·측정 제외 정책 주석 반영; 로더의 정책 허용값은 무변경.
+
 담당: A 계획·검증·커밋, X 반박(read-only) → 구현(workspace-write). 범위 N 만(T 확인 필요는 보고만). 동결 `shared/harness/*`·`configs/tests/*`, 운영 results/data/logs 쓰기 금지.
 근거: 10-20 A 분석 + X 반박(C1 SUPPORTED, C2·C3 PARTIAL). 사용자 결정(10-20): 아래 1~3 만. 완주 검사(기대 벤치 vs 결과 폴더)는 하지 않음.
 

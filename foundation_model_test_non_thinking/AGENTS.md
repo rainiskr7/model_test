@@ -4,11 +4,11 @@
 
 ## 수정 전 확인
 
-- `shared/harness/`·`configs/tests/`는 동결이다. 파일·패키지 표식도 추가하지 않는다. 시험에서 운영 `results/`·`data/`·`logs/`에 쓰지 않는다. 근거: [CONVENTIONS.md:125](CONVENTIONS.md#L125), [CONVENTIONS.md:176](CONVENTIONS.md#L176), [입구 SPEC:7](orchestration/SPEC_vibe_entry_docs_20261020.md#L7).
+- `shared/harness/`·`configs/tests/`는 동결이다. 파일·패키지 표식도 추가하지 않는다. 시험에서 운영 `results/`·`data/`·`logs/`에 쓰지 않는다. 근거: [CONVENTIONS.md:145](CONVENTIONS.md#L145), [CONVENTIONS.md:196](CONVENTIONS.md#L196), [입구 SPEC:7](orchestration/SPEC_vibe_entry_docs_20261020.md#L7).
 - 공통 코드는 `shared/`에서 수정한다. `llm/`·`slm/`·`vlm/`·`vsm/`의 **공통 트랙 디렉터리**가 링크이며, 클래스별 추천·평가계획은 실파일이다. 근거: [CONVENTIONS.md:17,33](CONVENTIONS.md#L17).
 - `orchestration/lanes/`의 진입 링크를 실파일로 바꾸거나 진입 파일 자체를 resolve하지 않는다. 호출 basename이 트랙을 정한다. 근거: [run_lane.sh:2,8](orchestration/run_lane.sh#L2).
-- 수정 전 [CONVENTIONS §11~14](CONVENTIONS.md#L123)의 해당 절을 읽는다. 외부 배치 `shared/agent/gpustack_custom/`, `shared/serving/` import 계약은 §11 예외를 따른다([CONVENTIONS.md:132,138](CONVENTIONS.md#L132)).
-- import 부작용 예외는 [CONVENTIONS.md:163](CONVENTIONS.md#L163), 동결 harness가 단독 복사하는 셸 helper의 heredoc 유지 예외는 [shared/results_dir.sh:2](shared/results_dir.sh#L2)를 따른다.
+- 수정 전 [CONVENTIONS §11~14](CONVENTIONS.md#11-패키지-구조import실행)의 해당 절을 읽는다. 외부 배치 `shared/agent/gpustack_custom/`, `shared/serving/` import 계약은 §11 예외를 따른다([CONVENTIONS.md:152,158](CONVENTIONS.md#L152)).
+- import 부작용 예외는 [CONVENTIONS.md:183](CONVENTIONS.md#L183), 동결 harness가 단독 복사하는 셸 helper의 heredoc 유지 예외는 [shared/results_dir.sh:2](shared/results_dir.sh#L2)를 따른다.
 
 ## 진입점과 검증
 
@@ -26,7 +26,7 @@
 
 - 현행 규칙·사용법: [CONVENTIONS](CONVENTIONS.md), [README](README.md), [레인](orchestration/README.md), [full 레인](orchestration/README_full.md), [트랙 훅 계약](orchestration/tracks/README.md), [멀티모달 발행 계약](MULTIMODAL_PUBLISH_CONTRACT.md).
 - [MULTIMODAL_REPRO_PLAN.md](MULTIMODAL_REPRO_PLAN.md)는 현행 정책과 과거 구현·측정 기록이 섞여 있다. 현재 CLI의 `--strict`는 `--run`이 필수([reports/report_multimodal_tracks.py:25](reports/report_multimodal_tracks.py#L25)).
-- 역사 기록: [REFACTORING_PLAN.md](REFACTORING_PLAN.md), `orchestration/SPEC_*.md` 중 완료·종료 문서. 각 제목 아래 상태와 근거 커밋을 확인한다. 진행 중인 [입구 SPEC](orchestration/SPEC_vibe_entry_docs_20261020.md)은 반영 결정 절을 따른다.
+- 역사 기록: [REFACTORING_PLAN.md](REFACTORING_PLAN.md), `orchestration/SPEC_*.md` 중 완료·종료 문서. 각 제목 아래 상태와 근거 커밋을 확인한다. 채택 작업이 완료된 [입구 SPEC](orchestration/SPEC_vibe_entry_docs_20261020.md)은 반영 결정 절과 완료 기록을 따른다.
 - 생성 문서 **손수정 금지**: [MULTIMODAL_TRACK_RESULTS.md:3](MULTIMODAL_TRACK_RESULTS.md#L3), [TAUBENCH_TRACK_RESULTS.md:3](TAUBENCH_TRACK_RESULTS.md#L3). 각각 보고 코드가 sidecar·summary에서 생성한다.
 
 ## 검색

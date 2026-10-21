@@ -98,7 +98,7 @@ def apply_serving_profile(cfg: dict) -> dict:
 
 
 def validate_skip_benches(skip_benches: list) -> None:
-    """skip 훅이 없는 이름이면 즉시 실패.
+    """모델별 측정 제외 정책에서 허용하지 않은 이름이면 즉시 실패.
 
     오타(b4_latency_profile → b4_latency)를 조용히 무시하면 제외했다고
     믿은 벤치가 그대로 돌아 잘못 비교될 숫자를 만든다. 이 메커니즘의
@@ -109,8 +109,7 @@ def validate_skip_benches(skip_benches: list) -> None:
         sys.exit(
             f"ERROR: skip_benches 에 알 수 없는 이름: {unknown}\n"
             f"사용 가능: {sorted(SKIPPABLE_BENCHES)}\n"
-            "(run_all.sh 에 skip 훅이 있는 벤치만 지정 가능. "
-            "훅을 추가했다면 load_model_config.py 의 SKIPPABLE_BENCHES 에도 추가할 것.)"
+            "(재개용 skip 훅의 존재와 측정 제외 정책 허용은 별개입니다.)"
         )
 
 
