@@ -15,7 +15,7 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
-
+import pytest
 
 TREE_ROOT = Path(__file__).resolve().parents[3]
 CUSTOM_DIR = Path(__file__).resolve().parents[1] / "gpustack_custom"
@@ -1626,8 +1626,8 @@ def test_seeded_field_recall_uses_seed_in_moe_artifact_or_skip():
         / "agent_p0verify/L6.json"
     )
     if not artifact.is_file():
-        print("SKIP test_seeded_field_recall_uses_seed_in_moe_artifact_or_skip: artifact absent")
-        return
+        pytest.skip("artifact absent")
+
     tasks = json.loads(artifact.read_text(encoding="utf-8"))["results"]
     task = next(task for task in tasks if task.get("task_id") == "L6-002")
     seed_payload = next(
@@ -3577,8 +3577,8 @@ def test_arg_f1_det_or_skip():
     base = os.environ.get("MODEL_TEST_BASE")
     metrics_py = Path(base or "") / "data" / "Ko-AgentBench" / "bench" / "runner" / "metrics.py"
     if not base or not metrics_py.is_file():
-        print("SKIP test_arg_f1_det_or_skip: vendored Ko-AgentBench not available")
-        return
+        pytest.skip("vendored Ko-AgentBench not available")
+
 
     context = scoring_context
     task = {
@@ -4434,9 +4434,13 @@ TESTS = [
 
 def main():
     failures = []
+    skipped = 0
     for test in TESTS:
         try:
             test()
+        except pytest.skip.Exception as exc:
+            skipped += 1
+            print(f"SKIP {test.__name__}: {exc}")
         except AssertionError as exc:
             failures.append(f"{test.__name__}: {exc}")
         except Exception as exc:
@@ -4447,8 +4451,39 @@ def main():
             print(f"FAIL {failure}", file=sys.stderr)
         return 1
 
-    print(f"OK {len(TESTS)} cases")
+    print(f"OK {len(TESTS) - skipped} passed, {skipped} skipped of {len(TESTS)} cases")
     return 0
+
+
+@pytest.mark.parametrize("failure", [None, AssertionError("synthetic assertion"), RuntimeError("synthetic error")],
+                         ids=["success", "assertion", "exception"])
+def test_main_reports_skips_and_preserves_failures(tmp_path, monkeypatch, capsys, failure):
+    """Exercise the standalone dispatcher; keep this test out of its own TESTS list."""
+    from unittest.mock import Mock
+
+    monkeypatch.setattr(sys.modules[__name__], "TREE_ROOT", tmp_path)
+    monkeypatch.delenv("MODEL_TEST_BASE", raising=False)
+    probe = Mock(__name__="probe", side_effect=failure)
+    after = Mock(__name__="after")
+    monkeypatch.setattr(sys.modules[__name__], "TESTS", [
+        test_arg_f1_det_or_skip, probe,
+        test_seeded_field_recall_uses_seed_in_moe_artifact_or_skip, after,
+    ])
+    assert main() == (1 if failure is not None else 0)
+    probe.assert_called_once_with()
+    after.assert_called_once_with()
+    stdout, stderr = capsys.readouterr()
+    skips = (
+        "SKIP test_arg_f1_det_or_skip: vendored Ko-AgentBench not available\n"
+        "SKIP test_seeded_field_recall_uses_seed_in_moe_artifact_or_skip: artifact absent\n"
+    )
+    if failure is None:
+        assert stdout == skips + "OK 2 passed, 2 skipped of 4 cases\n"
+        assert stderr == ""
+    else:
+        assert stdout == skips
+        detail = str(failure) if isinstance(failure, AssertionError) else f"unexpected {type(failure).__name__}: {failure}"
+        assert stderr == f"FAIL probe: {detail}\n"
 
 
 if __name__ == "__main__":

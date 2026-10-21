@@ -77,9 +77,33 @@ def test_b3_preflight_matches_head(tmp_path, head_heredocs, missing):
         assert stderr == ""
 
 
-@pytest.mark.parametrize("case", ["absent", "clean", "rejected"])
-def test_session_sanity_matches_head(tmp_path, head_heredocs, case):
+@pytest.mark.parametrize("case", ["absent", "clean", "rejected", "json", "utf8", "directory"])
+def test_session_sanity_matches_head(tmp_path, request, monkeypatch, case):
     session = tmp_path / "results/model/session"
+    if case in ("json", "utf8", "directory"):
+        # Changed error contract: do not compare these cases to the old heredoc.
+        monkeypatch.setenv("PYTHONUTF8", "1")
+        source = session / "vision/bench/broken.json"
+        source.parent.mkdir(parents=True)
+        if case == "directory":
+            source.mkdir()
+        else:
+            source.write_bytes(b"{" if case == "json" else b"\xff")
+        for excluded in ("broken.json", "vision/_derived/broken.json",
+                         "vision/bench/run_config.json", "vision/bench/runs.json"):
+            path = session / excluded
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(b"{")
+        actual = run_python(["-m", "shared.multimodal.benches.session_sanity",
+                             session, "model", BENCHES])
+        error = {"json": "JSONDecodeError", "utf8": "UnicodeDecodeError",
+                 "directory": "IsADirectoryError"}[case]
+        assert actual[0] == 1, actual
+        assert actual[1:] == (
+            f"[sanity] 1 건의 실패 결과:\n  [read] vision/bench/broken.json: {error}\n", "",
+        )
+        return
+    head_heredocs = request.getfixturevalue("head_heredocs")
     if case != "absent":
         source, _ = write_tiny_accuracy_source(tmp_path)
         summary_path = source / "summary.json"

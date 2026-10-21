@@ -221,7 +221,7 @@ for track in $TRACKS; do
     taubench)
       run_track taubench env "AGENT_REQUEST_TIMEOUT=$FULL_EVAL_REQUEST_TIMEOUT" "AGENT_TASK_TIMEOUT=$FULL_EVAL_TASK_TIMEOUT" \
         bash "$TRACK_BASE/taubench/run_taubench.sh" "$MODEL" "$BASE_URL_CHAT" ;;
-    *) echo "[full_eval] WARN: unknown track '$track' (configs/models/$MODEL_CONFIG.yaml)" ;;
+    *) echo "[full_eval] WARN: unknown track '$track' (configs/models/$MODEL_CONFIG.yaml)"; if [ "$track" != agent ]; then TRACK_FAILURES+=("${track}(unknown)"); fi ;;
   esac
 done
 
