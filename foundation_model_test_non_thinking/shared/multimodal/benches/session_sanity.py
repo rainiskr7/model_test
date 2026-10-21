@@ -21,7 +21,8 @@ def check_file(path, rel, model_name, schema):
     warnings = []
     try:
         d = json.loads(path.read_text())
-    except Exception:
+    except Exception as exc:
+        failures.append(f"  [read] {rel}: {type(exc).__name__}")
         return failures, warnings
 
     if schema is not None and isinstance(d, dict):

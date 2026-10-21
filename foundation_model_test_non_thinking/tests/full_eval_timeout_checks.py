@@ -22,7 +22,7 @@ REQUEST_ERROR = "AGENT_REQUEST_TIMEOUT must be a positive integer"
 TASK_ERROR = "AGENT_TASK_TIMEOUT must be an integer greater than AGENT_REQUEST_TIMEOUT"
 TRACKS = ("harness", "functionchat", "nlu", "taubench", "multimodal", "agent")
 CASES = ("defaults", "override", "request_only", "task_only", "empty",
-         "isolation", "invalid", "logs", "agent")
+         "isolation", "invalid", "logs", "agent", "unknown")
 
 TRACK_SCRIPT = '''import json, os, pathlib, sys
 keys = ("AGENT_REQUEST_TIMEOUT", "AGENT_TASK_TIMEOUT",
@@ -91,14 +91,18 @@ def execute(target, overrides, tracks, verify):
 
 def verify_valid(base, result, calls, pair, tracks):
     """Check executed environments as well as the master log and command arguments."""
-    assert result.returncode == 0, f"driver rc={result.returncode}: {result.stderr}"
-    expected_tracks = [name for name in tracks if name != "agent"]
+    unknown = [name for name in tracks if name not in TRACKS]
+    expected_rc = 1 if unknown else 0
+    assert result.returncode == expected_rc, (
+        f"expected rc {expected_rc}, driver rc={result.returncode}: {result.stdout} {result.stderr}")
+    expected_tracks = [name for name in tracks if name in TRACKS and name != "agent"]
     assert [call["track"] for call in calls] == expected_tracks, f"executed tracks: {calls}"
     consumers = {call["track"]: call["env"] for call in calls
                  if call["track"] in ("functionchat", "taubench")}
     expected = {REQUEST: pair[0], TASK: pair[1]}
-    assert consumers == {name: expected for name in ("functionchat", "taubench")}, (
-        f"both fake tracks executed; timeout mismatch: expected {expected}, observed {consumers}")
+    assert consumers == {name: expected for name in expected_tracks
+                         if name in ("functionchat", "taubench")}, (
+        f"fake track timeout mismatch: expected {expected}, observed {consumers}")
     for call in calls:
         if call["track"] not in consumers:
             assert call["env"] == {}, f"timeout leaked to {call}"
@@ -107,6 +111,13 @@ def verify_valid(base, result, calls, pair, tracks):
     if "agent" in tracks:
         assert "WARN: unknown track 'agent'" in result.stdout, result.stdout
     master = (base / "logs/fixture_session/_master.log").read_text()
+    if unknown:
+        failure = f"[full_eval] FAILED TRACKS ({len(unknown)}): " + " ".join(
+            f"{name}(unknown)" for name in unknown)
+        assert [line for line in result.stderr.splitlines() if "FAILED TRACKS" in line] == [failure], result.stderr
+        assert [line for line in master.splitlines() if "FAILED TRACKS" in line] == [failure], master
+    else:
+        assert "FAILED TRACKS" not in result.stderr + master
     header = (f"[full_eval] {REQUEST}={pair[0]} {TASK}={pair[1]} "
               "(functionchat·taubench only)")
     assert master.splitlines().count(header) == 1, f"missing/duplicate timeout header: {master}"
@@ -132,8 +143,11 @@ def valid_case(target, name):
                        "FULL_EVAL_REQUEST_TIMEOUT": "1", "FULL_EVAL_TASK_TIMEOUT": "2"}, ("350", "1000")),
         "logs": ({REQUEST: "350", TASK: "1000"}, ("350", "1000")),
         "agent": ({}, ("300", "900")),
+        "unknown": ({}, ("300", "900")),
     }[name]
     tracks = TRACKS + ("harness", "nlu") if name == "isolation" else TRACKS
+    if name == "unknown":
+        tracks = ("harness", "multimodl", "taubench")
     execute(target, overrides, tracks,
             lambda base, result, calls: verify_valid(base, result, calls, pair, tracks))
 
