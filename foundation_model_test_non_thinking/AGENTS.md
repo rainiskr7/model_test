@@ -4,11 +4,11 @@
 
 ## 수정 전 확인
 
-- `shared/harness/`·`configs/tests/`는 동결이다. 파일·패키지 표식도 추가하지 않는다. 시험에서 운영 `results/`·`data/`·`logs/`에 쓰지 않는다. 근거: [CONVENTIONS.md:125](CONVENTIONS.md#L125), [CONVENTIONS.md:176](CONVENTIONS.md#L176), [입구 SPEC:7](orchestration/SPEC_vibe_entry_docs_20261020.md#L7).
+- `shared/harness/`·`configs/tests/`는 동결이다. 파일·패키지 표식도 추가하지 않는다. 시험에서 운영 `results/`·`data/`·`logs/`에 쓰지 않는다. 근거: [CONVENTIONS.md:145](CONVENTIONS.md#L145), [CONVENTIONS.md:196](CONVENTIONS.md#L196), [입구 SPEC:7](orchestration/SPEC_vibe_entry_docs_20261020.md#L7).
 - 공통 코드는 `shared/`에서 수정한다. `llm/`·`slm/`·`vlm/`·`vsm/`의 **공통 트랙 디렉터리**가 링크이며, 클래스별 추천·평가계획은 실파일이다. 근거: [CONVENTIONS.md:17,33](CONVENTIONS.md#L17).
 - `orchestration/lanes/`의 진입 링크를 실파일로 바꾸거나 진입 파일 자체를 resolve하지 않는다. 호출 basename이 트랙을 정한다. 근거: [run_lane.sh:2,8](orchestration/run_lane.sh#L2).
-- 수정 전 [CONVENTIONS §11~14](CONVENTIONS.md#L123)의 해당 절을 읽는다. 외부 배치 `shared/agent/gpustack_custom/`, `shared/serving/` import 계약은 §11 예외를 따른다([CONVENTIONS.md:132,138](CONVENTIONS.md#L132)).
-- import 부작용 예외는 [CONVENTIONS.md:163](CONVENTIONS.md#L163), 동결 harness가 단독 복사하는 셸 helper의 heredoc 유지 예외는 [shared/results_dir.sh:2](shared/results_dir.sh#L2)를 따른다.
+- 수정 전 [CONVENTIONS §11~14](CONVENTIONS.md#11-패키지-구조import실행)의 해당 절을 읽는다. 외부 배치 `shared/agent/gpustack_custom/`, `shared/serving/` import 계약은 §11 예외를 따른다([CONVENTIONS.md:152,158](CONVENTIONS.md#L152)).
+- import 부작용 예외는 [CONVENTIONS.md:183](CONVENTIONS.md#L183), 동결 harness가 단독 복사하는 셸 helper의 heredoc 유지 예외는 [shared/results_dir.sh:2](shared/results_dir.sh#L2)를 따른다.
 
 ## 진입점과 검증
 

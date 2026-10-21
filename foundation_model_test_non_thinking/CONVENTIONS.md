@@ -136,7 +136,7 @@ grep 친화 + LLM 이 로그 분류 용이.
 - B3/B4는 `ADAPTERS`·`BENCHMARK_IDS`에 있고 `EXPECTED_COUNTS`에는 없다. `M/run_all.sh`에서 B4는 `skip_bench` 훅, B3는 `B3_MANIFEST` 존재·`M/benches/b3_preflight.py`의 `main` 결과로 실행을 결정한다.
 - 결과 경로는 `M/benches/paths.py`의 `get_results_dir`에서 bench 이름을 받는다(`vision/multimodal`, B3/B4는 `vision/customB`). `M/benches/session_sanity.py`의 `iter_result_files`는 `vision/` 아래를 탐색하고, `M/benches/_schema.py`의 `detect_and_validate`는 키로 판별한다. 별도 벤치명 목록을 추가하지 말고 새 결과 형식이 검증되는지 확인한다.
 - 이름 검색은 필수 등록·조건부 분기·자동 파생·단순 언급을 구분한다. 이번 문서 보완에서는 이름 일관성 시험·통합 등록부를 만들지 않는다(필요성은 벤치 추가 때 판단).
-- 후속: `configs/load_model_config.py`의 `validate_skip_benches` 오류 문구("훅을 추가했다면 … 추가")와 위 측정 제외 정책의 충돌은 별도 작업이며 운영 코드는 그대로 둔다.
+- `configs/load_model_config.py`의 `validate_skip_benches` 설명·오류 안내도 위 측정 제외 정책을 따른다. 허용값·검사 로직은 그대로 유지한다.
 - 후속: T 확인·이식 및 동결 `runner_checks.py`의 T 결과 읽기 경계는 별도 범위이며 이번 작업에서는 조사·수정하지 않는다.
 - 후속: `jev_test` 관련 확인·변경은 별도 범위다.
 
@@ -204,7 +204,7 @@ wrapper 전체에 `PYTHONPATH`를 export하지 않고 upstream 호출에도 붙�
 | 파일·시험 함수 | 이유·읽는 범위·알려진 취약점 |
 |---|---|
 | `test_publish_contamination.py` — `test_known_contaminated_kreta_sources_are_rejected` | 실측 오류 응답의 정답 오염 회귀. `fixtures/known_kreta_contamination.json`에 명시한 고정 10경로를 읽고 거부·오염 건수를 검사한다. 자료 누락·변경에 의존한다. |
-| `test_publish_contamination.py` — `test_non_error_kreta_sources_survive_independent_response_regrading` | 독립 재채점 회귀. `discover_sources(REPO)`의 KRETA JSONL 전역 탐색; 알려진 clean 경로 포함 여부와 모든 clean 결과를 검사한다. 새 clean 세션의 `parser_disagreement_rows`가 0이면 실패 가능하다. |
+| `test_publish_contamination.py` — `test_non_error_kreta_sources_survive_independent_response_regrading` | 독립 재채점 회귀. `discover_sources(REPO)`의 KRETA JSONL 전역 탐색; 알려진 clean 경로 포함 여부와 발행 가능으로 선별된 결과를 검사한다. `parser_disagreement_rows >= 1`은 고정 clean 목록에만 요구하며, 새 세션의 잘못된 발행 거부는 검출하지 못한다. |
 | `test_publish_dataset_identity.py` — `test_kreta_same_items_and_mode_share_fingerprint_across_repo_commits` | 고정 KRETA 2경로의 문항 digest·protocol 일치와 repository commit 차이를 검사한다. 저장 provenance 변경에 의존한다. |
 | `test_publish_dataset_identity.py` — `test_k_dtcbench_different_artifact_item_sets_have_different_digests` | 고정 K-DTC 2경로의 240건/5건 문항집합·digest 차이를 검사한다. 자료 건수·내용 변경에 의존한다. |
 | `test_publish_dataset_identity.py` — `test_mtvqa_dataset_identity_uses_all_row_and_qa_pairs` | 고정 MTVQA 경로의 `(row_idx, qa_idx)` 전체 문항 identity 회귀. 558문항·250개 id 등 저장 자료의 구성을 고정한다. |
