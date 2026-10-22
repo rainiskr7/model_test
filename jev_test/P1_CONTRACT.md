@@ -543,7 +543,7 @@ UNKNOWN/3개는 거부하며 기존 ongoing_slot_1/2의 의미는 그대로다.
 
 (판 5)
 
-kosgd2 항목과 기존 규칙은 configs/sets/kosgd2.yaml로 이동한다. task 두 개·문구·라벨 의미와 T0 fixture는 보존한다.
+kosgd2 항목과 기존 규칙은 configs/sets/kosgd2.yaml로 이동한다. task 두 개·문구·라벨 의미와 T0 fixture는 보존한다. 현행 예외는 계획 「판 5 보정 7 — kosgd2 W2」의 두 task 내 act_inform_intent instructions·criteria 문구뿐이다. 라벨 의미와 나머지 바이트는 보존한다.
 pool.exclude에 `{path: configs/t0/fixture_v1.json, field: cases, by: state_ref}`를 추가한다.
 state_ref의 KoSGD/kosgd2 참조는 row_id의 # 앞 대화 ID로 해석하므로 다른 턴도 제외된다.
 선정은 옛 풀 대화를 먼저 제외한 뒤 ID 정렬 순서대로 모든 USER 보유 후보에서 rng.choice를 한 번씩 소비한다.
@@ -1187,7 +1187,7 @@ C3 oracle.py는 jeveval의 selective/power를 import하지 않고 cutoff·정답
 
 - pplx: 길이 초과 응답 형태(422 메시지) · 반올림 · 문자열 state 처리 · `choice` 가 확률표 argmax 인지. Clef(SGLang): `usage.input_tokens` · 길이 초과 동작. 각 서버의 `served_name`.
 - 모델별 인코더 규칙(래퍼 포함)·$L_m$·`fixed_tokens` 계산법·문자 위치 → 토큰 위치 변환.
-  - 10-17: Clef·Clef-Flash 는 규칙 `clef_encode_record` 구현 — 체크포인트 사본의 `joint_schema_model.encode_record` 를 그대로 불러 ℓ(max_length 무제한)·`fixed_tokens`(max_state_tokens=0)·대상 끝(`render(state)` 의 offsets) 을 잰다 (H·I: 틀·잘림을 다시 구현하지 않음; 카드 코드가 `state_ids[:max_length-fixed_length]` 로 꼬리를 자르므로 §4-3 classify 와 일치). 모델 yaml `tokenizer.files_sha256` 에 `joint_schema_model.py` 를 넣어 fingerprint 에 묶는다. 10-17 후속: pplx v1·v1.1 규칙 `pplx_decision_messages` — HF 고정 sha 의 `source/src/autojev/model.py` 를 받아 `decision_messages` 로 질문마다 한 행(system + State/Question/Options 코드)을 만들고 서버 prepare 와 같은 chat 템플릿(생각 끔)으로 잰다; 서버는 행이 8,192 를 넘으면 잘리지 않고 422 거부(`Question branch exceeds the 8192-token limit`) 라 ℓ = 행 최댓값, `usage_tokens` = 행 합. 경계 빌더는 `run/t0_measure.py`. 네 모델 yaml 의 tokenizer·encoder·limit 은 채움(사본 `/Users/rainis/Desktop/workplace/models/<repo>`). 남은 P0: 결정 모델 서빙·served_name·auth·serving 필드, 실제 서버에서 ℓ·usage 일치 확인(Clef 는 `usage.input_tokens == ℓ`, pplx 는 합), T0.
+  - 10-17: Clef·Clef-Flash 는 규칙 `clef_encode_record` 구현 — 체크포인트 사본의 `joint_schema_model.encode_record` 를 그대로 불러 ℓ(max_length 무제한)·`fixed_tokens`(max_state_tokens=0)·대상 끝(`render(state)` 의 offsets) 을 잰다 (H·I: 틀·잘림을 다시 구현하지 않음; 카드 코드가 `state_ids[:max_length-fixed_length]` 로 꼬리를 자르므로 §4-3 classify 와 일치). 모델 yaml `tokenizer.files_sha256` 에 `joint_schema_model.py` 를 넣어 fingerprint 에 묶는다. 10-17 후속: pplx v1·v1.1 규칙 `pplx_decision_messages` — HF 고정 sha 의 `source/src/autojev/model.py` 를 받아 `decision_messages` 로 질문마다 한 행(system + State/Question/Options 코드)을 만들고 서버 prepare 와 같은 chat 템플릿(생각 끔)으로 잰다; 서버는 행이 8,192 를 넘으면 잘리지 않고 422 거부(`Question branch exceeds the 8192-token limit`) 라 ℓ = 행 최댓값, `usage_tokens` = 행 합. 경계 빌더는 `run/t0_measure.py`. 네 모델 yaml 의 tokenizer·encoder·limit 은 채움(사본 `<모델 사본 루트>/<repo>`). 남은 P0: 결정 모델 서빙·served_name·auth·serving 필드, 실제 서버에서 ℓ·usage 일치 확인(Clef 는 `usage.input_tokens == ℓ`, pplx 는 합), T0.
 - B1 진입 조건 (계획 §2-3) · 서버별 안전 동시성.
 - 감사 v4 (§2-2) — 동결 때.
 
@@ -1610,4 +1610,12 @@ manifest는 선택/task/model/b1/lists/요청 SHA를 묶는다. 원응답 입력
 각 기록은 logical_id와 calls, 각 call은 call_id/request_sha256/http_status/raw다.
 게이트는 원 manifest를 보존하고 출력에 응답 SHA 및 completed_manifest를 함께 남긴다.
 자동 전송/재시도 기능은 제공하지 않는다.
+````
+
+### 원문 보존 — 기존 본문 546행 (기준 커밋 102a097)
+
+현행 문구 예외는 계획 보정 7과 본문 §6-2a를 따른다.
+
+````markdown
+kosgd2 항목과 기존 규칙은 configs/sets/kosgd2.yaml로 이동한다. task 두 개·문구·라벨 의미와 T0 fixture는 보존한다.
 ````

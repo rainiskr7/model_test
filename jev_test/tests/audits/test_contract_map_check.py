@@ -11,7 +11,7 @@ def test_repository_map_preserves_six_blocks_and_all_tables():
     result = check.check(Path(__file__).resolve().parents[2])
     assert result['ok'], result
     assert result['rows'] == dict(issues=21, amendments=5, notes=7, preserved=6)
-    assert result['blocks'] == 6
+    assert result['blocks'] == 7  # Six d41e8b9 blocks plus the W2 registration.
 
 
 def test_fenced_headings_are_not_current_and_payload_is_exact():
@@ -41,3 +41,30 @@ def test_missing_duplicate_rows_and_targets_fail(kind):
         elif attack == 'duplicate': altered[kind].append(altered[kind][0])
         else: altered[kind][0][4 if kind == 'issues' else 1] = '계약 §999'
         assert check.check_mapping_targets(altered, sections)
+
+
+@pytest.mark.parametrize('attack', ['missing', 'duplicate', 'preserved_changed', 'current_changed'])
+def test_w2_registration_preservation_rejects_changes(tmp_path, monkeypatch, attack):
+    root = Path(__file__).resolve().parents[2]
+    for name in (*check.PRESERVED, 'jeveval/NOTES.md', 'CONTRACT_MAP.md',
+                 'audits/stage2_20261021/README.md'):
+        target = tmp_path / name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes((root / name).read_bytes())
+    git = check.git
+    monkeypatch.setattr(check, 'git', lambda _root, *args: git(root, *args))
+    assert check.check(tmp_path)['ok']
+    plan = tmp_path / 'JEV_TEST_PLAN.md'
+    text = plan.read_text()
+    payload = next(b for b in check.extract_preserved_blocks(text) if b.startswith(check.W2_HEADING))
+    fenced = '````markdown\n' + payload + '````'
+    if attack == 'missing':
+        text = text.replace(fenced, '')
+    elif attack == 'duplicate':
+        text += '\n' + fenced + '\n'
+    elif attack == 'preserved_changed':
+        text = text.replace(fenced, fenced.replace('98.0%', '99.0%'))
+    else:
+        text = text.replace('98.0%', '99.0%', 1)
+    plan.write_text(text)
+    assert not check.check(tmp_path)['ok']

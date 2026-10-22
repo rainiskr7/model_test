@@ -36,7 +36,8 @@ def test_alias_actions_only_derives_same_action_questions(tmp_path, monkeypatch)
     assert h.command("threshold") == 0
     h.run("test")
     assert h.command("score") == 0
-    full_actions = load_taskspec(tmp_path / "configs/tasks/kosgd_actions_only.yaml")
+    full = load_taskspec(tmp_path / "configs/tasks/kosgd2_full.yaml")
     alias_actions = load_taskspec(tmp_path / "configs/tasks/kosgd2_actions_only.yaml")
-    assert alias_actions.questions == full_actions.questions
+    # W2 changes INFORM_INTENT only in kosgd2; compare its two variants.
+    assert alias_actions.questions == [q for q in full.questions if q.id.startswith("act_")]
     assert len(alias_actions.questions) == 10

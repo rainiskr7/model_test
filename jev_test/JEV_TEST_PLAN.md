@@ -183,7 +183,7 @@ family=kosgd를 공유하되 set/경로/분할/실행 ID는 kosgd2로 구분한�
 
 W1 ongoing_2: “고객의 이번 발화와 관련된 서비스에서 지금 진행 중인 작업이 서로 다른
 서비스에서 둘인 경우, catalog 의 서비스 순서에서 뒤에 있는 서비스의 작업은? 진행 중인
-작업이 하나이거나 없으면 NONE.” ongoing_1과 행동 10개는 그대로다.
+작업이 하나이거나 없으면 NONE.” ongoing_1과 행동 9개는 그대로이며, act_inform_intent는 판 5 보정 7의 W2 문구를 따른다.
 진단 ongoing_two: “고객의 이번 발화와 관련된 서비스에서 지금 진행 중인 작업이 서로 다른
 서비스에서 둘인가?” true: “서로 다른 두 서비스에서 각각 작업이 진행 중이다” / false:
 “진행 중인 작업이 하나이거나 없다”. 성공 10·진단 3·입력 13문항이다. 정답 규칙은 완전한
@@ -573,6 +573,8 @@ kosgd2 감사 v5/실전 바이트 v4는 문서 끝 「§7-1 감사 및 단계 �
 
 ### 원문 보존 — 개정 15 적용 명세 — Phase A / Phase B (2026-10-19) (기준 커밋 d41e8b9)
 
+행동 10개 보존 문장의 현행 예외는 아래 「판 5 보정 7 — kosgd2 W2」를 따른다. 펜스 안 원문은 그대로 보존한다.
+
 아래는 당시 원문이며 현행 규칙은 본문과 CONTRACT_MAP.md를 따른다.
 
 ````markdown
@@ -747,3 +749,265 @@ C7 네트워크 거부와 보호 파일 SHA/목록 보존. C2/C3 실데이터·B
 - [Decision Index](https://github.com/apolinario/decision-index) · [WorkflowEvals](https://github.com/typesafe-ai/WorkflowEvals) (`core/providers.py:33`)
 - 데이터셋별 출처·sha 는 `configs/datasets.yaml`
 - [Jev (AI model) — Wikipedia](https://en.wikipedia.org/wiki/Jev_(AI_model))
+
+## 판 5 보정 7 — kosgd2 W2 (2026-10-22)
+
+기준 커밋은 102a097이며 모든 바이트 비교는 이 커밋을 기준으로 한다. 마지막 보정은
+102a097/70ad8cc의 판 5 보정 6이므로 다음 번호 7을 쓴다. 아래 집계와 변경 경위는
+Claude가 실행한 진단(2판 명세)의 기록이다. 구현자는 금지된 데이터·결과 원문을 재열람하거나
+집계를 재실행하지 않는다. 진단 코드 `scratchpad/kosgd_diag`는 사용자 지시로 삭제한다.
+
+### 변경 경위
+
+1. 옛 kosgd 시험 결과(main_20261020T224145)에서 act_inform_intent 예측 양성이 정답 양성의 약 2.5배인 것을 보고 이 문항을 살폈다 (모델 출력 관찰이 계기).
+2. 판단은 라벨만 읽는 집계와 사전 등록 규칙으로 했다 (결과 보기 전 규칙: ALL·TEST_REP 모두 비율 ≥ 0.90, 형식 이상 ≤ 5%). 집계 범위는 옛 풀 3,000 대화(dev 600 + test 2,400)만이다. 옛 풀 밖 1,201 대화(현행 kosgd2 평가 풀 1,200 + T0 참조 대화 1)는 허용 목록 검사로 turns에 접근하지 않았다.
+3. 수정 사유(§4-6 열거형): 지시가 두 가지로 읽힘 — “어떤 작업…을 하고 싶다는 의사를 밝히는가?”는 (가) 지금 진행되지 않는 작업을 새로 꺼냄 (나) 진행 중이거나 제안된 작업을 하고 싶다는 뜻을 보임, 둘 다로 읽힌다.
+4. AFFIRM은 같은 규칙에서 NOT_CANDIDATE (ALL 87.4%) → 바꾸지 않는다.
+
+### 라벨 집계 (label_freq)
+
+“의도 첫 등장 frame”은 그 USER frame의 active_intent(≠NONE)가 같은 대화·같은 서비스의
+이전 USER frame에 한 번도 없었던 frame이다. “first_intro”는 INFORM_INTENT 값이 같은
+대화·같은 서비스 이전 USER frame의 active_intent에 없었음이다. 작업 완료·별도 건·재개 여부는 판정하지 않는다.
+
+- INFORM_INTENT frame 7,941: 값 == 같은 frame active_intent 7,941 (100%); first_intro 7,779 (98.0%) · TEST_REP 627/635 (98.7%) · DEV_REP 174/177 (98.3%). 형식 이상 0.
+- 의도 첫 등장 frame 8,414: 직전 SYSTEM 같은 서비스 frame에 OFFER_INTENT 없음 7,774 → INFORM_INTENT 7,774 (100%); 있음 640 → AFFIRM_INTENT 635, INFORM_INTENT 5. 같은 frame에 둘 다 0.
+- 이미 나온 의도만 있는 USER frame 22,339 중 INFORM_INTENT 162 (0.7%). 이 162의 의미(같은 종류 별도 건·재개·반복 선언·주석 관례)는 이 집계로 구별할 수 없다. 잔여 모호로 기록한다.
+- 이것은 “라벨이 첫 등장 frame에 98% 붙는다”는 빈도이지, 한국어 문구 “새 작업”이 라벨과 98% 일치한다는 증거가 아니다.
+
+입력·출력 SHA-256 (Claude 실행 기록, Python 3.13.5). label_freq 입력 35개(split 1 + 대화 파일 34)는
+각 파일의 `경로 해시` 줄을 경로 이름순으로 이어 붙인 결합 해시로 적는다.
+
+| 구분 | 파일 | SHA-256 |
+|---|---|---|
+| 라벨 입력 | `configs/splits/kosgd.json` | `672dfa45fc66fe60ecb3cb1e3543afb9d5ea72cedd6c6cf4022d89f423552523` |
+| 라벨 입력 | split + `dataset/kosgd/dialogues_*.json` 34개 (결합) | `6dcd5ef8b9c60b94ab1226e67f6714ea80fc55c972630aebd60be000767d32f1` |
+| 설명용 입력 | `results/pplx_v1_1/main_20261020T224145/A/kosgd/full/test/final.jsonl` | `0906dff2ac1f134cc768bf2af0bb6e7f2fedd09d416c6b450e0b844fd549d5aa` |
+| 설명용 입력 | `results/b1_qwen3_8_27b/main_20261020T224145/A/kosgd/full/test/final.jsonl` | `4edcc3ae87e1bf6f17eb5f63bf7577a70503de217d979f1fde185e03f4772629` |
+| 설명용 입력 | `results/b1_qwen3_8_27b_fp8/main_20261020T224145/A/kosgd/full/test/final.jsonl` | `5a922f46be088879f1840acb8236f0df4aee51fbf17b8fda54e5a3be584ff486` |
+| 출력 | label_freq.json | `791185998a538dbbe4b5b75f579ddb58767543c3472b265290a4e016d52f8f3d` |
+| 출력 | model_diag.json | `64578a430918210d4f494f93e49d5f1923dc095d396f966aaaeca5136530d11f` |
+
+진단 코드(load.py · features.py · label_freq.py · model_diag.py, SHA-256 앞 16자 `1c6dab8f4a57e5a8` ·
+`190bb4a6d7094e07` · `c2bdf395209e532b` · `40286d408507e94f`; C5 의 w2_features.py `13c79f4ab6ed6e8d` ·
+w2_oper_check.py `01207044fe28ba7a`, load.py 는 C5 때 선택 인자 추가)와 출력 JSON은 사용자 지시로 삭제했다.
+이 표는 당시 입력을 가리킬 뿐이며 같은 코드로 다시 실행할 수는 없다.
+
+### 설명용 (모델 출력, 판정·문구 근거 아님)
+
+옛 kosgd 시험 2,400 대표 턴, 세 모델 모두 2,400 유효. 모델 순서는 pplx / B1 / FP8이다.
+INFORM_INTENT 오탐은 990 / 1,018 / 1,021이며 이미 나온 의도만 있는 턴은 931 / 961 / 964다.
+의도 첫 등장 턴인데 정답 거짓은 57 / 57 / 57이다. TEST_REP의 첫 등장 frame 684 =
+INFORM_INTENT 627 + AFFIRM_INTENT 57 (NEITHER 0)이므로 이 57 턴은 첫 등장 frame이
+모두 AFFIRM_INTENT인 턴이다 (두 집계에서 유도). 세 모델 오탐 교집합은 859, 합집합은 1,148이다.
+
+### C5 — W2 문구의 조작 정의 대조 (B 제안 결정 검사, 라벨만)
+
+B(새 맥락 중재)가 "라벨 근거는 '처음 등장'인데 W2 문구는 '지금 진행되고 있지 않은'"이라는 틈을 지적해
+제안한 검사다. 같은 옛 풀·같은 허용 목록 경계로, 판정 규칙을 실행 전에 기록한 뒤 돌렸다.
+W2_oper = 의도 ≠ NONE ∧ 직전 USER 턴의 어느 frame에도 같은 서비스/의도가 없음 ∧ 직전 SYSTEM
+같은 서비스 frame에 그 의도의 OFFER_INTENT 없음. FIRST는 '직전 USER 턴' 대신 '이전 모든 USER 턴'이다.
+K = 이전에 나왔지만 직전 USER 턴에는 없고 라벨이 거짓인 frame, M = W2_oper와 FIRST가 갈리는 frame.
+
+| 모집단 | frame | W2_oper 일치율 | 정밀도 | 재현율 | FIRST 재현율 | K | M |
+|---|---|---|---|---|---|---|---|
+| ALL | 33,046 | 99.55% (32,897) | 100% | 98.12% (7,792/7,941) | 97.96% (7,779/7,941) | 0 | 13 |
+| TEST_REP | 2,599 | 99.73% (2,592) | 100% | 98.90% (628/635) | 98.74% (627/635) | 0 | 1 |
+
+사전 판정(일치율 ≥ 0.90 그리고 K < M/2, 두 모집단 모두) → KEEP_W2. 갈리는 13 frame은 모두 라벨이
+INFORM_INTENT라 W2 읽기가 FIRST보다 라벨에 가깝다. 남은 불일치는 직전 USER 턴에 같은 의도가 있었는데
+INFORM_INTENT가 붙은 frame 149(ALL)이며 W2로는 거짓으로 읽힌다. 출력 w2_oper.json SHA-256 `3f856c43afea35d56e95c38da5394a9d125c91b14f8a678fc441cf66949fa251`.
+판정 규칙 기록 시각(파일 시각, 외부 증거 아님): 라벨 빈도 규칙 13:21·13:27 → 집계 실행 13:36; C5 규칙 14:15 → 실행 그 뒤.
+
+### W2 문구와 변경 범위
+
+`configs/tasks/kosgd2_full.yaml`과 `configs/tasks/kosgd2_actions_only.yaml`의
+act_inform_intent만 아래 동일 문구를 쓴다.
+
+- instructions: 고객의 이번 발화에서 지금 진행되고 있지 않은 작업(예약·조회·구매 등)을 새로 하겠다고 스스로 꺼내는가? 이미 진행 중인 작업을 다시 말하거나 그 조건만 말하는 경우, 시스템이 먼저 제안한 작업에 동의만 하는 경우는 여기에 들지 않는다. 같은 발화에서 다른 작업을 새로 꺼내면 참이다.
+- criteria 'true': 진행되고 있지 않은 작업을 새로 꺼낸다
+- criteria 'false': 새로 꺼내는 작업이 없다 (진행 중인 작업만 다시 말하거나 제안된 작업에 동의만 하는 경우 포함)
+
+id·role·type·label·문항 순서·다른 문항·주석 바이트는 불변이다. YAML 줄바꿈은 기존의
+단일 instructions 행 관례를 따른다. ongoing_1과 나머지 행동 9개, W1 ongoing_2와
+진단 ongoing_two는 유지한다. 옛 kosgd task·split·lists·b1·policy, 기존 audit_v4 out과
+jeveval 코드 로직은 변경하지 않는다. 계약 §6-2a의 문구 보존에 대한 현행 예외는 이 W2뿐이다.
+
+### 합성 예시와 기대 해석 (데이터 원문 아님)
+
+| 경우 | 합성 대화 | 기대 해석 |
+|---|---|---|
+| (a) 첫 발화 | “식당 예약하고 싶어요” | 참 |
+| (b) 예약 진행 중 | “7시로 해 주세요, 예약할게요” | 거짓 |
+| (c) 시스템 제안 | 시스템 “예약해 드릴까요?” → “네” | 거짓 |
+| (d) 다른 작업 추가 | “네, 그걸로 예약해 주세요. 그리고 택시도 불러 주세요” | 참 |
+| (e) 예약 완료 뒤 | “다른 식당도 하나 더 예약하고 싶어요” | 정하지 않음 (라벨 관례 미확인, 잔여 모호 162/7,941 쪽) |
+
+### 분할 유지 근거 — 미노출 확인
+
+제공된 경위상 kosgd2 평가 풀 1,200 대화(dev 240/test 960)는 아직 어떤 모델에도 입력되지
+않았다. results/에 kosgd2 실행 폴더와 results/_pilot, T0 결과가 없고, T0 fixture의 KoSGD
+참조 대화는 D1a로 풀 밖이다. 이는 출력 없음만으로 추정하는 것이 아니라 실행·파일럿·T0
+기록과 풀 경계를 함께 확인하는 근거다. Claude는 C4로 명령과 결과를 기록한다.
+W1 파일럿은 manifest·응답·gate 모두 아직 없으므로 1회 제한 위반이 아니다.
+기존 pilot_selection.json은 선정 기록이며 요청 manifest나 실행 증거가 아니다.
+
+W2를 커밋으로 확정한 뒤에만 kosgd2 요청을 만든다. 옛 kosgd 결과를 W2 성능 근거로
+쓰지 않는다. 따라서 §4-6 “모델 출력이 생긴 뒤 문구를 바꾸면 분할 폐기”는 kosgd2에
+해당하지 않는다. 옛 kosgd 판은 바이트 그대로이며 다시 채점하지 않는다.
+
+### 보증 범위·수용 조건
+
+- C1: 전체 pytest 통과, 기준 102a097의 node ID 2,810개 모두 존재(삭제 0), 새 skip/xfail 0. W2 짝 시험은 정확한 문구·두 판 일치·상수로 둔 기준 task와의 문구 외 메타데이터/질문/바이트 보존·한쪽만 옛 문구인 음성 사례를 검사한다. 기존 kosgd 바이트 보존 시험은 유지한다.
+- C2 (Claude 실행): 본 트리에서 실데이터 audit_v4 kosgd2를 실행해 새 파일 `audits/audit_v4/out/kosgd2.20261022.json`을 만든다. primary_variant_candidate=full, inputs의 두 task SHA는 새 task 파일 SHA와 같아야 하며 기존 out/*.json SHA는 불변이다. C2 감사 PASS는 새 문구 바이트가 요청·정답 연결·길이 규칙과 맞는다는 구현 일치성뿐이며 W2 의미 적합성·성능 향상 증거가 아니다.
+- 파일럿 게이트(중복 ≤5%·무효 ≤5%, 정답률 안 봄)는 그대로다. 파일럿 PASS도 W2 적합성 증거가 아니다. 파일럿 manifest는 W2 task SHA를 담으므로 W2 전 manifest는 없다(만든 적 없음). 요청 생성 순서와 해시는 `audits/kosgd2_pilot/README.md`를 따른다.
+- C3: 기준 102a097 대비 두 task의 git diff -U0 hunk는 act_inform_intent instructions·criteria 줄 안에만 있고 두 새 블록은 같다. configs/tasks/kosgd_*.yaml·configs/splits/*·configs/sets/* 및 기존 audits/audit_v4/out/*는 바이트 동일하다. C2의 새 감사 파일만 추가를 허용한다.
+- C5: 위 「C5」 표의 사전 판정 KEEP_W2. 라벨 빈도 대조이며 모델이 W2를 그렇게 읽는다는 증거는 아니다.
+- C4: results 안 kosgd2·_pilot·_t0 미노출 확인 명령을 기록하고, 끝에 scratchpad/kosgd_diag를 삭제한다. 변경 파일의 사용자 홈 절대경로는 0건이어야 한다. 구현자는 커밋하지 않는다.
+
+보고 연결은 `--audit-evidence kosgd2=audits/audit_v4/out/kosgd2.20261022.json`을
+명시한다. 기존 out 증거를 덮어쓰거나 과거 증거를 새 문구 감사로 취급하지 않는다.
+
+### Task SHA-256 (바이트 기준 102a097)
+
+| 파일 | 옛 SHA-256 (102a097) | W2 SHA-256 |
+|---|---|---|
+| `configs/tasks/kosgd2_full.yaml` | `ff09952c9a73b6fef81a51971f9a28d50f1cdfc80013fab425e52962cd02d0f0` | `7f985bfc6aebffaf4f6d6e8634c5c3e63e9b271728021ea9908f2eb59b5e6046` |
+| `configs/tasks/kosgd2_actions_only.yaml` | `24d66507b3f2df21758c79ac3c3a874b4b18d5008552dc002de120df590535d9` | `2eeba54872c476ea73a070ea967eb89e595961cc404bcdee448e9193cf56cea3` |
+
+### 원문 보존 — 판 5 보정 7 — kosgd2 W2 (2026-10-22) (기준 커밋 102a097)
+
+아래는 보정 7 등록 원문이며 현행 규칙은 위 보정 절과 CONTRACT_MAP.md를 따른다.
+
+````markdown
+## 판 5 보정 7 — kosgd2 W2 (2026-10-22)
+
+기준 커밋은 102a097이며 모든 바이트 비교는 이 커밋을 기준으로 한다. 마지막 보정은
+102a097/70ad8cc의 판 5 보정 6이므로 다음 번호 7을 쓴다. 아래 집계와 변경 경위는
+Claude가 실행한 진단(2판 명세)의 기록이다. 구현자는 금지된 데이터·결과 원문을 재열람하거나
+집계를 재실행하지 않는다. 진단 코드 `scratchpad/kosgd_diag`는 사용자 지시로 삭제한다.
+
+### 변경 경위
+
+1. 옛 kosgd 시험 결과(main_20261020T224145)에서 act_inform_intent 예측 양성이 정답 양성의 약 2.5배인 것을 보고 이 문항을 살폈다 (모델 출력 관찰이 계기).
+2. 판단은 라벨만 읽는 집계와 사전 등록 규칙으로 했다 (결과 보기 전 규칙: ALL·TEST_REP 모두 비율 ≥ 0.90, 형식 이상 ≤ 5%). 집계 범위는 옛 풀 3,000 대화(dev 600 + test 2,400)만이다. 옛 풀 밖 1,201 대화(현행 kosgd2 평가 풀 1,200 + T0 참조 대화 1)는 허용 목록 검사로 turns에 접근하지 않았다.
+3. 수정 사유(§4-6 열거형): 지시가 두 가지로 읽힘 — “어떤 작업…을 하고 싶다는 의사를 밝히는가?”는 (가) 지금 진행되지 않는 작업을 새로 꺼냄 (나) 진행 중이거나 제안된 작업을 하고 싶다는 뜻을 보임, 둘 다로 읽힌다.
+4. AFFIRM은 같은 규칙에서 NOT_CANDIDATE (ALL 87.4%) → 바꾸지 않는다.
+
+### 라벨 집계 (label_freq)
+
+“의도 첫 등장 frame”은 그 USER frame의 active_intent(≠NONE)가 같은 대화·같은 서비스의
+이전 USER frame에 한 번도 없었던 frame이다. “first_intro”는 INFORM_INTENT 값이 같은
+대화·같은 서비스 이전 USER frame의 active_intent에 없었음이다. 작업 완료·별도 건·재개 여부는 판정하지 않는다.
+
+- INFORM_INTENT frame 7,941: 값 == 같은 frame active_intent 7,941 (100%); first_intro 7,779 (98.0%) · TEST_REP 627/635 (98.7%) · DEV_REP 174/177 (98.3%). 형식 이상 0.
+- 의도 첫 등장 frame 8,414: 직전 SYSTEM 같은 서비스 frame에 OFFER_INTENT 없음 7,774 → INFORM_INTENT 7,774 (100%); 있음 640 → AFFIRM_INTENT 635, INFORM_INTENT 5. 같은 frame에 둘 다 0.
+- 이미 나온 의도만 있는 USER frame 22,339 중 INFORM_INTENT 162 (0.7%). 이 162의 의미(같은 종류 별도 건·재개·반복 선언·주석 관례)는 이 집계로 구별할 수 없다. 잔여 모호로 기록한다.
+- 이것은 “라벨이 첫 등장 frame에 98% 붙는다”는 빈도이지, 한국어 문구 “새 작업”이 라벨과 98% 일치한다는 증거가 아니다.
+
+입력·출력 SHA-256 (Claude 실행 기록, Python 3.13.5). label_freq 입력 35개(split 1 + 대화 파일 34)는
+각 파일의 `경로 해시` 줄을 경로 이름순으로 이어 붙인 결합 해시로 적는다.
+
+| 구분 | 파일 | SHA-256 |
+|---|---|---|
+| 라벨 입력 | `configs/splits/kosgd.json` | `672dfa45fc66fe60ecb3cb1e3543afb9d5ea72cedd6c6cf4022d89f423552523` |
+| 라벨 입력 | split + `dataset/kosgd/dialogues_*.json` 34개 (결합) | `6dcd5ef8b9c60b94ab1226e67f6714ea80fc55c972630aebd60be000767d32f1` |
+| 설명용 입력 | `results/pplx_v1_1/main_20261020T224145/A/kosgd/full/test/final.jsonl` | `0906dff2ac1f134cc768bf2af0bb6e7f2fedd09d416c6b450e0b844fd549d5aa` |
+| 설명용 입력 | `results/b1_qwen3_8_27b/main_20261020T224145/A/kosgd/full/test/final.jsonl` | `4edcc3ae87e1bf6f17eb5f63bf7577a70503de217d979f1fde185e03f4772629` |
+| 설명용 입력 | `results/b1_qwen3_8_27b_fp8/main_20261020T224145/A/kosgd/full/test/final.jsonl` | `5a922f46be088879f1840acb8236f0df4aee51fbf17b8fda54e5a3be584ff486` |
+| 출력 | label_freq.json | `791185998a538dbbe4b5b75f579ddb58767543c3472b265290a4e016d52f8f3d` |
+| 출력 | model_diag.json | `64578a430918210d4f494f93e49d5f1923dc095d396f966aaaeca5136530d11f` |
+
+진단 코드(load.py · features.py · label_freq.py · model_diag.py, SHA-256 앞 16자 `1c6dab8f4a57e5a8` ·
+`190bb4a6d7094e07` · `c2bdf395209e532b` · `40286d408507e94f`; C5 의 w2_features.py `13c79f4ab6ed6e8d` ·
+w2_oper_check.py `01207044fe28ba7a`, load.py 는 C5 때 선택 인자 추가)와 출력 JSON은 사용자 지시로 삭제했다.
+이 표는 당시 입력을 가리킬 뿐이며 같은 코드로 다시 실행할 수는 없다.
+
+### 설명용 (모델 출력, 판정·문구 근거 아님)
+
+옛 kosgd 시험 2,400 대표 턴, 세 모델 모두 2,400 유효. 모델 순서는 pplx / B1 / FP8이다.
+INFORM_INTENT 오탐은 990 / 1,018 / 1,021이며 이미 나온 의도만 있는 턴은 931 / 961 / 964다.
+의도 첫 등장 턴인데 정답 거짓은 57 / 57 / 57이다. TEST_REP의 첫 등장 frame 684 =
+INFORM_INTENT 627 + AFFIRM_INTENT 57 (NEITHER 0)이므로 이 57 턴은 첫 등장 frame이
+모두 AFFIRM_INTENT인 턴이다 (두 집계에서 유도). 세 모델 오탐 교집합은 859, 합집합은 1,148이다.
+
+### C5 — W2 문구의 조작 정의 대조 (B 제안 결정 검사, 라벨만)
+
+B(새 맥락 중재)가 "라벨 근거는 '처음 등장'인데 W2 문구는 '지금 진행되고 있지 않은'"이라는 틈을 지적해
+제안한 검사다. 같은 옛 풀·같은 허용 목록 경계로, 판정 규칙을 실행 전에 기록한 뒤 돌렸다.
+W2_oper = 의도 ≠ NONE ∧ 직전 USER 턴의 어느 frame에도 같은 서비스/의도가 없음 ∧ 직전 SYSTEM
+같은 서비스 frame에 그 의도의 OFFER_INTENT 없음. FIRST는 '직전 USER 턴' 대신 '이전 모든 USER 턴'이다.
+K = 이전에 나왔지만 직전 USER 턴에는 없고 라벨이 거짓인 frame, M = W2_oper와 FIRST가 갈리는 frame.
+
+| 모집단 | frame | W2_oper 일치율 | 정밀도 | 재현율 | FIRST 재현율 | K | M |
+|---|---|---|---|---|---|---|---|
+| ALL | 33,046 | 99.55% (32,897) | 100% | 98.12% (7,792/7,941) | 97.96% (7,779/7,941) | 0 | 13 |
+| TEST_REP | 2,599 | 99.73% (2,592) | 100% | 98.90% (628/635) | 98.74% (627/635) | 0 | 1 |
+
+사전 판정(일치율 ≥ 0.90 그리고 K < M/2, 두 모집단 모두) → KEEP_W2. 갈리는 13 frame은 모두 라벨이
+INFORM_INTENT라 W2 읽기가 FIRST보다 라벨에 가깝다. 남은 불일치는 직전 USER 턴에 같은 의도가 있었는데
+INFORM_INTENT가 붙은 frame 149(ALL)이며 W2로는 거짓으로 읽힌다. 출력 w2_oper.json SHA-256 `3f856c43afea35d56e95c38da5394a9d125c91b14f8a678fc441cf66949fa251`.
+판정 규칙 기록 시각(파일 시각, 외부 증거 아님): 라벨 빈도 규칙 13:21·13:27 → 집계 실행 13:36; C5 규칙 14:15 → 실행 그 뒤.
+
+### W2 문구와 변경 범위
+
+`configs/tasks/kosgd2_full.yaml`과 `configs/tasks/kosgd2_actions_only.yaml`의
+act_inform_intent만 아래 동일 문구를 쓴다.
+
+- instructions: 고객의 이번 발화에서 지금 진행되고 있지 않은 작업(예약·조회·구매 등)을 새로 하겠다고 스스로 꺼내는가? 이미 진행 중인 작업을 다시 말하거나 그 조건만 말하는 경우, 시스템이 먼저 제안한 작업에 동의만 하는 경우는 여기에 들지 않는다. 같은 발화에서 다른 작업을 새로 꺼내면 참이다.
+- criteria 'true': 진행되고 있지 않은 작업을 새로 꺼낸다
+- criteria 'false': 새로 꺼내는 작업이 없다 (진행 중인 작업만 다시 말하거나 제안된 작업에 동의만 하는 경우 포함)
+
+id·role·type·label·문항 순서·다른 문항·주석 바이트는 불변이다. YAML 줄바꿈은 기존의
+단일 instructions 행 관례를 따른다. ongoing_1과 나머지 행동 9개, W1 ongoing_2와
+진단 ongoing_two는 유지한다. 옛 kosgd task·split·lists·b1·policy, 기존 audit_v4 out과
+jeveval 코드 로직은 변경하지 않는다. 계약 §6-2a의 문구 보존에 대한 현행 예외는 이 W2뿐이다.
+
+### 합성 예시와 기대 해석 (데이터 원문 아님)
+
+| 경우 | 합성 대화 | 기대 해석 |
+|---|---|---|
+| (a) 첫 발화 | “식당 예약하고 싶어요” | 참 |
+| (b) 예약 진행 중 | “7시로 해 주세요, 예약할게요” | 거짓 |
+| (c) 시스템 제안 | 시스템 “예약해 드릴까요?” → “네” | 거짓 |
+| (d) 다른 작업 추가 | “네, 그걸로 예약해 주세요. 그리고 택시도 불러 주세요” | 참 |
+| (e) 예약 완료 뒤 | “다른 식당도 하나 더 예약하고 싶어요” | 정하지 않음 (라벨 관례 미확인, 잔여 모호 162/7,941 쪽) |
+
+### 분할 유지 근거 — 미노출 확인
+
+제공된 경위상 kosgd2 평가 풀 1,200 대화(dev 240/test 960)는 아직 어떤 모델에도 입력되지
+않았다. results/에 kosgd2 실행 폴더와 results/_pilot, T0 결과가 없고, T0 fixture의 KoSGD
+참조 대화는 D1a로 풀 밖이다. 이는 출력 없음만으로 추정하는 것이 아니라 실행·파일럿·T0
+기록과 풀 경계를 함께 확인하는 근거다. Claude는 C4로 명령과 결과를 기록한다.
+W1 파일럿은 manifest·응답·gate 모두 아직 없으므로 1회 제한 위반이 아니다.
+기존 pilot_selection.json은 선정 기록이며 요청 manifest나 실행 증거가 아니다.
+
+W2를 커밋으로 확정한 뒤에만 kosgd2 요청을 만든다. 옛 kosgd 결과를 W2 성능 근거로
+쓰지 않는다. 따라서 §4-6 “모델 출력이 생긴 뒤 문구를 바꾸면 분할 폐기”는 kosgd2에
+해당하지 않는다. 옛 kosgd 판은 바이트 그대로이며 다시 채점하지 않는다.
+
+### 보증 범위·수용 조건
+
+- C1: 전체 pytest 통과, 기준 102a097의 node ID 2,810개 모두 존재(삭제 0), 새 skip/xfail 0. W2 짝 시험은 정확한 문구·두 판 일치·상수로 둔 기준 task와의 문구 외 메타데이터/질문/바이트 보존·한쪽만 옛 문구인 음성 사례를 검사한다. 기존 kosgd 바이트 보존 시험은 유지한다.
+- C2 (Claude 실행): 본 트리에서 실데이터 audit_v4 kosgd2를 실행해 새 파일 `audits/audit_v4/out/kosgd2.20261022.json`을 만든다. primary_variant_candidate=full, inputs의 두 task SHA는 새 task 파일 SHA와 같아야 하며 기존 out/*.json SHA는 불변이다. C2 감사 PASS는 새 문구 바이트가 요청·정답 연결·길이 규칙과 맞는다는 구현 일치성뿐이며 W2 의미 적합성·성능 향상 증거가 아니다.
+- 파일럿 게이트(중복 ≤5%·무효 ≤5%, 정답률 안 봄)는 그대로다. 파일럿 PASS도 W2 적합성 증거가 아니다. 파일럿 manifest는 W2 task SHA를 담으므로 W2 전 manifest는 없다(만든 적 없음). 요청 생성 순서와 해시는 `audits/kosgd2_pilot/README.md`를 따른다.
+- C3: 기준 102a097 대비 두 task의 git diff -U0 hunk는 act_inform_intent instructions·criteria 줄 안에만 있고 두 새 블록은 같다. configs/tasks/kosgd_*.yaml·configs/splits/*·configs/sets/* 및 기존 audits/audit_v4/out/*는 바이트 동일하다. C2의 새 감사 파일만 추가를 허용한다.
+- C5: 위 「C5」 표의 사전 판정 KEEP_W2. 라벨 빈도 대조이며 모델이 W2를 그렇게 읽는다는 증거는 아니다.
+- C4: results 안 kosgd2·_pilot·_t0 미노출 확인 명령을 기록하고, 끝에 scratchpad/kosgd_diag를 삭제한다. 변경 파일의 사용자 홈 절대경로는 0건이어야 한다. 구현자는 커밋하지 않는다.
+
+보고 연결은 `--audit-evidence kosgd2=audits/audit_v4/out/kosgd2.20261022.json`을
+명시한다. 기존 out 증거를 덮어쓰거나 과거 증거를 새 문구 감사로 취급하지 않는다.
+
+### Task SHA-256 (바이트 기준 102a097)
+
+| 파일 | 옛 SHA-256 (102a097) | W2 SHA-256 |
+|---|---|---|
+| `configs/tasks/kosgd2_full.yaml` | `ff09952c9a73b6fef81a51971f9a28d50f1cdfc80013fab425e52962cd02d0f0` | `7f985bfc6aebffaf4f6d6e8634c5c3e63e9b271728021ea9908f2eb59b5e6046` |
+| `configs/tasks/kosgd2_actions_only.yaml` | `24d66507b3f2df21758c79ac3c3a874b4b18d5008552dc002de120df590535d9` | `2eeba54872c476ea73a070ea967eb89e595961cc404bcdee448e9193cf56cea3` |
+````
+
+### 원문 보존 — 기존 본문 186행 (기준 커밋 102a097)
+
+````markdown
+작업이 하나이거나 없으면 NONE.” ongoing_1과 행동 10개는 그대로다.
+````

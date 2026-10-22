@@ -64,3 +64,7 @@
 | 126, 136, 138 | 계약 §1-2a·§8-7a | 코드 지문 경로·B1 offsets·extra 구성원 및 항목 요약 경계 유지 |
 | 145–153 | 계약 §3-1·§3-2·§5-5c·§5-5d | confidence/ECE와 replay 판 4 규칙 유지 |
 | 155–173, 403–447 | 위 21행의 해당 현행 위치 | family/overlay/등록/감사/파일럿의 최신 범위 명시; 당시 검증 수·명령·변경 파일 목록은 이력 |
+
+## 보정 7 현행 대응 (기준 102a097)
+
+계획 §3-a와 「판 5 보정 7 — kosgd2 W2 (2026-10-22)」, 계약 §6-2a의 보존 예외는 kosgd2 두 task의 act_inform_intent instructions·criteria뿐이다. 기존 개정 15 원문은 당시 기록으로 보존한다. 파일럿은 W2 task SHA로 준비하고, 보고는 `--audit-evidence kosgd2=audits/audit_v4/out/kosgd2.20261022.json`으로 명시 연결한다. 감사·파일럿 PASS는 문구의 의미 적합성·성능 향상 증거가 아니다.

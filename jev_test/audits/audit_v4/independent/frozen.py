@@ -1,4 +1,4 @@
-"""249f096 동결 task의 ID/label/role/type/options와 문구 바이트 해시. 원본 변경 시 재등록 필요."""
+"""249f096 동결 task의 ID/label/role/type/options와 문구 바이트 해시. kosgd2 는 W2(보정 7) 기준. 원본 변경 시 재등록 필요."""
 
 TABLES = {'kosgd_full': {'ongoing_1': ('ongoing_slot_1', 'success', 'choice', 'catalog_intents_plus_none'),
                 'ongoing_2': ('ongoing_slot_2', 'success', 'choice', 'catalog_intents_plus_none'),
@@ -48,5 +48,5 @@ TABLES = {'kosgd_full': {'ongoing_1': ('ongoing_slot_1', 'success', 'choice', 'c
 
 TASK_SHA256 = {'kosgd_full': '629b887c267e802a75356fbc7cb792efd6a159f1917fe86a8aaf680b02cbb208',
  'kosgd_actions_only': 'd6f51422373d92e9b73f4eb34f359948752853352339d27d6d397242403c4700',
- 'kosgd2_full': 'ff09952c9a73b6fef81a51971f9a28d50f1cdfc80013fab425e52962cd02d0f0',
- 'kosgd2_actions_only': '24d66507b3f2df21758c79ac3c3a874b4b18d5008552dc002de120df590535d9'}
+ 'kosgd2_full': '7f985bfc6aebffaf4f6d6e8634c5c3e63e9b271728021ea9908f2eb59b5e6046',
+ 'kosgd2_actions_only': '2eeba54872c476ea73a070ea967eb89e595961cc404bcdee448e9193cf56cea3'}

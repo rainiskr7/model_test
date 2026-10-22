@@ -431,7 +431,7 @@ python -m jeveval.run.cli score-variants --history --run-dir "$HISTORY_RUN_DIR"
 
 감사는 기본 out/<set>.json을 쓰며 새 판은 report에 반복 옵션으로 명시한다.
 예: `--audit-evidence kosgd=audits/audit_v4/out/kosgd.20261021.json`
-및 `--audit-evidence kosgd2=audits/audit_v4/out/kosgd2.20261021.json`.
+및 `--audit-evidence kosgd2=audits/audit_v4/out/kosgd2.20261022.json`.
 파일을 자동 최신 선택하지 않고 적격 검사 실패는 연결 미확인으로 표시한다. 기존 보고서를
 덮어쓰지 않는 새 출력 경로를 사용한다. 코드/overlay 해시가 바뀐 kosgd2는 새 사전 감사,
 새 replay kosgd는 정확한 세 run을 포함한 새 사후 감사가 필요하다.

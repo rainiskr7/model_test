@@ -2,6 +2,9 @@
 
 실데이터 선정과 모델 호출은 이번 구현에서 실행하지 않는다. 질문은 kosgd2_full 13개,
 모델은 pplx_v1_1과 b1_qwen3_8_27b(BF16)이며 두 모델의 200 논리 ID가 같아야 한다.
+파일럿 요청은 W2 커밋 확정 뒤 W2 task SHA로 만들며 manifest에 그 SHA를 담는다.
+W2 전 manifest는 없다(만든 적 없음); 기존 pilot_selection.json은 선정 산출물이다.
+게이트 PASS는 W2 의미 적합성·성능 향상 증거가 아니다. 중복 ≤5%·무효 ≤5%와 1회 제한은 유지한다.
 정답·정확도·직전 정답 기준선을 만들지 않는다. 원 JSON의 라벨은 reader의 prefix에 투영하지 않는다.
 
 - `select_pilot.py`: 옛 풀 유일 3,000 ID 정렬 → 동일 RNG sample200 → 결과 정렬 → USER index choice.

@@ -21,6 +21,9 @@ PRESERVED = {
 AMENDMENTS = ('선택적 예측·조건부 통과 확률', 'family 의미', '복수 분석 선언·등록',
               '명시 감사 증거·독립 보조 보고', '수용 도구')
 NOTES = ('3–15', '16', '17–29', '31–36, 125–129', '126, 136, 138', '145–153', '155–173, 403–447')
+W2_HEADING = '## 판 5 보정 7 — kosgd2 W2 (2026-10-22)\n'
+W2_PRESERVED = '### 원문 보존 — 판 5 보정 7 — kosgd2 W2 (2026-10-22) (기준 커밋 102a097)'
+W2_SHA256 = '9698ecf1dfe9ead9db7eae8c2fbbcca8bb500c293e01ba6279c81b898c1ea9e5'
 
 
 def extract_preserved_blocks(text):
@@ -113,8 +116,16 @@ def check(root):
     mapping = (root / 'CONTRACT_MAP.md').read_text()
     rows = table_rows(mapping)
     errors = check_mapping_targets(rows, {n: index_current_sections(current[n]) for n in PRESERVED})
+    w2 = [b for b in blocks['JEV_TEST_PLAN.md'] if b.startswith(W2_HEADING)]
+    if len(w2) != 1 or sha256(w2[0].encode()).hexdigest() != W2_SHA256:
+        errors.append('JEV_TEST_PLAN.md: preserved W2 block')
+    else:
+        live = current['JEV_TEST_PLAN.md'].split(W2_PRESERVED, 1)[0]
+        if W2_HEADING not in live or W2_HEADING + live.split(W2_HEADING, 1)[1].rstrip() + '\n' != w2[0]:
+            errors.append('JEV_TEST_PLAN.md: current W2 differs from registered block')
     for name, expected in PRESERVED.items():
-        found = [b for b in blocks[name] if len(b.encode()) > 1000]
+        # Keep all six d41e8b9 comparisons; W2 has its own exact-byte check above.
+        found = [b for b in blocks[name] if len(b.encode()) > 1000 and not b.startswith(W2_HEADING)]
         if len(found) != len(expected): errors.append(f'{name}: block count')
         for i, (first, last, digest) in enumerate(expected):
             original = ''.join(old[name].splitlines(keepends=True)[first - 1:last])
@@ -132,7 +143,7 @@ def check(root):
     if actual != expected_rows: errors.append('preserved: map rows differ')
     for row in rows['amendments']:
         if row[1].endswith('.md') and not (root / row[1]).is_file(): errors.append('missing tool documentation')
-    return dict(ok=not errors, errors=errors, rows={k: len(v) for k, v in rows.items()}, blocks=6)
+    return dict(ok=not errors, errors=errors, rows={k: len(v) for k, v in rows.items()}, blocks=6 + len(w2))
 
 
 def main(argv=None):

@@ -83,10 +83,10 @@ questions:
 - id: act_inform_intent
   role: success
   type: noul
-  instructions: 고객의 이번 발화에서 어떤 작업(예약·조회·구매 등)을 하고 싶다는 의사를 밝히는가?
+  instructions: 고객의 이번 발화에서 지금 진행되고 있지 않은 작업(예약·조회·구매 등)을 새로 하겠다고 스스로 꺼내는가? 이미 진행 중인 작업을 다시 말하거나 그 조건만 말하는 경우, 시스템이 먼저 제안한 작업에 동의만 하는 경우는 여기에 들지 않는다. 같은 발화에서 다른 작업을 새로 꺼내면 참이다.
   criteria:
-    'true': 하고 싶은 작업을 밝힌다
-    'false': 하고 싶은 작업을 밝히지 않는다
+    'true': 진행되고 있지 않은 작업을 새로 꺼낸다
+    'false': 새로 꺼내는 작업이 없다 (진행 중인 작업만 다시 말하거나 제안된 작업에 동의만 하는 경우 포함)
   label: act:INFORM_INTENT
 - id: act_affirm_intent
   role: diagnostic
