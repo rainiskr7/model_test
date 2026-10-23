@@ -20,6 +20,10 @@ from shared.taubench.scoring.passk import pass_hat_k_table
 SCORING_VERSION = "taubench_state_v2"  # v2: 후보 프로토콜 실패(도구 미호출)를 측정된 실패로 센다
 JUDGE_BASES = frozenset({"NL_ASSERTION", "COMMUNICATE"})
 PROGRAMMATIC_BASES = frozenset({"DB", "ENV_ASSERTION", "ACTION"})
+SERVING_REJECTIONS = {
+    ("BadRequestError", "litellm.BadRequestError: OpenAIException - No user query found in messages."):
+        "template_requires_user_turn",
+}
 DECLARED_INVENTORY = {
     "telecom": {
         "total_records": 4592,
@@ -451,9 +455,22 @@ def _domain_summary(runnable_tasks: int, scores: _SimulationScores) -> dict[str,
         measured, passed, candidate_attr, env_attr, unclassified_attr
     )
 
+    reason = None if measured else "no upstream records had a runnable numeric reward"
+    if not measured and simulations and all(
+        sim.get("termination_reason") == "infrastructure_error" and _failure_actor(sim) == "agent"
+        for sim in simulations
+    ):
+        errors = {
+            (str((sim.get("info") or {}).get("error_type") or ""),
+             str((sim.get("info") or {}).get("error") or "").strip())
+            for sim in simulations
+        }
+        label = SERVING_REJECTIONS.get(next(iter(errors))) if len(errors) == 1 else None
+        if label:
+            reason = f"serving_incompatible:{label}"
     return {
         "status": "measured" if measured else "not_measured",
-        "reason": None if measured else "no upstream records had a runnable numeric reward",
+        "reason": reason,
         "pass_rate": passed / measured if measured else None,
         "pass_rate_source": "tau2 results.simulations[].reward_info.reward",
         "pass_rate_note": "후보 프로토콜 실패(candidate_protocol_failures)는 보상 0 의 측정된 실패로 분모·실패에 포함",

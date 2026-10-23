@@ -13,10 +13,24 @@ def with_completion_check(output):
     lines = []
     for line in stdout.splitlines(keepends=True):
         lines.append(line)
+        if line.startswith(b"COMMAND=env TAUBENCH_MODE=solo "):
+            tau_args = line.split(b" bash vsm/taubench/run_taubench.sh ", 1)[1]
+            request = line.split(b"AGENT_REQUEST_TIMEOUT=", 1)[1].split()[0]
+            concurrency = line.split(b"TAUBENCH_MAX_CONCURRENCY=", 1)[1].split()[0]
         if line.startswith(b"COMMAND[if-exists]=python derive_multimodal_publish.py "):
             source = line.split(b" --source ", 1)[1]
             lines.append(b"COMMAND[if-derive-rc=0]=python -m "
                          b"shared.multimodal.benches.koffvqa_judge_complete " + source)
+            session = source.split(b"/vision/", 1)[0].rsplit(b"/", 1)[1]
+            if session.endswith(b"_r1"):
+                lines.extend([
+                    b"SESSION=" + session[:-3] + b"_tbstd4\n",
+                    b"COMMAND=env TAUBENCH_MODE=standard TAUBENCH_USER_MODEL=openrouter/openai/gpt-4.1-mini "
+                    b"TAUBENCH_TRIALS=4 AGENT_REQUEST_TIMEOUT=" + request + b" TAUBENCH_MAX_CONCURRENCY=" + concurrency +
+                    b" bash vsm/taubench/run_taubench.sh " + tau_args,
+                ])
+            else:
+                lines.append(b"SKIP=" + session + b" taubench_standard\n")
     return b"".join(lines), stderr, rc
 
 

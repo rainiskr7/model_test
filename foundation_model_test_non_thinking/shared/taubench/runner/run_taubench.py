@@ -752,6 +752,15 @@ def main(argv: Optional[list[str]] = None) -> int:
         base_dir, bench_dir = _prepare_bench_dir(os.environ)
         split, selected_ids = _load_run_split(bench_dir, args)
         results_dir, upstream_dir = _prepare_results_dirs(base_dir, args)
+        manifest_path = results_dir / "run_manifest.json"
+        if manifest_path.exists():
+            existing_manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            integrity = existing_manifest.get("harness_integrity") if isinstance(existing_manifest, dict) else None
+            existing_mode = integrity.get("mode") if isinstance(integrity, dict) else None
+            if existing_mode not in ("solo", "standard"):
+                raise ValueError("기존 manifest의 mode를 확인할 수 없다 — 세션을 나눠라")
+            if existing_mode != args.mode:
+                raise ValueError(f"다른 mode({existing_mode}) 기록이 있다 — 세션을 나눠라")
         api_base = normalize_api_base(args.base_url)
         llm_args, user_llm_args, user_removed_params = _prepare_llm_args(
             args, api_base, os.environ

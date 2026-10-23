@@ -1,7 +1,7 @@
 # Sourced by run_lane.sh; definitions only, using the common lane context.
 # Inputs (phases: README.md): STOP_LABEL REPS AGENT_REQUEST_TIMEOUT FULL_AGENT_TASK_TIMEOUT
 # FULL_KRETA_WORKERS FULL_KRETA_RESUME FULL_RESUME_FROM MODEL BASE_URL_CHAT BASE_URL_V1
-# TAUBENCH_MAX_CONCURRENCY SESSION BASE PYTHONPATH LABEL HOST BASE_TS END_LABEL.
+# TAUBENCH_MAX_CONCURRENCY TAUBENCH_USER_MODEL TAUBENCH_TRIALS SESSION BASE PYTHONPATH LABEL HOST BASE_TS END_LABEL.
 # Functions: bad read_key log; results_model_dir is sourced locally at run time.
 track_secrets() { export TAUBENCH_USER_API_KEY="$(read_key TAUBENCH_USER_API_KEY)"; }
 
@@ -11,12 +11,13 @@ full_stage_index() {
     nlu) FULL_INDEX=1 ;; functionchat) FULL_INDEX=2 ;; taubench) FULL_INDEX=3 ;;
     multimodal) FULL_INDEX=4 ;; functionchat_judge) FULL_INDEX=5 ;;
     koffvqa_judge) FULL_INDEX=6 ;; derive) FULL_INDEX=7 ;;
+    taubench_standard) FULL_INDEX=8 ;;
     *) bad "invalid resume stage: $1" ;;
   esac
 }
 
 track_validate() {
-  FULL_STAGES="nlu functionchat taubench multimodal functionchat_judge koffvqa_judge derive"
+  FULL_STAGES="nlu functionchat taubench multimodal functionchat_judge koffvqa_judge derive taubench_standard"
   # Validate before activation, credential reads, or any fixture/server access.
   [ -n "$STOP_LABEL" ] || bad 'required key: STOP_LABEL'
   case "$REPS" in ''|*[!0-9]*) bad 'REPS must be positive' ;; esac
@@ -32,6 +33,9 @@ track_validate() {
     FULL_RESUME_REP=${BASH_REMATCH[1]}
     full_stage_index "${BASH_REMATCH[2]}"
     FULL_RESUME_INDEX=$FULL_INDEX
+    if [ "$FULL_RESUME_INDEX" -eq 8 ] && [ "$FULL_RESUME_REP" -ne 1 ]; then
+      bad 'taubench_standard resume requires r1'
+    fi
     [ "$FULL_RESUME_REP" -le "$REPS" ] 2>/dev/null || bad 'RESUME_FROM exceeds REPS'
   fi
 }
@@ -54,6 +58,10 @@ full_command() {
     taubench)
       FULL_CMD=(env TAUBENCH_MODE=solo TAUBENCH_TRIALS=1 "TAUBENCH_MAX_CONCURRENCY=$TAUBENCH_MAX_CONCURRENCY"
         "AGENT_REQUEST_TIMEOUT=$AGENT_REQUEST_TIMEOUT" "AGENT_TASK_TIMEOUT=$FULL_AGENT_TASK_TIMEOUT"
+        bash vsm/taubench/run_taubench.sh "$MODEL" "$BASE_URL_CHAT") ;;
+    taubench_standard)
+      FULL_CMD=(env TAUBENCH_MODE=standard "TAUBENCH_USER_MODEL=$TAUBENCH_USER_MODEL" "TAUBENCH_TRIALS=$TAUBENCH_TRIALS"
+        "AGENT_REQUEST_TIMEOUT=$AGENT_REQUEST_TIMEOUT" "TAUBENCH_MAX_CONCURRENCY=$TAUBENCH_MAX_CONCURRENCY"
         bash vsm/taubench/run_taubench.sh "$MODEL" "$BASE_URL_CHAT") ;;
     multimodal)
       FULL_CMD=(env "KRETA_WORKERS=$FULL_KRETA_WORKERS")
@@ -97,6 +105,11 @@ track_dry_run() {
     printf 'SESSION=%s\n' "$TS"
     for stage in $FULL_STAGES; do
       if full_skip_resume "$stage"; then printf 'SKIP=%s %s\n' "$TS" "$stage"; continue; fi
+      if [ "$stage" = taubench_standard ]; then
+        if [ "$N" -gt 1 ]; then printf 'SKIP=%s %s\n' "$TS" "$stage"; continue; fi
+        TS="${BASE_TS}_tbstd4"
+        printf 'SESSION=%s\n' "$TS"
+      fi
       full_command "$stage" "$RD/$TS/vision/multimodal/koffvqa/<latest *_gen.xlsx>"
       case "$stage" in *_judge|derive) prefix='COMMAND[if-exists]=' ;; *) prefix='COMMAND=' ;; esac
       printf '%s%s\n' "$prefix" "$(full_command_text)"
@@ -104,6 +117,7 @@ track_dry_run() {
         full_complete_command
         printf 'COMMAND[if-derive-rc=0]=%s\n' "$(full_command_text)"
       fi
+      TS="${SESSION}_r${N}"
     done
     N=$((N + 1))
   done
@@ -152,6 +166,11 @@ full_invoke() (
 full_run_stage() {
   # Record every executed stage and enforce stop/continue policy at one boundary.
   local stage=$1 rc
+  if [ "$stage" = taubench_standard ] && [ -e "$RD/$TS" ]; then
+    FULL_STANDARD_FAILURES=$((FULL_STANDARD_FAILURES + 1))
+    log "[$TS] $stage skip — 세션 존재 — 덮어쓰지 않음(standard 미충족)"
+    return
+  fi
   if ! full_stage_ready "$stage"; then log "[$TS] $stage skip (condition)"; return; fi
   full_command "$stage" "$FULL_PREDFILE"
   log "[$TS] $stage 시작: $(full_command_text)"
@@ -173,6 +192,7 @@ full_run_stage() {
       log "[$TS] $stage 실패 — $STOP_LABEL 레인 중단 (원인 확인 후 수동 재개)"
       exit "$rc" ;;
     taubench) log "[$TS] $stage 실패 rc=$rc — 계속" ;;
+    taubench_standard) FULL_STANDARD_FAILURES=$((FULL_STANDARD_FAILURES + 1)); log "[$TS] $stage 실패 rc=$rc — 계속" ;;
     *) FULL_JUDGE_FAILURES=$((FULL_JUDGE_FAILURES + 1)); log "[$TS] $stage 실패 rc=$rc — 계속" ;;
   esac
 }
@@ -184,7 +204,7 @@ track_run() {
   safe_model=$(printf '%s' "$MODEL" | tr '/:-' '___')
   model_dir=$(results_model_dir "$BASE" "$safe_model") || exit "$?"
   RD="$BASE/results/$model_dir"
-  FULL_JUDGE_FAILURES=0
+  FULL_JUDGE_FAILURES=0 FULL_STANDARD_FAILURES=0
   log "=== $LABEL 시작 MODEL=$MODEL host=$HOST sessions=${BASE_TS}_r1..r$REPS ==="
   N=1
   while [ "$N" -le "$REPS" ]; do
@@ -195,12 +215,17 @@ track_run() {
     fi
     for stage in $FULL_STAGES; do
       if full_skip_resume "$stage"; then log "[$TS] $stage skip (resume)"; continue; fi
+      if [ "$stage" = taubench_standard ]; then
+        if [ "$N" -gt 1 ]; then log "[$TS] $stage skip (once per lane)"; continue; fi
+        TS="${BASE_TS}_tbstd4"
+      fi
       mkdir -p "$BASE/logs/$TS"
       full_run_stage "$stage"
+      TS="${BASE_TS}_r${N}"
     done
     N=$((N + 1))
   done
-  log "=== $END_LABEL 레인 종료 (판정 실패 ${FULL_JUDGE_FAILURES}건) ==="
-  [ "$FULL_JUDGE_FAILURES" -eq 0 ] || exit 1
+  log "=== $END_LABEL 레인 종료 (판정 실패 ${FULL_JUDGE_FAILURES}건, standard 실패 ${FULL_STANDARD_FAILURES}건) ==="
+  [ "$FULL_JUDGE_FAILURES" -eq 0 ] && [ "$FULL_STANDARD_FAILURES" -eq 0 ] || exit 1
   exit 0
 }

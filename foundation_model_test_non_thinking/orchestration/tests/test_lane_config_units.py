@@ -60,7 +60,8 @@ def test_scoped_settings_override_common_without_cross_track_leak(lane, scoped_f
     full = run(lane, ['sample'], 'full')
     assert kmmlu.returncode == full.returncode == 0
     assert kmmlu.stdout.count('SESSION=') == 2
-    assert full.stdout.count('SESSION=') == 1
+    assert full.stdout.count('SESSION=') == 2
+    assert 'SESSION=full_session_tbstd4\n' in full.stdout
     assert 'AGENT_REQUEST_TIMEOUT=350 AGENT_TASK_TIMEOUT=1000' in full.stdout
 
 

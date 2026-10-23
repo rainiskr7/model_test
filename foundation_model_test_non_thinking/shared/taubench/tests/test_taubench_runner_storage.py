@@ -17,7 +17,21 @@ def assert_json_bytes(path):
 
 
 @pytest.mark.parametrize("upstream_fails", [False, True], ids=["success", "failure"])
-def test_main_saves_manifest_and_redacts_even_on_failure(monkeypatch, tmp_path, capsys, upstream_fails):
+@pytest.mark.parametrize("mode,existing,blocked", [
+    ("solo", None, False),
+    ("standard", '{"harness_integrity":{"mode":"solo"}}', True),
+    ("solo", '{"harness_integrity":{"mode":"standard"}}', True),
+    ("solo", '{}', True),
+    ("solo", '{', True),
+    ("solo", '[]', True),
+    ("solo", '{"harness_integrity":[]}', True),
+    ("solo", '{"harness_integrity":{}}', True),
+    ("solo", '{"harness_integrity":{"mode":"unknown"}}', True),
+    ("solo", '{"mode":"solo"}', True),
+    ("solo", '{"harness_integrity":{"mode":"solo"}}', False),
+    ("standard", '{"harness_integrity":{"mode":"standard"}}', False),
+])
+def test_main_saves_manifest_and_redacts_even_on_failure(monkeypatch, tmp_path, capsys, upstream_fails, mode, existing, blocked):
     bench = tmp_path / "data/tau2-bench"
     domain = bench / "data/tau2/domains/telecom"
     domain.mkdir(parents=True)
@@ -32,6 +46,15 @@ def test_main_saves_manifest_and_redacts_even_on_failure(monkeypatch, tmp_path, 
     monkeypatch.setenv("SERVING_UNSUPPORTED_SAMPLING_PARAMS", "")
     output = tmp_path / "results/test_model/session/language/taubench"
     manifest_path = output / "run_manifest.json"
+    if existing is not None:
+        output.mkdir(parents=True)
+        manifest_path.write_text(existing)
+    if blocked:
+        (output / "summary.json").write_text('{"sentinel":"preserve"}')
+        upstream = output / "upstream/telecom"
+        upstream.mkdir(parents=True)
+        (upstream / "results.json").write_text('{"api_key":"synthetic-preserve"}')
+    before = {p.relative_to(output): p.read_bytes() for p in output.rglob("*") if p.is_file()}
     initial = []
     calls = []
     secret = "synthetic-credential-for-storage-test"
@@ -68,11 +91,18 @@ def test_main_saves_manifest_and_redacts_even_on_failure(monkeypatch, tmp_path, 
     assert runner.write_json_atomic is write_json_atomic
     rc = runner.main([
         "--model", "test/model", "--base-url", "http://unused.invalid/v1",
-        "--mode", "solo", "--split", "test",
+        "--mode", mode, "--user-model", "fixture-user", "--split", "test",
     ])
+    if blocked:
+        assert rc == 2
+        assert calls == []
+        assert {p.relative_to(output): p.read_bytes() for p in output.rglob("*") if p.is_file()} == before
+        assert "ERROR:" in capsys.readouterr().err
+        return
     assert len(calls) == 1
     assert rc == (2 if upstream_fails else 0)
     manifest = assert_json_bytes(manifest_path)
+    assert manifest["harness_integrity"]["mode"] == mode
     assert manifest["status"] == ("running" if upstream_fails else "completed")
     if upstream_fails:
         assert manifest_path.read_bytes() == initial[0]
