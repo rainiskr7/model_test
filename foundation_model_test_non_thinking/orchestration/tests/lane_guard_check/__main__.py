@@ -1,4 +1,4 @@
-"""Run the bounded-process suite and retain reproducible artifacts."""
+"""Input: optional guard path; output: bounded suite reports and retained evidence."""
 
 from pathlib import Path
 import sys
@@ -35,9 +35,12 @@ def main():
     print(f"ARTIFACTS={root}", flush=True)
     report = Report()
     old = head_guard(repo, root)
+    # Keep the known defect reproducible after the fix itself becomes HEAD.
+    defect = head_guard(repo, root, revision="6b00d41")
     report.run("units", lambda: unit_cases(report))
     report.run("regression", lambda: regression_case(repo, root, target, old, report))
-    for case in (path_case, unsupported_case, default_conf_case, health_case,
+    report.run("health", lambda: health_case(repo, root, target, report, defect=defect))
+    for case in (path_case, unsupported_case, default_conf_case,
                  duplicate_case, manual_case, overlap_case, same_track_case, same_track_real_case, invalid_rows_case):
         report.run(case.__name__, lambda case=case: case(repo, root, target, report))
     for hot, label in (("84 70", "gpu"), ("60 96", "sensor")):
@@ -45,6 +48,9 @@ def main():
     report.run("real_before", lambda: real_case(repo, root, old, report, "real_before", decoy=False))
     report.run("real_logical", lambda: real_case(repo, root, target, report, "real_logical", physical=False))
     report.run("real_physical", lambda: real_case(repo, root, target, report, "real_physical"))
+    report.run("subshell_defect", lambda: real_case(repo, root, defect, report, "subshell_defect",
+               subshell=True, expect_duplicate=True, decoy=False))
+    report.run("subshell_working", lambda: real_case(repo, root, target, report, "subshell_working", subshell=True))
     return report.finish(root / "summary.json")
 
 

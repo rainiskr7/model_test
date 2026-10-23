@@ -1,4 +1,4 @@
-"""Build independent guard trees without reading the production lanes.conf."""
+"""Input: repo/guard and synthetic records; output: isolated trees and cycle evidence."""
 
 import json
 from pathlib import Path
@@ -14,13 +14,16 @@ def executable(path, source):
     path.chmod(0o755)
 
 
-def head_guard(repo, artifacts):
-    """Read the pre-change file from HEAD, accounting for N's Git prefix."""
-    ref = "HEAD:./orchestration/lane_guard.sh"
+def head_guard(repo, artifacts, revision="HEAD"):
+    """Input: Git revision; output: guard snapshot and resolved commit evidence."""
+    commit = subprocess.run(["git", "rev-parse", revision], cwd=repo, check=True,
+                            capture_output=True, text=True).stdout.strip()
+    ref = f"{commit}:./orchestration/lane_guard.sh"
     result = subprocess.run(["git", "show", ref], cwd=repo, check=True, capture_output=True)
-    path = artifacts / "head_lane_guard.sh"
+    label = "head" if revision == "HEAD" else revision
+    path = artifacts / (label + "_lane_guard.sh")
     path.write_bytes(result.stdout)
-    (artifacts / "head_source.txt").write_text(f"git show {ref}\nrc={result.returncode}\n")
+    (artifacts / (label + "_source.txt")).write_text(f"revision={revision}\ncommit={commit}\ngit show {ref}\nrc={result.returncode}\n")
     return path
 
 

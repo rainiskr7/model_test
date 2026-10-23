@@ -41,6 +41,15 @@ nohup perl -e 'setpgrp; exec @ARGV' /bin/bash "$N/orchestration/lane_guard.sh" >
    같은 트랙의 다른 모델은 별도 레인이며 잘못된 중복·미지원 경고를 만들지 않는다.
    다른 체크아웃과 임의의 심볼릭 링크 별칭은 탐색하지 않는다.
    `nohup perl ... exec` 뒤 bash가 같은 PID를 이어받으므로 이 형식과 호환된다.
+   위 명령줄에 일치하는 후보 중 **직접 부모가 일치 후보가 아닌** 프로세스만 root 후보로 남긴다.
+   같은 argv를 유지하는 직접 자식 하위 셸은 root 후보에서 빼고, root의 자손으로 STOP/CONT한다.
+   중간에 비일치 프로세스가 있는 비연속 조상 관계는 필터 범위 밖이며, 독립 후보 2개는 계속 무신호다.
+   후보의 PPID 조회가 하나라도 실패·빈 값·비숫자이면 필터 전체를 취소하고 원래 후보 집합을 쓴다.
+   따라서 원래 후보가 2개 이상이면 중복 경고·무신호이며, 단독 후보도 기존 판정을 그대로 따른다.
+   root PID/시작 시각이 같으면 단계 하위 셸 PID 교체로 instance·카운터·held 소유권을 초기화하지 않는다.
+   root가 종료되고 하위 셸만 남으면 그 셸을 단독 root로 승격하고 새 instance의 카운터를 초기화한다.
+   기존 held 항목은 PID/시작 시각으로 복구하며, 활성 사유가 모두 해제되면 자식부터 새 root까지 CONT한다.
+   신호 전 기존 identity 재확인을 유지하지만, pgrep·ps·신호 사이 PID 재사용 경쟁의 원자적 방지는 범위 밖이다.
 7. 실행 전 해석 결과를 확인한다.
 
 ```bash
@@ -163,6 +172,17 @@ C1.2는 `git show HEAD:./orchestration/lane_guard.sh` 사본과 현재 guard를
 `ARTIFACTS=/tmp/lane_guard_check.*` 아래 `summary.json`, `head_source.txt`, 케이스별
 `cycles.log`, `calls.jsonl`, `signals.jsonl`, `decoy_samples.json`을 남긴다.
 실패가 있으면 rc 1, 실제 프로세스 증거가 불가하면 rc 77, 모두 통과하면 rc 0이다.
+
+직접 부모 필터의 C1/C2 비교는 결함 버전 `6b00d41`을 별도로 고정해 커밋 뒤에도 재현한다.
+`6b00d41_source.txt`에 실제 전체 SHA를 기록하며, 기존 HEAD 경로 격리 검사는 그대로 유지한다.
+합성 C1은 root→동일 argv 하위 셸→sleep에 health 실패 2회/회복 2회를 적용한다.
+실프로세스 C2는 `Owned.launch(..., subshell=True)`가 세 PID의 생존·argv·직접 부모를 먼저 검증하고
+등록한 뒤, 과열 STOP/냉각 3회 CONT를 검사한다. 결함 판의 rc 0·중복 경고·신호 0은
+“수용 조건 FAIL 재현”이라는 예상 결과로 검사하므로 그 재현 자체는 suite PASS에 포함된다.
+어댑터/트리 구성 오류는 결함 재현으로 인정하지 않는다. 환경 제한은 INCONCLUSIVE다.
+합성 C3은 단계 PID 교체 때 카운터·held 유지, root 종료 뒤 승격·회복, PPID 조회 실패를 검사한다.
+실행 금지 지시 중에는 이 suite와 프로세스를 실행·신호하는 orchestration pytest를 실행하지 않는다.
+운영 트리의 T 상태 표본 수집과 운영 재기동은 운영자 작업이며 이 fixture의 입력·동작에 추가하지 않는다.
 
 동결 `shared/harness/tests/runner_checks.py guard` suite는 **퇴역(실행 금지)**이다.
 5b의 모델 인자·6필드 계약과 비호환이다. 운영 레인이 없어도 실행하지 않으며,

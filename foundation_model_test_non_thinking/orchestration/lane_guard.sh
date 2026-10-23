@@ -1,5 +1,6 @@
 #!/bin/bash
-# Unified server/temperature guard. Start in its own process group:
+# Input: lane processes, health/temperature probes and saved ownership.
+# Output: STOP/CONT, state and logs. Start in its own process group:
 # perl -e 'setpgrp; exec @ARGV' bash /absolute/orchestration/lane_guard.sh
 # The old watchdog/temp_guard must already have been retired by the operator.
 set -u
@@ -204,6 +205,21 @@ while :; do
     load_state
     script_pattern=$(lane_pattern "$track")
     roots=$(pgrep -f "^([^ ]*/)?bash ${script_pattern} ${model_conf}$" 2>/dev/null)
+    # Input: exact command matches. Output: candidates without a matching parent.
+    # An incomplete parent inspection retains the entire original candidate set.
+    candidates=" $(printf '%s\n' "$roots" | tr '\n' ' ')"
+    filtered_roots="" parents_ok=1
+    for candidate in $roots; do
+      parent=$(ps -p "$candidate" -o ppid= 2>/dev/null) || { parents_ok=0; break; }
+      parent=${parent//[[:space:]]/}
+      case "$parent" in ''|*[!0-9]*) parents_ok=0; break ;; esac
+      case "$candidates" in
+        *" $parent "*) ;;
+        *) filtered_roots="${filtered_roots}${filtered_roots:+
+}${candidate}" ;;
+      esac
+    done
+    [ "$parents_ok" != 1 ] || roots=$filtered_roots
     count=$(printf '%s\n' "$roots" | awk 'NF{n++}END{print n+0}')
     if [ "$count" -ge 2 ]; then
       if [ "$duplicate_warned" = 0 ]; then log "$name: 레인 2개 이상 — 신호 없음"; duplicate_warned=1; save_state; fi

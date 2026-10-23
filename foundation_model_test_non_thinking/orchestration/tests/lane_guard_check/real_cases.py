@@ -1,4 +1,4 @@
-"""Real STOP/CONT evidence with no global process enumeration."""
+"""Input: owned fixture trees/guard versions; output: STOP/CONT and isolation evidence."""
 
 import json
 import os
@@ -39,7 +39,8 @@ def require_tree(report, name, owned, pids, stopped):
     report.check(name, all(row and (("T" in row["stat"]) == stopped) for row in records))
 
 
-def real_case(repo, root, target, report, label, physical=True, decoy=True):
+def real_case(repo, root, target, report, label, physical=True, decoy=True,
+              subshell=False, expect_duplicate=False):
     # Check before launch: denied inspection must never leave a spawned tree.
     if ps_field(os.getpid(), "pid") != str(os.getpid()):
         raise Inconclusive("owned-PID ps probe did not return this driver PID")
@@ -48,7 +49,7 @@ def real_case(repo, root, target, report, label, physical=True, decoy=True):
     try:
         lane = f.orch / "lanes" / (f.script + ".sh")
         lane = lane.resolve() if physical else lane
-        pids = owned.launch(lane, "lane", f.arguments)
+        pids = owned.launch(lane, "lane", f.arguments, subshell=subshell)
         if not all(row["stamp"] for row in owned.records.values()):
             raise Inconclusive("owned PID start identity unavailable")
         if decoy:
@@ -56,7 +57,7 @@ def real_case(repo, root, target, report, label, physical=True, decoy=True):
             decoys = owned.launch(bait.resolve(), "decoy", f.arguments)
             monitor = DecoyMonitor(decoys)
             monitor.thread.start()
-        exercise_tree(f, owned, pids, report, label)
+        exercise_tree(f, owned, pids, report, label, expect_duplicate=expect_duplicate)
         if monitor:
             monitor.close(f.base / "decoy_samples.json")
             report.check(label + " C1.1 decoy T=0 / exited=0",
@@ -75,15 +76,25 @@ def real_case(repo, root, target, report, label, physical=True, decoy=True):
             owned.close()
 
 
-def exercise_tree(f, owned, pids, report, label):
+def exercise_tree(f, owned, pids, report, label, expect_duplicate=False):
+    if expect_duplicate:
+        f.values("up", "84 70")
+        f.cycle(2)
+        report.check(label + " C2 defect acceptance FAIL reproduced: rc=0, duplicate, no signals",
+                     f.log().count("레인 2개 이상") == 1 and not f.signals())
+        require_tree(report, label + " C2 three verified PIDs remain unstopped", owned, pids, False)
+        return
     f.cycle()
-    report.check(label + " C1.3 owned root identified", f"root={pids[0]} " in f.log())
+    report.check(label + " C1.3 owned root identified", f"root={pids[0]} " in f.log() and
+                 "레인 2개 이상" not in f.log() and "미지원" not in f.log())
     f.values("up", "84 70")
     f.cycle()
-    require_tree(report, label + " C1.3 STOP root + sleep", owned, pids, True)
+    require_tree(report, label + " C1.3 STOP entire owned tree", owned, pids, True)
     f.values("up", "72 85")
     f.cycle(2)
     require_tree(report, label + " two cool cycles stay stopped", owned, pids, True)
     f.cycle()
     require_tree(report, label + " C1.3 third cool cycle CONT", owned, pids, False)
     report.check(label + " only owned signals allowed", all(s["allowed"] for s in f.signals()))
+    report.check(label + " CONT children before root", [int(s["pid"]) for s in f.signals()
+                 if s["signal"] == "-CONT"] == list(reversed(pids)))
