@@ -37,7 +37,7 @@
 ## N/T 관계: 계약과 관측
 
 - **동일성 계약**: `shared/harness/tests/runner_checks.py`만 T 사본과 `cmp` 동일을 요구한다([v6 SPEC:11](orchestration/SPEC_refactor_v6_steps1-6_20261019.md#L11)). 다른 동결 파일까지 N/T 동일성 의무로 확대하지 않는다.
-- 확인 명령: `cmp shared/harness/tests/runner_checks.py ../foundation_model_test_thinking/shared/harness/tests/runner_checks.py`([레인 README:128](orchestration/README.md#L128)).
+- 확인 명령: `cmp shared/harness/tests/runner_checks.py ../foundation_model_test_thinking/shared/harness/tests/runner_checks.py`([레인 README:137](orchestration/README.md#L137)).
 - **현재 관측(2026-10-20)**: 양쪽 추적 파일의 디렉터리 집합 및 실제 존재를 대조했다. 결과 데이터·캐시를 제외한 N 전용 최대 하위 트리는 아래와 같다. 이는 이식 대상 목록이 아니다.
   - `orchestration/`, `reports/`, `tools/`(따라서 `tools/output_baseline/` 포함), `configs/serving_profiles/`.
   - `shared/harness/scoring/`, `shared/nlu/scoring/`, `shared/nlu/tests/`, `shared/multimodal/publish/`, `shared/multimodal/tests/`.

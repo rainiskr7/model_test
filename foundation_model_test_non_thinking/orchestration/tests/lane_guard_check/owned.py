@@ -1,4 +1,4 @@
-"""Inspect and clean up only explicitly launched fixture processes."""
+"""Input: fixture launch requests; output: verified owned trees and PID-only cleanup."""
 
 import os
 import signal
@@ -28,7 +28,7 @@ def current_record(pid, expected):
     stat = ps_field(pid, "stat")
     if not stat or "Z" in stat:
         return None
-    return dict(expected, stat=stat, cmd=ps_field(pid, "command"))
+    return dict(expected, stat=stat, cmd=ps_field(pid, "command"), ppid=ps_field(pid, "ppid"))
 
 
 class Owned:
@@ -37,12 +37,17 @@ class Owned:
         self.processes = []
         self.records = {}
 
-    def launch(self, script, name, arguments=()):
-        """Use the production nohup/perl/exec form with one declared sleep child."""
+    def launch(self, script, name, arguments=(), subshell=False):
+        """Input: lane argv/tree shape; output: registered root[, shell], sleep PIDs."""
         marker = self.fixture.base / (name + ".child")
+        shell_marker = self.fixture.base / (name + ".subshell")
         script.parent.mkdir(parents=True, exist_ok=True)
-        script.write_text('#!/bin/bash\nsleep 300 &\necho "$!" > "$CHILD_FILE"\nwait\n')
-        env = {"PATH": "/usr/bin:/bin", "CHILD_FILE": str(marker), "LC_ALL": "C"}
+        body = 'sleep 300 &\necho "$!" > "$CHILD_FILE"\nwait\n'
+        if subshell:
+            body = '(\n' + body + ') &\necho "$!" > "$SHELL_FILE"\nwait\n'
+        script.write_text('#!/bin/bash\n' + body)
+        env = {"PATH": "/usr/bin:/bin", "CHILD_FILE": str(marker),
+               "SHELL_FILE": str(shell_marker), "LC_ALL": "C"}
         with (self.fixture.base / (name + ".out")).open("w") as output:
             proc = subprocess.Popen(["/usr/bin/nohup", "/usr/bin/perl", "-e",
                                      "setpgrp; exec @ARGV", "/bin/bash", str(script), *arguments],
@@ -51,17 +56,37 @@ class Owned:
         self.processes.append(proc)
         self.records[str(proc.pid)] = {"ppid": os.getpid(), "stamp": ps_field(proc.pid, "lstart")}
         deadline = time.monotonic() + 5
-        while not marker.exists() and proc.poll() is None and time.monotonic() < deadline:
+        markers = [marker, shell_marker] if subshell else [marker]
+        while proc.poll() is None and time.monotonic() < deadline:
+            # Opening the marker precedes echo's write: existence alone is not readiness.
+            if all(path.exists() and path.read_text().strip().isdigit() for path in markers):
+                break
             time.sleep(.02)
-        if not marker.exists():
-            raise RuntimeError(f"fixture lane failed to start: {name}, rc={proc.poll()}")
-        child = int(marker.read_text())
-        for pid, parent in ((proc.pid, os.getpid()), (child, proc.pid)):
+        # Register every published PID before validation so finally/close can clean up.
+        shell = int(shell_marker.read_text()) if subshell and shell_marker.exists() else None
+        child = int(marker.read_text()) if marker.exists() else None
+        family = [(proc.pid, os.getpid())]
+        if shell is not None:
+            family.append((shell, proc.pid))
+        if child is not None:
+            family.append((child, shell if subshell else proc.pid))
+        for pid, parent in family:
             self.records[str(pid)] = {"ppid": parent, "stamp": ps_field(pid, "lstart")}
-        if ps_field(child, "ppid") != str(proc.pid):
-            raise RuntimeError("fixture child parent mismatch")
+        if child is None or (subshell and shell is None):
+            raise RuntimeError(f"fixture lane failed to start: {name}, rc={proc.poll()}")
+        if not all(self.records[str(pid)]["stamp"] for pid, _ in family):
+            raise Inconclusive("owned PID start identity unavailable")
+        rows = [current_record(str(pid), self.records[str(pid)]) for pid, _ in family]
+        expected_command = " ".join(("/bin/bash", str(script), *arguments))
+        if any(row is None or row["ppid"] != str(parent)
+               for row, (_, parent) in zip(rows, family)):
+            raise RuntimeError("fixture tree is not alive with the declared parents")
+        if rows[0]["cmd"] != expected_command or (subshell and rows[1]["cmd"] != expected_command):
+            raise RuntimeError("fixture shell argv mismatch")
+        if rows[-1]["cmd"] != "sleep 300":
+            raise RuntimeError("fixture sleep argv mismatch")
         self.fixture.table(self.records)
-        return proc.pid, child
+        return tuple(pid for pid, _ in family)
 
     def states(self, pids):
         return [current_record(pid, self.records[str(pid)]) for pid in pids]
@@ -70,7 +95,8 @@ class Owned:
         # No process-group/global signalling. Resume and kill registered children
         # first, then allow bash to reap them before terminating any remaining root.
         roots = {str(proc.pid) for proc in self.processes}
-        for pid, record in self.records.items():
+        # Signal leaves before intermediate shells (including the optional subshell).
+        for pid, record in reversed(list(self.records.items())):
             if current_record(pid, record):
                 os.kill(int(pid), signal.SIGCONT)
                 if pid not in roots:

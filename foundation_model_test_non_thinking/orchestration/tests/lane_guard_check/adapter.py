@@ -1,4 +1,4 @@
-"""Fixture ps/pgrep/kill: JSON model or an explicit real PID allowlist."""
+"""Input: JSON model or owned PID records; output: bounded ps/pgrep/kill results."""
 
 import json
 import os
@@ -30,6 +30,8 @@ def ps_output(records, args):
         # This is the guard's own availability probe, not a table search.
         return pid if pid == os.environ.get("LG_CHECK_GUARD_PID") else ""
     row = records.get(pid)
+    if field == "ppid=" and row is not None:
+        return str(row["ppid"])
     return "" if row is None else row[{"lstart=": "stamp", "stat=": "stat",
                                        "command=": "cmd"}[field]]
 
@@ -69,6 +71,9 @@ def main():
     if tool == "pgrep":
         result = "\n".join(select_pids(records, *args))
     elif tool == "ps":
+        if args[-1:] == ["ppid="] and records.get(args[1], {}).get("ppid_error"):
+            # Synthetic inspection denial, separate from an empty successful read.
+            return 1
         result = ps_output(records, args)
     else:
         raise ValueError(f"forbidden tool: {tool}")
