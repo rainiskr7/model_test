@@ -105,6 +105,8 @@ class Fixture:
 
     def release(self, session):
         (self.base / ('release.' + session)).touch()
+        if session.endswith('_r1'):
+            (self.base / ('release.' + session[:-3] + '_tbstd4')).touch()
 
     def close(self):
         for proc, session in self.processes:
