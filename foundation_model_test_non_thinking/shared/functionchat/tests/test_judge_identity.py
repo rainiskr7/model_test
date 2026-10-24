@@ -67,6 +67,16 @@ def test_workers_share_identity_and_consecutive_main_runs_do_not_leak(monkeypatc
         }
         assert list(summary["judge"]["served_identity"]) == ["model", "system_fingerprint", "provider"]
         assert [row["verdicts"] for row in summary["records"]] == [["pass", "pass"], ["pass", "pass"]]
+    # C5 independently exercises the guard, including legacy metadata.
+    path = output / "judge.json"
+    summary.pop("judge_request", None)
+    summary["judge"]["model"] = "different-judge"
+    path.write_text(json.dumps(summary))
+    before = path.read_bytes()
+    calls.clear()
+    with pytest.raises(SystemExit) as rejected:
+        runner.main([*args, "--concurrency", "2"])
+    assert rejected.value.code == 2 and calls == [] and path.read_bytes() == before
 
 
 def test_identity_reset_preserves_conversion_order_and_snapshot_independence():

@@ -23,10 +23,35 @@ def test_judge_verdicts_empty():
     assert actual == []
 
 
-def test_judge_verdicts_skip_same_model():
+def test_judge_verdicts_skip_same_model(tmp_path):
     entries = [{'model': model, 'credential': {'n': i}} for i, model in enumerate(['b', 'b', 'a'])]
     actual = subject._judge_verdicts(entries, lambda a, b: [a['n'], b['n']])
     assert actual == [('b', 'a', [0, 2]), ('b', 'a', [1, 2])]
+    import json
+    for model, verdict in (("a", "pass"), ("b", "fail")):
+        directory = tmp_path / "results" / model / "session/language/functionchat"
+        directory.mkdir(parents=True)
+        (directory / "judge.json").write_text(json.dumps({
+            "judge": {"model": "alias", "human_validation": "not performed"},
+            "records": [{"status": "judged", "verdict": verdict, "unstable": False}],
+        }))
+    baseline = subject.collect_claims(tmp_path)
+    assert all(entry["judge_profile"] == ("alias", None, None, 700)
+               for entry in baseline["judge_credentials"])
+    rendered = subject._render_claim_verdicts(baseline)
+    path = directory / "judge.json"
+    saved = json.loads(path.read_text())
+    request = {"model": "alias", "provider": None, "reasoning_effort": None,
+               "max_tokens_requested": 700, "max_tokens_effective": 700, "temperature": 0}
+    for field, value in (("model", "other"), ("provider", "deepinfra/bf16"),
+                         ("reasoning_effort", "medium"), ("max_tokens_effective", 2000)):
+        path.write_text(json.dumps({**saved, "judge_request": {**request, field: value}}))
+        claims = subject.collect_claims(tmp_path)
+        assert claims["judge_verdicts"] == [("a", "b", {
+            "comparable": False, "reason": "판정기 프로파일 불일치 — 비교 불가"})]
+        assert "판정기 프로파일 불일치 — 비교 불가" in "\n".join(subject._render_claim_verdicts(claims))
+    path.write_text(json.dumps({**saved, "judge_request": request}))
+    assert subject._render_claim_verdicts(subject.collect_claims(tmp_path)) == rendered
 
 
 def test_render_exact_empty():

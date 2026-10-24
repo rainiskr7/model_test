@@ -2,6 +2,7 @@
 # Inputs (phases: README.md): STOP_LABEL REPS AGENT_REQUEST_TIMEOUT FULL_AGENT_TASK_TIMEOUT
 # FULL_KRETA_WORKERS FULL_KRETA_RESUME FULL_RESUME_FROM MODEL BASE_URL_CHAT BASE_URL_V1
 # TAUBENCH_MAX_CONCURRENCY TAUBENCH_USER_MODEL TAUBENCH_TRIALS SESSION BASE PYTHONPATH LABEL HOST BASE_TS END_LABEL.
+# JUDGE_MODEL JUDGE_PROVIDER JUDGE_REASONING_EFFORT JUDGE_MAX_TOKENS.
 # Functions: bad read_key log; results_model_dir is sourced locally at run time.
 track_secrets() { export TAUBENCH_USER_API_KEY="$(read_key TAUBENCH_USER_API_KEY)"; }
 
@@ -20,6 +21,11 @@ track_validate() {
   FULL_STAGES="nlu functionchat taubench multimodal functionchat_judge koffvqa_judge derive taubench_standard"
   # Validate before activation, credential reads, or any fixture/server access.
   [ -n "$STOP_LABEL" ] || bad 'required key: STOP_LABEL'
+  [[ "$JUDGE_MODEL" =~ [^[:space:]] ]] || bad 'JUDGE_MODEL must not be empty'
+  if [ -n "$JUDGE_MAX_TOKENS" ]; then
+    [[ "$JUDGE_MAX_TOKENS" =~ ^[0-9]+$ ]] && [ "$JUDGE_MAX_TOKENS" -gt 0 ] 2>/dev/null || bad 'JUDGE_MAX_TOKENS must be a positive integer'
+  fi
+  case "$JUDGE_REASONING_EFFORT" in ''|low|medium|high) ;; *) bad 'JUDGE_REASONING_EFFORT must be empty, low, medium or high' ;; esac
   case "$REPS" in ''|*[!0-9]*) bad 'REPS must be positive' ;; esac
   [ "$REPS" -gt 0 ] 2>/dev/null || bad 'REPS must be positive'
   # Full-only: keep inherited AGENT_TASK_TIMEOUT untouched on legacy tracks.
@@ -70,14 +76,21 @@ full_command() {
       fi
       FULL_CMD+=(bash vsm/multimodal/run_all.sh "$MODEL" "$BASE_URL_V1") ;;
     functionchat_judge)
-      FULL_CMD=(python -m shared.functionchat.judge.run_judge --results-dir "$RD/$TS/language/functionchat") ;;
+      FULL_CMD=(python -m shared.functionchat.judge.run_judge --results-dir "$RD/$TS/language/functionchat"
+        --judge-model "$JUDGE_MODEL") ;;
     koffvqa_judge)
       FULL_CMD=(python -m shared.multimodal.benches.koffvqa_api_judge --predfile "$predfile"
-        --target-model "$MODEL" --judge-model openai/gpt-4.1-mini
+        --target-model "$MODEL" --judge-model "$JUDGE_MODEL"
         --judge-base-url https://openrouter.ai/api/v1 --judge-api-key-env TAUBENCH_USER_API_KEY --seed 0) ;;
     derive)
       FULL_CMD=(python derive_multimodal_publish.py --base . --write
         --source "$RD/$TS/vision/multimodal/koffvqa_api_judge") ;;
+  esac
+  case "$stage" in
+    functionchat_judge|koffvqa_judge)
+      [ -z "$JUDGE_PROVIDER" ] || FULL_CMD+=(--judge-provider "$JUDGE_PROVIDER")
+      [ -z "$JUDGE_REASONING_EFFORT" ] || FULL_CMD+=(--judge-reasoning-effort "$JUDGE_REASONING_EFFORT")
+      [ -z "$JUDGE_MAX_TOKENS" ] || FULL_CMD+=(--judge-max-tokens "$JUDGE_MAX_TOKENS") ;;
   esac
 }
 

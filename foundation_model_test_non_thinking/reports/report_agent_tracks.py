@@ -134,6 +134,8 @@ def _judge_verdicts(judge_credentials, comparable) -> list:
                 continue
             judge_verdicts.append((
                 left["model"], right["model"],
+                {"comparable": False, "reason": "판정기 프로파일 불일치 — 비교 불가"}
+                if left.get("judge_profile") != right.get("judge_profile") else
                 comparable(left["credential"], right["credential"]),
             ))
     return judge_verdicts
@@ -170,9 +172,14 @@ def collect_claims(base: Path) -> Dict[str, Any]:
         judge = load(run_dir / "judge.json")
         if not judge:
             continue
+        request = judge.get("judge_request") or {}
+        judge_profile = (request.get("model", (judge.get("judge") or {}).get("model")),
+                         request.get("provider") or None, request.get("reasoning_effort") or None,
+                         request.get("max_tokens_effective", 700))
         judge_credentials.append({
             "model": run_dir.parents[2].name,
             "run": run_dir.parents[1].name,
+            "judge_profile": judge_profile,
             "credential": repro.judge_credential(judge.get("records") or []),
             "provisional": (judge.get("judge") or {}).get("human_validation") == UNVALIDATED,
         })

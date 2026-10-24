@@ -333,7 +333,7 @@ check_stage_argv() {
     functionchat|taubench|taubench_standard) printf '%s\n' fixture/model http://192.168.0.7:18023/v1/chat/completions ;;
     multimodal) printf '%s\n' fixture/model http://192.168.0.7:18023/v1 ;;
     functionchat_judge)
-      printf '%s\n' -m shared.functionchat.judge.run_judge --results-dir "$FX/results/fixture_model/$ts/language/functionchat" ;;
+      printf '%s\n' -m shared.functionchat.judge.run_judge --results-dir "$FX/results/fixture_model/$ts/language/functionchat" --judge-model openai/gpt-4.1-mini ;;
     koffvqa_judge)
       # 4c: only the environment variable name belongs in the recorded argv.
       printf '%s\n' -m shared.multimodal.benches.koffvqa_api_judge --predfile \
@@ -409,6 +409,9 @@ invalid_setting_message() {
       printf 'AGENT_TASK_TIMEOUT must be an integer greater than AGENT_REQUEST_TIMEOUT' ;;
     FULL_REPS=*) printf 'REPS must be positive' ;;
     LANE_DISPLAY=) printf 'required key: LANE_DISPLAY' ;;
+    FULL_JUDGE_MODEL=*) printf 'JUDGE_MODEL must not be empty' ;;
+    FULL_JUDGE_MAX_TOKENS=*) printf 'JUDGE_MAX_TOKENS must be a positive integer' ;;
+    FULL_JUDGE_REASONING_EFFORT=*) printf 'JUDGE_REASONING_EFFORT must be empty, low, medium or high' ;;
     *) return 1 ;;
   esac
 }
@@ -420,7 +423,8 @@ f6() {
     FULL_RESUME_FROM=r2:taubench_standard FULL_RESUME_FROM=r0:x FULL_RESUME_FROM=r4:nlu FULL_RESUME_FROM=r2:unknown FULL_RESUME_FROM=r2:nlu:extra \
     FULL_AGENT_TASK_TIMEOUT=120 FULL_AGENT_TASK_TIMEOUT=300 FULL_AGENT_TASK_TIMEOUT=x \
     FULL_AGENT_REQUEST_TIMEOUT=900 FULL_AGENT_REQUEST_TIMEOUT=0 FULL_AGENT_REQUEST_TIMEOUT=x \
-    FULL_REPS=0 FULL_REPS=-1 FULL_REPS=x LANE_DISPLAY=; do
+    FULL_REPS=0 FULL_REPS=-1 FULL_REPS=x LANE_DISPLAY= FULL_JUDGE_MODEL= \
+    FULL_JUDGE_MAX_TOKENS=0 FULL_JUDGE_MAX_TOKENS=-1 FULL_JUDGE_MAX_TOKENS=x FULL_JUDGE_REASONING_EFFORT=invalid; do
     count=$((count + 1))
     fixture "F6_$count"
     set_config "$setting"
@@ -441,6 +445,38 @@ f7() {
   expect_rc 0 || return 1
   local dir
   for dir in "$FX/dump/"*; do check_stage_env "$dir" 350 1000 || return 1; done
+  # C2: common values and full overrides must reach both dry-run and real argv.
+  local scope stage
+  for scope in common full; do
+    fixture "F7_judge_$scope"
+    set_config FULL_REPS=1
+    set_config JUDGE_MODEL=openai/gpt-oss-120b
+    set_config JUDGE_PROVIDER=deepinfra/bf16
+    set_config JUDGE_REASONING_EFFORT=medium
+    set_config JUDGE_MAX_TOKENS=2000
+    if [ "$scope" = full ]; then
+      set_config JUDGE_MODEL=unused
+      set_config JUDGE_PROVIDER=unused
+      set_config JUDGE_REASONING_EFFORT=high
+      set_config JUDGE_MAX_TOKENS=99
+      set_config FULL_JUDGE_MODEL=openai/gpt-oss-120b
+      set_config FULL_JUDGE_PROVIDER=deepinfra/bf16
+      set_config FULL_JUDGE_REASONING_EFFORT=medium
+      set_config FULL_JUDGE_MAX_TOKENS=2000
+    fi
+    run_lane 1
+    expect_rc 0 || return 1
+    [ "$(grep -c -- '--judge-model openai/gpt-oss-120b' "$FX/stdout")" -eq 2 ] || return 1
+    [ "$(grep -c -- '--judge-provider deepinfra/bf16 --judge-reasoning-effort medium --judge-max-tokens 2000' "$FX/stdout")" -eq 2 ] || return 1
+    run_lane
+    expect_rc 0 || return 1
+    for stage in functionchat_judge koffvqa_judge; do
+      dir="$FX/dump/20261015_full_r1.$stage"
+      for value in --judge-model openai/gpt-oss-120b --judge-provider deepinfra/bf16 --judge-reasoning-effort medium --judge-max-tokens 2000; do
+        exact "$dir/argv" "$value" || return 1
+      done
+    done
+  done
 }
 
 put_judge_outputs() {
@@ -522,6 +558,11 @@ cd1() {
         path=orchestration/laneconf/$(basename "$file")
         (cd "$REPO" && git show "015c3c5:./$path") > "$file" || return 1
       done
+      # This historical schema predates judge settings; supply today's unchanged
+      # defaults only in the fixture so CD1 still isolates DISPLAY behavior.
+      { printf 'JUDGE_MODEL=openai/gpt-4.1-mini\nJUDGE_PROVIDER=\nJUDGE_REASONING_EFFORT=\nJUDGE_MAX_TOKENS=\n';
+        cat "$FX/orchestration/tracks/full.sh"; } > "$FX/full.new"
+      mv "$FX/full.new" "$FX/orchestration/tracks/full.sh"
       expected='qwen3.5 27B FP8'
     else expected=sentinel-x11; fi
     set_config FULL_REPS=1

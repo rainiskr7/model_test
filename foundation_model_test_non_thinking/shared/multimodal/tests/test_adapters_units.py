@@ -18,6 +18,23 @@ def test_judge_protocol_end_to_end_and_rejudge():
     for rejudge, expected in [(False, EXPECTED_JUDGE_HASH), (True, EXPECTED_REJUDGE_HASH)]:
         protocol = adapters._judge_protocol(summary, {}, 'sha', None, rejudge, None)
         assert _digest(protocol) == expected
+        request = {"model": "judge", "provider": None, "reasoning_effort": None,
+                   "max_tokens_requested": None, "max_tokens_effective": 1024, "temperature": 0.0, "seed": 0}
+        current = {**summary, "judge_request": request}
+        assert adapters._judge_protocol(current, {}, 'sha', None, rejudge, None) == protocol
+        current["judge_request"] = {**request, "max_tokens_requested": 1024}
+        assert adapters._judge_protocol(current, {}, 'sha', None, rejudge, None) == protocol
+        hashes = {protocol["fingerprint"]}
+        for key, value in (("provider", "deepinfra/bf16"), ("reasoning_effort", "medium"),
+                           ("max_tokens_effective", 2000)):
+            current["judge_request"] = {**request, key: value}
+            changed = adapters._judge_protocol(current, {}, 'sha', None, rejudge, None)
+            assert changed == adapters._judge_protocol(current, {}, 'sha', None, rejudge, None)
+            assert changed["fingerprint"] not in hashes
+            hashes.add(changed["fingerprint"])
+        for seed in (None, 0, 7):
+            changed = adapters._judge_protocol(summary, {"decoding": {"seed": seed}}, 'sha', None, rejudge, None)
+            assert changed["recorded"].get("seed") == seed
 
 
 def test_aggregate_judge_rows_rejects_bool_and_preserves_failure_order():
