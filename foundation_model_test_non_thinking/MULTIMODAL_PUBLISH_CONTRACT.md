@@ -378,6 +378,8 @@ direct/32-token protocol을 받았고 지시 준수와 제한 안에서 답을 �
 |---|---|---|
 | `judge_model` | 요청한 alias | **포함** — 판정기가 다르면 다른 프로토콜 |
 | `judge_prompt_version` | 손으로 유지하는 버전 문자열 | **포함** |
+| `judge_provider` / `judge_reasoning_effort` | summary의 `judge_request`에 요청한 제공자·effort | 값이 있을 때만 **포함**; 미설정 키는 생략 |
+| `judge_max_tokens` | `judge_request.max_tokens_effective` | 기본 1024가 아닌 값만 **포함**; 기존 decoding.max_tokens도 유지 |
 | `judge_base_url` | 엔드포인트/제공자 | 정보용 |
 | `judge_served_identity` | 응답이 보고한 `model`·`system_fingerprint`·`provider` | 정보용 |
 | `judge_prompt_template_sha256` | 프롬프트 템플릿 **본문의 해시** | 정보용 |
@@ -392,6 +394,8 @@ direct/32-token protocol을 받았고 지시 준수와 제한 안에서 답을 �
 은 손으로 유지하므로 본문이 바뀌어도 그대로 남지만 해시는 그럴 수 없다. 지문을
 가르는 대신 "같은 측정의 반복이 아니다"라고 말하는 쪽이, 비교를 살리면서 드리프트도
 잡는다. 해시가 없는 옛 산출물은 `judge_prompt_template_hash` 를 `unknown` 으로 남긴다.
+
+`judge_request`는 요청 프로파일 기록이며 served identity와 구별한다. 토큰 옵션 생략은 `max_tokens_requested=null`, 실제 전송 상한은 `max_tokens_effective=1024`다. 기본 프로파일과 명시적 1024는 새 지문 필드를 추가하지 않아 구형 지문을 유지한다. provider·effort를 지정하거나 상한을 변경하면 프로파일을 분리한다. seed는 기존 run_config.decoding 경로로 지문에 반영한다.
 
 판정 요청에는 벤치 질문·채점기준·대상 모델의 응답이 실려 나간다(이미지는 보내지
 않는다). 외부 전송이므로 실행 전 승인이 필요하다.

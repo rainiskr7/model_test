@@ -120,6 +120,9 @@ def _parse_args(argv):
     ap.add_argument("--results-dir", required=True, type=Path)
     ap.add_argument("--data-dir", type=Path, default=Path("data/FunctionChat-Bench/data"))
     ap.add_argument("--judge-model", default="openai/gpt-4.1-mini")
+    ap.add_argument("--judge-provider", default=None)
+    ap.add_argument("--judge-reasoning-effort", choices=("", "low", "medium", "high"), default=None)
+    ap.add_argument("--judge-max-tokens", type=int, default=None)
     # 3회여야 과반이 성립한다. 2회는 갈리면 판정 불가가 되어 분모에서 빠진다 —
     # 2026-08-23 본 실행에서 21건(qwen 12/gemma 9)이 그렇게 사라졌다.
     # 전송·파싱 실패는 0건이었고 전부 동점이었다.
@@ -134,6 +137,12 @@ def _parse_args(argv):
         help="기존 judge.json 의 판정 불가 항목만 다시 판정해 병합한다",
     )
     args = ap.parse_args(argv)
+    if not args.judge_model.strip():
+        ap.error("--judge-model must not be empty")
+    if args.judge_max_tokens is not None and args.judge_max_tokens <= 0:
+        ap.error("--judge-max-tokens must be a positive integer")
+    args.judge_provider = args.judge_provider or None
+    args.judge_reasoning_effort = args.judge_reasoning_effort or None
     return args
 
 
@@ -147,17 +156,33 @@ def _load_api_key(args):
 
 def _load_inputs(args):
     """Load rubrics and candidates and select unresolved records for retry."""
+    out_path = args.results_dir / "judge.json"
+    stored = None
+    if out_path.exists():
+        try:
+            stored = json.loads(out_path.read_text(encoding="utf-8"))
+            request = stored.get("judge_request")
+            old = ((request["model"], request["provider"] or None,
+                    request["reasoning_effort"] or None, request["max_tokens_effective"])
+                   if "judge_request" in stored else (stored["judge"]["model"], None, None, 700))
+            current = (args.judge_model, args.judge_provider, args.judge_reasoning_effort,
+                       args.judge_max_tokens if args.judge_max_tokens is not None else 700)
+            if old != current:
+                print("[judge] 판정기 프로파일 불일치 — 재판정 저장 위치를 나눠라", file=sys.stderr)
+                raise SystemExit(2)
+        except (OSError, ValueError, KeyError, TypeError, AttributeError) as exc:
+            print(f"[judge] 기존 판정 기록 확인 실패 ({type(exc).__name__}) — 쓰지 않는다", file=sys.stderr)
+            raise SystemExit(2) from exc
     rubrics = load_rubrics(args.data_dir)
     items = collect_items(args.results_dir)
 
     # --retry-unresolved: 기존 judge.json 에서 판정 불가(동점)로 남은 항목만 다시 돈다.
     # 전체 재실행은 이미 확정된 615건까지 다시 부르는 낭비다.
     previous = None
-    out_path = args.results_dir / "judge.json"
     if args.retry_unresolved:
         if not out_path.exists():
             raise SystemExit(f"--retry-unresolved 인데 {out_path} 가 없습니다.")
-        previous = json.loads(out_path.read_text(encoding="utf-8"))
+        previous = stored
         items = select_retry_items(items, previous["records"])
         print(f"[judge] 재판정 대상 {len(items)}건 (기존 판정 불가)")
     return rubrics, items, previous
@@ -174,7 +199,8 @@ def _judge_item(item: Dict[str, Any], *, rubrics, args, api_key, identity):
     prompt = render_prompt(rubrics[kind], item)
     return item, [
         call_judge(prompt, args.judge_model, api_key, args.timeout, args.retries,
-                   identity=identity)
+                   identity=identity, provider=args.judge_provider,
+                   reasoning_effort=args.judge_reasoning_effort, max_tokens=args.judge_max_tokens)
         for _ in range(args.repeats)
     ]
 
@@ -269,6 +295,14 @@ def _build_summary(args, rubrics, records, per_type, errors, identity):
     summary = {
         "benchmark": "kakao/FunctionChat-Bench (LLM judge layer)",
         "scoring_version": SCORING_VERSION,
+        "judge_request": {
+            "model": args.judge_model,
+            "provider": args.judge_provider,
+            "reasoning_effort": args.judge_reasoning_effort,
+            "max_tokens_requested": args.judge_max_tokens,
+            "max_tokens_effective": args.judge_max_tokens if args.judge_max_tokens is not None else 700,
+            "temperature": 0,
+        },
         "judge": {
             "model": args.judge_model,
             # 재판정(--retry-unresolved)을 하면 항목마다 투표 수가 다르다. 단일 값으로

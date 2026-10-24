@@ -107,6 +107,13 @@ def _judge_protocol(summary: Mapping[str, Any], config: Mapping[str, Any], recor
     for key in ("judge_prompt_template_sha256", "judge_base_url", "judge_served_identity"):
         if summary.get(key):
             recorded[key] = summary[key]
+    request = summary.get("judge_request") or {}
+    for key in ("provider", "reasoning_effort"):
+        if request.get(key):
+            recorded["judge_" + key] = request[key]
+    # The legacy default stays in decoding.max_tokens; do not fork its cohort.
+    if request.get("max_tokens_effective") not in (None, 1024):
+        recorded["judge_max_tokens"] = request["max_tokens_effective"]
     if rejudge:
         # Diagnostic variant: the predictions are held fixed, so they are part of
         # this protocol's identity rather than informational provenance.

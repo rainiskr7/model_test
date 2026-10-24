@@ -121,18 +121,21 @@ def rubric_digest(rubrics: Dict[str, str]) -> Dict[str, str]:
 
 def call_judge(
     prompt: str, model: str, api_key: str, timeout: float, retries: int,
-    *, identity: ServedIdentity,
+    *, identity: ServedIdentity, provider=None, reasoning_effort=None, max_tokens=None,
 ) -> Dict[str, Any]:
     """구조화 출력으로 판정을 받는다. 실패는 fail 이 아니라 오류로 돌려준다."""
-    body = json.dumps(
-        {
+    body = {
             "model": model,
             "temperature": 0,
-            "max_tokens": 700,
+            "max_tokens": 700 if max_tokens is None else max_tokens,
             "messages": [{"role": "user", "content": prompt}],
             "response_format": {"type": "json_schema", "json_schema": VERDICT_SCHEMA},
         }
-    ).encode("utf-8")
+    if provider:
+        body["provider"] = {"order": [provider], "allow_fallbacks": False, "require_parameters": True}
+    if reasoning_effort:
+        body["reasoning"] = {"effort": reasoning_effort}
+    body = json.dumps(body).encode("utf-8")
     last_error = None
     for attempt in range(max(1, retries)):
         req = urllib.request.Request(

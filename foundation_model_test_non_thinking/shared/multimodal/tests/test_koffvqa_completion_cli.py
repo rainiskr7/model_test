@@ -43,6 +43,13 @@ def test_complete_judge_preserves_head_artifact_bytes(tmp_path):
     for name in ("results.json", "summary.json"):
         before = (old.judge_dir() / name).read_text().replace(str(old.base), "<BASE>")
         after = (new.judge_dir() / name).read_text().replace(str(new.base), "<BASE>")
+        if name == "summary.json":
+            summary = json.loads(after)
+            assert summary.pop("judge_request") == {
+                "model": "fixture-judge", "provider": None, "reasoning_effort": None,
+                "max_tokens_requested": None, "max_tokens_effective": 1024, "temperature": 0.0, "seed": 0,
+            }
+            after = json.dumps(summary, ensure_ascii=False, indent=2)
         assert after == before
 
 

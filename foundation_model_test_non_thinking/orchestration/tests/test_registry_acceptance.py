@@ -78,7 +78,11 @@ def test_cb3_five_lanes_match_bundle_b_head_bytes(tmp_path, model, track):
         assert result.returncode == 0, result.stderr
         outputs.append((result.stdout, result.stderr, result.returncode))
         fx.assert_dry()
-    assert with_completion_check(outputs[0]) == outputs[1]
+    stdout, stderr, rc = with_completion_check(outputs[0])
+    stdout = b''.join(line.rstrip(b'\n') + b' --judge-model openai/gpt-4.1-mini\n'
+                      if b'shared.functionchat.judge.run_judge ' in line else line
+                      for line in stdout.splitlines(keepends=True))
+    assert (stdout, stderr, rc) == outputs[1]
     print(f'CB3 {model}/{track} HEAD={REGISTRY_BASELINE} bytes equal except C7 follow-up: {fx.base}/evidence')
 
 
@@ -107,7 +111,11 @@ def test_cb3_config_paths_match_bundle_b_head_bytes(tmp_path, track, change):
         assert outputs[0] == (b'', f'run_lane: {message}: DISPLAY\n'.encode(), 2)
         assert outputs[1] == (b'', f'run_lane: {message}: LANE_DISPLAY\n'.encode(), 2)
     else:
-        assert with_completion_check(outputs[0]) == outputs[1]
+        stdout, stderr, rc = with_completion_check(outputs[0])
+        stdout = b''.join(line.rstrip(b'\n') + b' --judge-model openai/gpt-4.1-mini\n'
+                          if b'shared.functionchat.judge.run_judge ' in line else line
+                          for line in stdout.splitlines(keepends=True))
+        assert (stdout, stderr, rc) == outputs[1]
     assert outputs[1][2] == (2 if change in ('unknown', 'duplicate', 'prefix', 'empty', 'space') else 0)
 
 

@@ -37,6 +37,12 @@ KMMLU/harness는 포함하지 않는다. 같은 mtime의 workbook은 셸 glob �
 | TAUBENCH_USER_MODEL / TAUBENCH_TRIALS | standard 사용자 모델 / 시행 수; 기본 `openrouter/openai/gpt-4.1-mini` / 4 |
 | AGENT_REQUEST_TIMEOUT | 양의 정수 초, 기본 300; functionchat·taubench에만 주입 |
 | AGENT_TASK_TIMEOUT | REQUEST보다 큰 정수 초, 기본 900; functionchat·solo taubench에만 주입 |
+| JUDGE_MODEL | FC·KOFFVQA 판정 모델, 기본 `openai/gpt-4.1-mini`; 빈값 금지 |
+| JUDGE_PROVIDER | 선택: OpenRouter 제공자 slug; 지정하면 order 단일 제공자, allow_fallbacks=false, require_parameters=true |
+| JUDGE_REASONING_EFFORT | 빈값(미전송) 또는 low·medium·high |
+| JUDGE_MAX_TOKENS | 빈값(FC 700·KOFFVQA 1024 유지) 또는 양의 정수 |
+
+판정 키도 공통 값보다 `FULL_JUDGE_*` 값이 우선한다. Stage 1의 설정 전달 범위는 full 레인과 판정기 직접 CLI다. `shared/multimodal/run_koffvqa.sh`의 선택적 API judge 경로는 새 provider·reasoning·토큰 옵션을 전달하지 않는다. FC seed는 전송하지 않고 KOFFVQA full의 `--seed 0`은 유지한다. 제공자 설정은 요청 조건이며 실제 제공자는 기존 served identity 기록으로 확인한다.
 
 알 수 없는 키, 잘못된 REPS/KRETA 값, 유효하지 않은 재개 단계나 반복 번호는 rc 2다. 단계 이름은 위 8개 이름과 정확히 같아야 한다. solo taubench에는 `TAUBENCH_TRIALS=1`을 주입하고 standard에는 conf 값 또는 기본 4를 쓴다. `AGENT_REQUEST_TIMEOUT`(기본 300초)과 `AGENT_TASK_TIMEOUT`(기본 900초)은 conf에서 양의 정수 초로 지정하며, TASK가 REQUEST보다 커야 한다(아니면 rc 2). full 자식 환경에서는 `NUM_CONCURRENT`와 두 timeout의 상속값을 제거한 뒤 FunctionChat·solo tau 단계에만 conf 값 또는 레인 기본값을 `env` 접두로 전달한다. standard에는 REQUEST만 전달하며 TASK는 wrapper 기본 600초다. `AGENT_REQUEST_TIMEOUT>=600`이면 standard의 runner 검증에서 실패한다. nlu·multimodal·judge·derive에는 두 timeout을 전달하지 않는다. 기존 kmmlu·taubench_std4의 timeout 전달은 유지한다. taubench와 KRETA의 단계별 변수도 자식 환경에서 먼저 제거하고 필요한 단계에만 다시 넣는다. loader 출력은 기존 방식으로 적용하며, Python 모듈 호출에만 `PYTHONPATH`를 붙인다.
 
@@ -73,6 +79,8 @@ r1의 8단계와 r2의 앞 3단계는 `skip (resume)` 로그만 남기고 건너
 
 판정부터 다시 진행하려면 conf에 `FULL_RESUME_FROM=rK:koffvqa_judge`를 지정한다. 해당 반복에 prediction xlsx가 없으면 rc 2로 종료한다. 재판정은 실패 행만 이어서 처리하지 않고 xlsx 전체를 다시 채점한다. 10-05의 246/275(크레딧 부족), 10-06의 274/275(JSON parse 오류) 같은 불완전 판정은 원인을 해결한 뒤 이 경로로 재채점한다. `rK:derive`는 저장된 불완전 판정을 복구하지 않는다.
 
+기존 판정과 모델·provider·effort·실효 토큰 상한(추가로 KOFFVQA temperature·seed)이 같으면 재채점한다. 다르거나 기존 판정 기록을 읽거나 식별할 수 없으면 요청 없이 judge rc 2로 거절하고 기존 산출물을 보존한다. full은 이를 판정 실패로 누적하고 해당 derive를 건너뛰어 최종 rc 1을 낸다. 프로파일 변경을 통한 복구는 의도적으로 막으며 판정기별 저장 분리는 Stage 2에서 정한다. 다른 세션의 재판정 자체는 `api_judge_rejudge`로 지원되지만 형제 prediction 사본·SHA·provenance 계약을 충족해야 한다.
+
 ## 실패 정책
 
 - 어떤 단계든 rc 3 또는 rc >=129이면 그 rc로 즉시 중단한다.
@@ -86,7 +94,9 @@ r1의 8단계와 r2의 앞 3단계는 `skip (resume)` 로그만 남기고 건너
 ## 코드 확인 사항과 명세의 전제 보정
 
 - FunctionChat `shared.functionchat.judge.run_judge`는 정식 패키지 `python -m`으로 호출한다. 세션 경로는 EVAL_TIMESTAMP에서 추론하지 않고 필수 `--results-dir`에서 받는다. 기본 `--data-dir=data/FunctionChat-Bench/data`는 cwd 의존성이 있다. 기존 러너의 `cd "$BASE"`를 유지해 저장소 루트의 data를 해석한다. judge 하위 디렉터리로 cd하면 오히려 잘못된 경로가 된다.
+  직접 CLI는 `--judge-model`, `--judge-provider`, `--judge-reasoning-effort`, `--judge-max-tokens`를 받는다. 구형 FC 기록은 `(judge.model, None, None, 700)`으로 비교한다. 동일 프로파일의 `--retry-unresolved`는 repeats 변경을 허용하고 확정 레코드와 이전 served identity를 보존한다. 보고서는 같은 정규화 프로파일끼리만 judge 우열을 비교한다.
 - KOFFVQA `shared.multimodal.benches.koffvqa_api_judge` 역시 `python -m` 호출이다. `benches.paths.get_base_dir/get_timestamp`가 MODEL_TEST_BASE/EVAL_TIMESTAMP를 우선하고 `get_results_dir`가 기존 모델 철자를 재사용한다. 결과는 같은 세션의 `vision/multimodal/koffvqa_api_judge`에 저장된다.
+  두 판정기 모두 요약 최상위 `judge_request`에 model·provider·reasoning_effort·max_tokens_requested·max_tokens_effective·temperature를 기록하며 KOFFVQA는 seed도 기록한다. 토큰 옵션 생략은 requested=null, effective는 실제 700/1024다. KOFFVQA의 구형 summary는 judge_model·run_config.decoding을 사용하고, summary가 없으면 같은 폴더 run_config.json의 judge.model·decoding으로 확인한다. 식별 기록 없이 results.json만 남은 경우에는 덮어쓰지 않는다.
 - `derive_multimodal_publish.py --source`는 세션 디렉터리가 아닌 벤치 디렉터리(또는 KRETA JSONL) 하나를 받는다. `publish.adapters.ADAPTERS`에 `koffvqa_api_judge`가 등록돼 있다. 따라서 `--base . --write --source <RD>/<TS>/vision/multimodal/koffvqa_api_judge`만 호출한다. 다른 세션이나 다른 벤치의 sidecar를 일괄 갱신하지 않는다. derive를 생략하거나 레인 밖 수동 작업으로 돌릴 필요는 없다.
 - `shared/multimodal/run_all.sh`는 KRETA_RESUME=1이면 `run_kreta_resume.sh`를 호출하고 실패하면 1회 재시도한다. NLU/FunctionChat/taubench와 달리 내부 벤치들의 rc는 `run_checked`가 일반 실패 수로 바꿀 수 있다. 새 레인은 run_all 자체가 반환한 rc만 판정한다. 내부 rc 3/130이 항상 보존된다고 가정하지 않는다. 보호 파일은 변경하지 않는다.
 - `run_repeated_eval.sh`의 기존 세션 거부는 rc 1이지만 full은 명세가 지정한 rc 2를 쓴다.

@@ -92,7 +92,8 @@ FINGERPRINT_INFORMATIONAL_RECORDED = {
     # External-judge provenance.  Recording *more* about a judge must not fork
     # the cohort away from every run made before the field existed — the same
     # rule that already applies to dataset provenance.  Judge identity still
-    # splits a cohort through `judge_model` and `judge_prompt_version`, and a
+    # splits a cohort through `judge_model`, `judge_prompt_version`, and optional
+    # requested provider/reasoning/token settings (legacy defaults omitted). A
     # template that changed under a stable version string is caught by the
     # cohort drift check rather than by silently separating the runs.
     "judge_base_url",

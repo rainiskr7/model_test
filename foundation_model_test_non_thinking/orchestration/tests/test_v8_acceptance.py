@@ -27,7 +27,11 @@ def test_cd3_five_lane_bytes_match_pre_v8(tmp_path, model, track):
         assert result.returncode == 0, result.stderr
         outputs.append((result.stdout, result.stderr, result.returncode))
         fx.assert_dry()
-    assert with_completion_check(outputs[0]) == outputs[1]
+    stdout, stderr, rc = with_completion_check(outputs[0])
+    stdout = b''.join(line.rstrip(b'\n') + b' --judge-model openai/gpt-4.1-mini\n'
+                      if b'shared.functionchat.judge.run_judge ' in line else line
+                      for line in stdout.splitlines(keepends=True))
+    assert (stdout, stderr, rc) == outputs[1]
     print(f'CD3 {model}/{track}: identical except C7 follow-up; {fx.base}/evidence')
 
 
