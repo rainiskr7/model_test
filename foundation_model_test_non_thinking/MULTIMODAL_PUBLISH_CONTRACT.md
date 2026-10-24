@@ -417,6 +417,19 @@ direct/32-token protocol을 받았고 지시 준수와 제한 안에서 답을 �
 **같은 세션에 판정을 다시 돌리지 않는다.** 판정기는 `results.json` 을 덮어쓰므로
 첫 측정을 파괴한다. 코호트 구성원을 늘리려면 새 세션이어야 한다.
 
+재판정 발행 어댑터는 판정 세션의 형제 `koffvqa/*_gen.xlsx`를 먼저 검사한다.
+형제 workbook이 하나도 없고 `summary.predfile`의 예측 세션과 판정 세션이 모두
+식별되며 서로 다르면, 현재 모델 폴더의 `<예측 세션>/vision/multimodal/koffvqa`를
+사용한다. 기록된 절대 base 대신 세션 이름으로 복원하며, 그 위치의 xlsx SHA와
+generation summary를 읽는다. 기존 형제 workbook이 있으면 SHA 불일치여도 다른
+세션으로 우회하지 않는다. 원본 세션을 참조하는 sidecar의 무결성을 유지하려면
+원본 xlsx도 함께 보존해야 한다.
+
+**재판정 세션은 모델 간 비교에 쓰지 않는다.** `rejudged_prediction_sha256`가
+지문에 포함되므로 같은 판정 프로파일이어도 다른 예측 바이트는 다른 코호트다.
+Stage 2는 저장 지원이며, KOFFVQA 모델 간 비교를 위한 재생성 또는 비교 계약
+변경은 별도 Stage 2b 결정이다. 완전성 검사 CLI의 성공은 발행 가능 판정이 아니다.
+
 ## 9. KOFFVQA 판정기 컬럼 및 점수 계약
 
 xlsx 컬럼: `['index','question','answer','category','l2-category','prediction']`

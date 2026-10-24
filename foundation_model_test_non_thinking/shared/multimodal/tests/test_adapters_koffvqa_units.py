@@ -118,6 +118,81 @@ def test_judge_session_controls_variant_and_prediction_identity(tmp_path, monkey
     if rejudge:
         assert recorded["rejudged_prediction_sha256"] == recorded["prediction_sha256"]
     assert [path.name for path in result["source_files"]] == ["results.json", "summary.json", "model_gen.xlsx"]
+    assert result["publishable"] is True and result["failures"] == []
+    if rejudge:
+        from derive_multimodal_publish import main as derive_main
+        from shared.multimodal.publish import report
+        from shared.multimodal.publish.schema import sidecar_path
+
+        sibling = source.parent / "koffvqa"
+        original = source.parents[3] / "old/vision/multimodal/koffvqa"
+        original.parent.mkdir(parents=True)
+        sibling.rename(original)
+        prediction = original / "model_gen.xlsx"
+        summary = json.loads((source / "summary.json").read_text())
+        # The recorded absolute base is obsolete; only the session is reused.
+        summary["predfile"] = "/retired/base/results/model/old/vision/multimodal/koffvqa/model_gen.xlsx"
+        _write_json(source / "summary.json", summary)
+        relocated = koffvqa.adapt_koffvqa_judge(source)
+        assert relocated["status"] == "LEGACY_REVALIDATED"
+        assert relocated["publishable"] is True and relocated["failures"] == []
+        assert relocated["variant"] == "api_judge_rejudge"
+        assert relocated["protocol"] == result["protocol"]
+        assert relocated["protocol"]["recorded"]["rejudged_prediction_sha256"] == adapters.sha256_file(prediction)
+        assert relocated["source_files"] == [source / "results.json", source / "summary.json", prediction]
+        before = {p: p.read_bytes() for p in (source / "results.json", source / "summary.json",
+                                              prediction, original / "summary.json")}
+        assert derive_main(["--base", str(tmp_path), "--source", str(source), "--write"]) == 0
+        sidecar = json.loads(sidecar_path(source).read_text())
+        assert sidecar["status"] == "LEGACY_REVALIDATED"
+        assert sidecar["publishable"] is True and sidecar["failures"] == []
+        assert prediction.relative_to(tmp_path).as_posix() in [a["path"] for a in sidecar["source"]["artifacts"]]
+        loaded, missing = report.collect(tmp_path, run="current")
+        assert len(loaded) == 1 and missing == [] and loaded[0]["publishable"] is True
+        assert all(p.read_bytes() == value for p, value in before.items())
+
+        prediction.write_bytes(b"changed prediction")
+        rejected = koffvqa.adapt_koffvqa_judge(source)
+        assert rejected["publishable"] is False
+        assert rejected["failures"] == ["prediction SHA가 생성 산출물과 일치하지 않음"]
+        loaded, missing = report.collect(tmp_path, run="current")
+        assert loaded == [] and len(missing) == 1
+        assert "sha256 mismatch" in missing[0]["reason"]
+        prediction.write_bytes(before[prediction])
+        original.rename(tmp_path / "saved-generation")
+        rejected = koffvqa.adapt_koffvqa_judge(source)
+        assert rejected["publishable"] is False
+        assert rejected["failures"] == ["prediction SHA가 생성 산출물과 일치하지 않음"]
+        (tmp_path / "saved-generation").rename(original)
+
+        # A present but wrong sibling must not silently fall back to the original.
+        sibling.mkdir()
+        (sibling / "wrong_gen.xlsx").write_bytes(b"wrong")
+        assert koffvqa.adapt_koffvqa_judge(source)["failures"] == ["prediction SHA가 생성 산출물과 일치하지 않음"]
+        (sibling / "wrong_gen.xlsx").unlink()
+        sibling.rmdir()
+        for predfile in (None, "elsewhere/prediction.xlsx"):
+            _write_json(source / "summary.json", {**summary, "predfile": predfile})
+            rejected = koffvqa.adapt_koffvqa_judge(source)
+            assert rejected["variant"] == "api_judge_end_to_end"
+            assert rejected["publishable"] is False
+        _write_json(source / "summary.json", summary)
+
+        second = source.parents[3] / "second/vision/multimodal/koffvqa_api_judge"
+        second.mkdir(parents=True)
+        other = source.parents[3] / "old2/vision/multimodal/koffvqa"
+        other.mkdir(parents=True)
+        (other / "model_gen.xlsx").write_bytes(b"other predictions")
+        (other / "summary.json").write_bytes((original / "summary.json").read_bytes())
+        (second / "results.json").write_bytes((source / "results.json").read_bytes())
+        _write_json(second / "summary.json", {**summary,
+                    "predfile": str(other / "model_gen.xlsx"),
+                    "prediction_sha256": adapters.sha256_file(other / "model_gen.xlsx")})
+        different = koffvqa.adapt_koffvqa_judge(second)
+        assert different["publishable"] is True and different["failures"] == []
+        assert different["variant"] == "api_judge_rejudge"
+        assert different["protocol"]["recorded"]["judge_model"] == recorded["judge_model"]
+        assert different["protocol"]["fingerprint"] != relocated["protocol"]["fingerprint"]
 
 
 @pytest.mark.parametrize("key", ["koffvqa", "koffvqa_api_judge"])

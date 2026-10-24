@@ -38,6 +38,7 @@ KMMLU/harness는 포함하지 않는다. 같은 mtime의 workbook은 셸 glob �
 | AGENT_REQUEST_TIMEOUT | 양의 정수 초, 기본 300; functionchat·taubench에만 주입 |
 | AGENT_TASK_TIMEOUT | REQUEST보다 큰 정수 초, 기본 900; functionchat·solo taubench에만 주입 |
 | JUDGE_MODEL | FC·KOFFVQA 판정 모델, 기본 `openai/gpt-4.1-mini`; 빈값 금지 |
+| JUDGE_COHORT | FC 판정 저장 이름, 기본 빈값(`judge.json`); 지정하면 `judge.<값>.json`. 소문자 `[a-z0-9][a-z0-9_-]{0,31}`만 허용. KOFFVQA에는 전달하지 않음 |
 | JUDGE_PROVIDER | 선택: OpenRouter 제공자 slug; 지정하면 order 단일 제공자, allow_fallbacks=false, require_parameters=true |
 | JUDGE_REASONING_EFFORT | 빈값(미전송) 또는 low·medium·high |
 | JUDGE_MAX_TOKENS | 빈값(FC 700·KOFFVQA 1024 유지) 또는 양의 정수 |
@@ -79,7 +80,43 @@ r1의 8단계와 r2의 앞 3단계는 `skip (resume)` 로그만 남기고 건너
 
 판정부터 다시 진행하려면 conf에 `FULL_RESUME_FROM=rK:koffvqa_judge`를 지정한다. 해당 반복에 prediction xlsx가 없으면 rc 2로 종료한다. 재판정은 실패 행만 이어서 처리하지 않고 xlsx 전체를 다시 채점한다. 10-05의 246/275(크레딧 부족), 10-06의 274/275(JSON parse 오류) 같은 불완전 판정은 원인을 해결한 뒤 이 경로로 재채점한다. `rK:derive`는 저장된 불완전 판정을 복구하지 않는다.
 
-기존 판정과 모델·provider·effort·실효 토큰 상한(추가로 KOFFVQA temperature·seed)이 같으면 재채점한다. 다르거나 기존 판정 기록을 읽거나 식별할 수 없으면 요청 없이 judge rc 2로 거절하고 기존 산출물을 보존한다. full은 이를 판정 실패로 누적하고 해당 derive를 건너뛰어 최종 rc 1을 낸다. 프로파일 변경을 통한 복구는 의도적으로 막으며 판정기별 저장 분리는 Stage 2에서 정한다. 다른 세션의 재판정 자체는 `api_judge_rejudge`로 지원되지만 형제 prediction 사본·SHA·provenance 계약을 충족해야 한다.
+기존 판정과 모델·provider·effort·실효 토큰 상한(추가로 KOFFVQA temperature·seed)이 같으면 재채점한다. 다르거나 기존 판정 기록을 읽거나 식별할 수 없으면 요청 없이 judge rc 2로 거절하고 기존 산출물을 보존한다. full은 이를 판정 실패로 누적하고 해당 derive를 건너뛰어 최종 rc 1을 낸다. FC는 `JUDGE_COHORT`로 선택한 파일 안에서 프로파일을 검사하며 다른 코호트 파일은 읽거나 덮어쓰지 않는다. KOFFVQA의 다른 프로파일 판정은 아래 절차로 새 세션에 저장한다.
+
+## 저장된 예측의 재판정
+
+FC는 원본 예측 폴더에 `judge.<c>.json`을 추가한다. `<c>`는 위 slug 규칙을 따르며 빈값은 기존 `judge.json`을 선택한다. 코호트 이름은 저장 파일 선택자다. 같은 이름을 썼더라도 판정 프로파일이 다르면 보고서의 judge 우열 비교는 거부된다. `--retry-unresolved`도 선택된 파일의 미해결 항목만 재판정한다. 예측·summary를 다른 세션으로 복사하면 exact 반복 관측으로 다시 수집될 수 있으므로 복사하지 않는다.
+
+N 루트에서 실행한다. `<RD>`는 `results/<모델 폴더>`의 실제 경로이며 `<원본 세션>`은 예측을 생성한 세션이다. 아래 판정 모델과 선택 provider·effort·토큰 상한은 비교하려는 프로파일에 맞춘다.
+
+```bash
+python -m shared.functionchat.judge.run_judge \
+  --results-dir <RD>/<원본 세션>/language/functionchat \
+  --judge-cohort <c> --judge-model <판정 모델>
+python -m reports.report_agent_tracks --base . --judge-cohort <c>
+```
+
+보고서는 지정한 파일만 읽고 없으면 judged 축을 생략한다. 빈값에서는 기존 `judge.json`만 읽는다. 지정한 코호트명은 콘솔에 표시하며 `--write-markdown <경로>`로 저장한 Markdown에도 표시한다.
+
+KOFFVQA는 새 판정 세션에 `results.json`·`summary.json`을 저장한다. `run_config`는 summary에 내장되며 별도 `run_config.json`은 구형 기록의 읽기 경로다. 현재 결과 base를 명시해 원본 예측과 판정 세션을 같은 모델 폴더 아래에 둔다. `<생성 파일>`은 실제 `*_gen.xlsx` 이름이다.
+
+```bash
+MODEL_TEST_BASE="$PWD" EVAL_TIMESTAMP=<원본 세션>_judge_<c> \
+python -m shared.multimodal.benches.koffvqa_api_judge \
+  --predfile <RD>/<원본 세션>/vision/multimodal/koffvqa/<생성 파일> \
+  --target-model <모델> --judge-model <판정 모델> \
+  --judge-base-url https://openrouter.ai/api/v1 \
+  --judge-api-key-env TAUBENCH_USER_API_KEY --seed 0
+python derive_multimodal_publish.py --base . --write \
+  --source <RD>/<원본 세션>_judge_<c>/vision/multimodal/koffvqa_api_judge
+python -m shared.multimodal.benches.koffvqa_judge_complete \
+  <RD>/<원본 세션>_judge_<c>/vision/multimodal/koffvqa_api_judge
+```
+
+`_judge_<c>`는 명명 관례이며 코드가 접미사를 해석하지 않는다. 판정 프로파일이 다른 기존 세션을 덮어쓰지 않도록 새 이름을 쓴다. 판정 rc 0 또는 10일 때 저장 산출물에 derive를 적용하고, 그 외 오류에서는 먼저 원인을 해결한다. `koffvqa_judge_complete`는 행 수·점수의 완전성만 검사하며 발행 가능 확인이 아니다. 일반 derive의 rc 0도 발행 가능을 보장하지 않는다. `_derived/publish.json`의 `status`·`publishable`·`failures`를 확인한다.
+
+어댑터는 판정 세션의 형제 `koffvqa/*_gen.xlsx`를 우선한다. workbook이 하나도 없고 `summary.predfile`에서 읽은 예측 세션과 판정 세션이 모두 식별되며 서로 다를 때만, 현재 모델 폴더의 `<예측 세션>/vision/multimodal/koffvqa`를 읽는다. 기록된 절대 base 경로는 사용하지 않는다. 형제 workbook이 있는데 SHA가 다르면 원본 세션으로 우회하지 않고 거부한다. 원본 세션을 참조한 재판정 sidecar는 원본 xlsx가 남아 있고 SHA가 같아야 보고서가 받는다. 백업·이동 시 두 세션의 의존 관계를 보존해야 한다.
+
+**재판정 세션은 모델 간 비교에 쓰지 않는다.** `api_judge_rejudge`는 고정 예측에 대한 판정기 비결정성 진단이며, 예측 SHA가 지문에 들어가 다른 예측끼리는 코호트가 갈린다. Stage 2는 KOFFVQA 저장 지원과 FC 비교까지다. KOFFVQA 모델 간 비교를 위한 재생성 또는 비교 계약 변경은 별도 Stage 2b 결정이다. `tools/output_baseline`은 이 교차 세션 재판정 배치의 의존 파일 복사를 지원하지 않으며 이번 변경 범위 밖이다.
 
 ## 실패 정책
 
@@ -94,7 +131,7 @@ r1의 8단계와 r2의 앞 3단계는 `skip (resume)` 로그만 남기고 건너
 ## 코드 확인 사항과 명세의 전제 보정
 
 - FunctionChat `shared.functionchat.judge.run_judge`는 정식 패키지 `python -m`으로 호출한다. 세션 경로는 EVAL_TIMESTAMP에서 추론하지 않고 필수 `--results-dir`에서 받는다. 기본 `--data-dir=data/FunctionChat-Bench/data`는 cwd 의존성이 있다. 기존 러너의 `cd "$BASE"`를 유지해 저장소 루트의 data를 해석한다. judge 하위 디렉터리로 cd하면 오히려 잘못된 경로가 된다.
-  직접 CLI는 `--judge-model`, `--judge-provider`, `--judge-reasoning-effort`, `--judge-max-tokens`를 받는다. 구형 FC 기록은 `(judge.model, None, None, 700)`으로 비교한다. 동일 프로파일의 `--retry-unresolved`는 repeats 변경을 허용하고 확정 레코드와 이전 served identity를 보존한다. 보고서는 같은 정규화 프로파일끼리만 judge 우열을 비교한다.
+  직접 CLI는 `--judge-model`, `--judge-provider`, `--judge-reasoning-effort`, `--judge-max-tokens`, `--judge-cohort`를 받는다. 구형 FC 기록은 `(judge.model, None, None, 700)`으로 비교한다. 동일 프로파일의 `--retry-unresolved`는 repeats 변경을 허용하고 확정 레코드와 이전 served identity를 보존한다. 보고서는 같은 정규화 프로파일끼리만 judge 우열을 비교한다.
 - KOFFVQA `shared.multimodal.benches.koffvqa_api_judge` 역시 `python -m` 호출이다. `benches.paths.get_base_dir/get_timestamp`가 MODEL_TEST_BASE/EVAL_TIMESTAMP를 우선하고 `get_results_dir`가 기존 모델 철자를 재사용한다. 결과는 같은 세션의 `vision/multimodal/koffvqa_api_judge`에 저장된다.
   두 판정기 모두 요약 최상위 `judge_request`에 model·provider·reasoning_effort·max_tokens_requested·max_tokens_effective·temperature를 기록하며 KOFFVQA는 seed도 기록한다. 토큰 옵션 생략은 requested=null, effective는 실제 700/1024다. KOFFVQA의 구형 summary는 judge_model·run_config.decoding을 사용하고, summary가 없으면 같은 폴더 run_config.json의 judge.model·decoding으로 확인한다. 식별 기록 없이 results.json만 남은 경우에는 덮어쓰지 않는다.
 - `derive_multimodal_publish.py --source`는 세션 디렉터리가 아닌 벤치 디렉터리(또는 KRETA JSONL) 하나를 받는다. `publish.adapters.ADAPTERS`에 `koffvqa_api_judge`가 등록돼 있다. 따라서 `--base . --write --source <RD>/<TS>/vision/multimodal/koffvqa_api_judge`만 호출한다. 다른 세션이나 다른 벤치의 sidecar를 일괄 갱신하지 않는다. derive를 생략하거나 레인 밖 수동 작업으로 돌릴 필요는 없다.

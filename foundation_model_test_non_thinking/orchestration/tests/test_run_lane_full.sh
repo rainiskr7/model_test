@@ -412,6 +412,7 @@ invalid_setting_message() {
     FULL_JUDGE_MODEL=*) printf 'JUDGE_MODEL must not be empty' ;;
     FULL_JUDGE_MAX_TOKENS=*) printf 'JUDGE_MAX_TOKENS must be a positive integer' ;;
     FULL_JUDGE_REASONING_EFFORT=*) printf 'JUDGE_REASONING_EFFORT must be empty, low, medium or high' ;;
+    JUDGE_COHORT=*|FULL_JUDGE_COHORT=*) printf 'JUDGE_COHORT must match [a-z0-9][a-z0-9_-]{0,31}' ;;
     *) return 1 ;;
   esac
 }
@@ -424,7 +425,8 @@ f6() {
     FULL_AGENT_TASK_TIMEOUT=120 FULL_AGENT_TASK_TIMEOUT=300 FULL_AGENT_TASK_TIMEOUT=x \
     FULL_AGENT_REQUEST_TIMEOUT=900 FULL_AGENT_REQUEST_TIMEOUT=0 FULL_AGENT_REQUEST_TIMEOUT=x \
     FULL_REPS=0 FULL_REPS=-1 FULL_REPS=x LANE_DISPLAY= FULL_JUDGE_MODEL= \
-    FULL_JUDGE_MAX_TOKENS=0 FULL_JUDGE_MAX_TOKENS=-1 FULL_JUDGE_MAX_TOKENS=x FULL_JUDGE_REASONING_EFFORT=invalid; do
+    FULL_JUDGE_MAX_TOKENS=0 FULL_JUDGE_MAX_TOKENS=-1 FULL_JUDGE_MAX_TOKENS=x FULL_JUDGE_REASONING_EFFORT=invalid \
+    JUDGE_COHORT=Oss 'JUDGE_COHORT=a b' FULL_JUDGE_COHORT=.; do
     count=$((count + 1))
     fixture "F6_$count"
     set_config "$setting"
@@ -477,6 +479,24 @@ f7() {
       done
     done
   done
+  fixture F7_cohort
+  set_config FULL_REPS=1
+  run_lane 1
+  expect_rc 0 || return 1
+  grep 'shared.multimodal.benches.koffvqa_api_judge ' "$FX/stdout" > "$FX/kof_before"
+  set_config JUDGE_COHORT=oss
+  run_lane 1
+  expect_rc 0 || return 1
+  [ "$(grep -c -- '--judge-cohort oss' "$FX/stdout")" -eq 1 ] || return 1
+  grep 'shared.multimodal.benches.koffvqa_api_judge ' "$FX/stdout" > "$FX/kof_after"
+  diff -u "$FX/kof_before" "$FX/kof_after" || return 1
+  run_lane
+  expect_rc 0 || return 1
+  check_stage_argv 20261015_full_r1 koffvqa_judge || return 1
+  printf '%s\n' -m shared.functionchat.judge.run_judge --results-dir \
+    "$FX/results/fixture_model/20261015_full_r1/language/functionchat" \
+    --judge-model openai/gpt-4.1-mini --judge-cohort oss > "$FX/expected_cohort_argv"
+  diff -u "$FX/expected_cohort_argv" "$FX/dump/20261015_full_r1.functionchat_judge/argv"
 }
 
 put_judge_outputs() {

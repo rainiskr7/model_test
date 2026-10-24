@@ -25,13 +25,16 @@ def test_defaults_empty_values_and_internal_destinations():
     assert values['FULL_KRETA_WORKERS'] == '2'
     assert 'KRETA_WORKERS' not in values
     defaults = resolve(parse(SAMPLE), 'kmmlu', TRACKS)
+    assert defaults['JUDGE_COHORT'] == ''
     assert [defaults[key] for key in ('JUDGE_MODEL', 'JUDGE_PROVIDER', 'JUDGE_REASONING_EFFORT', 'JUDGE_MAX_TOKENS')] == [
         'openai/gpt-4.1-mini', '', '', '']
     for first in (False, True):
-        common = 'JUDGE_MODEL=common\nJUDGE_PROVIDER=common\nJUDGE_REASONING_EFFORT=low\nJUDGE_MAX_TOKENS=100\n'
-        scoped = 'FULL_JUDGE_MODEL=alias\nFULL_JUDGE_PROVIDER=deepinfra/bf16\nFULL_JUDGE_REASONING_EFFORT=medium\nFULL_JUDGE_MAX_TOKENS=2000\n'
+        common = 'JUDGE_COHORT=common\nJUDGE_MODEL=common\nJUDGE_PROVIDER=common\nJUDGE_REASONING_EFFORT=low\nJUDGE_MAX_TOKENS=100\n'
+        scoped = 'FULL_JUDGE_COHORT=oss\nFULL_JUDGE_MODEL=alias\nFULL_JUDGE_PROVIDER=deepinfra/bf16\nFULL_JUDGE_REASONING_EFFORT=medium\nFULL_JUDGE_MAX_TOKENS=2000\n'
         entries = parse(SAMPLE + 'SESSION_FULL=fixture\n' + (scoped + common if first else common + scoped))
         full = resolve(entries, 'full', TRACKS)
+        assert full['JUDGE_COHORT'] == 'oss'
+        assert resolve(entries, 'kmmlu', TRACKS)['JUDGE_COHORT'] == 'common'
         assert [full[key] for key in ('JUDGE_MODEL', 'JUDGE_PROVIDER', 'JUDGE_REASONING_EFFORT', 'JUDGE_MAX_TOKENS')] == [
             'alias', 'deepinfra/bf16', 'medium', '2000']
         assert resolve(entries, 'kmmlu', TRACKS)['JUDGE_MODEL'] == 'common'
