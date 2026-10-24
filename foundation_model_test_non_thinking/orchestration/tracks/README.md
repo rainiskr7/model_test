@@ -35,6 +35,7 @@ root의 `orchestration/tracks`를 전달한다. 모듈 파일의 원본 경로�
 | `TAUBENCH_USER_MODEL` `TAUBENCH_TRIALS` `TAUBENCH_MAX_CONCURRENCY` `AGENT_REQUEST_TIMEOUT` | P0 | 사용자 모델·동시성·timeout 설정 |
 | `FULL_AGENT_TASK_TIMEOUT` `FULL_KRETA_WORKERS` `FULL_KRETA_RESUME` `FULL_RESUME_FROM` | P0 | 기존 내부 변수명으로 해석한 설정 |
 | `JUDGE_MODEL` `JUDGE_PROVIDER` `JUDGE_REASONING_EFFORT` `JUDGE_MAX_TOKENS` | P0 | full 판정 프로파일; 선택 옵션은 빈값이면 미전송 |
+| `JUDGE_COHORT` | P0 | FC 판정 저장 이름; 빈값은 judge.json, 지정 시 judge.<값>.json. KOFFVQA에는 전달하지 않음 |
 | `SESSION` | P0 | 선택 트랙 SESSION 키의 값; 트랙은 이 공통 이름을 사용 |
 | `TRACK` `BASE` `HERE` | P0 | 트랙 이름·코드 루트·orchestration 경로 |
 | `LABEL` `PREFIX` `STOP_LABEL` `END_LABEL` | P0 | LANE_DISPLAY와 트랙 이름으로 만든 레이블 |

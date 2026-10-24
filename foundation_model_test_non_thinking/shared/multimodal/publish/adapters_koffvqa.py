@@ -142,6 +142,13 @@ def adapt_koffvqa_judge(source_dir: Path) -> dict[str, Any]:
 
     sibling = source_dir.parent / "koffvqa"
     candidates = sorted(sibling.glob("*_gen.xlsx"))
+    prediction_session = _prediction_session(summary, sibling)
+    judge_session = _session_of(source_dir)
+    rejudge = bool(prediction_session and judge_session and prediction_session != judge_session)
+    # Keep existing sibling copies authoritative, including SHA mismatches.
+    if not candidates and rejudge:
+        sibling = source_dir.parents[3] / prediction_session / "vision" / "multimodal" / "koffvqa"
+        candidates = sorted(sibling.glob("*_gen.xlsx"))
     recorded_sha = summary.get("prediction_sha256")
     if not recorded_sha:
         failures.append("prediction SHA 기록이 없음")
@@ -158,9 +165,6 @@ def adapt_koffvqa_judge(source_dir: Path) -> dict[str, Any]:
     # bytes that already exist measures only the judge.  Both used to land in one
     # cohort under one tolerance, so a spread could not be attributed.  The
     # session that produced the predictions decides which this is.
-    prediction_session = _prediction_session(summary, sibling)
-    judge_session = _session_of(source_dir)
-    rejudge = bool(prediction_session and judge_session and prediction_session != judge_session)
     protocol = _judge_protocol(summary, config, recorded_sha, item_digest, rejudge, generation_revision)
     metrics = {
         "axes": [{"name": "rubric", "value": average, "unit": "score/10", "numerator": sum(scores), "denominator": len(scores)}]

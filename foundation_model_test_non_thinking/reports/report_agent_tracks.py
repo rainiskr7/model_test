@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -43,7 +44,7 @@ def fraction(num: Optional[int], den: Optional[int]) -> str:
     return f"{num}/{den} = {num/den:.4f}"
 
 
-def collect(base: Path) -> List[Dict[str, Any]]:
+def collect(base: Path, judge_cohort: str = "") -> List[Dict[str, Any]]:
     rows: List[Dict[str, Any]] = []
     for summary_path in sorted(base.glob("results/*/*/language/*/summary.json")):
         track = summary_path.parent.name
@@ -75,7 +76,7 @@ def collect(base: Path) -> List[Dict[str, Any]]:
         if track == "functionchat":
             o = d.get("overall") or {}
             row["axes"] = [("exact", o.get("passed"), o.get("measured"), False)]
-            judge = load(summary_path.parent / "judge.json")
+            judge = load(summary_path.parent / (f"judge.{judge_cohort}.json" if judge_cohort else "judge.json"))
             if judge:
                 jo = judge.get("overall") or {}
                 unvalidated = (judge.get("judge") or {}).get("human_validation") == UNVALIDATED
@@ -141,7 +142,7 @@ def _judge_verdicts(judge_credentials, comparable) -> list:
     return judge_verdicts
 
 
-def collect_claims(base: Path) -> Dict[str, Any]:
+def collect_claims(base: Path, judge_cohort: str = "") -> Dict[str, Any]:
     """모델별 클레임 자격과 발행 가능한 우열 주장.
 
     1급 관측 대상은 스칼라 점수가 아니라 **항목별 통과 벡터**다. 실측: 어떤
@@ -169,7 +170,7 @@ def collect_claims(base: Path) -> Dict[str, Any]:
     creds, verdicts = _exact_claims(grouped, credential, comparable)
     judge_credentials = []
     for run_dir in run_dirs:
-        judge = load(run_dir / "judge.json")
+        judge = load(run_dir / (f"judge.{judge_cohort}.json" if judge_cohort else "judge.json"))
         if not judge:
             continue
         request = judge.get("judge_request") or {}
@@ -192,6 +193,7 @@ def collect_claims(base: Path) -> Dict[str, Any]:
         "verdicts": verdicts,
         "judge_credentials": judge_credentials,
         "judge_verdicts": judge_verdicts,
+        **({"judge_cohort": judge_cohort} if judge_cohort else {}),
     }
 
 
@@ -474,6 +476,10 @@ def render_markdown(
     out: List[str] = []
     out.append("# agent 트랙 결과")
     out.append("")
+    judge_cohort = (claims or {}).get("judge_cohort")
+    if judge_cohort:
+        out.append(f"판정 코호트: {judge_cohort} (judge.{judge_cohort}.json)")
+        out.append("")
     out.append(
         "이 파일은 `foundation_model_test_non_thinking/reports/report_agent_tracks.py` 가 산출물에서 생성한다. "
         "손으로 고치지 말 것 — 다시 생성하면 덮어써진다."
@@ -540,6 +546,7 @@ def _print_console(published, rejected, no_record, show_rejected):
 
 def main(argv: Optional[List[str]] = None) -> int:
     ap = argparse.ArgumentParser()
+    ap.add_argument("--judge-cohort", default="", help="읽을 판정 이름; 빈값은 judge.json")
     ap.add_argument(
         "--base", type=Path, default=BASE,
         help="산출물을 읽을 기준 디렉터리(<PATH>/results, 기본값: 이 저장소); 채점 코드는 실행 중인 저장소의 패키지를 쓴다",
@@ -552,10 +559,12 @@ def main(argv: Optional[List[str]] = None) -> int:
         help="명령 없이 읽을 수 있는 보고서를 이 경로에 쓴다",
     )
     args = ap.parse_args(argv)
+    if args.judge_cohort and not re.fullmatch(r"[a-z0-9][a-z0-9_-]{0,31}", args.judge_cohort):
+        ap.error("--judge-cohort must match [a-z0-9][a-z0-9_-]{0,31}")
 
-    rows = collect(args.base)
+    rows = collect(args.base, args.judge_cohort)
     repro_report = collect_functionchat_reproducibility(args.base)
-    claims = collect_claims(args.base)
+    claims = collect_claims(args.base, args.judge_cohort)
     if not rows:
         print("산출물이 없습니다.", file=sys.stderr)
         return 2
@@ -567,6 +576,8 @@ def main(argv: Optional[List[str]] = None) -> int:
     published = [r for r in rows if r["publishable"]]
     rejected = [r for r in rows if not r["publishable"]]
     no_record = [r for r in rows if not r["has_gate_record"]]
+    if args.judge_cohort:
+        print(f"판정 코호트: {args.judge_cohort} (judge.{args.judge_cohort}.json)")
     _print_console(published, rejected, no_record, args.show_rejected)
     if args.strict and (rejected or no_record):
         return 1

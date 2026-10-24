@@ -21,6 +21,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import sys
 from collections import Counter, defaultdict
 from concurrent.futures import ThreadPoolExecutor
@@ -118,6 +119,7 @@ def _parse_args(argv):
     """Parse args."""
     ap = argparse.ArgumentParser()
     ap.add_argument("--results-dir", required=True, type=Path)
+    ap.add_argument("--judge-cohort", default="", help="판정 저장 이름; 빈값은 judge.json")
     ap.add_argument("--data-dir", type=Path, default=Path("data/FunctionChat-Bench/data"))
     ap.add_argument("--judge-model", default="openai/gpt-4.1-mini")
     ap.add_argument("--judge-provider", default=None)
@@ -137,6 +139,8 @@ def _parse_args(argv):
         help="기존 judge.json 의 판정 불가 항목만 다시 판정해 병합한다",
     )
     args = ap.parse_args(argv)
+    if args.judge_cohort and not re.fullmatch(r"[a-z0-9][a-z0-9_-]{0,31}", args.judge_cohort):
+        ap.error("--judge-cohort must match [a-z0-9][a-z0-9_-]{0,31}")
     if not args.judge_model.strip():
         ap.error("--judge-model must not be empty")
     if args.judge_max_tokens is not None and args.judge_max_tokens <= 0:
@@ -156,7 +160,7 @@ def _load_api_key(args):
 
 def _load_inputs(args):
     """Load rubrics and candidates and select unresolved records for retry."""
-    out_path = args.results_dir / "judge.json"
+    out_path = args.results_dir / (f"judge.{args.judge_cohort}.json" if args.judge_cohort else "judge.json")
     stored = None
     if out_path.exists():
         try:
@@ -377,7 +381,7 @@ def _apply_publish_gate(summary, items, previous, records):
 
 def _save_summary(args, summary, gate_failures):
     """Write judge JSON, print results and return the existing gate status."""
-    out = args.results_dir / "judge.json"
+    out = args.results_dir / (f"judge.{args.judge_cohort}.json" if args.judge_cohort else "judge.json")
     out.write_text(json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8")
     o = summary["overall"]
     for kind, counts in summary["by_type"].items():
