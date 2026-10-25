@@ -303,7 +303,9 @@ def _render_comparison_cohorts(summaries) -> list:
         out += [
             f"### {facts['domain']}/{facts['split_name']} — protocol `{fingerprint}`",
             "",
-            f"사용자 시뮬레이터: `{facts['user_model']}` · mode `{facts['mode']}` · tau2 `{facts['tau2_version']}`",
+            f"사용자 시뮬레이터: `{facts['user_model']}` · mode `{facts['mode']}` · tau2 `{facts['tau2_version']}`"
+            + (f" · provider `{facts['user_provider']}`" if "user_provider" in facts else "")
+            + (f" · effort `{facts['user_reasoning_effort']}`" if "user_reasoning_effort" in facts else ""),
             "",
         ]
         blocked = {id(run): _blockers(run) for run in runs}

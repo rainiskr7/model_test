@@ -99,7 +99,7 @@ kmmlu는 LANE_TOKENIZER도 필수이며 REPS=3, REQUIRE_NOTHINK=1,
 LM_EVAL_MODE=chat, NUM_CONCURRENT=8이 기본이다. NUM_CONCURRENT는 1..8이다.
 std4 기본은 TAUBENCH_USER_MODEL=openrouter/openai/gpt-4.1-mini,
 TAUBENCH_TRIALS=4, TAUBENCH_MAX_CONCURRENCY=4, AGENT_REQUEST_TIMEOUT=300이다.
-호출 시 TAUBENCH_MODE=standard를 설정한다. full 옵션은 [README_full.md](README_full.md)를 따른다.
+호출 시 TAUBENCH_MODE=standard를 설정한다. TAUBENCH_USER_PROVIDER·TAUBENCH_USER_REASONING_EFFORT는 기본 빈값(미전송)이다. 지정 시 openrouter/ 사용자 모델만 허용하고 TAUBENCH_USER_BASE_URL과 동시 지정하면 rc 2다. provider는 `[a-z0-9][a-z0-9/_.-]*`, effort는 low·medium·high를 허용한다. 접두 예: `TAUBENCH_STD4_TAUBENCH_USER_PROVIDER`, `FULL_TAUBENCH_USER_PROVIDER`(effort도 같은 규칙). full 옵션은 [README_full.md](README_full.md)를 따른다.
 
 선택 키에는 등록된 트랙의 `<TRACK 대문자>_` 접두를 붙일 수 있다. 현재 예는
 `KMMLU_`, `TAUBENCH_STD4_`, `FULL_`이다. SESSION_*는 공통 키로 먼저 판정하며,
@@ -109,7 +109,7 @@ TAUBENCH_TRIALS=4, TAUBENCH_MAX_CONCURRENCY=4, AGENT_REQUEST_TIMEOUT=300이다.
 메시지는 `duplicate key: <접두를 포함한 원래 키>`이며 비선택 트랙의 중복도 오류다.
 옵션 변경 시 기존 줄을 교체하고 같은 키를 뒤에 추가하지 않는다.
 접두를 허용하는 키는 REPS, LANE_TOKENIZER, REQUIRE_NOTHINK, LM_EVAL_MODE,
-NUM_CONCURRENT, TAUBENCH_USER_MODEL, TAUBENCH_TRIALS, TAUBENCH_MAX_CONCURRENCY,
+NUM_CONCURRENT, TAUBENCH_USER_MODEL, TAUBENCH_USER_PROVIDER, TAUBENCH_USER_REASONING_EFFORT, TAUBENCH_TRIALS, TAUBENCH_MAX_CONCURRENCY,
 AGENT_REQUEST_TIMEOUT, AGENT_TASK_TIMEOUT, KRETA_WORKERS, KRETA_RESUME, RESUME_FROM이다.
 LANE_DISPLAY·접속 식별 키·SESSION_*에는 접두를 붙이지 않는다. 알 수 없는 키는
 다른 트랙 접두가 붙어 있어도 rc 2다.
