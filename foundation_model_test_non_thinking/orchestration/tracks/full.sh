@@ -2,6 +2,7 @@
 # Inputs (phases: README.md): STOP_LABEL REPS AGENT_REQUEST_TIMEOUT FULL_AGENT_TASK_TIMEOUT
 # FULL_KRETA_WORKERS FULL_KRETA_RESUME FULL_RESUME_FROM MODEL BASE_URL_CHAT BASE_URL_V1
 # TAUBENCH_MAX_CONCURRENCY TAUBENCH_USER_MODEL TAUBENCH_TRIALS SESSION BASE PYTHONPATH LABEL HOST BASE_TS END_LABEL.
+# TAUBENCH_USER_PROVIDER TAUBENCH_USER_REASONING_EFFORT TAUBENCH_USER_BASE_URL.
 # JUDGE_MODEL JUDGE_COHORT JUDGE_PROVIDER JUDGE_REASONING_EFFORT JUDGE_MAX_TOKENS.
 # Functions: bad read_key log; results_model_dir is sourced locally at run time.
 track_secrets() { export TAUBENCH_USER_API_KEY="$(read_key TAUBENCH_USER_API_KEY)"; }
@@ -21,6 +22,13 @@ track_validate() {
   FULL_STAGES="nlu functionchat taubench multimodal functionchat_judge koffvqa_judge derive taubench_standard"
   # Validate before activation, credential reads, or any fixture/server access.
   [ -n "$STOP_LABEL" ] || bad 'required key: STOP_LABEL'
+  case "$TAUBENCH_USER_REASONING_EFFORT" in ''|low|medium|high) ;; *) bad 'TAUBENCH_USER_REASONING_EFFORT must be empty, low, medium or high' ;; esac
+  if [ -n "$TAUBENCH_USER_PROVIDER" ]; then
+    [[ "$TAUBENCH_USER_PROVIDER" =~ ^[a-z0-9][a-z0-9/_.-]*$ ]] || bad 'TAUBENCH_USER_PROVIDER must match [a-z0-9][a-z0-9/_.-]*'
+  fi
+  if [ -n "$TAUBENCH_USER_PROVIDER$TAUBENCH_USER_REASONING_EFFORT" ]; then
+    [[ "$TAUBENCH_USER_MODEL" == openrouter/* ]] && [ -z "${TAUBENCH_USER_BASE_URL:-}" ] || bad 'user provider/effort requires openrouter/ model without TAUBENCH_USER_BASE_URL'
+  fi
   [[ "$JUDGE_MODEL" =~ [^[:space:]] ]] || bad 'JUDGE_MODEL must not be empty'
   if [ -n "${JUDGE_COHORT:-}" ]; then
     [[ "$JUDGE_COHORT" =~ ^[a-z0-9][a-z0-9_-]{0,31}$ ]] || bad 'JUDGE_COHORT must match [a-z0-9][a-z0-9_-]{0,31}'
@@ -70,8 +78,10 @@ full_command() {
         bash vsm/taubench/run_taubench.sh "$MODEL" "$BASE_URL_CHAT") ;;
     taubench_standard)
       FULL_CMD=(env TAUBENCH_MODE=standard "TAUBENCH_USER_MODEL=$TAUBENCH_USER_MODEL" "TAUBENCH_TRIALS=$TAUBENCH_TRIALS"
-        "AGENT_REQUEST_TIMEOUT=$AGENT_REQUEST_TIMEOUT" "TAUBENCH_MAX_CONCURRENCY=$TAUBENCH_MAX_CONCURRENCY"
-        bash vsm/taubench/run_taubench.sh "$MODEL" "$BASE_URL_CHAT") ;;
+        "AGENT_REQUEST_TIMEOUT=$AGENT_REQUEST_TIMEOUT" "TAUBENCH_MAX_CONCURRENCY=$TAUBENCH_MAX_CONCURRENCY")
+      [ -z "$TAUBENCH_USER_PROVIDER" ] || FULL_CMD+=("TAUBENCH_USER_PROVIDER=$TAUBENCH_USER_PROVIDER")
+      [ -z "$TAUBENCH_USER_REASONING_EFFORT" ] || FULL_CMD+=("TAUBENCH_USER_REASONING_EFFORT=$TAUBENCH_USER_REASONING_EFFORT")
+      FULL_CMD+=(bash vsm/taubench/run_taubench.sh "$MODEL" "$BASE_URL_CHAT") ;;
     multimodal)
       FULL_CMD=(env "KRETA_WORKERS=$FULL_KRETA_WORKERS")
       if [ "$N" -eq "$FULL_RESUME_REP" ] && [ "$FULL_RESUME_INDEX" -eq 4 ] && [ "$FULL_KRETA_RESUME" = 1 ]; then
@@ -174,6 +184,7 @@ full_invoke() (
   local stage=$1
   unset AGENT_REQUEST_TIMEOUT AGENT_TASK_TIMEOUT NUM_CONCURRENT TAUBENCH_MODE TAUBENCH_TRIALS
   unset TAUBENCH_MAX_CONCURRENCY KRETA_WORKERS KRETA_RESUME
+  unset TAUBENCH_USER_PROVIDER TAUBENCH_USER_REASONING_EFFORT
   case "$stage" in
     *_judge|derive) PYTHONPATH="$BASE${PYTHONPATH:+:$PYTHONPATH}" EVAL_TIMESTAMP="$TS" "${FULL_CMD[@]}" ;;
     *) EVAL_TIMESTAMP="$TS" "${FULL_CMD[@]}" ;;

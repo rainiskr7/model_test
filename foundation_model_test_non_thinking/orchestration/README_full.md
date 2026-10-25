@@ -34,7 +34,7 @@ KMMLU/harness는 포함하지 않는다. 같은 mtime의 workbook은 셸 glob �
 | KRETA_RESUME | 0 또는 1, 기본 0; 정확한 multimodal 재개 지점에만 1 주입 |
 | RESUME_FROM | 선택: `r<N>:<stage>`, N은 1..REPS |
 | TAUBENCH_MAX_CONCURRENCY | 기본 4; solo·standard taubench에 주입 |
-| TAUBENCH_USER_MODEL / TAUBENCH_TRIALS | standard 사용자 모델 / 시행 수; 기본 `openrouter/openai/gpt-4.1-mini` / 4 |
+| TAUBENCH_USER_MODEL / TAUBENCH_TRIALS | standard 사용자 모델 / 시행 수; 기본 `openrouter/openai/gpt-4.1-mini` / 4. 제공자·effort 선택은 [사용자 프로파일](#standard-사용자-프로파일)을 따른다 |
 | AGENT_REQUEST_TIMEOUT | 양의 정수 초, 기본 300; functionchat·taubench에만 주입 |
 | AGENT_TASK_TIMEOUT | REQUEST보다 큰 정수 초, 기본 900; functionchat·solo taubench에만 주입 |
 | JUDGE_MODEL | FC·KOFFVQA 판정 모델, 기본 `openai/gpt-4.1-mini`; 빈값 금지 |
@@ -183,3 +183,14 @@ nohup perl -e 'setpgrp; exec @ARGV' /bin/bash "$N/orchestration/lanes/full.sh" q
 ```
 
 실제 모델 서버, 외부 judge, 실제 데이터/결과를 통한 평가와 checkpoint 복구는 이 격리 시험의 검증 범위 밖이다.
+
+## standard 사용자 프로파일
+
+| 키 | full 계약 |
+| --- | --- |
+| TAUBENCH_USER_PROVIDER | 기본 빈값(미전송). `[a-z0-9][a-z0-9/_.-]*` 제공자 slug; 지정하면 order 단일 제공자, allow_fallbacks=false, require_parameters=true |
+| TAUBENCH_USER_REASONING_EFFORT | 기본 빈값(미전송) 또는 low·medium·high; LiteLLM 모델 맵과 무관하게 extra_body.reasoning.effort로 전달 |
+
+공통 값보다 `FULL_TAUBENCH_USER_PROVIDER`·`FULL_TAUBENCH_USER_REASONING_EFFORT`가 우선한다. 두 옵션은 standard 단계에만 전달한다. 하나라도 지정하면 사용자 모델은 `openrouter/` 접두여야 하고 `TAUBENCH_USER_BASE_URL` 환경값과 동시에 지정할 수 없다(rc 2). `OPENROUTER_API_BASE`는 막지 않으며, 새 옵션을 쓸 때 manifest의 `user_openrouter_api_base_set`에 비어 있지 않은 환경값의 존재만 기록한다. 값 자체는 기록하지 않는다.
+
+provider·effort가 비어 있으면 기존 요청·manifest·summary·코호트를 유지한다. 지정한 값은 manifest와 비교 지문에 들어가며 tau2 results.json의 설정 기록과 대조한다(실제 전송 또는 실제 제공자의 증거가 아님). 제공자 정책 플래그·order·effort가 다르거나 잘못된 타입이면 summary를 남기고 발행·후보 간 비교를 거부한다. low/medium 선택과 도구 호출·추론 누출·지연·지원 파라미터는 전환 전 실 요청 검증 대상이다.

@@ -5,6 +5,7 @@ import argparse
 import importlib.metadata
 import json
 import os
+import re
 import subprocess
 import sys
 from datetime import datetime
@@ -356,6 +357,8 @@ def parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
     # 이 트랙에서 돌 수 없다.
     parser.add_argument("--domain", default="telecom")
     parser.add_argument("--user-model", default=None)
+    parser.add_argument("--user-provider", default=None)
+    parser.add_argument("--user-reasoning-effort", choices=("", "low", "medium", "high"), default=None)
     # 사용자 시뮬레이터를 에이전트와 **다른 엔드포인트**로 보낼 때 쓴다.
     # 상류 기본값이 외부 모델(gpt-4.1)이므로 이게 정상 형태다. 생략하면 에이전트와
     # 같은 엔드포인트를 쓴다(로컬 제3 모델을 사용자로 세우는 경우).
@@ -388,10 +391,26 @@ def parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
     parser.add_argument("--max-tokens", type=int, default=16384)
     parser.add_argument("--max-concurrency", type=int, default=1)
     parser.add_argument("--max-steps", type=int, default=100)
-    return parser.parse_args(argv)
+    args = parser.parse_args(argv)
+    args.user_provider = args.user_provider or None
+    args.user_reasoning_effort = args.user_reasoning_effort or None
+    return args
 
 
 def _validate_args(args: argparse.Namespace) -> None:
+    if args.user_provider or args.user_reasoning_effort:
+        error = None
+        if args.mode != "standard":
+            error = "사용자 시뮬레이터 옵션은 standard 전용입니다"
+        elif not (args.user_model or "").startswith("openrouter/") or args.user_base_url:
+            error = "사용자 provider/effort는 openrouter/ 모델 전용이며 --user-base-url과 함께 쓸 수 없습니다"
+        elif args.user_provider and not re.fullmatch(r"[a-z0-9][a-z0-9/_.-]*", args.user_provider):
+            error = "user provider must match [a-z0-9][a-z0-9/_.-]*"
+        elif args.user_reasoning_effort not in (None, "low", "medium", "high"):
+            error = "user reasoning effort must be empty, low, medium or high"
+        if error:
+            print(f"[taubench] ERROR: {error}", file=sys.stderr)
+            raise SystemExit(2)
     if args.request_timeout <= 0 or args.task_timeout <= 0:
         raise ValueError("request/task timeouts must be positive")
     if args.task_timeout <= args.request_timeout:
@@ -468,7 +487,10 @@ def _prepare_results_dirs(base_dir: Path, args: argparse.Namespace) -> tuple[Pat
 def _prepare_llm_args(
     args: argparse.Namespace, api_base: str, environ: MutableMapping[str, str]
 ) -> tuple[dict, dict, list[str]]:
-    """후보와 사용자 인자를 만들고 키 환경 설정 및 제약 로그를 적용한다."""
+    """후보와 사용자 인자를 만들고 키 환경 설정 및 제약 로그를 적용한다.
+
+    유지: 사용자 지시(새 함수 금지), Stage 4
+    """
     llm_args = build_litellm_args(api_base, args.request_timeout, args.max_tokens)
 
     # 사용자 시뮬레이터 llm_args. 별도 엔드포인트를 주면 그쪽으로, 아니면
@@ -516,6 +538,14 @@ def _prepare_llm_args(
                 )
             # litellm 이 읽을 자리에 옮겨 담는다. 자식 프로세스 env 로만 전달된다.
             environ.setdefault("OPENROUTER_API_KEY", user_api_key)
+        if args.user_provider or args.user_reasoning_effort:
+            # 네이티브 필드는 LiteLLM의 가변 reasoning 지원 맵에 의존하지 않는다.
+            user_llm_args["extra_body"] = {
+                **({"provider": {"order": [args.user_provider], "allow_fallbacks": False,
+                                 "require_parameters": True}} if args.user_provider else {}),
+                **({"reasoning": {"effort": args.user_reasoning_effort}}
+                   if args.user_reasoning_effort else {}),
+            }
     # 엔드포인트가 정해진 **뒤에** 적용한다 — 로컬로 가는지 외부로 가는지
     # 알아야 어느 제약을 걸지 정할 수 있다.
     user_removed_params = (
@@ -595,6 +625,11 @@ def _build_manifest(
             "user_api_base": (
                 None if args.mode == "solo" else user_llm_args.get("api_base")
             ),
+            **({"user_provider": args.user_provider} if args.user_provider else {}),
+            **({"user_reasoning_effort": args.user_reasoning_effort}
+               if args.user_reasoning_effort else {}),
+            **({"user_openrouter_api_base_set": bool(os.environ.get("OPENROUTER_API_BASE"))}
+               if args.user_provider or args.user_reasoning_effort else {}),
             "provider": "litellm_openai_compatible",
             "model_requested": args.model,
             "model_sent_to_litellm": litellm_model_name(args.model),

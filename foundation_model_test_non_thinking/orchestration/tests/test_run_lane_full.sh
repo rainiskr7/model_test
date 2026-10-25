@@ -116,6 +116,7 @@ run_lane() {
     PYTHONDONTWRITEBYTECODE=1 MODEL_TEST_BASE="$FX" LANE_DRY_RUN="${1:-0}" \
     AGENT_REQUEST_TIMEOUT=999 AGENT_TASK_TIMEOUT=9999 NUM_CONCURRENT=99 TAUBENCH_MODE=standard TAUBENCH_TRIALS=9 \
     TAUBENCH_MAX_CONCURRENCY=9 KRETA_WORKERS=9 KRETA_RESUME=1 \
+    TAUBENCH_USER_PROVIDER=inherited/provider TAUBENCH_USER_REASONING_EFFORT=high \
     /bin/bash "$FX/orchestration/lanes/$LANE.sh" fixture) > "$FX/stdout" 2>&1
   RC=$?
 }
@@ -172,7 +173,37 @@ f1() {
   run_lane 1
   expect_rc 0 || return 1
   grep '^COMMAND=' "$FX/stdout" > "$FX/std4_command"
-  diff -u "$FX/standard_command" "$FX/std4_command"
+  diff -u "$FX/standard_command" "$FX/std4_command" || return 1
+  local selected configured_command= envfile
+  for selected in full taubench_std4; do
+    fixture "F1_profile_$selected"
+    LANE=$selected
+    set_config FULL_REPS=1
+    set_config SESSION_TAUBENCH_STD4=fixture_std4
+    set_config TAUBENCH_USER_MODEL=openrouter/openai/gpt-oss-120b
+    set_config TAUBENCH_USER_PROVIDER=deepinfra/bf16
+    set_config TAUBENCH_USER_REASONING_EFFORT=medium
+    run_lane 1
+    expect_rc 0 || return 1
+    if [ "$selected" = full ]; then
+      configured_command=$(grep '^COMMAND=env TAUBENCH_MODE=standard ' "$FX/stdout")
+    else
+      exact "$FX/stdout" "$configured_command" || return 1
+    fi
+    has "$FX/stdout" 'TAUBENCH_USER_PROVIDER=deepinfra/bf16 TAUBENCH_USER_REASONING_EFFORT=medium bash' || return 1
+    [ ! -e "$FX/logs" ] && [ ! -e "$FX/calls" ] || return 1
+    run_lane
+    expect_rc 0 || return 1
+    for envfile in "$FX/dump/"*/env; do
+      case "$envfile" in
+        *.taubench_standard/env)
+          exact "$envfile" 'TAUBENCH_USER_MODEL=openrouter/openai/gpt-oss-120b' &&
+          exact "$envfile" 'TAUBENCH_USER_PROVIDER=deepinfra/bf16' &&
+          exact "$envfile" 'TAUBENCH_USER_REASONING_EFFORT=medium' || return 1 ;;
+        *) absent "$envfile" '^TAUBENCH_USER_(PROVIDER|REASONING_EFFORT)=' || return 1 ;;
+      esac
+    done
+  done
 }
 
 f2() {

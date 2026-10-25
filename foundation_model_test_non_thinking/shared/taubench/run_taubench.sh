@@ -81,6 +81,12 @@ RUN_ARGS=(
 if [ -n "${TAUBENCH_USER_MODEL:-}" ]; then
   RUN_ARGS+=(--user-model "$TAUBENCH_USER_MODEL")
 fi
+if [ -n "${TAUBENCH_USER_PROVIDER:-}" ]; then
+  RUN_ARGS+=(--user-provider "$TAUBENCH_USER_PROVIDER")
+fi
+if [ -n "${TAUBENCH_USER_REASONING_EFFORT:-}" ]; then
+  RUN_ARGS+=(--user-reasoning-effort "$TAUBENCH_USER_REASONING_EFFORT")
+fi
 # 사용자 시뮬레이터를 외부 API 로 보낼 때만. 키는 여기서 넘기지 않는다 —
 # 프로세스 목록 노출을 피하려고 러너가 TAUBENCH_USER_API_KEY 환경변수(.env)를 직접 읽는다.
 if [ -n "${TAUBENCH_USER_BASE_URL:-}" ]; then
