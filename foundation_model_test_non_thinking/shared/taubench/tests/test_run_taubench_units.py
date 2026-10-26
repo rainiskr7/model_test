@@ -3,9 +3,12 @@
 import hashlib
 import io
 import json
+import os
+import subprocess
 from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 from types import SimpleNamespace
+from unittest import mock
 
 import pytest
 
@@ -68,24 +71,137 @@ def test_split_summary_preserves_existing_telecom_label(domain):
     }) == "[taubench] telecom split 'test': 1/2 judge-free tasks; 1 not measured"
 
 
-@pytest.mark.parametrize("external", [False, True])
-def test_prepare_llm_args_keeps_user_protocol_independent(monkeypatch, external):
+@pytest.mark.parametrize("external,options,rejected,anchor", [
+    (False, [], False, False),
+    (True, [], False, False),
+    (True, ["--user-provider", "", "--user-reasoning-effort", ""], False, False),
+    (True, ["--user-provider", "deepinfra/bf16"], False, False),
+    (True, ["--user-reasoning-effort", "low"], False, False),
+    (True, ["--user-reasoning-effort", "high"], False, False),
+    (True, ["--user-provider", "deepinfra/bf16", "--user-reasoning-effort", "medium"], False, False),
+    pytest.param(True, ["--user-provider", "deepinfra/bf16", "--user-reasoning-effort", "medium"],
+                 False, True, id="litellm-1.82.6-anchor"),
+    (False, ["--user-provider", "deepinfra/bf16"], True, False),
+    (False, ["--user-reasoning-effort", "low"], True, False),
+    (True, ["--mode", "solo", "--user-provider", "deepinfra/bf16"], True, False),
+    (True, ["--mode", "solo", "--user-reasoning-effort", "low"], True, False),
+    (True, ["--user-model", "anthropic/user", "--user-provider", "deepinfra/bf16"], True, False),
+    (True, ["--user-model", "openai/user", "--user-reasoning-effort", "medium"], True, False),
+    (True, ["--user-model", "", "--user-provider", "deepinfra/bf16"], True, False),
+    (True, ["--user-base-url", "http://unused/v1", "--user-provider", "deepinfra/bf16"], True, False),
+    (True, ["--user-base-url", "http://unused/v1", "--user-reasoning-effort", "low"], True, False),
+    (True, ["--user-reasoning-effort", "invalid"], True, False),
+    (True, ["--user-provider", "Bad/provider"], True, False),
+    (True, ["--user-provider", "two words"], True, False),
+    (True, ["--user-provider", "provider\n"], True, False),
+    (True, ["--user-provider", "/provider"], True, False),
+])
+def test_prepare_llm_args_keeps_user_protocol_independent(monkeypatch, external, options, rejected, anchor, tmp_path, capsys):
+    """설정부터 CLI·manifest·실제 변환까지의 계약.
+
+    유지: 사용자 지시(새 함수 금지), Stage 4
+    """
     monkeypatch.setattr(runner, "_unsupported_sampling_params", lambda: ["temperature"])
-    args = runner.parse_args([
+    argv = [
         "--model", "candidate", "--mode", "standard", "--user-model",
         "openrouter/user" if external else "local-user",
         "--request-timeout", "3", "--max-tokens", "17",
-    ])
+    ] + options
+    if rejected:
+        with mock.patch.object(runner.subprocess, "run") as upstream, mock.patch.object(runner.subprocess, "check_output") as git:
+            with pytest.raises(SystemExit) as error:
+                runner.main(argv)
+            assert error.value.code == 2
+            stderr = capsys.readouterr().err
+            assert stderr and "unrecognized arguments" not in stderr
+            upstream.assert_not_called()
+            git.assert_not_called()
+        return
+    args = runner.parse_args(argv)
+    runner._validate_args(args)
     environ = {"TAUBENCH_USER_API_KEY": "synthetic"}
     candidate, user, removed = runner._prepare_llm_args(args, "http://unused/v1", environ)
     assert candidate == {"api_base": "http://unused/v1", "timeout": 3.0,
                          "num_retries": 0, "max_tokens": 17}
-    assert user == ({"timeout": 120.0, "num_retries": 0, "max_tokens": 16384, "temperature": 0.0}
-                    if external else {"api_base": "http://unused/v1", "timeout": 120.0,
-                                      "num_retries": 0, "max_tokens": 16384})
+    expected = ({"timeout": 120.0, "num_retries": 0, "max_tokens": 16384, "temperature": 0.0}
+                if external else {"api_base": "http://unused/v1", "timeout": 120.0,
+                                  "num_retries": 0, "max_tokens": 16384})
+    extra = {}
+    if args.user_provider:
+        extra["provider"] = {"order": ["deepinfra/bf16"], "allow_fallbacks": False, "require_parameters": True}
+    if args.user_reasoning_effort:
+        extra["reasoning"] = {"effort": args.user_reasoning_effort}
+    if extra:
+        expected["extra_body"] = extra
+    assert user == expected
+    assert json.dumps(user, separators=(",", ":")) == json.dumps(expected, separators=(",", ":"))
+    command = runner.build_upstream_command(args, candidate, user, tmp_path, ["one"])
+    assert command[command.index("--user-llm-args") + 1] == json.dumps(expected, separators=(",", ":"))
     assert removed == ([] if external else ["temperature"])
     assert environ == ({"TAUBENCH_USER_API_KEY": "synthetic", "OPENROUTER_API_KEY": "synthetic"}
                        if external else {"TAUBENCH_USER_API_KEY": "synthetic"})
+    for base_set in (False, True):
+        if base_set:
+            monkeypatch.setenv("OPENROUTER_API_BASE", "http://override.invalid/v1")
+        else:
+            monkeypatch.delenv("OPENROUTER_API_BASE", raising=False)
+        integrity = runner._build_manifest(args, {}, "http://unused/v1", user, [], removed)["harness_integrity"]
+        for key in ("user_provider", "user_reasoning_effort"):
+            if getattr(args, key):
+                assert integrity[key] == getattr(args, key)
+            else:
+                assert key not in integrity
+        if extra:
+            assert integrity["user_openrouter_api_base_set"] is base_set
+        else:
+            assert "user_openrouter_api_base_set" not in integrity
+        assert "http://override.invalid/v1" not in json.dumps(integrity)
+
+    # Execute the actual shell wrapper with a recording interpreter, wholly in tmp_path.
+    root = Path(runner.__file__).resolve().parents[3]
+    (tmp_path / "data/tau2-bench").mkdir(parents=True)
+    interpreter = tmp_path / "record-python"
+    interpreter.write_text('#!/bin/sh\nprintf "%s\\n" "$@"\n', encoding="utf-8")
+    interpreter.chmod(0o755)
+    wrapper = subprocess.run(["/bin/bash", str(root / "shared/taubench/run_taubench.sh"), "candidate"],
+        env={"PATH": os.defpath, "MODEL_TEST_BASE": str(tmp_path), "TAU_PY": str(interpreter),
+             "EVAL_TIMESTAMP": "fixture", "TAUBENCH_MODE": "standard", "TAUBENCH_USER_MODEL": args.user_model,
+             "TAUBENCH_USER_PROVIDER": args.user_provider or "",
+             "TAUBENCH_USER_REASONING_EFFORT": args.user_reasoning_effort or ""},
+        capture_output=True, text=True, check=True)
+    forwarded = wrapper.stdout.splitlines()
+    for option, value in (("--user-provider", args.user_provider), ("--user-reasoning-effort", args.user_reasoning_effort)):
+        if value:
+            assert forwarded[forwarded.index(option) + 1] == value
+        else:
+            assert option not in forwarded
+    if anchor:
+        python = root / ".venv-taubench/bin/python"
+        if not python.is_file():
+            pytest.skip("C2(c) INCONCLUSIVE: repository .venv-taubench/bin/python missing; rerun with LiteLLM 1.82.6 before CLOSE")
+        code = '''
+import importlib.metadata, json, sys
+from unittest.mock import patch
+with patch("socket.socket.connect", side_effect=AssertionError("network forbidden")), patch("socket.socket.connect_ex", side_effect=AssertionError("network forbidden")):
+    import litellm
+    from litellm.llms.openrouter.chat.transformation import OpenrouterConfig
+    assert importlib.metadata.version("litellm") == "1.82.6", "C2(c) requires LiteLLM 1.82.6"
+    params = json.load(sys.stdin)
+    params.pop("timeout")
+    params.pop("num_retries")
+    litellm.drop_params = True
+    optional = litellm.get_optional_params(model="openai/gpt-oss-120b", custom_llm_provider="openrouter", **params)
+    body = OpenrouterConfig().transform_request(model="openai/gpt-oss-120b", messages=[{"role": "user", "content": "fixture"}], optional_params=optional, litellm_params={}, headers={})
+    print(json.dumps(body))
+'''
+        transformed = subprocess.run([str(python), "-B", "-c", code], input=json.dumps(user),
+            env={"PATH": os.defpath, "PYTHONDONTWRITEBYTECODE": "1", "LITELLM_LOCAL_MODEL_COST_MAP": "true"},
+            cwd=tmp_path, capture_output=True, text=True, timeout=30)
+        assert transformed.returncode == 0, transformed.stderr
+        body = json.loads(transformed.stdout)
+        assert body["provider"] == extra["provider"]
+        assert body["reasoning"] == extra["reasoning"]
+        assert "extra_body" not in body
 
 
 def _main_contract(monkeypatch, tmp_path, scenario):

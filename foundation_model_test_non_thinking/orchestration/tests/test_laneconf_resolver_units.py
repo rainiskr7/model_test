@@ -24,6 +24,39 @@ def test_defaults_empty_values_and_internal_destinations():
     assert values['LM_EVAL_MODE'] == ''
     assert values['FULL_KRETA_WORKERS'] == '2'
     assert 'KRETA_WORKERS' not in values
+    defaults = resolve(parse(SAMPLE), 'kmmlu', TRACKS)
+    assert defaults['JUDGE_COHORT'] == ''
+    assert [defaults[key] for key in ('JUDGE_MODEL', 'JUDGE_PROVIDER', 'JUDGE_REASONING_EFFORT', 'JUDGE_MAX_TOKENS')] == [
+        'openai/gpt-4.1-mini', '', '', '']
+    for first in (False, True):
+        common = 'JUDGE_COHORT=common\nJUDGE_MODEL=common\nJUDGE_PROVIDER=common\nJUDGE_REASONING_EFFORT=low\nJUDGE_MAX_TOKENS=100\n'
+        scoped = 'FULL_JUDGE_COHORT=oss\nFULL_JUDGE_MODEL=alias\nFULL_JUDGE_PROVIDER=deepinfra/bf16\nFULL_JUDGE_REASONING_EFFORT=medium\nFULL_JUDGE_MAX_TOKENS=2000\n'
+        entries = parse(SAMPLE + 'SESSION_FULL=fixture\n' + (scoped + common if first else common + scoped))
+        full = resolve(entries, 'full', TRACKS)
+        assert full['JUDGE_COHORT'] == 'oss'
+        assert resolve(entries, 'kmmlu', TRACKS)['JUDGE_COHORT'] == 'common'
+        assert [full[key] for key in ('JUDGE_MODEL', 'JUDGE_PROVIDER', 'JUDGE_REASONING_EFFORT', 'JUDGE_MAX_TOKENS')] == [
+            'alias', 'deepinfra/bf16', 'medium', '2000']
+        assert resolve(entries, 'kmmlu', TRACKS)['JUDGE_MODEL'] == 'common'
+    user_keys = ('TAUBENCH_USER_PROVIDER', 'TAUBENCH_USER_REASONING_EFFORT')
+    assert [defaults[key] for key in user_keys] == ['', '']
+    for track in ('full', 'taubench_std4'):
+        prefix = track.upper() + '_'
+        common = 'TAUBENCH_USER_PROVIDER=other/provider\nTAUBENCH_USER_REASONING_EFFORT=low\n'
+        scoped = prefix + 'TAUBENCH_USER_PROVIDER=deepinfra/bf16\n' + prefix + 'TAUBENCH_USER_REASONING_EFFORT=medium\n'
+        for first in (False, True):
+            entries = parse(SAMPLE + (scoped + common if first else common + scoped))
+            selected = resolve(entries, track, TRACKS, require_session=False)
+            assert [selected[key] for key in user_keys] == ['deepinfra/bf16', 'medium']
+            assert [resolve(entries, 'kmmlu', TRACKS)[key] for key in user_keys] == ['other/provider', 'low']
+        empty = resolve(parse(SAMPLE + common + prefix + 'TAUBENCH_USER_PROVIDER=\n' +
+                              prefix + 'TAUBENCH_USER_REASONING_EFFORT=\n'), track, TRACKS, require_session=False)
+        assert [empty[key] for key in user_keys] == ['', '']
+        for key in (*user_keys, *(prefix + key for key in user_keys)):
+            with pytest.raises(ConfigError, match='duplicate key: ' + key):
+                parse(SAMPLE + key + '=x\n' + key + '=x\n')
+        with pytest.raises(ConfigError, match='unknown key: USER_PROVIDER'):
+            resolve(parse(SAMPLE + prefix + 'USER_PROVIDER=x\n'), track, TRACKS, require_session=False)
 
 
 @pytest.mark.parametrize('key', ['CONFIG', 'HOST_ENV', 'HOST_DEFAULT', 'KEYVAR', 'LANE_DISPLAY',

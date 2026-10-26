@@ -77,7 +77,7 @@ JUDGE_PROMPT = """아래는 한국어 시각 질의응답에 대한 객관적 �
 
 def judge_one(client, judge_model: str, question: str, response: str, criteria,
               seed: Optional[int] = None, max_tokens: int = 1024,
-              identity: Optional["ServedIdentity"] = None) -> tuple:
+              identity: Optional["ServedIdentity"] = None, *, provider=None, reasoning_effort=None) -> tuple:
     crit_str = criteria if isinstance(criteria, str) else json.dumps(criteria, ensure_ascii=False, indent=2)
     prompt = JUDGE_PROMPT.format(question=question, criteria=crit_str, response=response)
     kwargs = {
@@ -88,6 +88,13 @@ def judge_one(client, judge_model: str, question: str, response: str, criteria,
     }
     if seed is not None:
         kwargs["seed"] = seed
+    extra_body = {}
+    if provider:
+        extra_body["provider"] = {"order": [provider], "allow_fallbacks": False, "require_parameters": True}
+    if reasoning_effort:
+        extra_body["reasoning"] = {"effort": reasoning_effort}
+    if extra_body:
+        kwargs["extra_body"] = extra_body
     try:
         resp = client.chat.completions.create(**kwargs)
         if identity is not None:
@@ -161,19 +168,30 @@ def _parse_args():
     ap.add_argument("--predfile", required=True, help="KOFFVQA generate.py 결과 .xlsx")
     ap.add_argument("--target-model", required=True, help="평가 대상 모델명 (결과 폴더 명명용)")
     ap.add_argument("--judge-model", required=True, help="judge 로 사용할 OpenAI-compat 모델명")
+    ap.add_argument("--judge-provider", default=None)
+    ap.add_argument("--judge-reasoning-effort", choices=("", "low", "medium", "high"), default=None)
     ap.add_argument("--judge-base-url", required=True, help="judge API base_url")
     ap.add_argument("--judge-api-key", default=None, help="judge API key (환경변수 옵션보다 우선)")
     ap.add_argument("--judge-api-key-env", default=None,
                     help="judge 키 환경변수 이름 (미설정·빈 값이면 오류; 두 옵션 생략 시 기존 OPENAI_API_KEY fallback)")
     ap.add_argument("--limit", type=int, default=None)
     ap.add_argument("--seed", type=int, default=None, help="judge seed")
-    ap.add_argument("--judge-max-tokens", type=int, default=1024, help="judge 응답 max_tokens (default 1024 — 근거 포함)")
+    ap.add_argument("--judge-max-tokens", type=int, default=argparse.SUPPRESS, help="judge 응답 max_tokens (default 1024 — 근거 포함)")
     ap.add_argument("--question-column", default=None, help="질문 컬럼 override (default: question)")
     ap.add_argument("--criteria-column", "--answer-column", dest="criteria_column", default=None,
                     help="채점 기준 컬럼 override (default: answer)")
     ap.add_argument("--response-column", "--prediction-column", dest="response_column", default=None,
                     help="모델 응답 컬럼 override (default: prediction)")
     args = ap.parse_args()
+    args.judge_max_tokens_requested = getattr(args, "judge_max_tokens", None)
+    if args.judge_max_tokens_requested is None:
+        args.judge_max_tokens = 1024
+    if not args.judge_model.strip():
+        ap.error("--judge-model must not be empty")
+    if args.judge_max_tokens <= 0:
+        ap.error("--judge-max-tokens must be a positive integer")
+    args.judge_provider = getattr(args, "judge_provider", None) or None
+    args.judge_reasoning_effort = getattr(args, "judge_reasoning_effort", None) or None
     return args
 
 
@@ -240,6 +258,7 @@ def _judge_rows(args, df, q_col, crit_col, resp_col, client):
         score, reason, err, raw_judge = judge_one(
             client, args.judge_model, q, resp, crit,
             seed=args.seed, max_tokens=args.judge_max_tokens, identity=identity,
+            provider=args.judge_provider, reasoning_effort=args.judge_reasoning_effort,
         )
         if score is not None:
             scores.append(score)
@@ -267,6 +286,15 @@ def _build_summary(args, results, scores, identity, build_run_config):
     summary = {
         "benchmark": "KOFFVQA (API judge)",
         "judge_model": args.judge_model,
+        "judge_request": {
+            "model": args.judge_model,
+            "provider": args.judge_provider,
+            "reasoning_effort": args.judge_reasoning_effort,
+            "max_tokens_requested": args.judge_max_tokens_requested,
+            "max_tokens_effective": args.judge_max_tokens,
+            "temperature": 0.0,
+            "seed": args.seed,
+        },
         "judge_prompt_version": JUDGE_PROMPT_VERSION,
         "judge_prompt_template_sha256": _prompt_template_hash(),
         "judge_base_url": args.judge_base_url,
@@ -294,6 +322,15 @@ def _build_summary(args, results, scores, identity, build_run_config):
             },
         ),
     }
+    # The external judge does not apply the target model's SERVING_* constraints.
+    config = summary["run_config"]
+    decoding = {"temperature": 0.0, "max_tokens": args.judge_max_tokens, "seed": args.seed}
+    if "decoding" in config and config["decoding"] != decoding:
+        config["decoding"] = decoding
+    if "serving_constraints" in config:
+        config["serving_constraints"] = {"unsupported_sampling_params": [], "max_output_tokens": None,
+                                         "force_skip_special_tokens": None, "removed_parameters": [],
+                                         "skip_special_tokens": None}
     return summary
 
 
@@ -320,8 +357,31 @@ def main():
         save_json, build_run_config, make_client,
     )
     df, q_col, crit_col, resp_col = _load_predictions(args)
-    client = make_client(args.judge_base_url, judge_api_key)
     out_dir = _prepare_output(args, get_base_dir, get_timestamp, get_results_dir)
+    summary_path, config_path = out_dir / "summary.json", out_dir / "run_config.json"
+    if summary_path.exists() or config_path.exists() or (out_dir / "results.json").exists():
+        try:
+            stored = json.loads((summary_path if summary_path.exists() else config_path).read_text(encoding="utf-8"))
+            request = stored.get("judge_request")
+            if "judge_request" in stored:
+                old = (request["model"], request["provider"] or None, request["reasoning_effort"] or None,
+                       request["max_tokens_effective"], request["temperature"], request["seed"])
+            else:
+                config = stored.get("run_config") if summary_path.exists() else stored
+                if config is None and config_path.exists():
+                    config = json.loads(config_path.read_text(encoding="utf-8"))
+                decoding = config["decoding"]
+                model = stored.get("judge_model") or (config.get("judge") or {}).get("model")
+                old = (model, None, None, decoding["max_tokens"], decoding["temperature"], decoding["seed"])
+            current = (args.judge_model, args.judge_provider, args.judge_reasoning_effort,
+                       args.judge_max_tokens, 0.0, args.seed)
+            if old != current:
+                print("[koffvqa_judge] 판정기 프로파일 불일치 — 재판정 저장 위치를 나눠라", file=sys.stderr)
+                return 2
+        except (OSError, ValueError, KeyError, TypeError, AttributeError) as exc:
+            print(f"[koffvqa_judge] 기존 판정 기록 확인 실패 ({type(exc).__name__}) — 쓰지 않는다", file=sys.stderr)
+            return 2
+    client = make_client(args.judge_base_url, judge_api_key)
     results, scores, identity = _judge_rows(args, df, q_col, crit_col, resp_col, client)
     summary = _build_summary(args, results, scores, identity, build_run_config)
     _save_results(out_dir, results, summary, save_json)

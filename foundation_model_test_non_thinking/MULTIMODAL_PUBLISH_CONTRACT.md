@@ -378,6 +378,8 @@ direct/32-token protocol을 받았고 지시 준수와 제한 안에서 답을 �
 |---|---|---|
 | `judge_model` | 요청한 alias | **포함** — 판정기가 다르면 다른 프로토콜 |
 | `judge_prompt_version` | 손으로 유지하는 버전 문자열 | **포함** |
+| `judge_provider` / `judge_reasoning_effort` | summary의 `judge_request`에 요청한 제공자·effort | 값이 있을 때만 **포함**; 미설정 키는 생략 |
+| `judge_max_tokens` | `judge_request.max_tokens_effective` | 기본 1024가 아닌 값만 **포함**; 기존 decoding.max_tokens도 유지 |
 | `judge_base_url` | 엔드포인트/제공자 | 정보용 |
 | `judge_served_identity` | 응답이 보고한 `model`·`system_fingerprint`·`provider` | 정보용 |
 | `judge_prompt_template_sha256` | 프롬프트 템플릿 **본문의 해시** | 정보용 |
@@ -392,6 +394,8 @@ direct/32-token protocol을 받았고 지시 준수와 제한 안에서 답을 �
 은 손으로 유지하므로 본문이 바뀌어도 그대로 남지만 해시는 그럴 수 없다. 지문을
 가르는 대신 "같은 측정의 반복이 아니다"라고 말하는 쪽이, 비교를 살리면서 드리프트도
 잡는다. 해시가 없는 옛 산출물은 `judge_prompt_template_hash` 를 `unknown` 으로 남긴다.
+
+`judge_request`는 요청 프로파일 기록이며 served identity와 구별한다. 토큰 옵션 생략은 `max_tokens_requested=null`, 실제 전송 상한은 `max_tokens_effective=1024`다. 기본 프로파일과 명시적 1024는 새 지문 필드를 추가하지 않아 구형 지문을 유지한다. provider·effort를 지정하거나 상한을 변경하면 프로파일을 분리한다. seed는 기존 run_config.decoding 경로로 지문에 반영한다.
 
 판정 요청에는 벤치 질문·채점기준·대상 모델의 응답이 실려 나간다(이미지는 보내지
 않는다). 외부 전송이므로 실행 전 승인이 필요하다.
@@ -412,6 +416,19 @@ direct/32-token protocol을 받았고 지시 준수와 제한 안에서 답을 �
 
 **같은 세션에 판정을 다시 돌리지 않는다.** 판정기는 `results.json` 을 덮어쓰므로
 첫 측정을 파괴한다. 코호트 구성원을 늘리려면 새 세션이어야 한다.
+
+재판정 발행 어댑터는 판정 세션의 형제 `koffvqa/*_gen.xlsx`를 먼저 검사한다.
+형제 workbook이 하나도 없고 `summary.predfile`의 예측 세션과 판정 세션이 모두
+식별되며 서로 다르면, 현재 모델 폴더의 `<예측 세션>/vision/multimodal/koffvqa`를
+사용한다. 기록된 절대 base 대신 세션 이름으로 복원하며, 그 위치의 xlsx SHA와
+generation summary를 읽는다. 기존 형제 workbook이 있으면 SHA 불일치여도 다른
+세션으로 우회하지 않는다. 원본 세션을 참조하는 sidecar의 무결성을 유지하려면
+원본 xlsx도 함께 보존해야 한다.
+
+**재판정 세션은 모델 간 비교에 쓰지 않는다.** `rejudged_prediction_sha256`가
+지문에 포함되므로 같은 판정 프로파일이어도 다른 예측 바이트는 다른 코호트다.
+Stage 2는 저장 지원이며, KOFFVQA 모델 간 비교를 위한 재생성 또는 비교 계약
+변경은 별도 Stage 2b 결정이다. 완전성 검사 CLI의 성공은 발행 가능 판정이 아니다.
 
 ## 9. KOFFVQA 판정기 컬럼 및 점수 계약
 

@@ -5,7 +5,7 @@ state/action rewards into this repository's `summary.json` contract. It never st
 an LLM judge. Two modes exist (`TAUBENCH_MODE`, default `solo`): `solo` runs
 `llm_agent_solo` with `dummy_user` and no LLM user simulator; `standard` runs
 `llm_agent` with the upstream `user_simulator`, which requires `TAUBENCH_USER_MODEL`
-(the same user model for every candidate, so comparisons hold).
+(the same user model for every candidate, so comparisons hold). Optional `TAUBENCH_USER_PROVIDER` / `TAUBENCH_USER_REASONING_EFFORT` (CLI: `--user-provider` / `--user-reasoning-effort`) default to empty; they require standard mode, an `openrouter/` user model, and no user base URL. Provider slugs match `[a-z0-9][a-z0-9/_.-]*`; effort accepts low/medium/high. Nonempty settings are sent through `extra_body`, recorded in the manifest and cohort fingerprint, and compared against tau2's saved configuration (not wire evidence). Missing or malformed declared settings block publication while retaining the summary. Empty settings preserve existing bytes; `OPENROUTER_API_BASE` presence is recorded only when either option is used, as `user_openrouter_api_base_set`, without recording its value. See [lane profile options](../../orchestration/README_full.md#standard-사용자-프로파일).
 
 Only canonical telecom text tasks are runnable. `llm_agent_solo` plus `dummy_user`
 is supported there. The banking-knowledge environment explicitly rejects solo mode,

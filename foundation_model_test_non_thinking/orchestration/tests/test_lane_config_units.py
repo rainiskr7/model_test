@@ -46,6 +46,40 @@ def test_selected_track_requires_its_session(lane, track):
     result = run(lane, ['sample'], track)
     assert result.returncode == 2
     assert 'required key: SESSION_' + track.upper() in result.stderr
+    if track == 'kmmlu':
+        return
+    original = conf.read_text() + 'SESSION_' + track.upper() + '=fixture\n'
+    prefix = track.upper() + '_'
+    for provider, effort in (('', ''), ('deepinfra/bf16', 'medium'), ('deepinfra/bf16', ''), ('', 'low'), ('', 'high')):
+        conf.write_text(original + prefix + 'TAUBENCH_USER_PROVIDER=' + provider + '\n' +
+                        prefix + 'TAUBENCH_USER_REASONING_EFFORT=' + effort + '\n')
+        result = run(lane, ['sample'], track)
+        assert result.returncode == 0, result.stderr
+        commands = [line for line in result.stdout.splitlines() if line.startswith('COMMAND=')]
+        standard = next(line for line in commands if 'TAUBENCH_MODE=standard' in line)
+        for key, value in (('TAUBENCH_USER_PROVIDER', provider), ('TAUBENCH_USER_REASONING_EFFORT', effort)):
+            assert (key + '=' in standard) is bool(value)
+            if value:
+                assert key + '=' + value + ' bash ' in standard or key + '=' + value + ' TAUBENCH_' in standard
+            assert all(key + '=' not in line for line in commands if line != standard)
+    for settings, base_url in (
+        ('TAUBENCH_USER_PROVIDER=Bad/provider\n', ''),
+        ('TAUBENCH_USER_PROVIDER=two words\n', ''),
+        ('TAUBENCH_USER_PROVIDER=/provider\n', ''),
+        ('TAUBENCH_USER_REASONING_EFFORT=invalid\n', ''),
+        ('TAUBENCH_USER_MODEL=local\nTAUBENCH_USER_PROVIDER=deepinfra/bf16\n', ''),
+        ('TAUBENCH_USER_MODEL=anthropic/user\nTAUBENCH_USER_REASONING_EFFORT=low\n', ''),
+        ('TAUBENCH_USER_MODEL=openai/user\nTAUBENCH_USER_PROVIDER=deepinfra/bf16\n', ''),
+        ('TAUBENCH_USER_MODEL=\nTAUBENCH_USER_PROVIDER=deepinfra/bf16\n', ''),
+        ('TAUBENCH_USER_PROVIDER=deepinfra/bf16\n', 'http://unused/v1'),
+        ('TAUBENCH_USER_REASONING_EFFORT=medium\n', 'http://unused/v1'),
+    ):
+        conf.write_text(original + ''.join(prefix + line + '\n' for line in settings.splitlines()))
+        lane.env['TAUBENCH_USER_BASE_URL'] = base_url
+        result = run(lane, ['sample'], track)
+        assert result.returncode == 2 and result.stdout == '' and result.stderr.startswith('run_lane: ')
+        assert not list((lane.base / 'records').iterdir())
+    lane.env.pop('TAUBENCH_USER_BASE_URL', None)
 
 
 @pytest.mark.parametrize('scoped_first', [True, False])
@@ -60,7 +94,8 @@ def test_scoped_settings_override_common_without_cross_track_leak(lane, scoped_f
     full = run(lane, ['sample'], 'full')
     assert kmmlu.returncode == full.returncode == 0
     assert kmmlu.stdout.count('SESSION=') == 2
-    assert full.stdout.count('SESSION=') == 1
+    assert full.stdout.count('SESSION=') == 2
+    assert 'SESSION=full_session_tbstd4\n' in full.stdout
     assert 'AGENT_REQUEST_TIMEOUT=350 AGENT_TASK_TIMEOUT=1000' in full.stdout
 
 

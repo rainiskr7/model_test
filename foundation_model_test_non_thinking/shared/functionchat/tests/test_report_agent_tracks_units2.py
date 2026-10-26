@@ -23,10 +23,85 @@ def test_judge_verdicts_empty():
     assert actual == []
 
 
-def test_judge_verdicts_skip_same_model():
+def test_judge_verdicts_skip_same_model(tmp_path, capsys):
     entries = [{'model': model, 'credential': {'n': i}} for i, model in enumerate(['b', 'b', 'a'])]
     actual = subject._judge_verdicts(entries, lambda a, b: [a['n'], b['n']])
     assert actual == [('b', 'a', [0, 2]), ('b', 'a', [1, 2])]
+    import json
+    for model, verdict in (("a", "pass"), ("b", "fail")):
+        directory = tmp_path / "results" / model / "session/language/functionchat"
+        directory.mkdir(parents=True)
+        (directory / "judge.json").write_text(json.dumps({
+            "judge": {"model": "alias", "human_validation": "not performed"},
+            "records": [{"status": "judged", "verdict": verdict, "unstable": False}],
+        }))
+    baseline = subject.collect_claims(tmp_path)
+    assert all(entry["judge_profile"] == ("alias", None, None, 700)
+               for entry in baseline["judge_credentials"])
+    rendered = subject._render_claim_verdicts(baseline)
+    path = directory / "judge.json"
+    saved = json.loads(path.read_text())
+    request = {"model": "alias", "provider": None, "reasoning_effort": None,
+               "max_tokens_requested": 700, "max_tokens_effective": 700, "temperature": 0}
+    for field, value in (("model", "other"), ("provider", "deepinfra/bf16"),
+                         ("reasoning_effort", "medium"), ("max_tokens_effective", 2000)):
+        path.write_text(json.dumps({**saved, "judge_request": {**request, field: value}}))
+        claims = subject.collect_claims(tmp_path)
+        assert claims["judge_verdicts"] == [("a", "b", {
+            "comparable": False, "reason": "판정기 프로파일 불일치 — 비교 불가"})]
+        assert "판정기 프로파일 불일치 — 비교 불가" in "\n".join(subject._render_claim_verdicts(claims))
+    path.write_text(json.dumps({**saved, "judge_request": request}))
+    assert subject._render_claim_verdicts(subject.collect_claims(tmp_path)) == rendered
+
+    import pytest
+    for model in ("a", "b"):
+        directory = tmp_path / "results" / model / "session/language/functionchat"
+        (directory / "summary.json").write_text(json.dumps({
+            "model": model, "scoring_version": "test", "overall": {"passed": 1, "measured": 2},
+            "publish_status": {"publishable": True, "failures": []},
+        }))
+        default = json.loads((directory / "judge.json").read_text())
+        default["overall"] = {"passed": 1, "judged": 2}
+        (directory / "judge.json").write_text(json.dumps(default))
+        (directory / "judge.oss.json").write_text(json.dumps({
+            **default, "overall": {"passed": 2, "judged": 2},
+            "judge_request": {**request, "model": "cohort-judge"},
+        }))
+    original = {p: p.read_bytes() for p in tmp_path.rglob("*.json")}
+    defaults = subject.collect(tmp_path)
+    selected = subject.collect(tmp_path, "oss")
+    assert all(row["axes"][-1][1:3] == (1, 2) for row in defaults)
+    assert all(row["axes"][-1][1:3] == (2, 2) for row in selected)
+    assert all(len(row["axes"]) == 1 for row in subject.collect(tmp_path, "absent"))
+    assert not subject.collect_claims(tmp_path, "absent")["judge_credentials"]
+    assert "judge_cohort" not in subject.collect_claims(tmp_path)
+    claims = subject.collect_claims(tmp_path, "oss")
+    assert claims["judge_cohort"] == "oss"
+    assert all(entry["judge_profile"][0] == "cohort-judge" for entry in claims["judge_credentials"])
+    assert all(entry["judge_profile"][0] == "alias" for entry in subject.collect_claims(tmp_path)["judge_credentials"])
+    heading = "판정 코호트: oss (judge.oss.json)"
+    markdown_path = tmp_path / "report.md"
+    assert subject.main(["--base", str(tmp_path), "--judge-cohort", "oss",
+                         "--write-markdown", str(markdown_path)]) == 0
+    assert capsys.readouterr().out.count(heading) == 1
+    assert markdown_path.read_text().count(heading) == 1
+    assert "판정 코호트:" not in subject.render_markdown(defaults, claims=subject.collect_claims(tmp_path))
+    for value in ("Oss", "a b", ".", "a/b", "a" * 33, "a\n"):
+        with pytest.raises(SystemExit) as rejected:
+            subject.main(["--base", str(tmp_path), "--judge-cohort", value])
+        assert rejected.value.code == 2
+    capsys.readouterr()
+    assert original == {p: p.read_bytes() for p in tmp_path.rglob("*.json")}
+    cohort_path = directory / "judge.oss.json"
+    cohort = json.loads(cohort_path.read_text())
+    cohort["judge_request"]["provider"] = "different-provider"
+    cohort_path.write_text(json.dumps(cohort))
+    assert subject.collect_claims(tmp_path, "oss")["judge_verdicts"] == [("a", "b", {
+        "comparable": False, "reason": "판정기 프로파일 불일치 — 비교 불가"})]
+    assert subject.collect(tmp_path) == defaults
+    cohort_path.unlink()
+    assert len(subject.collect_claims(tmp_path, "oss")["judge_credentials"]) == 1
+    assert [len(row["axes"]) for row in subject.collect(tmp_path, "oss")] == [2, 1]
 
 
 def test_render_exact_empty():

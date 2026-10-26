@@ -96,13 +96,30 @@ def test_missing_explicit_judge_resume_input_is_error(tmp_path):
 
 def test_judge_resume_and_later_conditional_skip(tmp_path):
     fx = Fixture(tmp_path / "checkout")
-    assert fx.judge().returncode == 0  # supplies the first repetition's workbook
+    assert fx.judge(JUDGE_OUTCOME="partial").returncode == 10
     fx.configure("r1:koffvqa_judge", reps=2)
+    conf = fx.base / "orchestration/models/fixture.conf"
+    conf.write_text(conf.read_text() + "FULL_JUDGE_MODEL=fixture-judge\n")
     fx.put("no_outputs", "")
     result = fx.lane()
     assert result.returncode == 0
     assert "fixture_r1 koffvqa_api_judge 0" in (fx.base / "calls").read_text()
     assert "[fixture_r2] koffvqa_judge skip (condition)" in result.stdout
+    assert json.loads((fx.judge_dir() / "summary.json").read_text())["scored"] == 2
+    # Profile changes must not rejudge or derive the old artifacts.
+    for setting in ("FULL_JUDGE_MODEL=other", "FULL_JUDGE_PROVIDER=deepinfra/bf16",
+                    "FULL_JUDGE_REASONING_EFFORT=medium", "FULL_JUDGE_MAX_TOKENS=2000"):
+        fx.configure("r1:koffvqa_judge", reps=1)
+        conf.write_text(conf.read_text() + ("" if setting.startswith("FULL_JUDGE_MODEL=") else
+                                           "FULL_JUDGE_MODEL=fixture-judge\n") + setting + "\n")
+        (fx.base / "calls").unlink()
+        before = {str(p.relative_to(fx.judge_dir())): p.read_bytes()
+                  for p in fx.judge_dir().rglob("*") if p.is_file()}
+        assert fx.lane().returncode == 1
+        assert "fixture_r1 koffvqa_api_judge 2" in (fx.base / "calls").read_text()
+        assert " derive " not in (fx.base / "calls").read_text()
+        assert before == {str(p.relative_to(fx.judge_dir())): p.read_bytes()
+                          for p in fx.judge_dir().rglob("*") if p.is_file()}
 
 
 @pytest.mark.parametrize("rc", [1, 2, 3, 130])

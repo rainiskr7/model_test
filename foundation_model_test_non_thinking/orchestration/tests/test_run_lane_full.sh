@@ -18,6 +18,7 @@ put_stubs() {
 #!/bin/bash
 set -u
 stage=$1; shift
+if [ "$stage" = taubench ] && [ "${TAUBENCH_MODE:-}" = standard ]; then stage=taubench_standard; fi
 base=$MODEL_TEST_BASE
 out="$base/dump/$EVAL_TIMESTAMP.$stage"
 mkdir -p "$out"
@@ -115,6 +116,7 @@ run_lane() {
     PYTHONDONTWRITEBYTECODE=1 MODEL_TEST_BASE="$FX" LANE_DRY_RUN="${1:-0}" \
     AGENT_REQUEST_TIMEOUT=999 AGENT_TASK_TIMEOUT=9999 NUM_CONCURRENT=99 TAUBENCH_MODE=standard TAUBENCH_TRIALS=9 \
     TAUBENCH_MAX_CONCURRENCY=9 KRETA_WORKERS=9 KRETA_RESUME=1 \
+    TAUBENCH_USER_PROVIDER=inherited/provider TAUBENCH_USER_REASONING_EFFORT=high \
     /bin/bash "$FX/orchestration/lanes/$LANE.sh" fixture) > "$FX/stdout" 2>&1
   RC=$?
 }
@@ -123,7 +125,11 @@ has() { grep -F -- "$2" "$1" >/dev/null; }
 exact() { grep -Fx -- "$2" "$1" >/dev/null; }
 absent() { ! grep -E -- "$2" "$1" >/dev/null; }
 expect_rc() { [ "$RC" -eq "$1" ] || { cat "$FX/stdout"; return 1; }; }
-set_rc() { printf '%s\n' "$3" > "$FX/rc/20261015_full_r$1.$2"; }
+set_rc() {
+  local ts="20261015_full_r$1"
+  [ "$2" != taubench_standard ] || ts=20261015_full_tbstd4
+  printf '%s\n' "$3" > "$FX/rc/$ts.$2"
+}
 set_config() {
   # Contract change: replace a setting instead of appending a duplicate key.
   local file="$FX/orchestration/models/fixture.conf" key=${1%%=*}
@@ -139,6 +145,7 @@ all_calls() {
     for stage in nlu functionchat taubench multimodal functionchat_judge koffvqa_judge derive; do
       printf '20261015_full_r%s %s\n' "$rep" "$stage"
     done
+    if [ "$rep" = 1 ]; then printf '20261015_full_tbstd4 taubench_standard\n'; fi
   done
 }
 
@@ -157,7 +164,46 @@ f1() {
   sed "s|@BASE@|$FX|g" "$HERE/fixtures_full/dry_run.txt" > "$FX/expected"
   diff -u "$FX/expected" "$FX/stdout" || return 1
   [ ! -e "$FX/helper_called" ] && [ ! -e "$FX/preflight" ] &&
-    [ ! -e "$FX/logs" ] && [ ! -e "$FX/results" ] && [ ! -e "$FX/calls" ]
+    [ ! -e "$FX/logs" ] && [ ! -e "$FX/results" ] && [ ! -e "$FX/calls" ] || return 1
+  exact "$FX/stdout" 'SESSION=20261015_full_tbstd4' || return 1
+  [ "$(grep -c '^SKIP=.* taubench_standard$' "$FX/stdout")" -eq 2 ] || return 1
+  grep '^COMMAND=env TAUBENCH_MODE=standard ' "$FX/stdout" > "$FX/standard_command"
+  set_config SESSION_TAUBENCH_STD4=fixture_std4
+  LANE=taubench_std4
+  run_lane 1
+  expect_rc 0 || return 1
+  grep '^COMMAND=' "$FX/stdout" > "$FX/std4_command"
+  diff -u "$FX/standard_command" "$FX/std4_command" || return 1
+  local selected configured_command= envfile
+  for selected in full taubench_std4; do
+    fixture "F1_profile_$selected"
+    LANE=$selected
+    set_config FULL_REPS=1
+    set_config SESSION_TAUBENCH_STD4=fixture_std4
+    set_config TAUBENCH_USER_MODEL=openrouter/openai/gpt-oss-120b
+    set_config TAUBENCH_USER_PROVIDER=deepinfra/bf16
+    set_config TAUBENCH_USER_REASONING_EFFORT=medium
+    run_lane 1
+    expect_rc 0 || return 1
+    if [ "$selected" = full ]; then
+      configured_command=$(grep '^COMMAND=env TAUBENCH_MODE=standard ' "$FX/stdout")
+    else
+      exact "$FX/stdout" "$configured_command" || return 1
+    fi
+    has "$FX/stdout" 'TAUBENCH_USER_PROVIDER=deepinfra/bf16 TAUBENCH_USER_REASONING_EFFORT=medium bash' || return 1
+    [ ! -e "$FX/logs" ] && [ ! -e "$FX/calls" ] || return 1
+    run_lane
+    expect_rc 0 || return 1
+    for envfile in "$FX/dump/"*/env; do
+      case "$envfile" in
+        *.taubench_standard/env)
+          exact "$envfile" 'TAUBENCH_USER_MODEL=openrouter/openai/gpt-oss-120b' &&
+          exact "$envfile" 'TAUBENCH_USER_PROVIDER=deepinfra/bf16' &&
+          exact "$envfile" 'TAUBENCH_USER_REASONING_EFFORT=medium' || return 1 ;;
+        *) absent "$envfile" '^TAUBENCH_USER_(PROVIDER|REASONING_EFFORT)=' || return 1 ;;
+      esac
+    done
+  done
 }
 
 f2() {
@@ -165,12 +211,30 @@ f2() {
   mkdir -p "$FX/results/FiXtUrE_model/20261015_full_r1"
   run_lane
   expect_rc 2 && [ ! -e "$FX/calls" ] &&
-    has "$FX/logs/resume_orch/orchestrator.log" '세션 존재 — 재개는 RESUME_FROM'
+    has "$FX/logs/resume_orch/orchestrator.log" '세션 존재 — 재개는 RESUME_FROM' || return 1
+  local resume dir
+  for resume in fresh r1:taubench_standard; do
+    fixture "F2_${resume//:/_}"
+    if [ "$resume" != fresh ]; then set_config "FULL_RESUME_FROM=$resume"; fi
+    dir="$FX/results/fixture_model/20261015_full_tbstd4"
+    mkdir -p "$dir/language/taubench/upstream/telecom"
+    printf 'preserve manifest\n' > "$dir/language/taubench/run_manifest.json"
+    printf 'preserve upstream\n' > "$dir/language/taubench/upstream/telecom/results.json"
+    find "$dir" -type f -exec shasum -a 256 {} \; | sort > "$FX/before"
+    run_lane
+    expect_rc 1 || return 1
+    absent "$FX/calls" 'taubench_standard' || return 1
+    has "$FX/stdout" '세션 존재 — 덮어쓰지 않음(standard 미충족)' || return 1
+    has "$FX/stdout" 'standard 실패 1건' || return 1
+    find "$dir" -type f -exec shasum -a 256 {} \; | sort > "$FX/after"
+    diff -u "$FX/before" "$FX/after" || return 1
+  done
 }
 
 failure_case() {
   # An exact ordered call list proves both continuation and early stopping.
-  local name=$1 stage=$2 code=$3 expected_rc=$4 stop=$5
+  local name=$1 stage=$2 code=$3 expected_rc=$4 stop=$5 ts=20261015_full_r1
+  [ "$stage" != taubench_standard ] || ts=20261015_full_tbstd4
   fixture "$name"
   set_rc 1 "$stage" "$code"
   run_lane
@@ -184,7 +248,7 @@ failure_case() {
     all_calls 1 2 3 > "$FX/expected_calls"
   fi
   diff -u "$FX/expected_calls" "$FX/calls" || return 1
-  has "$FX/logs/resume_orch/orchestrator.log" "[20261015_full_r1] $stage 종료 rc=$code"
+  has "$FX/logs/resume_orch/orchestrator.log" "[$ts] $stage 종료 rc=$code"
 }
 
 f3() {
@@ -195,17 +259,20 @@ f3() {
   failure_case F3_multimodal multimodal 1 1 yes || return 1
   failure_case F3_tau taubench 1 0 no || return 1
   has "$FX/stdout" 'taubench 실패 rc=1 — 계속' || return 1
+  failure_case F3_standard taubench_standard 1 1 no || return 1
+  failure_case F3_standard_config taubench_standard 2 1 no || return 1
+  has "$FX/stdout" 'standard 실패 1건' || return 1
   local stage code
   for stage in functionchat_judge koffvqa_judge derive; do
     failure_case "F3_$stage" "$stage" 1 1 no || return 1
-    has "$FX/stdout" '=== qwen3.5 27B FP8 full 레인 종료 (판정 실패 1건) ===' || return 1
+    has "$FX/stdout" '=== qwen3.5 27B FP8 full 레인 종료 (판정 실패 1건, standard 실패 0건) ===' || return 1
   done
   failure_case F3_incomplete koffvqa_judge 10 1 no || return 1
   fixture F3_complete_check
   set_rc 1 complete 10
   run_lane
   expect_rc 1 && has "$FX/stdout" '[20261015_full_r1] derive 종료 rc=10' || return 1
-  for stage in nlu functionchat taubench multimodal functionchat_judge koffvqa_judge derive; do
+  for stage in nlu functionchat taubench multimodal functionchat_judge koffvqa_judge derive taubench_standard; do
     for code in 3 130; do
       failure_case "F3_${stage}_$code" "$stage" "$code" "$code" yes || return 1
     done
@@ -213,7 +280,12 @@ f3() {
   fixture F3_accumulated
   set_rc 1 functionchat_judge 1; set_rc 2 koffvqa_judge 2; set_rc 3 derive 1
   run_lane
-  expect_rc 1 && has "$FX/stdout" '레인 종료 (판정 실패 3건)'
+  expect_rc 1 && has "$FX/stdout" '레인 종료 (판정 실패 3건, standard 실패 0건)' || return 1
+  fixture F3_both
+  set_rc 1 functionchat_judge 1
+  set_rc 1 taubench_standard 1
+  run_lane
+  expect_rc 1 && has "$FX/stdout" '판정 실패 1건, standard 실패 1건'
 }
 
 f4() {
@@ -224,13 +296,13 @@ f4() {
   printf 'FiXtUrE_model\n' > "$FX/model_dir"
   run_lane 1
   expect_rc 0 || return 1
-  [ "$(grep -c '^SKIP=' "$FX/stdout")" -eq 10 ] || return 1
+  [ "$(grep -c '^SKIP=' "$FX/stdout")" -eq 13 ] || return 1
   [ "$(grep -c 'KRETA_RESUME=1' "$FX/stdout")" -eq 1 ] || return 1
   run_lane
   expect_rc 0 || return 1
   { all_calls 2 | sed '1,3d'; all_calls 3; } > "$FX/expected_calls"
   diff -u "$FX/expected_calls" "$FX/calls" || return 1
-  [ "$(grep -c 'skip (resume)' "$FX/stdout")" -eq 10 ] || return 1
+  [ "$(grep -c 'skip (resume)' "$FX/stdout")" -eq 11 ] || return 1
   local dir
   for dir in "$FX/dump/"*; do
     case "$dir" in
@@ -238,7 +310,18 @@ f4() {
       *) absent "$dir/env" '^KRETA_RESUME=' || return 1 ;;
     esac
   done
-  exact "$FX/dump/20261015_full_r2.functionchat_judge/argv" "$FX/results/FiXtUrE_model/20261015_full_r2/language/functionchat"
+  exact "$FX/dump/20261015_full_r2.functionchat_judge/argv" "$FX/results/FiXtUrE_model/20261015_full_r2/language/functionchat" || return 1
+  fixture F4_standard
+  set_config FULL_RESUME_FROM=r1:taubench_standard
+  run_lane 1
+  expect_rc 0 || return 1
+  [ "$(grep -c '^SKIP=20261015_full_r1 ' "$FX/stdout")" -eq 7 ] || return 1
+  run_lane
+  expect_rc 0 || return 1
+  { printf '20261015_full_tbstd4 taubench_standard\n'; all_calls 2 3; } > "$FX/expected_calls"
+  diff -u "$FX/expected_calls" "$FX/calls" || return 1
+  check_stage_env "$FX/dump/20261015_full_tbstd4.taubench_standard" || return 1
+  check_stage_env "$FX/dump/20261015_full_r2.nlu"
 }
 
 check_stage_env() {
@@ -253,11 +336,18 @@ check_stage_env() {
     functionchat|taubench)
       exact "$dir/env" "AGENT_REQUEST_TIMEOUT=${2:-300}" &&
         exact "$dir/env" "AGENT_TASK_TIMEOUT=${3:-900}" || return 1 ;;
+    taubench_standard)
+      exact "$dir/env" "AGENT_REQUEST_TIMEOUT=${2:-300}" &&
+        absent "$dir/env" '^AGENT_TASK_TIMEOUT=' || return 1 ;;
     *) absent "$dir/env" '^AGENT_(REQUEST|TASK)_TIMEOUT=' || return 1 ;;
   esac
   if [ "$stage" = taubench ]; then
     exact "$dir/env" TAUBENCH_MODE=solo && exact "$dir/env" TAUBENCH_TRIALS=1 &&
       exact "$dir/env" TAUBENCH_MAX_CONCURRENCY=4 || return 1
+  elif [ "$stage" = taubench_standard ]; then
+    exact "$dir/env" TAUBENCH_MODE=standard && exact "$dir/env" TAUBENCH_TRIALS=4 &&
+      exact "$dir/env" TAUBENCH_MAX_CONCURRENCY=4 &&
+      exact "$dir/env" TAUBENCH_USER_MODEL=openrouter/openai/gpt-4.1-mini || return 1
   else absent "$dir/env" '^TAUBENCH_(MODE|TRIALS|MAX_CONCURRENCY)=' || return 1; fi
   if [ "$stage" = multimodal ]; then exact "$dir/env" KRETA_WORKERS=4 || return 1
   else absent "$dir/env" '^KRETA_WORKERS=' || return 1; fi
@@ -271,10 +361,10 @@ check_stage_argv() {
   local ts=$1 stage=$2
   case "$stage" in
     nlu) printf '%s\n' --model fixture/model --endpoint http://192.168.0.7:18023/v1/chat/completions ;;
-    functionchat|taubench) printf '%s\n' fixture/model http://192.168.0.7:18023/v1/chat/completions ;;
+    functionchat|taubench|taubench_standard) printf '%s\n' fixture/model http://192.168.0.7:18023/v1/chat/completions ;;
     multimodal) printf '%s\n' fixture/model http://192.168.0.7:18023/v1 ;;
     functionchat_judge)
-      printf '%s\n' -m shared.functionchat.judge.run_judge --results-dir "$FX/results/fixture_model/$ts/language/functionchat" ;;
+      printf '%s\n' -m shared.functionchat.judge.run_judge --results-dir "$FX/results/fixture_model/$ts/language/functionchat" --judge-model openai/gpt-4.1-mini ;;
     koffvqa_judge)
       # 4c: only the environment variable name belongs in the recorded argv.
       printf '%s\n' -m shared.multimodal.benches.koffvqa_api_judge --predfile \
@@ -302,6 +392,8 @@ f5() {
       printf 'SENTINEL\n' > "$FX/logs/20261015_full_r$rep/$stage.log"
     done
   done
+  mkdir -p "$FX/logs/20261015_full_tbstd4"
+  printf 'SENTINEL\n' > "$FX/logs/20261015_full_tbstd4/taubench_standard.log"
   run_lane
   expect_rc 0 || return 1
   all_calls 1 2 3 > "$FX/expected_calls"
@@ -339,6 +431,7 @@ invalid_setting_message() {
     FULL_KRETA_WORKERS=*) printf 'KRETA_WORKERS must be 1..4' ;;
     FULL_KRETA_RESUME=*) printf 'KRETA_RESUME must be 0 or 1' ;;
     FULL_RESUME_FROM=r4:nlu) printf 'RESUME_FROM exceeds REPS' ;;
+    FULL_RESUME_FROM=r2:taubench_standard) printf 'taubench_standard resume requires r1' ;;
     FULL_RESUME_FROM=r2:unknown) printf 'invalid resume stage: unknown' ;;
     FULL_RESUME_FROM=*) printf 'invalid RESUME_FROM' ;;
     FULL_AGENT_REQUEST_TIMEOUT=0|FULL_AGENT_REQUEST_TIMEOUT=x)
@@ -347,6 +440,10 @@ invalid_setting_message() {
       printf 'AGENT_TASK_TIMEOUT must be an integer greater than AGENT_REQUEST_TIMEOUT' ;;
     FULL_REPS=*) printf 'REPS must be positive' ;;
     LANE_DISPLAY=) printf 'required key: LANE_DISPLAY' ;;
+    FULL_JUDGE_MODEL=*) printf 'JUDGE_MODEL must not be empty' ;;
+    FULL_JUDGE_MAX_TOKENS=*) printf 'JUDGE_MAX_TOKENS must be a positive integer' ;;
+    FULL_JUDGE_REASONING_EFFORT=*) printf 'JUDGE_REASONING_EFFORT must be empty, low, medium or high' ;;
+    JUDGE_COHORT=*|FULL_JUDGE_COHORT=*) printf 'JUDGE_COHORT must match [a-z0-9][a-z0-9_-]{0,31}' ;;
     *) return 1 ;;
   esac
 }
@@ -355,10 +452,12 @@ f6() {
   local setting message count=0
   # 4a: reject invalid full timeout pairs before activation/preflight.
   for setting in UNKNOWN=x FULL_KRETA_WORKERS=9 FULL_KRETA_WORKERS=0 FULL_KRETA_RESUME=2 \
-    FULL_RESUME_FROM=r0:x FULL_RESUME_FROM=r4:nlu FULL_RESUME_FROM=r2:unknown FULL_RESUME_FROM=r2:nlu:extra \
+    FULL_RESUME_FROM=r2:taubench_standard FULL_RESUME_FROM=r0:x FULL_RESUME_FROM=r4:nlu FULL_RESUME_FROM=r2:unknown FULL_RESUME_FROM=r2:nlu:extra \
     FULL_AGENT_TASK_TIMEOUT=120 FULL_AGENT_TASK_TIMEOUT=300 FULL_AGENT_TASK_TIMEOUT=x \
     FULL_AGENT_REQUEST_TIMEOUT=900 FULL_AGENT_REQUEST_TIMEOUT=0 FULL_AGENT_REQUEST_TIMEOUT=x \
-    FULL_REPS=0 FULL_REPS=-1 FULL_REPS=x LANE_DISPLAY=; do
+    FULL_REPS=0 FULL_REPS=-1 FULL_REPS=x LANE_DISPLAY= FULL_JUDGE_MODEL= \
+    FULL_JUDGE_MAX_TOKENS=0 FULL_JUDGE_MAX_TOKENS=-1 FULL_JUDGE_MAX_TOKENS=x FULL_JUDGE_REASONING_EFFORT=invalid \
+    JUDGE_COHORT=Oss 'JUDGE_COHORT=a b' FULL_JUDGE_COHORT=.; do
     count=$((count + 1))
     fixture "F6_$count"
     set_config "$setting"
@@ -379,6 +478,56 @@ f7() {
   expect_rc 0 || return 1
   local dir
   for dir in "$FX/dump/"*; do check_stage_env "$dir" 350 1000 || return 1; done
+  # C2: common values and full overrides must reach both dry-run and real argv.
+  local scope stage
+  for scope in common full; do
+    fixture "F7_judge_$scope"
+    set_config FULL_REPS=1
+    set_config JUDGE_MODEL=openai/gpt-oss-120b
+    set_config JUDGE_PROVIDER=deepinfra/bf16
+    set_config JUDGE_REASONING_EFFORT=medium
+    set_config JUDGE_MAX_TOKENS=2000
+    if [ "$scope" = full ]; then
+      set_config JUDGE_MODEL=unused
+      set_config JUDGE_PROVIDER=unused
+      set_config JUDGE_REASONING_EFFORT=high
+      set_config JUDGE_MAX_TOKENS=99
+      set_config FULL_JUDGE_MODEL=openai/gpt-oss-120b
+      set_config FULL_JUDGE_PROVIDER=deepinfra/bf16
+      set_config FULL_JUDGE_REASONING_EFFORT=medium
+      set_config FULL_JUDGE_MAX_TOKENS=2000
+    fi
+    run_lane 1
+    expect_rc 0 || return 1
+    [ "$(grep -c -- '--judge-model openai/gpt-oss-120b' "$FX/stdout")" -eq 2 ] || return 1
+    [ "$(grep -c -- '--judge-provider deepinfra/bf16 --judge-reasoning-effort medium --judge-max-tokens 2000' "$FX/stdout")" -eq 2 ] || return 1
+    run_lane
+    expect_rc 0 || return 1
+    for stage in functionchat_judge koffvqa_judge; do
+      dir="$FX/dump/20261015_full_r1.$stage"
+      for value in --judge-model openai/gpt-oss-120b --judge-provider deepinfra/bf16 --judge-reasoning-effort medium --judge-max-tokens 2000; do
+        exact "$dir/argv" "$value" || return 1
+      done
+    done
+  done
+  fixture F7_cohort
+  set_config FULL_REPS=1
+  run_lane 1
+  expect_rc 0 || return 1
+  grep 'shared.multimodal.benches.koffvqa_api_judge ' "$FX/stdout" > "$FX/kof_before"
+  set_config JUDGE_COHORT=oss
+  run_lane 1
+  expect_rc 0 || return 1
+  [ "$(grep -c -- '--judge-cohort oss' "$FX/stdout")" -eq 1 ] || return 1
+  grep 'shared.multimodal.benches.koffvqa_api_judge ' "$FX/stdout" > "$FX/kof_after"
+  diff -u "$FX/kof_before" "$FX/kof_after" || return 1
+  run_lane
+  expect_rc 0 || return 1
+  check_stage_argv 20261015_full_r1 koffvqa_judge || return 1
+  printf '%s\n' -m shared.functionchat.judge.run_judge --results-dir \
+    "$FX/results/fixture_model/20261015_full_r1/language/functionchat" \
+    --judge-model openai/gpt-4.1-mini --judge-cohort oss > "$FX/expected_cohort_argv"
+  diff -u "$FX/expected_cohort_argv" "$FX/dump/20261015_full_r1.functionchat_judge/argv"
 }
 
 put_judge_outputs() {
@@ -403,7 +552,7 @@ f8() {
   put_judge_outputs 1
   run_lane
   expect_rc 0 || return 1
-  { printf '20261015_full_r1 derive\n'; all_calls 2 3; } > "$FX/expected_calls"
+  { printf '20261015_full_r1 derive\n20261015_full_tbstd4 taubench_standard\n'; all_calls 2 3; } > "$FX/expected_calls"
   diff -u "$FX/expected_calls" "$FX/calls" || return 1
   # Later repetitions must still gate derive on judge rc 0, even with resume set.
   fixture F8_later_judge_failure
@@ -412,7 +561,7 @@ f8() {
   set_rc 2 koffvqa_judge 1
   run_lane
   expect_rc 1 || return 1
-  { printf '20261015_full_r1 derive\n'; all_calls 2 3; } |
+  { printf '20261015_full_r1 derive\n20261015_full_tbstd4 taubench_standard\n'; all_calls 2 3; } |
     sed '/^20261015_full_r2 derive$/d' > "$FX/expected_calls"
   diff -u "$FX/expected_calls" "$FX/calls"
 }
@@ -433,7 +582,7 @@ f9() {
     esac
     # Dry-run remains descriptive and never checks whether judge artifacts exist.
     run_lane 1
-    expect_rc 0 && [ "$(grep -c '^SKIP=' "$FX/stdout")" -eq 6 ] &&
+    expect_rc 0 && [ "$(grep -c '^SKIP=' "$FX/stdout")" -eq 8 ] &&
       [ ! -e "$FX/calls" ] && [ ! -e "$FX/preflight" ] || return 1
     run_lane
     expect_rc 2 && [ ! -e "$FX/calls" ] &&
@@ -460,6 +609,11 @@ cd1() {
         path=orchestration/laneconf/$(basename "$file")
         (cd "$REPO" && git show "015c3c5:./$path") > "$file" || return 1
       done
+      # This historical schema predates judge settings; supply today's unchanged
+      # defaults only in the fixture so CD1 still isolates DISPLAY behavior.
+      { printf 'JUDGE_MODEL=openai/gpt-4.1-mini\nJUDGE_PROVIDER=\nJUDGE_REASONING_EFFORT=\nJUDGE_MAX_TOKENS=\n';
+        cat "$FX/orchestration/tracks/full.sh"; } > "$FX/full.new"
+      mv "$FX/full.new" "$FX/orchestration/tracks/full.sh"
       expected='qwen3.5 27B FP8'
     else expected=sentinel-x11; fi
     set_config FULL_REPS=1
@@ -479,7 +633,7 @@ cd1() {
       exact "$file" "DISPLAY=$expected" && exact "$file" 'LANG=C.UTF-8' || return 1
       count=$((count + 1))
     done
-    [ "$count" -eq 7 ] || return 1
+    [ "$count" -eq 8 ] || return 1
     exact "$FX/loader-dry.env" DISPLAY=sentinel-x11
     verdict=$?
     printf '%s\n' "$verdict" > "$FX/sentinel.rc"

@@ -32,8 +32,10 @@ root의 `orchestration/tracks`를 전달한다. 모듈 파일의 원본 경로�
 | --- | --- | --- |
 | `CONFIG` `HOST_ENV` `HOST_DEFAULT` `KEYVAR` `LANE_DISPLAY` | P0 | 필수 공통 설정 |
 | `LANE_TOKENIZER` `REPS` `REQUIRE_NOTHINK` `LM_EVAL_MODE` `NUM_CONCURRENT` | P0 | 해석된 선택 설정 |
-| `TAUBENCH_USER_MODEL` `TAUBENCH_TRIALS` `TAUBENCH_MAX_CONCURRENCY` `AGENT_REQUEST_TIMEOUT` | P0 | 사용자 모델·동시성·timeout 설정 |
+| `TAUBENCH_USER_MODEL` `TAUBENCH_USER_PROVIDER` `TAUBENCH_USER_REASONING_EFFORT` `TAUBENCH_USER_BASE_URL` `TAUBENCH_TRIALS` `TAUBENCH_MAX_CONCURRENCY` `AGENT_REQUEST_TIMEOUT` | P0 | 사용자 모델·동시성·timeout 설정. provider/effort는 빈값이면 미전송; 지정 시 openrouter/ 모델만 허용하고 상속 환경의 USER_BASE_URL과 동시 지정 금지(USER_BASE_URL은 conf 키가 아님). 접두 예: `TAUBENCH_STD4_TAUBENCH_USER_PROVIDER`, `FULL_TAUBENCH_USER_PROVIDER` |
 | `FULL_AGENT_TASK_TIMEOUT` `FULL_KRETA_WORKERS` `FULL_KRETA_RESUME` `FULL_RESUME_FROM` | P0 | 기존 내부 변수명으로 해석한 설정 |
+| `JUDGE_MODEL` `JUDGE_PROVIDER` `JUDGE_REASONING_EFFORT` `JUDGE_MAX_TOKENS` | P0 | full 판정 프로파일; 선택 옵션은 빈값이면 미전송 |
+| `JUDGE_COHORT` | P0 | FC 판정 저장 이름; 빈값은 judge.json, 지정 시 judge.<값>.json. KOFFVQA에는 전달하지 않음 |
 | `SESSION` | P0 | 선택 트랙 SESSION 키의 값; 트랙은 이 공통 이름을 사용 |
 | `TRACK` `BASE` `HERE` | P0 | 트랙 이름·코드 루트·orchestration 경로 |
 | `LABEL` `PREFIX` `STOP_LABEL` `END_LABEL` | P0 | LANE_DISPLAY와 트랙 이름으로 만든 레이블 |

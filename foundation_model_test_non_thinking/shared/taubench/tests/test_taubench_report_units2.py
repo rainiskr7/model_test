@@ -47,6 +47,17 @@ def test_render_cohorts_single():
      '|---|---|---:|---|',
      '| m | retail/test | - | — |',
      '']
+    for provider, effort in (("deepinfra/bf16", "medium"), ("deepinfra/bf16", None), (None, "low")):
+        rendered = subject._render_comparison_cohorts([{
+            'model': 'm', 'split': {'domain': 'retail', 'name': 'test'},
+            'harness_integrity': {'mode': 'standard', 'user_provider': provider, 'user_reasoning_effort': effort}}])
+        header = next(line for line in rendered if line.startswith('사용자 시뮬레이터:'))
+        assert (' · provider ' in header) is bool(provider)
+        assert (' · effort ' in header) is bool(effort)
+        if provider:
+            assert f' · provider `{provider}`' in header
+        if effort:
+            assert f' · effort `{effort}`' in header
 
 
 def test_render_repro_empty():

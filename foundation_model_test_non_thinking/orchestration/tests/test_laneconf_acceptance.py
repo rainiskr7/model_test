@@ -93,5 +93,9 @@ def test_ca3_same_path_head_bytes(tmp_path, model, track):
         assert result.returncode == 0, result.stderr
         results.append((result.stdout, result.stderr, result.returncode))
         fx.assert_dry()
-    assert with_completion_check(results[0]) == results[1]
+    stdout, stderr, rc = with_completion_check(results[0])
+    stdout = b''.join(line.rstrip(b'\n') + b' --judge-model openai/gpt-4.1-mini\n'
+                      if b'shared.functionchat.judge.run_judge ' in line else line
+                      for line in stdout.splitlines(keepends=True))
+    assert (stdout, stderr, rc) == results[1]
     print(f'CA3 {model}/{track}: identical except C7 follow-up; {fx.base}/evidence')

@@ -1,8 +1,10 @@
 """R4 contracts captured by executing original blocks on synthetic inputs."""
+import pytest
 import shared.taubench.scoring.cohort as subject
 
 
-def test_comparison_facts_empty():
+@pytest.mark.parametrize("value", [None, ""])
+def test_comparison_facts_empty(value):
     actual = list(subject._comparison_facts({}).items())
     assert actual == [('benchmark', None),
      ('scoring_version', None),
@@ -20,6 +22,9 @@ def test_comparison_facts_empty():
      ('max_steps', None),
      ('tau2_version', None),
      ('trials', None)]
+    empty = {"harness_integrity": {"user_provider": value, "user_reasoning_effort": value}}
+    assert list(subject._comparison_facts(empty).items()) == actual
+    assert subject.comparison_fingerprint(empty) == subject.comparison_fingerprint({})
 
 
 def test_comparison_facts_protocol():
@@ -40,3 +45,19 @@ def test_comparison_facts_protocol():
      ('max_steps', None),
      ('tau2_version', None),
      ('trials', 3)]
+    baseline = {"harness_integrity": {"mode": "standard", "user_request_timeout": 120.0,
+                                    "user_max_tokens": 16384, "user_model_sent_to_litellm": "openrouter/openai/gpt-oss-120b"}}
+    fingerprints = {subject.comparison_fingerprint(baseline)["fingerprint"]}
+    for provider, effort in (("deepinfra/bf16", "medium"), ("other/provider", "medium"),
+                             ("deepinfra/bf16", "low"), ("deepinfra/bf16", None), (None, "medium")):
+        summary = {"harness_integrity": {**baseline["harness_integrity"],
+                    "user_provider": provider, "user_reasoning_effort": effort}}
+        result = subject.comparison_fingerprint(summary)
+        for key, value in (("user_provider", provider), ("user_reasoning_effort", effort)):
+            if value:
+                assert result["facts"][key] == value
+            else:
+                assert key not in result["facts"]
+        assert result["fingerprint"] not in fingerprints
+        fingerprints.add(result["fingerprint"])
+        assert subject.comparison_fingerprint({**summary, "model": "different-candidate"}) == result

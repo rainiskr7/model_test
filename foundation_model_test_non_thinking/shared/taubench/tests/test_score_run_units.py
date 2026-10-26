@@ -89,9 +89,59 @@ EXPECTED_DOMAINS_HASH = '93d7a06685a013fe6f19b17277cf6d2713f00c1263e58240c10eaa9
 EXPECTED_SUMMARY_HASH = '7cb399c64963513cd2be063de9f9c9f99e444dc9db51e4ed57b3f6e3390c1583'
 
 
-def test_domain_summary_combines_scored_records_and_attribution():
+@pytest.mark.parametrize('case', [
+    'original', 'serving', 'timeout', 'server', 'mixed', 'other_message',
+    'user', 'unknown', 'both_actors', 'empty', 'non_infra', 'measured',
+])
+def test_domain_summary_combines_scored_records_and_attribution(case, tmp_path, capsys):
     raw, _ = _fixture()
     result = scorer._domain_summary(1, scorer._score_simulations(raw))
     assert _digest(result) == EXPECTED_DOMAIN_HASH
+    if case == 'original':
+        return
+    raw, manifest = _fixture()
+    raw['tasks'] = [{'id': str(i), 'evaluation_criteria': {'reward_basis': ['DB']}} for i in range(40)]
+    raw['simulations'] = [{
+        'task_id': str(i), 'termination_reason': 'infrastructure_error',
+        'info': {'error_type': 'BadRequestError',
+                 'error': ' litellm.BadRequestError: OpenAIException - No user query found in messages.\n',
+                 'error_traceback': 'self.agent.generate_next_message'},
+    } for i in range(40)]
+    for sim in raw['simulations']:
+        if case in ('timeout', 'server'):
+            sim['info']['error_type'] = 'Timeout' if case == 'timeout' else 'InternalServerError'
+        elif case == 'other_message':
+            sim['info']['error'] = 'different BadRequest'
+        elif case in ('user', 'unknown', 'both_actors'):
+            sim['info']['error_traceback'] = {
+                'user': 'self.user.generate_next_message', 'unknown': '',
+                'both_actors': 'self.agent.generate_next_message self.user.generate_next_message',
+            }[case]
+    if case == 'mixed':
+        raw['simulations'][-1]['info']['error_type'] = 'APIError'
+    elif case == 'empty':
+        raw['simulations'] = []
+    elif case in ('non_infra', 'measured'):
+        raw['simulations'][-1]['termination_reason'] = 'agent_stop'
+        if case == 'measured':
+            raw['simulations'][-1]['reward_info'] = {'reward': 1}
+    manifest['split'].update(task_ids=[str(i) for i in range(40)], task_count=40, runnable_task_count=40)
+    upstream = tmp_path / 'upstream/telecom'
+    upstream.mkdir(parents=True)
+    (upstream / 'results.json').write_text(json.dumps(raw))
+    (tmp_path / 'run_manifest.json').write_text(json.dumps(manifest))
+    assert scorer.main(['--results-dir', str(tmp_path)]) == 1
+    summary = json.loads((tmp_path / 'summary.json').read_text())
+    entry = summary['by_domain']['telecom']
+    expected = ('serving_incompatible:template_requires_user_turn' if case == 'serving'
+                else None if case == 'measured' else 'no upstream records had a runnable numeric reward')
+    assert entry['reason'] == expected
+    assert summary['publish_status']['publishable'] is False
+    assert (entry['measured'], entry['passed'], entry['failed'], entry['pass_rate']) == (
+        (1, 1, 0, 1.0) if case == 'measured' else (0, 0, 0, None))
+    assert entry['candidate_protocol_failures'] == {}
+    if case == 'serving':
+        assert entry['incompletion_attribution']['environment'] == {'BadRequestError@agent': 40}
+        assert expected in capsys.readouterr().err
 
 EXPECTED_DOMAIN_HASH = 'e1cea74c186ac30b0bffae23cb8d4db9d02183f271c4dbb4a8567467862cecd9'

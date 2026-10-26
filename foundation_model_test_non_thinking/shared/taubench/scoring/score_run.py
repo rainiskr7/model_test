@@ -20,6 +20,10 @@ from shared.taubench.scoring.passk import pass_hat_k_table
 SCORING_VERSION = "taubench_state_v2"  # v2: 후보 프로토콜 실패(도구 미호출)를 측정된 실패로 센다
 JUDGE_BASES = frozenset({"NL_ASSERTION", "COMMUNICATE"})
 PROGRAMMATIC_BASES = frozenset({"DB", "ENV_ASSERTION", "ACTION"})
+SERVING_REJECTIONS = {
+    ("BadRequestError", "litellm.BadRequestError: OpenAIException - No user query found in messages."):
+        "template_requires_user_turn",
+}
 DECLARED_INVENTORY = {
     "telecom": {
         "total_records": 4592,
@@ -140,6 +144,7 @@ def _validate_user_protocol(
     설정이 바뀌면 사용자 프로토콜도 따라 바뀌었다 — 같은 gpt-4.1-mini 인데 한쪽은
     timeout 600s/8192 tokens, 다른 쪽은 120s/16384 tokens 로 돌아간 실측이 있다.
     구버전 산출물은 매니페스트에 사용자 인자가 없으므로 관측값만 남기고 통과시킨다.
+    유지: 사용자 지시(새 함수 금지), Stage 4
     """
 
     # 모델·타임아웃·토큰만 보면 "고정" 이 아니다. 러너는 사용자에게 temperature 와
@@ -152,6 +157,28 @@ def _validate_user_protocol(
         "user_temperature": user_args.get("temperature"),
         "user_api_base": user_args.get("api_base"),
     }
+    extra = user_args.get("extra_body")
+    extra = extra if isinstance(extra, dict) else {}
+    if integrity.get("user_provider") or extra.get("provider") is not None:
+        provider = extra.get("provider")
+        order = provider.get("order") if isinstance(provider, dict) else None
+        if not isinstance(provider, dict):
+            value = "invalid:provider_not_object"
+        elif not isinstance(order, list) or len(order) != 1 or not isinstance(order[0], str):
+            value = "invalid:provider_order"
+        elif provider.get("allow_fallbacks") is not False:
+            value = "invalid:allow_fallbacks"
+        elif provider.get("require_parameters") is not True:
+            value = "invalid:require_parameters"
+        else:
+            value = order[0]
+        observed["user_provider"] = value
+    if integrity.get("user_reasoning_effort") or extra.get("reasoning") is not None:
+        reasoning = extra.get("reasoning")
+        effort = reasoning.get("effort") if isinstance(reasoning, dict) else None
+        observed["user_reasoning_effort"] = effort if isinstance(effort, str) else "invalid:reasoning_effort"
+    if "user_provider" in observed or "user_reasoning_effort" in observed:
+        observed["source"] = "tau2 results.info.user_info.llm_args (configuration, not wire evidence)"
     declared_timeout = integrity.get("user_request_timeout")
     declared_max_tokens = integrity.get("user_max_tokens")
     if declared_timeout is None and declared_max_tokens is None:
@@ -179,6 +206,10 @@ def _validate_user_protocol(
         declared = integrity.get(key)
         if declared is not None:
             expected[key] = declared
+            actual[key] = observed[key]
+    for key in ("user_provider", "user_reasoning_effort"):
+        if integrity.get(key):
+            expected[key] = integrity[key]
             actual[key] = observed[key]
     observed["pinned"] = True
     if actual != expected:
@@ -451,9 +482,22 @@ def _domain_summary(runnable_tasks: int, scores: _SimulationScores) -> dict[str,
         measured, passed, candidate_attr, env_attr, unclassified_attr
     )
 
+    reason = None if measured else "no upstream records had a runnable numeric reward"
+    if not measured and simulations and all(
+        sim.get("termination_reason") == "infrastructure_error" and _failure_actor(sim) == "agent"
+        for sim in simulations
+    ):
+        errors = {
+            (str((sim.get("info") or {}).get("error_type") or ""),
+             str((sim.get("info") or {}).get("error") or "").strip())
+            for sim in simulations
+        }
+        label = SERVING_REJECTIONS.get(next(iter(errors))) if len(errors) == 1 else None
+        if label:
+            reason = f"serving_incompatible:{label}"
     return {
         "status": "measured" if measured else "not_measured",
-        "reason": None if measured else "no upstream records had a runnable numeric reward",
+        "reason": reason,
         "pass_rate": passed / measured if measured else None,
         "pass_rate_source": "tau2 results.simulations[].reward_info.reward",
         "pass_rate_note": "후보 프로토콜 실패(candidate_protocol_failures)는 보상 0 의 측정된 실패로 분모·실패에 포함",

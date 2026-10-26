@@ -53,6 +53,17 @@ def test_judge_one_records_only_in_supplied_identity():
     assert judge.served_identity_snapshot(first) == {"model": ["served"]}
     assert judge.served_identity_snapshot(second) == {}
     assert judge.judge_one(_client("untracked"), "alias", "q", "a", "rubric") == outcome
+    from unittest.mock import Mock
+    client = _client("profile")
+    client.chat.completions.create = Mock(wraps=client.chat.completions.create)
+    assert judge.judge_one(client, "alias", "q", "a", "rubric", max_tokens=2000,
+                           provider="deepinfra/bf16", reasoning_effort="medium") == outcome
+    sent = client.chat.completions.create.call_args.kwargs
+    assert sent["max_tokens"] == 2000
+    assert sent["extra_body"] == {
+        "provider": {"order": ["deepinfra/bf16"], "allow_fallbacks": False, "require_parameters": True},
+        "reasoning": {"effort": "medium"},
+    }
 
 
 def test_repeated_main_saves_separate_identity_and_preserves_summary_order(monkeypatch, tmp_path):
@@ -82,7 +93,7 @@ def test_repeated_main_saves_separate_identity_and_preserves_summary_order(monke
     assert first["judge_served_identity"] == {"model": ["first"]}
     assert second["judge_served_identity"] == {"model": ["second"]}
     assert list(first) == list(second) == [
-        "benchmark", "judge_model", "judge_prompt_version", "judge_prompt_template_sha256",
+        "benchmark", "judge_model", "judge_request", "judge_prompt_version", "judge_prompt_template_sha256",
         "judge_base_url", "judge_served_identity", "target_model", "predfile",
         "prediction_sha256", "total", "scored", "avg_score", "max_possible_score", "run_config",
     ]
