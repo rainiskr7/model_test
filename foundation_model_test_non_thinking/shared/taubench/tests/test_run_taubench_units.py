@@ -95,6 +95,20 @@ def test_split_summary_preserves_existing_telecom_label(domain):
     (True, ["--user-provider", "two words"], True, False),
     (True, ["--user-provider", "provider\n"], True, False),
     (True, ["--user-provider", "/provider"], True, False),
+    (True, ["--user-quantizations", ""], False, False),
+    (True, ["--user-quantizations", "int8,fp4,mxfp4,nvfp4,fp6,fp8,mxfp8,fp16,bf16,fp32,unknown", "--user-reasoning-effort", "low"], False, False),
+    (True, ["--user-quantizations", "int4"], False, False),
+    pytest.param(True, ["--user-quantizations", "bf16,fp8"], False, True, id="litellm-1.82.6-quant-only-anchor"),
+    pytest.param(True, ["--user-provider", "deepinfra/bf16", "--user-quantizations", "fp8,bf16",
+                       "--user-reasoning-effort", "low"], False, True, id="litellm-1.82.6-quant-combined-anchor"),
+    (False, ["--user-quantizations", "bf16"], True, False),
+    (True, ["--mode", "solo", "--user-quantizations", "bf16"], True, False),
+    (True, ["--user-model", "openai/user", "--user-quantizations", "bf16"], True, False),
+    (True, ["--user-model", "anthropic/user", "--user-quantizations", "bf16"], True, False),
+    (True, ["--user-model", "", "--user-quantizations", "bf16"], True, False),
+    (True, ["--user-base-url", "http://unused/v1", "--user-quantizations", "bf16"], True, False),
+    *[(True, ["--user-quantizations", value], True, False) for value in
+      ("int3", "bf16,bf16", "bf16,,fp8", "bf16,", ",bf16", "BF16", "bf16 fp8", "bf16\n")],
 ])
 def test_prepare_llm_args_keeps_user_protocol_independent(monkeypatch, external, options, rejected, anchor, tmp_path, capsys):
     """설정부터 CLI·manifest·실제 변환까지의 계약.
@@ -129,6 +143,11 @@ def test_prepare_llm_args_keeps_user_protocol_independent(monkeypatch, external,
     extra = {}
     if args.user_provider:
         extra["provider"] = {"order": ["deepinfra/bf16"], "allow_fallbacks": False, "require_parameters": True}
+    if args.user_quantizations:
+        provider = extra.setdefault("provider", {})
+        provider.pop("require_parameters", None)
+        provider["quantizations"] = args.user_quantizations.split(",")
+        provider["require_parameters"] = True
     if args.user_reasoning_effort:
         extra["reasoning"] = {"effort": args.user_reasoning_effort}
     if extra:
@@ -146,7 +165,7 @@ def test_prepare_llm_args_keeps_user_protocol_independent(monkeypatch, external,
         else:
             monkeypatch.delenv("OPENROUTER_API_BASE", raising=False)
         integrity = runner._build_manifest(args, {}, "http://unused/v1", user, [], removed)["harness_integrity"]
-        for key in ("user_provider", "user_reasoning_effort"):
+        for key in ("user_provider", "user_reasoning_effort", "user_quantizations"):
             if getattr(args, key):
                 assert integrity[key] == getattr(args, key)
             else:
@@ -167,16 +186,18 @@ def test_prepare_llm_args_keeps_user_protocol_independent(monkeypatch, external,
         env={"PATH": os.defpath, "MODEL_TEST_BASE": str(tmp_path), "TAU_PY": str(interpreter),
              "EVAL_TIMESTAMP": "fixture", "TAUBENCH_MODE": "standard", "TAUBENCH_USER_MODEL": args.user_model,
              "TAUBENCH_USER_PROVIDER": args.user_provider or "",
+             "TAUBENCH_USER_QUANTIZATIONS": args.user_quantizations or "",
              "TAUBENCH_USER_REASONING_EFFORT": args.user_reasoning_effort or ""},
         capture_output=True, text=True, check=True)
     forwarded = wrapper.stdout.splitlines()
-    for option, value in (("--user-provider", args.user_provider), ("--user-reasoning-effort", args.user_reasoning_effort)):
+    for option, value in (("--user-provider", args.user_provider), ("--user-reasoning-effort", args.user_reasoning_effort),
+                          ("--user-quantizations", args.user_quantizations)):
         if value:
             assert forwarded[forwarded.index(option) + 1] == value
         else:
             assert option not in forwarded
     if anchor:
-        python = root / ".venv-taubench/bin/python"
+        python = Path(os.environ.get("TAU_PY", root / ".venv-taubench/bin/python"))
         if not python.is_file():
             pytest.skip("C2(c) INCONCLUSIVE: repository .venv-taubench/bin/python missing; rerun with LiteLLM 1.82.6 before CLOSE")
         code = '''
@@ -200,7 +221,7 @@ with patch("socket.socket.connect", side_effect=AssertionError("network forbidde
         assert transformed.returncode == 0, transformed.stderr
         body = json.loads(transformed.stdout)
         assert body["provider"] == extra["provider"]
-        assert body["reasoning"] == extra["reasoning"]
+        assert body.get("reasoning") == extra.get("reasoning")
         assert "extra_body" not in body
 
 

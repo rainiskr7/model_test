@@ -2,7 +2,7 @@
 # Inputs (phases: README.md): STOP_LABEL REPS AGENT_REQUEST_TIMEOUT FULL_AGENT_TASK_TIMEOUT
 # FULL_KRETA_WORKERS FULL_KRETA_RESUME FULL_RESUME_FROM MODEL BASE_URL_CHAT BASE_URL_V1
 # TAUBENCH_MAX_CONCURRENCY TAUBENCH_USER_MODEL TAUBENCH_TRIALS SESSION BASE PYTHONPATH LABEL HOST BASE_TS END_LABEL.
-# TAUBENCH_USER_PROVIDER TAUBENCH_USER_REASONING_EFFORT TAUBENCH_USER_BASE_URL.
+# TAUBENCH_USER_PROVIDER TAUBENCH_USER_QUANTIZATIONS TAUBENCH_USER_REASONING_EFFORT TAUBENCH_USER_BASE_URL.
 # JUDGE_MODEL JUDGE_COHORT JUDGE_PROVIDER JUDGE_REASONING_EFFORT JUDGE_MAX_TOKENS.
 # Functions: bad read_key log; results_model_dir is sourced locally at run time.
 track_secrets() { export TAUBENCH_USER_API_KEY="$(read_key TAUBENCH_USER_API_KEY)"; }
@@ -26,8 +26,19 @@ track_validate() {
   if [ -n "$TAUBENCH_USER_PROVIDER" ]; then
     [[ "$TAUBENCH_USER_PROVIDER" =~ ^[a-z0-9][a-z0-9/_.-]*$ ]] || bad 'TAUBENCH_USER_PROVIDER must match [a-z0-9][a-z0-9/_.-]*'
   fi
-  if [ -n "$TAUBENCH_USER_PROVIDER$TAUBENCH_USER_REASONING_EFFORT" ]; then
-    [[ "$TAUBENCH_USER_MODEL" == openrouter/* ]] && [ -z "${TAUBENCH_USER_BASE_URL:-}" ] || bad 'user provider/effort requires openrouter/ model without TAUBENCH_USER_BASE_URL'
+  if [ -n "$TAUBENCH_USER_QUANTIZATIONS" ]; then
+    local quantization quant_seen=, quant_tokens=()
+    local quant_allowed='int4,int8,fp4,mxfp4,nvfp4,fp6,fp8,mxfp8,fp16,bf16,fp32,unknown'
+    [[ "$TAUBENCH_USER_QUANTIZATIONS" =~ ^[a-z0-9]+(,[a-z0-9]+)*$ ]] || bad 'TAUBENCH_USER_QUANTIZATIONS must be a comma-separated token list'
+    IFS=, read -r -a quant_tokens <<< "$TAUBENCH_USER_QUANTIZATIONS"
+    for quantization in "${quant_tokens[@]}"; do
+      [[ ",$quant_allowed," == *",$quantization,"* ]] || bad "unsupported user quantization: $quantization"
+      [[ "$quant_seen" != *",$quantization,"* ]] || bad "duplicate user quantization: $quantization"
+      quant_seen+="$quantization,"
+    done
+  fi
+  if [ -n "$TAUBENCH_USER_PROVIDER$TAUBENCH_USER_REASONING_EFFORT$TAUBENCH_USER_QUANTIZATIONS" ]; then
+    [[ "$TAUBENCH_USER_MODEL" == openrouter/* ]] && [ -z "${TAUBENCH_USER_BASE_URL:-}" ] || bad 'user provider/effort/quantizations requires openrouter/ model without TAUBENCH_USER_BASE_URL'
   fi
   [[ "$JUDGE_MODEL" =~ [^[:space:]] ]] || bad 'JUDGE_MODEL must not be empty'
   if [ -n "${JUDGE_COHORT:-}" ]; then
@@ -80,6 +91,7 @@ full_command() {
       FULL_CMD=(env TAUBENCH_MODE=standard "TAUBENCH_USER_MODEL=$TAUBENCH_USER_MODEL" "TAUBENCH_TRIALS=$TAUBENCH_TRIALS"
         "AGENT_REQUEST_TIMEOUT=$AGENT_REQUEST_TIMEOUT" "TAUBENCH_MAX_CONCURRENCY=$TAUBENCH_MAX_CONCURRENCY")
       [ -z "$TAUBENCH_USER_PROVIDER" ] || FULL_CMD+=("TAUBENCH_USER_PROVIDER=$TAUBENCH_USER_PROVIDER")
+      [ -z "$TAUBENCH_USER_QUANTIZATIONS" ] || FULL_CMD+=("TAUBENCH_USER_QUANTIZATIONS=$TAUBENCH_USER_QUANTIZATIONS")
       [ -z "$TAUBENCH_USER_REASONING_EFFORT" ] || FULL_CMD+=("TAUBENCH_USER_REASONING_EFFORT=$TAUBENCH_USER_REASONING_EFFORT")
       FULL_CMD+=(bash vsm/taubench/run_taubench.sh "$MODEL" "$BASE_URL_CHAT") ;;
     multimodal)
@@ -184,7 +196,7 @@ full_invoke() (
   local stage=$1
   unset AGENT_REQUEST_TIMEOUT AGENT_TASK_TIMEOUT NUM_CONCURRENT TAUBENCH_MODE TAUBENCH_TRIALS
   unset TAUBENCH_MAX_CONCURRENCY KRETA_WORKERS KRETA_RESUME
-  unset TAUBENCH_USER_PROVIDER TAUBENCH_USER_REASONING_EFFORT
+  unset TAUBENCH_USER_PROVIDER TAUBENCH_USER_REASONING_EFFORT TAUBENCH_USER_QUANTIZATIONS
   case "$stage" in
     *_judge|derive) PYTHONPATH="$BASE${PYTHONPATH:+:$PYTHONPATH}" EVAL_TIMESTAMP="$TS" "${FULL_CMD[@]}" ;;
     *) EVAL_TIMESTAMP="$TS" "${FULL_CMD[@]}" ;;

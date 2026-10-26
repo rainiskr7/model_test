@@ -190,7 +190,12 @@ nohup perl -e 'setpgrp; exec @ARGV' /bin/bash "$N/orchestration/lanes/full.sh" q
 | --- | --- |
 | TAUBENCH_USER_PROVIDER | 기본 빈값(미전송). `[a-z0-9][a-z0-9/_.-]*` 제공자 slug; 지정하면 order 단일 제공자, allow_fallbacks=false, require_parameters=true |
 | TAUBENCH_USER_REASONING_EFFORT | 기본 빈값(미전송) 또는 low·medium·high; LiteLLM 모델 맵과 무관하게 extra_body.reasoning.effort로 전달 |
+| TAUBENCH_USER_QUANTIZATIONS | 기본 빈값(미전송). 쉼표 허용 목록; 2026-10-27 OpenRouter 문서 열거값 `int4,int8,fp4,mxfp4,nvfp4,fp6,fp8,mxfp8,fp16,bf16,fp32,unknown`. 미지 토큰·중복·빈 토큰은 rc 2 |
 
-공통 값보다 `FULL_TAUBENCH_USER_PROVIDER`·`FULL_TAUBENCH_USER_REASONING_EFFORT`가 우선한다. 두 옵션은 standard 단계에만 전달한다. 하나라도 지정하면 사용자 모델은 `openrouter/` 접두여야 하고 `TAUBENCH_USER_BASE_URL` 환경값과 동시에 지정할 수 없다(rc 2). `OPENROUTER_API_BASE`는 막지 않으며, 새 옵션을 쓸 때 manifest의 `user_openrouter_api_base_set`에 비어 있지 않은 환경값의 존재만 기록한다. 값 자체는 기록하지 않는다.
+공통 값보다 `FULL_TAUBENCH_USER_PROVIDER`·`FULL_TAUBENCH_USER_REASONING_EFFORT`·`FULL_TAUBENCH_USER_QUANTIZATIONS`가 우선한다. 세 옵션은 standard 단계에만 전달한다. 하나라도 지정하면 사용자 모델은 `openrouter/` 접두여야 하고 `TAUBENCH_USER_BASE_URL` 환경값과 동시에 지정할 수 없다(rc 2). `OPENROUTER_API_BASE`는 막지 않으며, 새 옵션을 쓸 때 manifest의 `user_openrouter_api_base_set`에 비어 있지 않은 환경값의 존재만 기록한다. 값 자체는 기록하지 않는다.
 
-provider·effort가 비어 있으면 기존 요청·manifest·summary·코호트를 유지한다. 지정한 값은 manifest와 비교 지문에 들어가며 tau2 results.json의 설정 기록과 대조한다(실제 전송 또는 실제 제공자의 증거가 아님). 제공자 정책 플래그·order·effort가 다르거나 잘못된 타입이면 summary를 남기고 발행·후보 간 비교를 거부한다. low/medium 선택과 도구 호출·추론 누출·지연·지원 파라미터는 전환 전 실 요청 검증 대상이다.
+provider·effort·quantizations가 모두 비어 있으면 기존 요청·manifest·summary·코호트를 유지한다. 지정한 값은 manifest와 비교 지문에 들어가며 tau2 results.json의 설정 기록과 대조한다(실제 전송 또는 실제 제공자의 증거가 아님). 제공자 정책 플래그·order·effort·quantizations가 다르거나 잘못된 타입이면 summary를 남기고 발행·후보 간 비교를 거부한다. low/medium 선택과 도구 호출·추론 누출·지연·지원 파라미터는 전환 전 실 요청 검증 대상이다.
+
+quantizations는 제외 목록이 아니라 허용 목록이다. 현재 열거값에서 int4만 제외하려면 `int8,fp4,mxfp4,nvfp4,fp6,fp8,mxfp8,fp16,bf16,fp32,unknown`을 지정한다. provider가 비어 있으면 `order`·`allow_fallbacks`를 보내지 않고 `quantizations`·`require_parameters=true`만 보내므로 업체를 고정하지 않는다. provider를 함께 지정하면 기존 단일 업체·fallback 금지 정책에 목록을 추가한다. 입력 순서를 요청·manifest·지문에 그대로 보존하므로 같은 원소라도 순서가 다르면 별도 지문이다.
+
+새 OpenRouter 토큰은 자동 허용하지 않는다. 지원하려면 (1) `shared/taubench/runner/run_taubench.py`의 `USER_QUANTIZATIONS`(채점도 재사용), (2) `orchestration/tracks/{taubench_std4,full}.sh`의 `quant_allowed`, (3) 위 허용값 표를 함께 갱신하고 `test_lane_config_units.py`의 집합 동일성·거절 시험을 통과시킨다. int4 제외 설정에도 새 허용 토큰을 명시적으로 추가해야 한다. 실제 서빙 업체는 results.json 메시지의 raw_data.provider에 남으며 이번 보고서는 업체 분포를 집계하지 않는다.

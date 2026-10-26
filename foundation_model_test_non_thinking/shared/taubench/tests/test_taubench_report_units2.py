@@ -1,4 +1,5 @@
 """R4 contracts captured by executing original blocks on synthetic inputs."""
+import pytest
 import shared.taubench.scoring.report as subject
 
 
@@ -33,7 +34,8 @@ def test_render_cohorts_empty():
     assert actual == ['## 비교 코호트', '']
 
 
-def test_render_cohorts_single():
+@pytest.mark.parametrize("quantizations", [None, "", "bf16,fp8", "fp8,bf16"])
+def test_render_cohorts_single(quantizations):
     actual = subject._render_comparison_cohorts([{'model': 'm', 'split': {'domain': 'retail', 'name': 'test'}, 'harness_integrity': {'mode': 'solo'}}])
     assert actual == ['## 비교 코호트',
      '',
@@ -50,10 +52,13 @@ def test_render_cohorts_single():
     for provider, effort in (("deepinfra/bf16", "medium"), ("deepinfra/bf16", None), (None, "low")):
         rendered = subject._render_comparison_cohorts([{
             'model': 'm', 'split': {'domain': 'retail', 'name': 'test'},
-            'harness_integrity': {'mode': 'standard', 'user_provider': provider, 'user_reasoning_effort': effort}}])
+            'harness_integrity': {'mode': 'standard', 'user_provider': provider, 'user_reasoning_effort': effort, 'user_quantizations': quantizations}}])
         header = next(line for line in rendered if line.startswith('사용자 시뮬레이터:'))
         assert (' · provider ' in header) is bool(provider)
         assert (' · effort ' in header) is bool(effort)
+        assert (' · quant ' in header) is bool(quantizations)
+        if quantizations:
+            assert f' · quant `{quantizations}`' in header
         if provider:
             assert f' · provider `{provider}`' in header
         if effort:

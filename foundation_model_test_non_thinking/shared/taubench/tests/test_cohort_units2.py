@@ -22,12 +22,13 @@ def test_comparison_facts_empty(value):
      ('max_steps', None),
      ('tau2_version', None),
      ('trials', None)]
-    empty = {"harness_integrity": {"user_provider": value, "user_reasoning_effort": value}}
+    empty = {"harness_integrity": {"user_provider": value, "user_reasoning_effort": value, "user_quantizations": value}}
     assert list(subject._comparison_facts(empty).items()) == actual
     assert subject.comparison_fingerprint(empty) == subject.comparison_fingerprint({})
 
 
-def test_comparison_facts_protocol():
+@pytest.mark.parametrize("quantizations", [None, "bf16,fp8", "fp8,bf16", "bf16"])
+def test_comparison_facts_protocol(quantizations):
     actual = list(subject._comparison_facts({'model': 'candidate', 'benchmark': 'tau', 'scoring_version': 'v', 'split': {'domain': 'retail', 'name': 'test', 'task_ids': ['b', 'a'], 'task_count': 2, 'runnable_task_count': 2}, 'harness_integrity': {'mode': 'solo', 'trials': 3, 'request_timeout': 99, 'user_max_tokens': 8}}).items())
     assert actual == [('benchmark', 'tau'),
      ('scoring_version', 'v'),
@@ -47,13 +48,19 @@ def test_comparison_facts_protocol():
      ('trials', 3)]
     baseline = {"harness_integrity": {"mode": "standard", "user_request_timeout": 120.0,
                                     "user_max_tokens": 16384, "user_model_sent_to_litellm": "openrouter/openai/gpt-oss-120b"}}
+    quant_fingerprints = {
+        subject.comparison_fingerprint({"harness_integrity": {
+            **baseline["harness_integrity"], "user_quantizations": value}})["fingerprint"]
+        for value in (None, "bf16,fp8", "fp8,bf16", "bf16")
+    }
+    assert len(quant_fingerprints) == 4
     fingerprints = {subject.comparison_fingerprint(baseline)["fingerprint"]}
     for provider, effort in (("deepinfra/bf16", "medium"), ("other/provider", "medium"),
                              ("deepinfra/bf16", "low"), ("deepinfra/bf16", None), (None, "medium")):
         summary = {"harness_integrity": {**baseline["harness_integrity"],
-                    "user_provider": provider, "user_reasoning_effort": effort}}
+                    "user_provider": provider, "user_reasoning_effort": effort, "user_quantizations": quantizations}}
         result = subject.comparison_fingerprint(summary)
-        for key, value in (("user_provider", provider), ("user_reasoning_effort", effort)):
+        for key, value in (("user_provider", provider), ("user_reasoning_effort", effort), ("user_quantizations", quantizations)):
             if value:
                 assert result["facts"][key] == value
             else:

@@ -11,6 +11,11 @@ import shared.taubench.scoring.score_run as subject
     "order_missing", "order_empty", "order_two", "order_string", "order_nonstring", "order_null",
     "fallbacks_missing", "fallbacks_true", "fallbacks_zero", "require_missing", "require_false", "require_one",
     "reasoning_missing", "reasoning_null", "reasoning_list", "reasoning_string", "effort_missing", "effort_null", "effort_number",
+    "quant_only", "quant_combined", "quant_undeclared", "undeclared_order", "undeclared_empty_provider",
+    "quant_mismatch", "quant_reordered", "quant_missing", "quant_null", "quant_string", "quant_empty",
+    "quant_embedded_comma", "quant_empty_token", "quant_unknown", "quant_number", "quant_nested", "quant_duplicate",
+    "quant_require_missing", "quant_require_false", "quant_require_one", "quant_provider_null",
+    "quant_provider_string", "quant_provider_list", "quant_extra_missing", "quant_pinned_order_missing",
 ])
 def test_observed_protocol_mismatch(case, tmp_path):
     """설정 대조 오류는 저장된 summary와 비교·발행 게이트까지 전달한다.
@@ -57,6 +62,39 @@ def test_observed_protocol_mismatch(case, tmp_path):
         extra.pop(field)
         if kind != "missing":
             extra[field] = {"null": None, "string": "bad", "list": []}[kind]
+    if case.startswith("quant_"):
+        integrity["user_quantizations"] = "bf16,fp8"
+        extra["provider"]["quantizations"] = ["bf16", "fp8"]
+        if case not in ("quant_combined", "quant_pinned_order_missing"):
+            integrity.pop("user_provider")
+            extra["provider"].pop("order")
+            extra["provider"].pop("allow_fallbacks")
+        if case == "quant_pinned_order_missing":
+            extra["provider"].pop("order")
+        elif case == "quant_undeclared":
+            integrity.pop("user_quantizations")
+        elif case == "quant_missing":
+            extra["provider"].pop("quantizations")
+        elif case.startswith("quant_require_"):
+            extra["provider"].pop("require_parameters")
+            if case != "quant_require_missing":
+                extra["provider"]["require_parameters"] = False if case == "quant_require_false" else 1
+        elif case.startswith("quant_provider_"):
+            extra["provider"] = {"quant_provider_null": None, "quant_provider_string": "bad", "quant_provider_list": []}[case]
+        elif case == "quant_extra_missing":
+            extra = {}
+        elif case in ("quant_mismatch", "quant_reordered", "quant_null", "quant_string", "quant_empty",
+                      "quant_embedded_comma", "quant_empty_token", "quant_unknown", "quant_number", "quant_nested", "quant_duplicate"):
+            extra["provider"]["quantizations"] = {
+                "quant_mismatch": ["fp8"], "quant_reordered": ["fp8", "bf16"], "quant_null": None,
+                "quant_string": "bf16,fp8", "quant_empty": [], "quant_embedded_comma": ["bf16,fp8"],
+                "quant_empty_token": [""], "quant_unknown": ["int3"], "quant_number": [1],
+                "quant_nested": [["bf16"]], "quant_duplicate": ["bf16", "bf16"],
+            }[case]
+    elif case.startswith("undeclared_"):
+        integrity.pop("user_provider")
+        if case == "undeclared_empty_provider":
+            extra["provider"] = {}
     user_args = {"timeout": 120.0, "max_tokens": 16384, "temperature": 0.0}
     if case != "extra_missing":
         user_args["extra_body"] = {"extra_null": None, "extra_string": "bad", "extra_list": []}.get(case, extra)
@@ -74,7 +112,8 @@ def test_observed_protocol_mismatch(case, tmp_path):
     upstream = tmp_path / "upstream/telecom"
     upstream.mkdir(parents=True)
     (upstream / "results.json").write_text(json.dumps(raw))
-    valid = case in ("valid", "provider_only", "effort_only")
+    valid = case in ("valid", "provider_only", "effort_only", "quant_only", "quant_combined",
+                     "quant_undeclared", "undeclared_order", "undeclared_empty_provider")
     assert subject.main(["--results-dir", str(tmp_path)]) == (0 if valid else 1)
     summary = json.loads((tmp_path / "summary.json").read_text())
     protocol = summary["harness_integrity"]["upstream_result_evidence"]["user_protocol"]
@@ -83,11 +122,27 @@ def test_observed_protocol_mismatch(case, tmp_path):
     assert ("mismatch" not in protocol) is valid
     assert summary["publish_status"]["publishable"] is valid
     assert cohort.comparison_fingerprint(summary)["comparable_across_candidates"] is valid
+    if case in ("quant_only", "quant_combined", "quant_undeclared"):
+        assert protocol["user_quantizations"] == "bf16,fp8"
+        assert ("user_provider" in protocol) is (case == "quant_combined")
+    if case == "undeclared_order":
+        assert protocol["user_provider"] == "deepinfra/bf16"
+    if case == "undeclared_empty_provider":
+        assert protocol["user_provider"] == "invalid:provider_order"
+    if case in ("quant_embedded_comma", "quant_empty_token", "quant_unknown", "quant_number", "quant_nested"):
+        assert protocol["user_quantizations"] == "invalid:quantizations_token"
+    if case in ("quant_missing", "quant_null", "quant_string", "quant_empty", "quant_provider_null",
+                "quant_provider_string", "quant_provider_list", "quant_extra_missing"):
+        assert protocol["user_quantizations"] == "invalid:quantizations_not_list"
+    if case == "quant_duplicate":
+        assert protocol["user_quantizations"] == "invalid:quantizations_duplicate"
+    if case.startswith("quant_require_"):
+        assert protocol["user_quantizations"] == "invalid:require_parameters"
     if not valid:
         assert any("비교할 수 없다" in message for message in summary["publish_status"]["failures"])
-        if case not in ("provider", "effort"):
+        if case not in ("provider", "effort", "quant_mismatch", "quant_reordered"):
             assert any(str(value).startswith("invalid:") for key, value in protocol.items()
-                       if key in ("user_provider", "user_reasoning_effort"))
+                       if key in ("user_provider", "user_reasoning_effort", "user_quantizations"))
 
 
 def test_observed_protocol_unpinned():

@@ -80,7 +80,7 @@ def _comparison_facts(summary: Mapping[str, Any]) -> dict:
         # 쟀다"를 구분할 수 없다. 기록만 하고 지문에서 빼면 둘이 한 코호트에 들어간다.
         "trials": integrity.get("trials"),
     }
-    for key in ("user_provider", "user_reasoning_effort"):
+    for key in ("user_provider", "user_reasoning_effort", "user_quantizations"):
         if integrity.get(key):
             facts[key] = integrity[key]
     return facts

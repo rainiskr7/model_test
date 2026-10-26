@@ -84,6 +84,9 @@ fi
 if [ -n "${TAUBENCH_USER_PROVIDER:-}" ]; then
   RUN_ARGS+=(--user-provider "$TAUBENCH_USER_PROVIDER")
 fi
+if [ -n "${TAUBENCH_USER_QUANTIZATIONS:-}" ]; then
+  RUN_ARGS+=(--user-quantizations "$TAUBENCH_USER_QUANTIZATIONS")
+fi
 if [ -n "${TAUBENCH_USER_REASONING_EFFORT:-}" ]; then
   RUN_ARGS+=(--user-reasoning-effort "$TAUBENCH_USER_REASONING_EFFORT")
 fi
