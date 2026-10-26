@@ -1,12 +1,14 @@
 """API judge pre-refactor anchors; variable fields are listed in _r3_runner_fakes."""
 
+import pytest
 from openpyxl import Workbook
 
 from shared.multimodal.tests._runner_fakes import load_runner, read_json
 from shared.multimodal.tests._r3_runner_fakes import assert_capture, capture, cli, prepare_local
 
 
-def test_main_requests_storage_identity(monkeypatch, tmp_path, capsys, fresh_import):
+@pytest.mark.parametrize("effort,temperature_mode,provider", [("medium", "", "deepinfra/bf16"), ("none", "", "deepinfra/bf16"), ("none", "omit", "deepinfra/bf16"), ("", "omit", "")])
+def test_main_requests_storage_identity(monkeypatch, tmp_path, capsys, fresh_import, effort, temperature_mode, provider):
     import argparse
     import json
     import sys
@@ -49,7 +51,7 @@ def test_main_requests_storage_identity(monkeypatch, tmp_path, capsys, fresh_imp
     state.calls.clear()
     state.constructors.clear()
     for field, value in (("model", "other"), ("provider", "deepinfra/bf16"),
-                         ("reasoning_effort", "medium"), ("max_tokens_effective", 2000), ("seed", 8)):
+                         ("reasoning_effort", "medium"), ("max_tokens_effective", 2000), ("seed", 8), ("temperature", None), ("temperature_mode", "omit")):
         stored = json.loads(json.dumps(summary))
         stored["judge_request"][field] = value
         (output / "summary.json").write_text(json.dumps(stored))
@@ -93,8 +95,9 @@ def test_main_requests_storage_identity(monkeypatch, tmp_path, capsys, fresh_imp
         for path in output.iterdir():
             path.unlink()
         monkeypatch.setattr(argparse.ArgumentParser, "parse_args", parse_args)
-        profile = ["--judge-model", "openai/gpt-oss-120b", "--judge-provider", "deepinfra/bf16",
-                   "--judge-reasoning-effort", "medium", "--judge-max-tokens", "2000"]
+        profile = ["--judge-model", "openai/gpt-oss-120b", "--judge-provider", provider,
+                   "--judge-reasoning-effort", effort, "--judge-max-tokens", "2000",
+                   "--judge-temperature-mode", temperature_mode]
         cli(monkeypatch, [*arguments, *profile])
         monkeypatch.setenv("SERVING_UNSUPPORTED_SAMPLING_PARAMS", "seed,temperature")
         monkeypatch.setenv("SERVING_MAX_OUTPUT_TOKENS", "5")
@@ -103,18 +106,29 @@ def test_main_requests_storage_identity(monkeypatch, tmp_path, capsys, fresh_imp
         for call in handler.call_args_list[4:]:
             body = json.loads(call.args[0].content)
             assert body["model"] == "openai/gpt-oss-120b" and body["max_tokens"] == 2000
-            assert body["provider"] == {"order": ["deepinfra/bf16"], "allow_fallbacks": False, "require_parameters": True}
-            assert body["reasoning"] == {"effort": "medium"} and body["seed"] == 7
+            assert body.get("provider") == ({"order": [provider], "allow_fallbacks": False, "require_parameters": True} if provider else None)
+            assert body.get("reasoning") == ({"effort": effort} if effort else None)
+            assert ("temperature" not in body) is bool(temperature_mode)
+            assert body["seed"] == 7
             assert "extra_body" not in body
         final = read_json(output / "summary.json")
         assert final["judge_request"] == {
-            "model": "openai/gpt-oss-120b", "provider": "deepinfra/bf16", "reasoning_effort": "medium",
-            "max_tokens_requested": 2000, "max_tokens_effective": 2000, "temperature": 0.0, "seed": 7,
+            "model": "openai/gpt-oss-120b", "provider": provider or None, "reasoning_effort": effort or None,
+            "max_tokens_requested": 2000, "max_tokens_effective": 2000, "temperature": None if temperature_mode else 0.0, "seed": 7,
+            **({"temperature_mode": "omit"} if temperature_mode else {}),
         }
-        assert final["run_config"]["decoding"] == {"temperature": 0.0, "max_tokens": 2000, "seed": 7}
+        assert final["run_config"]["decoding"] == {"temperature": None if temperature_mode else 0.0, "max_tokens": 2000, "seed": 7,
+                                                    **({"temperature_mode": "omit"} if temperature_mode else {})}
+        assert final["run_config"]["decoding_requested"] == final["run_config"]["decoding"]
+        before = {p.name: p.read_bytes() for p in output.iterdir()}
+        monkeypatch.setattr(argparse.ArgumentParser, "parse_args", parse_args)
+        cli(monkeypatch, [*arguments, *profile, "--judge-temperature-mode", "" if temperature_mode else "omit"])
+        assert runner.main() == 2 and handler.call_count == 8
+        assert before == {p.name: p.read_bytes() for p in output.iterdir()}
         assert final["run_config"]["serving_constraints"]["removed_parameters"] == []
         for invalid in (["--judge-model", ""], ["--judge-max-tokens", "0"],
-                        ["--judge-max-tokens", "-1"], ["--judge-reasoning-effort", "invalid"]):
+                        ["--judge-max-tokens", "-1"], ["--judge-reasoning-effort", "invalid"], ["--judge-reasoning-effort", "xhigh"],
+                        *(["--judge-temperature-mode", value] for value in ("0.5", "OMIT", "default"))):
             monkeypatch.setattr(argparse.ArgumentParser, "parse_args", parse_args)
             cli(monkeypatch, [*arguments, *invalid])
             with pytest.raises(SystemExit) as rejected:

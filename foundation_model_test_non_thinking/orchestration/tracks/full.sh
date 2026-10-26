@@ -2,8 +2,8 @@
 # Inputs (phases: README.md): STOP_LABEL REPS AGENT_REQUEST_TIMEOUT FULL_AGENT_TASK_TIMEOUT
 # FULL_KRETA_WORKERS FULL_KRETA_RESUME FULL_RESUME_FROM MODEL BASE_URL_CHAT BASE_URL_V1
 # TAUBENCH_MAX_CONCURRENCY TAUBENCH_USER_MODEL TAUBENCH_TRIALS SESSION BASE PYTHONPATH LABEL HOST BASE_TS END_LABEL.
-# TAUBENCH_USER_PROVIDER TAUBENCH_USER_QUANTIZATIONS TAUBENCH_USER_REASONING_EFFORT TAUBENCH_USER_BASE_URL.
-# JUDGE_MODEL JUDGE_COHORT JUDGE_PROVIDER JUDGE_REASONING_EFFORT JUDGE_MAX_TOKENS.
+# TAUBENCH_USER_PROVIDER TAUBENCH_USER_QUANTIZATIONS TAUBENCH_USER_REASONING_EFFORT TAUBENCH_USER_TEMPERATURE_MODE TAUBENCH_USER_BASE_URL.
+# JUDGE_MODEL JUDGE_COHORT JUDGE_PROVIDER JUDGE_REASONING_EFFORT JUDGE_MAX_TOKENS JUDGE_TEMPERATURE_MODE.
 # Functions: bad read_key log; results_model_dir is sourced locally at run time.
 track_secrets() { export TAUBENCH_USER_API_KEY="$(read_key TAUBENCH_USER_API_KEY)"; }
 
@@ -22,7 +22,8 @@ track_validate() {
   FULL_STAGES="nlu functionchat taubench multimodal functionchat_judge koffvqa_judge derive taubench_standard"
   # Validate before activation, credential reads, or any fixture/server access.
   [ -n "$STOP_LABEL" ] || bad 'required key: STOP_LABEL'
-  case "$TAUBENCH_USER_REASONING_EFFORT" in ''|low|medium|high) ;; *) bad 'TAUBENCH_USER_REASONING_EFFORT must be empty, low, medium or high' ;; esac
+  case "$TAUBENCH_USER_REASONING_EFFORT" in ''|none|low|medium|high) ;; *) bad 'TAUBENCH_USER_REASONING_EFFORT must be empty, none, low, medium or high' ;; esac
+  case "${TAUBENCH_USER_TEMPERATURE_MODE:-}" in ''|omit) ;; *) bad 'TAUBENCH_USER_TEMPERATURE_MODE must be empty or omit' ;; esac
   if [ -n "$TAUBENCH_USER_PROVIDER" ]; then
     [[ "$TAUBENCH_USER_PROVIDER" =~ ^[a-z0-9][a-z0-9/_.-]*$ ]] || bad 'TAUBENCH_USER_PROVIDER must match [a-z0-9][a-z0-9/_.-]*'
   fi
@@ -37,7 +38,7 @@ track_validate() {
       quant_seen+="$quantization,"
     done
   fi
-  if [ -n "$TAUBENCH_USER_PROVIDER$TAUBENCH_USER_REASONING_EFFORT$TAUBENCH_USER_QUANTIZATIONS" ]; then
+  if [ -n "$TAUBENCH_USER_PROVIDER$TAUBENCH_USER_REASONING_EFFORT$TAUBENCH_USER_QUANTIZATIONS${TAUBENCH_USER_TEMPERATURE_MODE:-}" ]; then
     [[ "$TAUBENCH_USER_MODEL" == openrouter/* ]] && [ -z "${TAUBENCH_USER_BASE_URL:-}" ] || bad 'user provider/effort/quantizations requires openrouter/ model without TAUBENCH_USER_BASE_URL'
   fi
   [[ "$JUDGE_MODEL" =~ [^[:space:]] ]] || bad 'JUDGE_MODEL must not be empty'
@@ -47,7 +48,8 @@ track_validate() {
   if [ -n "$JUDGE_MAX_TOKENS" ]; then
     [[ "$JUDGE_MAX_TOKENS" =~ ^[0-9]+$ ]] && [ "$JUDGE_MAX_TOKENS" -gt 0 ] 2>/dev/null || bad 'JUDGE_MAX_TOKENS must be a positive integer'
   fi
-  case "$JUDGE_REASONING_EFFORT" in ''|low|medium|high) ;; *) bad 'JUDGE_REASONING_EFFORT must be empty, low, medium or high' ;; esac
+  case "${JUDGE_TEMPERATURE_MODE:-}" in ''|omit) ;; *) bad 'JUDGE_TEMPERATURE_MODE must be empty or omit' ;; esac
+  case "$JUDGE_REASONING_EFFORT" in ''|none|low|medium|high) ;; *) bad 'JUDGE_REASONING_EFFORT must be empty, none, low, medium or high' ;; esac
   case "$REPS" in ''|*[!0-9]*) bad 'REPS must be positive' ;; esac
   [ "$REPS" -gt 0 ] 2>/dev/null || bad 'REPS must be positive'
   # Full-only: keep inherited AGENT_TASK_TIMEOUT untouched on legacy tracks.
@@ -93,6 +95,7 @@ full_command() {
       [ -z "$TAUBENCH_USER_PROVIDER" ] || FULL_CMD+=("TAUBENCH_USER_PROVIDER=$TAUBENCH_USER_PROVIDER")
       [ -z "$TAUBENCH_USER_QUANTIZATIONS" ] || FULL_CMD+=("TAUBENCH_USER_QUANTIZATIONS=$TAUBENCH_USER_QUANTIZATIONS")
       [ -z "$TAUBENCH_USER_REASONING_EFFORT" ] || FULL_CMD+=("TAUBENCH_USER_REASONING_EFFORT=$TAUBENCH_USER_REASONING_EFFORT")
+      [ -z "${TAUBENCH_USER_TEMPERATURE_MODE:-}" ] || FULL_CMD+=("TAUBENCH_USER_TEMPERATURE_MODE=$TAUBENCH_USER_TEMPERATURE_MODE")
       FULL_CMD+=(bash vsm/taubench/run_taubench.sh "$MODEL" "$BASE_URL_CHAT") ;;
     multimodal)
       FULL_CMD=(env "KRETA_WORKERS=$FULL_KRETA_WORKERS")
@@ -116,6 +119,7 @@ full_command() {
     functionchat_judge|koffvqa_judge)
       [ -z "$JUDGE_PROVIDER" ] || FULL_CMD+=(--judge-provider "$JUDGE_PROVIDER")
       [ -z "$JUDGE_REASONING_EFFORT" ] || FULL_CMD+=(--judge-reasoning-effort "$JUDGE_REASONING_EFFORT")
+      [ -z "${JUDGE_TEMPERATURE_MODE:-}" ] || FULL_CMD+=(--judge-temperature-mode "$JUDGE_TEMPERATURE_MODE")
       [ -z "$JUDGE_MAX_TOKENS" ] || FULL_CMD+=(--judge-max-tokens "$JUDGE_MAX_TOKENS") ;;
   esac
 }
@@ -196,7 +200,7 @@ full_invoke() (
   local stage=$1
   unset AGENT_REQUEST_TIMEOUT AGENT_TASK_TIMEOUT NUM_CONCURRENT TAUBENCH_MODE TAUBENCH_TRIALS
   unset TAUBENCH_MAX_CONCURRENCY KRETA_WORKERS KRETA_RESUME
-  unset TAUBENCH_USER_PROVIDER TAUBENCH_USER_REASONING_EFFORT TAUBENCH_USER_QUANTIZATIONS
+  unset TAUBENCH_USER_PROVIDER TAUBENCH_USER_REASONING_EFFORT TAUBENCH_USER_QUANTIZATIONS TAUBENCH_USER_TEMPERATURE_MODE
   case "$stage" in
     *_judge|derive) PYTHONPATH="$BASE${PYTHONPATH:+:$PYTHONPATH}" EVAL_TIMESTAMP="$TS" "${FULL_CMD[@]}" ;;
     *) EVAL_TIMESTAMP="$TS" "${FULL_CMD[@]}" ;;

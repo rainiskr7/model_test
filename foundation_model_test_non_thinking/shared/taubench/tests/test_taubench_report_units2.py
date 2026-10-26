@@ -35,7 +35,8 @@ def test_render_cohorts_empty():
 
 
 @pytest.mark.parametrize("quantizations", [None, "", "bf16,fp8", "fp8,bf16"])
-def test_render_cohorts_single(quantizations):
+@pytest.mark.parametrize("temperature_mode", [None, "", "omit"])
+def test_render_cohorts_single(quantizations, temperature_mode):
     actual = subject._render_comparison_cohorts([{'model': 'm', 'split': {'domain': 'retail', 'name': 'test'}, 'harness_integrity': {'mode': 'solo'}}])
     assert actual == ['## 비교 코호트',
      '',
@@ -49,14 +50,15 @@ def test_render_cohorts_single(quantizations):
      '|---|---|---:|---|',
      '| m | retail/test | - | — |',
      '']
-    for provider, effort in (("deepinfra/bf16", "medium"), ("deepinfra/bf16", None), (None, "low")):
+    for provider, effort in (("deepinfra/bf16", "medium"), ("deepinfra/bf16", None), (None, "low"), (None, "none")):
         rendered = subject._render_comparison_cohorts([{
             'model': 'm', 'split': {'domain': 'retail', 'name': 'test'},
-            'harness_integrity': {'mode': 'standard', 'user_provider': provider, 'user_reasoning_effort': effort, 'user_quantizations': quantizations}}])
+            'harness_integrity': {'mode': 'standard', 'user_provider': provider, 'user_reasoning_effort': effort, 'user_quantizations': quantizations, 'user_temperature_mode': temperature_mode}}])
         header = next(line for line in rendered if line.startswith('사용자 시뮬레이터:'))
         assert (' · provider ' in header) is bool(provider)
         assert (' · effort ' in header) is bool(effort)
         assert (' · quant ' in header) is bool(quantizations)
+        assert (' · temperature `omit`' in header) is bool(temperature_mode)
         if quantizations:
             assert f' · quant `{quantizations}`' in header
         if provider:

@@ -73,6 +73,16 @@ def test_split_summary_preserves_existing_telecom_label(domain):
 
 @pytest.mark.parametrize("external,options,rejected,anchor", [
     (False, [], False, False),
+    (True, ["--user-temperature-mode", ""], False, False),
+    *[(True, ["--user-temperature-mode", mode, "--user-reasoning-effort", "none", *profile], False, True)
+      for mode in ("", "omit") for profile in ([], ["--user-provider", "deepinfra/bf16"], ["--user-quantizations", "bf16"])],
+    (True, ["--user-temperature-mode", "omit"], False, True),
+    *[(True, ["--user-temperature-mode", value], True, False) for value in ("0.5", "OMIT", "default")],
+    (True, ["--user-reasoning-effort", "xhigh"], True, False),
+    (False, ["--user-temperature-mode", "omit"], True, False),
+    (True, ["--mode", "solo", "--user-temperature-mode", "omit"], True, False),
+    (True, ["--user-model", "anthropic/user", "--user-temperature-mode", "omit"], True, False),
+    (True, ["--user-base-url", "http://unused/v1", "--user-temperature-mode", "omit"], True, False),
     (True, [], False, False),
     (True, ["--user-provider", "", "--user-reasoning-effort", ""], False, False),
     (True, ["--user-provider", "deepinfra/bf16"], False, False),
@@ -140,6 +150,8 @@ def test_prepare_llm_args_keeps_user_protocol_independent(monkeypatch, external,
     expected = ({"timeout": 120.0, "num_retries": 0, "max_tokens": 16384, "temperature": 0.0}
                 if external else {"api_base": "http://unused/v1", "timeout": 120.0,
                                   "num_retries": 0, "max_tokens": 16384})
+    if args.user_temperature_mode == "omit":
+        expected.pop("temperature")
     extra = {}
     if args.user_provider:
         extra["provider"] = {"order": ["deepinfra/bf16"], "allow_fallbacks": False, "require_parameters": True}
@@ -165,12 +177,16 @@ def test_prepare_llm_args_keeps_user_protocol_independent(monkeypatch, external,
         else:
             monkeypatch.delenv("OPENROUTER_API_BASE", raising=False)
         integrity = runner._build_manifest(args, {}, "http://unused/v1", user, [], removed)["harness_integrity"]
-        for key in ("user_provider", "user_reasoning_effort", "user_quantizations"):
+        for key in ("user_provider", "user_reasoning_effort", "user_quantizations", "user_temperature_mode"):
             if getattr(args, key):
                 assert integrity[key] == getattr(args, key)
             else:
                 assert key not in integrity
-        if extra:
+        assert integrity["user_temperature"] == user.get("temperature")
+        if args.user_temperature_mode:
+            assert integrity["user_removed_sampling_params"] == []
+            assert integrity["user_sampling_controls_removed"] is False
+        if extra or args.user_temperature_mode:
             assert integrity["user_openrouter_api_base_set"] is base_set
         else:
             assert "user_openrouter_api_base_set" not in integrity
@@ -187,11 +203,12 @@ def test_prepare_llm_args_keeps_user_protocol_independent(monkeypatch, external,
              "EVAL_TIMESTAMP": "fixture", "TAUBENCH_MODE": "standard", "TAUBENCH_USER_MODEL": args.user_model,
              "TAUBENCH_USER_PROVIDER": args.user_provider or "",
              "TAUBENCH_USER_QUANTIZATIONS": args.user_quantizations or "",
-             "TAUBENCH_USER_REASONING_EFFORT": args.user_reasoning_effort or ""},
+             "TAUBENCH_USER_REASONING_EFFORT": args.user_reasoning_effort or "",
+             "TAUBENCH_USER_TEMPERATURE_MODE": args.user_temperature_mode},
         capture_output=True, text=True, check=True)
     forwarded = wrapper.stdout.splitlines()
     for option, value in (("--user-provider", args.user_provider), ("--user-reasoning-effort", args.user_reasoning_effort),
-                          ("--user-quantizations", args.user_quantizations)):
+                          ("--user-quantizations", args.user_quantizations), ("--user-temperature-mode", args.user_temperature_mode)):
         if value:
             assert forwarded[forwarded.index(option) + 1] == value
         else:
@@ -220,7 +237,8 @@ with patch("socket.socket.connect", side_effect=AssertionError("network forbidde
             cwd=tmp_path, capture_output=True, text=True, timeout=30)
         assert transformed.returncode == 0, transformed.stderr
         body = json.loads(transformed.stdout)
-        assert body["provider"] == extra["provider"]
+        assert body.get("provider") == extra.get("provider")
+        assert ("temperature" not in body) is bool(args.user_temperature_mode)
         assert body.get("reasoning") == extra.get("reasoning")
         assert "extra_body" not in body
 

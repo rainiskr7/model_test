@@ -43,8 +43,9 @@ def test_missing_conf_and_unknown_track(lane):
     assert unknown.returncode == 2 and 'unknown TRACK: unknown' in unknown.stderr
 
 
+@pytest.mark.parametrize('temperature_mode', ['', 'omit'])
 @pytest.mark.parametrize('track', ['kmmlu', 'taubench_std4', 'full'])
-def test_selected_track_requires_its_session(lane, track):
+def test_selected_track_requires_its_session(lane, track, temperature_mode):
     conf = lane.base / 'orchestration/models/sample.conf'
     conf.write_text(conf.read_text().replace('SESSION_KMMLU=sample\n', ''))
     result = run(lane, ['sample'], track)
@@ -60,23 +61,28 @@ def test_selected_track_requires_its_session(lane, track):
     assert set(shell_tokens) == USER_QUANTIZATIONS
     for provider, effort, quantizations in (
         ('', '', ''), ('deepinfra/bf16', 'medium', ''), ('deepinfra/bf16', '', ''), ('', 'low', ''), ('', 'high', ''),
-        ('', 'low', 'bf16,fp8'), ('deepinfra/bf16', 'medium', 'fp8,bf16'),
+        ('', 'none', ''), ('', 'low', 'bf16,fp8'), ('deepinfra/bf16', 'medium', 'fp8,bf16'),
         *[('', '', token) for token in shell_tokens],
     ):
         conf.write_text(original + prefix + 'TAUBENCH_USER_PROVIDER=' + provider + '\n' +
                         prefix + 'TAUBENCH_USER_REASONING_EFFORT=' + effort + '\n' +
-                        prefix + 'TAUBENCH_USER_QUANTIZATIONS=' + quantizations + '\n')
+                        prefix + 'TAUBENCH_USER_QUANTIZATIONS=' + quantizations + '\n' +
+                        prefix + 'TAUBENCH_USER_TEMPERATURE_MODE=' + temperature_mode + '\n')
         result = run(lane, ['sample'], track)
         assert result.returncode == 0, result.stderr
         commands = [line for line in result.stdout.splitlines() if line.startswith('COMMAND=')]
         standard = next(line for line in commands if 'TAUBENCH_MODE=standard' in line)
         for key, value in (('TAUBENCH_USER_PROVIDER', provider), ('TAUBENCH_USER_REASONING_EFFORT', effort),
-                           ('TAUBENCH_USER_QUANTIZATIONS', quantizations)):
+                           ('TAUBENCH_USER_QUANTIZATIONS', quantizations), ('TAUBENCH_USER_TEMPERATURE_MODE', temperature_mode)):
             assert (key + '=' in standard) is bool(value)
             if value:
                 assert key + '=' + value + ' bash ' in standard or key + '=' + value + ' TAUBENCH_' in standard
             assert all(key + '=' not in line for line in commands if line != standard)
     for settings, base_url in (
+        *[('TAUBENCH_USER_TEMPERATURE_MODE=' + value + '\n', '') for value in ('0.5', 'OMIT', 'default')],
+        ('TAUBENCH_USER_REASONING_EFFORT=xhigh\n', ''),
+        ('TAUBENCH_USER_MODEL=local\nTAUBENCH_USER_TEMPERATURE_MODE=omit\n', ''),
+        ('TAUBENCH_USER_TEMPERATURE_MODE=omit\n', 'http://unused/v1'),
         ('TAUBENCH_USER_PROVIDER=Bad/provider\n', ''),
         ('TAUBENCH_USER_PROVIDER=two words\n', ''),
         ('TAUBENCH_USER_PROVIDER=/provider\n', ''),

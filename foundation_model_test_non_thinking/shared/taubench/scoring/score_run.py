@@ -193,7 +193,9 @@ def _validate_user_protocol(
         reasoning = extra.get("reasoning")
         effort = reasoning.get("effort") if isinstance(reasoning, dict) else None
         observed["user_reasoning_effort"] = effort if isinstance(effort, str) else "invalid:reasoning_effort"
-    if "user_provider" in observed or "user_reasoning_effort" in observed or "user_quantizations" in observed:
+    if integrity.get("user_temperature_mode"):
+        observed["user_temperature_mode"] = "omit" if "temperature" not in user_args else "invalid:temperature_present"
+    if "user_provider" in observed or "user_reasoning_effort" in observed or "user_quantizations" in observed or "user_temperature_mode" in observed:
         observed["source"] = "tau2 results.info.user_info.llm_args (configuration, not wire evidence)"
     declared_timeout = integrity.get("user_request_timeout")
     declared_max_tokens = integrity.get("user_max_tokens")
@@ -223,7 +225,7 @@ def _validate_user_protocol(
         if declared is not None:
             expected[key] = declared
             actual[key] = observed[key]
-    for key in ("user_provider", "user_reasoning_effort", "user_quantizations"):
+    for key in ("user_provider", "user_reasoning_effort", "user_quantizations", "user_temperature_mode"):
         if integrity.get(key):
             expected[key] = integrity[key]
             actual[key] = observed[key]

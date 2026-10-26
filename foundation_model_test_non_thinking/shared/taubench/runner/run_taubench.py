@@ -363,7 +363,8 @@ def parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
     parser.add_argument("--user-model", default=None)
     parser.add_argument("--user-provider", default=None)
     parser.add_argument("--user-quantizations", default=None)
-    parser.add_argument("--user-reasoning-effort", choices=("", "low", "medium", "high"), default=None)
+    parser.add_argument("--user-reasoning-effort", choices=("", "none", "low", "medium", "high"), default=None)
+    parser.add_argument("--user-temperature-mode", choices=("", "omit"), default="")
     # 사용자 시뮬레이터를 에이전트와 **다른 엔드포인트**로 보낼 때 쓴다.
     # 상류 기본값이 외부 모델(gpt-4.1)이므로 이게 정상 형태다. 생략하면 에이전트와
     # 같은 엔드포인트를 쓴다(로컬 제3 모델을 사용자로 세우는 경우).
@@ -404,7 +405,7 @@ def parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
 
 
 def _validate_args(args: argparse.Namespace) -> None:
-    if args.user_provider or args.user_reasoning_effort or args.user_quantizations:
+    if args.user_provider or args.user_reasoning_effort or args.user_quantizations or args.user_temperature_mode:
         error = None
         if args.mode != "standard":
             error = "사용자 시뮬레이터 옵션은 standard 전용입니다"
@@ -412,8 +413,10 @@ def _validate_args(args: argparse.Namespace) -> None:
             error = "사용자 provider/effort/quantizations는 openrouter/ 모델 전용이며 --user-base-url과 함께 쓸 수 없습니다"
         elif args.user_provider and not re.fullmatch(r"[a-z0-9][a-z0-9/_.-]*", args.user_provider):
             error = "user provider must match [a-z0-9][a-z0-9/_.-]*"
-        elif args.user_reasoning_effort not in (None, "low", "medium", "high"):
-            error = "user reasoning effort must be empty, low, medium or high"
+        elif args.user_reasoning_effort not in (None, "none", "low", "medium", "high"):
+            error = "user reasoning effort must be empty, none, low, medium or high"
+        elif args.user_temperature_mode not in ("", "omit"):
+            error = "user temperature mode must be empty or omit"
         elif args.user_quantizations:
             tokens = args.user_quantizations.split(",")
             if not re.fullmatch(r"[a-z0-9]+(,[a-z0-9]+)*", args.user_quantizations) or any(
@@ -516,7 +519,7 @@ def _prepare_llm_args(
     user_llm_args = build_litellm_args(
         api_base, args.user_request_timeout, args.user_max_tokens
     )
-    if args.mode == "standard":
+    if args.mode == "standard" and args.user_temperature_mode != "omit":
         # 상류는 사용자 시뮬레이터에 temperature=0 을 명시한다
         # (config.py DEFAULT_LLM_ARGS_USER). 우리는 --user-llm-args 를 통째로
         # 넘기므로 여기서 넣지 않으면 상류 기본값까지 덮여, 사용자가 서버
@@ -639,6 +642,7 @@ def _build_manifest(
             "user_temperature": (
                 None if args.mode == "solo" else user_llm_args.get("temperature")
             ),
+            **({"user_temperature_mode": "omit"} if args.user_temperature_mode == "omit" else {}),
             "user_api_base": (
                 None if args.mode == "solo" else user_llm_args.get("api_base")
             ),
@@ -647,7 +651,7 @@ def _build_manifest(
             **({"user_reasoning_effort": args.user_reasoning_effort}
                if args.user_reasoning_effort else {}),
             **({"user_openrouter_api_base_set": bool(os.environ.get("OPENROUTER_API_BASE"))}
-               if args.user_provider or args.user_reasoning_effort or args.user_quantizations else {}),
+               if args.user_provider or args.user_reasoning_effort or args.user_quantizations or args.user_temperature_mode else {}),
             "provider": "litellm_openai_compatible",
             "model_requested": args.model,
             "model_sent_to_litellm": litellm_model_name(args.model),

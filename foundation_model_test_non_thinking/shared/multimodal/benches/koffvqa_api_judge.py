@@ -77,7 +77,7 @@ JUDGE_PROMPT = """아래는 한국어 시각 질의응답에 대한 객관적 �
 
 def judge_one(client, judge_model: str, question: str, response: str, criteria,
               seed: Optional[int] = None, max_tokens: int = 1024,
-              identity: Optional["ServedIdentity"] = None, *, provider=None, reasoning_effort=None) -> tuple:
+              identity: Optional["ServedIdentity"] = None, *, provider=None, reasoning_effort=None, temperature_mode="") -> tuple:
     crit_str = criteria if isinstance(criteria, str) else json.dumps(criteria, ensure_ascii=False, indent=2)
     prompt = JUDGE_PROMPT.format(question=question, criteria=crit_str, response=response)
     kwargs = {
@@ -86,6 +86,8 @@ def judge_one(client, judge_model: str, question: str, response: str, criteria,
         "temperature": 0.0,
         "max_tokens": max_tokens,
     }
+    if temperature_mode == "omit":
+        kwargs.pop("temperature")
     if seed is not None:
         kwargs["seed"] = seed
     extra_body = {}
@@ -169,7 +171,8 @@ def _parse_args():
     ap.add_argument("--target-model", required=True, help="평가 대상 모델명 (결과 폴더 명명용)")
     ap.add_argument("--judge-model", required=True, help="judge 로 사용할 OpenAI-compat 모델명")
     ap.add_argument("--judge-provider", default=None)
-    ap.add_argument("--judge-reasoning-effort", choices=("", "low", "medium", "high"), default=None)
+    ap.add_argument("--judge-reasoning-effort", choices=("", "none", "low", "medium", "high"), default=None)
+    ap.add_argument("--judge-temperature-mode", choices=("", "omit"), default="")
     ap.add_argument("--judge-base-url", required=True, help="judge API base_url")
     ap.add_argument("--judge-api-key", default=None, help="judge API key (환경변수 옵션보다 우선)")
     ap.add_argument("--judge-api-key-env", default=None,
@@ -192,6 +195,7 @@ def _parse_args():
         ap.error("--judge-max-tokens must be a positive integer")
     args.judge_provider = getattr(args, "judge_provider", None) or None
     args.judge_reasoning_effort = getattr(args, "judge_reasoning_effort", None) or None
+    args.judge_temperature_mode = getattr(args, "judge_temperature_mode", "")
     return args
 
 
@@ -259,6 +263,7 @@ def _judge_rows(args, df, q_col, crit_col, resp_col, client):
             client, args.judge_model, q, resp, crit,
             seed=args.seed, max_tokens=args.judge_max_tokens, identity=identity,
             provider=args.judge_provider, reasoning_effort=args.judge_reasoning_effort,
+            temperature_mode=args.judge_temperature_mode,
         )
         if score is not None:
             scores.append(score)
@@ -292,7 +297,8 @@ def _build_summary(args, results, scores, identity, build_run_config):
             "reasoning_effort": args.judge_reasoning_effort,
             "max_tokens_requested": args.judge_max_tokens_requested,
             "max_tokens_effective": args.judge_max_tokens,
-            "temperature": 0.0,
+            "temperature": None if args.judge_temperature_mode == "omit" else 0.0,
+            **({"temperature_mode": "omit"} if args.judge_temperature_mode == "omit" else {}),
             "seed": args.seed,
         },
         "judge_prompt_version": JUDGE_PROMPT_VERSION,
@@ -310,7 +316,7 @@ def _build_summary(args, results, scores, identity, build_run_config):
             benchmark="KOFFVQA-API-judge",
             model=args.target_model,
             base_url=args.judge_base_url,
-            temperature=0.0,
+            temperature=None if args.judge_temperature_mode == "omit" else 0.0,
             seed=args.seed,
             max_tokens=args.judge_max_tokens,
             judge_model=args.judge_model,
@@ -324,7 +330,11 @@ def _build_summary(args, results, scores, identity, build_run_config):
     }
     # The external judge does not apply the target model's SERVING_* constraints.
     config = summary["run_config"]
-    decoding = {"temperature": 0.0, "max_tokens": args.judge_max_tokens, "seed": args.seed}
+    decoding = {"temperature": None if args.judge_temperature_mode == "omit" else 0.0,
+                "max_tokens": args.judge_max_tokens, "seed": args.seed}
+    if args.judge_temperature_mode == "omit":
+        decoding["temperature_mode"] = "omit"
+        config["decoding_requested"] = dict(decoding)
     if "decoding" in config and config["decoding"] != decoding:
         config["decoding"] = decoding
     if "serving_constraints" in config:
@@ -366,6 +376,7 @@ def main():
             if "judge_request" in stored:
                 old = (request["model"], request["provider"] or None, request["reasoning_effort"] or None,
                        request["max_tokens_effective"], request["temperature"], request["seed"])
+                mode = request.get("temperature_mode")
             else:
                 config = stored.get("run_config") if summary_path.exists() else stored
                 if config is None and config_path.exists():
@@ -373,8 +384,13 @@ def main():
                 decoding = config["decoding"]
                 model = stored.get("judge_model") or (config.get("judge") or {}).get("model")
                 old = (model, None, None, decoding["max_tokens"], decoding["temperature"], decoding["seed"])
+                mode = decoding.get("temperature_mode")
             current = (args.judge_model, args.judge_provider, args.judge_reasoning_effort,
-                       args.judge_max_tokens, 0.0, args.seed)
+                       args.judge_max_tokens, None if args.judge_temperature_mode == "omit" else 0.0, args.seed)
+            if mode:
+                old += (mode,)
+            if args.judge_temperature_mode == "omit":
+                current += ("omit",)
             if old != current:
                 print("[koffvqa_judge] 판정기 프로파일 불일치 — 재판정 저장 위치를 나눠라", file=sys.stderr)
                 return 2

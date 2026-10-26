@@ -16,6 +16,9 @@ def _add_decoding(config: Mapping[str, Any], recorded: dict[str, Any], unknown: 
         value = decoding.get(key)
         if key in removed:
             recorded[f"{key}_removed"] = True
+        elif key == "temperature" and key in decoding and value is None and decoding.get("temperature_mode") == "omit":
+            recorded[key] = None
+            recorded["temperature_mode"] = "omit"
         elif value is None:
             unknown.append(key)
         else:
@@ -108,7 +111,7 @@ def _judge_protocol(summary: Mapping[str, Any], config: Mapping[str, Any], recor
         if summary.get(key):
             recorded[key] = summary[key]
     request = summary.get("judge_request") or {}
-    for key in ("provider", "reasoning_effort"):
+    for key in ("provider", "reasoning_effort", "temperature_mode"):
         if request.get(key):
             recorded["judge_" + key] = request[key]
     # The legacy default stays in decoding.max_tokens; do not fork its cohort.

@@ -106,6 +106,11 @@ elif [ "${API_JUDGE:-0}" = "1" ]; then
   fi
   echo "[koffvqa] === API judge ($JUDGE_MODEL @ $JUDGE_BASE_URL) ==="
   cd "$SCRIPT_DIR/benches"
+  JUDGE_PROFILE_ARGS=()
+  [ -z "${JUDGE_PROVIDER:-}" ] || JUDGE_PROFILE_ARGS+=(--judge-provider "$JUDGE_PROVIDER")
+  [ -z "${JUDGE_REASONING_EFFORT:-}" ] || JUDGE_PROFILE_ARGS+=(--judge-reasoning-effort "$JUDGE_REASONING_EFFORT")
+  [ -z "${JUDGE_MAX_TOKENS:-}" ] || JUDGE_PROFILE_ARGS+=(--judge-max-tokens "$JUDGE_MAX_TOKENS")
+  [ -z "${JUDGE_TEMPERATURE_MODE:-}" ] || JUDGE_PROFILE_ARGS+=(--judge-temperature-mode "$JUDGE_TEMPERATURE_MODE")
   JUDGE_KEY_ARG=""
   if [ -n "$JUDGE_API_KEY" ]; then JUDGE_KEY_ARG="--judge-api-key-env JUDGE_API_KEY"; fi
   PYTHONPATH="$CODE_ROOT${PYTHONPATH:+:$PYTHONPATH}" "$PY" -m shared.multimodal.benches.koffvqa_api_judge \
@@ -113,7 +118,7 @@ elif [ "${API_JUDGE:-0}" = "1" ]; then
     --target-model "$MODEL" \
     --judge-model "$JUDGE_MODEL" \
     --judge-base-url "$JUDGE_BASE_URL" \
-    $JUDGE_KEY_ARG || {
+    "${JUDGE_PROFILE_ARGS[@]}" $JUDGE_KEY_ARG || {
     echo "[koffvqa] ERROR: API judge 실패"
     exit 1
   }

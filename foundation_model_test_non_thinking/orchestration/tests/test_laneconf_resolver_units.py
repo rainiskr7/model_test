@@ -38,6 +38,16 @@ def test_defaults_empty_values_and_internal_destinations():
         assert [full[key] for key in ('JUDGE_MODEL', 'JUDGE_PROVIDER', 'JUDGE_REASONING_EFFORT', 'JUDGE_MAX_TOKENS')] == [
             'alias', 'deepinfra/bf16', 'medium', '2000']
         assert resolve(entries, 'kmmlu', TRACKS)['JUDGE_MODEL'] == 'common'
+    for prefix in ("FULL_", "TAUBENCH_STD4_"):
+        track = "full" if prefix == "FULL_" else "taubench_std4"
+        for key in ("JUDGE_TEMPERATURE_MODE", "TAUBENCH_USER_TEMPERATURE_MODE"):
+            assert defaults[key] == ""
+            for value in ("", "omit"):
+                common, scoped = key + "=omit\n", prefix + key + "=" + value + "\n"
+                for first in (False, True):
+                    entries = parse(SAMPLE + (scoped + common if first else common + scoped))
+                    assert resolve(entries, track, TRACKS, require_session=False)[key] == value
+                    assert resolve(entries, "kmmlu", TRACKS)[key] == "omit"
     user_keys = ('TAUBENCH_USER_PROVIDER', 'TAUBENCH_USER_REASONING_EFFORT', 'TAUBENCH_USER_QUANTIZATIONS')
     assert [defaults[key] for key in user_keys] == ['', '', '']
     for track in ('full', 'taubench_std4'):

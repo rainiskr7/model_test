@@ -121,7 +121,7 @@ def rubric_digest(rubrics: Dict[str, str]) -> Dict[str, str]:
 
 def call_judge(
     prompt: str, model: str, api_key: str, timeout: float, retries: int,
-    *, identity: ServedIdentity, provider=None, reasoning_effort=None, max_tokens=None,
+    *, identity: ServedIdentity, provider=None, reasoning_effort=None, max_tokens=None, temperature_mode="",
 ) -> Dict[str, Any]:
     """구조화 출력으로 판정을 받는다. 실패는 fail 이 아니라 오류로 돌려준다."""
     body = {
@@ -131,6 +131,8 @@ def call_judge(
             "messages": [{"role": "user", "content": prompt}],
             "response_format": {"type": "json_schema", "json_schema": VERDICT_SCHEMA},
         }
+    if temperature_mode == "omit":
+        body.pop("temperature")
     if provider:
         body["provider"] = {"order": [provider], "allow_fallbacks": False, "require_parameters": True}
     if reasoning_effort:
@@ -241,6 +243,7 @@ def _parse_args(argv):
     parser.add_argument("--per-type", type=int, default=15)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--repeats", type=int, default=3, help="같은 판정기 반복 횟수")
+    # Standalone pilot CLI keeps its legacy profile; new judge options belong to run_judge.
     parser.add_argument("--models", default="openai/gpt-4.1-mini,openai/gpt-4.1")
     parser.add_argument("--api-key-env", default="TAUBENCH_USER_API_KEY")
     parser.add_argument("--timeout", type=float, default=120.0)

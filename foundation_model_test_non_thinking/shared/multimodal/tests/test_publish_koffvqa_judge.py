@@ -72,3 +72,29 @@ def test_prediction_sha_binds_artifact_but_does_not_split_judge_cohort(monkeypat
     assert first["protocol"]["recorded"]["prediction_sha256"] != second["protocol"]["recorded"]["prediction_sha256"]
     assert first["protocol"]["recorded"]["dataset_item_digest"] == second["protocol"]["recorded"]["dataset_item_digest"]
     assert first["protocol"]["fingerprint"] == second["protocol"]["fingerprint"]
+    # Explicit omission is known protocol, unlike a legacy unknown temperature.
+    source = tmp_path / "results/model-b/session/vision/multimodal/koffvqa_api_judge"
+    saved = json.loads((source / "summary.json").read_text())
+    saved["run_config"]["decoding"]["temperature"] = None
+    (source / "summary.json").write_text(json.dumps(saved))
+    unknown = adapt_koffvqa_judge(source)
+    assert "temperature" in unknown["protocol"]["unknown"]
+    saved["judge_request"] = {"temperature": None, "temperature_mode": "omit", "reasoning_effort": "none"}
+    saved["run_config"]["decoding"]["temperature_mode"] = "omit"
+    (source / "summary.json").write_text(json.dumps(saved))
+    omitted = adapt_koffvqa_judge(source)
+    assert "temperature" not in omitted["protocol"]["unknown"]
+    assert omitted["protocol"]["recorded"]["temperature"] is None
+    assert omitted["protocol"]["recorded"]["judge_temperature_mode"] == "omit"
+    assert omitted["protocol"]["recorded"]["judge_reasoning_effort"] == "none"
+    assert len({row["protocol"]["fingerprint"] for row in (first, unknown, omitted)}) == 3
+    # Rejudge remains a distinct diagnostic variant with the prediction SHA in its identity.
+    import shutil
+    dest = tmp_path / "results/model-b/rejudge/vision/multimodal/koffvqa_api_judge"
+    shutil.copytree(source, dest)
+    saved["predfile"] = str(source.parent / "koffvqa/model-b_gen.xlsx")
+    (dest / "summary.json").write_text(json.dumps(saved))
+    rejudged = adapt_koffvqa_judge(dest)
+    assert rejudged["variant"] == "api_judge_rejudge"
+    assert rejudged["protocol"]["recorded"]["rejudged_prediction_sha256"] == saved["prediction_sha256"]
+    assert rejudged["protocol"]["fingerprint"] != omitted["protocol"]["fingerprint"]

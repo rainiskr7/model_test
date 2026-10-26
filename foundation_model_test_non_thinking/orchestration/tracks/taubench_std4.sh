@@ -1,13 +1,14 @@
 # Sourced by run_lane.sh; definitions only, using the common lane context.
 # Inputs (phases: README.md): SESSION TAUBENCH_USER_MODEL TAUBENCH_TRIALS
-# TAUBENCH_USER_PROVIDER TAUBENCH_USER_QUANTIZATIONS TAUBENCH_USER_REASONING_EFFORT TAUBENCH_USER_BASE_URL
+# TAUBENCH_USER_PROVIDER TAUBENCH_USER_QUANTIZATIONS TAUBENCH_USER_REASONING_EFFORT TAUBENCH_USER_TEMPERATURE_MODE TAUBENCH_USER_BASE_URL
 # AGENT_REQUEST_TIMEOUT TAUBENCH_MAX_CONCURRENCY MODEL BASE_URL_CHAT LABEL HOST
 # BASE END_LABEL; functions: read_key log bad.
 track_export() { export TAUBENCH_MAX_CONCURRENCY; }
 track_secrets() { export TAUBENCH_USER_API_KEY="$(read_key TAUBENCH_USER_API_KEY)"; }
 
 track_validate() {
-  case "$TAUBENCH_USER_REASONING_EFFORT" in ''|low|medium|high) ;; *) bad 'TAUBENCH_USER_REASONING_EFFORT must be empty, low, medium or high' ;; esac
+  case "$TAUBENCH_USER_REASONING_EFFORT" in ''|none|low|medium|high) ;; *) bad 'TAUBENCH_USER_REASONING_EFFORT must be empty, none, low, medium or high' ;; esac
+  case "${TAUBENCH_USER_TEMPERATURE_MODE:-}" in ''|omit) ;; *) bad 'TAUBENCH_USER_TEMPERATURE_MODE must be empty or omit' ;; esac
   if [ -n "$TAUBENCH_USER_PROVIDER" ]; then
     [[ "$TAUBENCH_USER_PROVIDER" =~ ^[a-z0-9][a-z0-9/_.-]*$ ]] || bad 'TAUBENCH_USER_PROVIDER must match [a-z0-9][a-z0-9/_.-]*'
   fi
@@ -22,7 +23,7 @@ track_validate() {
       quant_seen+="$quantization,"
     done
   fi
-  if [ -n "$TAUBENCH_USER_PROVIDER$TAUBENCH_USER_REASONING_EFFORT$TAUBENCH_USER_QUANTIZATIONS" ]; then
+  if [ -n "$TAUBENCH_USER_PROVIDER$TAUBENCH_USER_REASONING_EFFORT$TAUBENCH_USER_QUANTIZATIONS${TAUBENCH_USER_TEMPERATURE_MODE:-}" ]; then
     [[ "$TAUBENCH_USER_MODEL" == openrouter/* ]] && [ -z "${TAUBENCH_USER_BASE_URL:-}" ] || bad 'user provider/effort/quantizations requires openrouter/ model without TAUBENCH_USER_BASE_URL'
   fi
 }
@@ -33,6 +34,7 @@ track_dry_run() {
   [ -z "$TAUBENCH_USER_PROVIDER" ] || printf ' TAUBENCH_USER_PROVIDER=%s' "$TAUBENCH_USER_PROVIDER"
   [ -z "$TAUBENCH_USER_QUANTIZATIONS" ] || printf ' TAUBENCH_USER_QUANTIZATIONS=%s' "$TAUBENCH_USER_QUANTIZATIONS"
   [ -z "$TAUBENCH_USER_REASONING_EFFORT" ] || printf ' TAUBENCH_USER_REASONING_EFFORT=%s' "$TAUBENCH_USER_REASONING_EFFORT"
+  [ -z "${TAUBENCH_USER_TEMPERATURE_MODE:-}" ] || printf ' TAUBENCH_USER_TEMPERATURE_MODE=%s' "$TAUBENCH_USER_TEMPERATURE_MODE"
   printf ' bash vsm/taubench/run_taubench.sh %s %s\n' "$MODEL" "$BASE_URL_CHAT"
 }
 
@@ -41,6 +43,7 @@ track_run() {
   [ -z "$TAUBENCH_USER_PROVIDER" ] || user_env+=("TAUBENCH_USER_PROVIDER=$TAUBENCH_USER_PROVIDER")
   [ -z "$TAUBENCH_USER_QUANTIZATIONS" ] || user_env+=("TAUBENCH_USER_QUANTIZATIONS=$TAUBENCH_USER_QUANTIZATIONS")
   [ -z "$TAUBENCH_USER_REASONING_EFFORT" ] || user_env+=("TAUBENCH_USER_REASONING_EFFORT=$TAUBENCH_USER_REASONING_EFFORT")
+  [ -z "${TAUBENCH_USER_TEMPERATURE_MODE:-}" ] || user_env+=("TAUBENCH_USER_TEMPERATURE_MODE=$TAUBENCH_USER_TEMPERATURE_MODE")
   TS=$SESSION
   log "=== $LABEL 시작 MODEL=$MODEL host=$HOST session=$TS ==="
   mkdir -p "$BASE/logs/$TS"

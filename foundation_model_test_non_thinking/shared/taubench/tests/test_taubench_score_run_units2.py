@@ -6,7 +6,7 @@ import shared.taubench.scoring.score_run as subject
 
 
 @pytest.mark.parametrize("case", [
-    "valid", "provider_only", "effort_only", "provider", "effort", "extra_missing", "extra_null",
+    "omit", "omit_zero", "omit_null", "none", "provider_only", "valid", "effort_only", "provider", "effort", "extra_missing", "extra_null",
     "extra_string", "extra_list", "provider_missing", "provider_null", "provider_string", "provider_list",
     "order_missing", "order_empty", "order_two", "order_string", "order_nonstring", "order_null",
     "fallbacks_missing", "fallbacks_true", "fallbacks_zero", "require_missing", "require_false", "require_one",
@@ -35,6 +35,8 @@ def test_observed_protocol_mismatch(case, tmp_path):
     }
     extra = {"provider": {"order": ["deepinfra/bf16"], "allow_fallbacks": False, "require_parameters": True},
              "reasoning": {"effort": "medium"}}
+    if case == "none":
+        integrity["user_reasoning_effort"] = extra["reasoning"]["effort"] = "none"
     if case in ("provider_only", "effort_only"):
         key, field = ("user_reasoning_effort", "reasoning") if case == "provider_only" else ("user_provider", "provider")
         del integrity[key], extra[field]
@@ -96,6 +98,12 @@ def test_observed_protocol_mismatch(case, tmp_path):
         if case == "undeclared_empty_provider":
             extra["provider"] = {}
     user_args = {"timeout": 120.0, "max_tokens": 16384, "temperature": 0.0}
+    if case.startswith("omit"):
+        integrity.update(user_temperature=None, user_temperature_mode="omit")
+        if case == "omit":
+            user_args.pop("temperature")
+        elif case == "omit_null":
+            user_args["temperature"] = None
     if case != "extra_missing":
         user_args["extra_body"] = {"extra_null": None, "extra_string": "bad", "extra_list": []}.get(case, extra)
     raw = {"info": {
@@ -112,7 +120,7 @@ def test_observed_protocol_mismatch(case, tmp_path):
     upstream = tmp_path / "upstream/telecom"
     upstream.mkdir(parents=True)
     (upstream / "results.json").write_text(json.dumps(raw))
-    valid = case in ("valid", "provider_only", "effort_only", "quant_only", "quant_combined",
+    valid = case in ("omit", "none", "valid", "provider_only", "effort_only", "quant_only", "quant_combined",
                      "quant_undeclared", "undeclared_order", "undeclared_empty_provider")
     assert subject.main(["--results-dir", str(tmp_path)]) == (0 if valid else 1)
     summary = json.loads((tmp_path / "summary.json").read_text())
@@ -142,7 +150,7 @@ def test_observed_protocol_mismatch(case, tmp_path):
         assert any("비교할 수 없다" in message for message in summary["publish_status"]["failures"])
         if case not in ("provider", "effort", "quant_mismatch", "quant_reordered"):
             assert any(str(value).startswith("invalid:") for key, value in protocol.items()
-                       if key in ("user_provider", "user_reasoning_effort", "user_quantizations"))
+                       if key in ("user_provider", "user_reasoning_effort", "user_quantizations", "user_temperature_mode"))
 
 
 def test_observed_protocol_unpinned():

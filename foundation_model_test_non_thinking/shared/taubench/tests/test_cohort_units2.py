@@ -28,7 +28,8 @@ def test_comparison_facts_empty(value):
 
 
 @pytest.mark.parametrize("quantizations", [None, "bf16,fp8", "fp8,bf16", "bf16"])
-def test_comparison_facts_protocol(quantizations):
+@pytest.mark.parametrize("temperature_mode", [None, "", "omit"])
+def test_comparison_facts_protocol(quantizations, temperature_mode):
     actual = list(subject._comparison_facts({'model': 'candidate', 'benchmark': 'tau', 'scoring_version': 'v', 'split': {'domain': 'retail', 'name': 'test', 'task_ids': ['b', 'a'], 'task_count': 2, 'runnable_task_count': 2}, 'harness_integrity': {'mode': 'solo', 'trials': 3, 'request_timeout': 99, 'user_max_tokens': 8}}).items())
     assert actual == [('benchmark', 'tau'),
      ('scoring_version', 'v'),
@@ -56,11 +57,11 @@ def test_comparison_facts_protocol(quantizations):
     assert len(quant_fingerprints) == 4
     fingerprints = {subject.comparison_fingerprint(baseline)["fingerprint"]}
     for provider, effort in (("deepinfra/bf16", "medium"), ("other/provider", "medium"),
-                             ("deepinfra/bf16", "low"), ("deepinfra/bf16", None), (None, "medium")):
+                             ("deepinfra/bf16", "none"), ("deepinfra/bf16", "low"), ("deepinfra/bf16", None), (None, "medium")):
         summary = {"harness_integrity": {**baseline["harness_integrity"],
-                    "user_provider": provider, "user_reasoning_effort": effort, "user_quantizations": quantizations}}
+                    "user_provider": provider, "user_reasoning_effort": effort, "user_quantizations": quantizations, "user_temperature_mode": temperature_mode}}
         result = subject.comparison_fingerprint(summary)
-        for key, value in (("user_provider", provider), ("user_reasoning_effort", effort), ("user_quantizations", quantizations)):
+        for key, value in (("user_provider", provider), ("user_reasoning_effort", effort), ("user_quantizations", quantizations), ("user_temperature_mode", temperature_mode)):
             if value:
                 assert result["facts"][key] == value
             else:
@@ -68,3 +69,6 @@ def test_comparison_facts_protocol(quantizations):
         assert result["fingerprint"] not in fingerprints
         fingerprints.add(result["fingerprint"])
         assert subject.comparison_fingerprint({**summary, "model": "different-candidate"}) == result
+        default = {"harness_integrity": {**summary["harness_integrity"], "user_temperature_mode": ""}}
+        assert (subject.comparison_fingerprint(default)["fingerprint"] != result["fingerprint"]) is bool(temperature_mode)
+        assert result["comparable_across_candidates"] is True
