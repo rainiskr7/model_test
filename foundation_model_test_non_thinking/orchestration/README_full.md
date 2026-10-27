@@ -133,6 +133,8 @@ python -m shared.multimodal.benches.koffvqa_api_judge \
 
 이 명령은 실행 예시이며 기본값을 전환하지 않는다. 이후 위와 같은 derive·완전성 검사 및 발행 검사를 새 판정 경로에 적용한다. `api_judge_migration`은 교차 세션·xlsx SHA를 검증하고 템플릿 해시를 지문에 포함한다. prediction SHA는 정보용이며, end-to-end·진단 재판정과 별도 표에서 모델 간 비교한다. 같은 모델·코호트의 완전 복사본은 기존 규칙으로 접고, 남은 실행의 prediction SHA가 중복이면 그 모델의 대표 선택을 거부하고 strict를 실패시킨다. 서로 다른 생성 결과의 반복에는 end-to-end와 같은 평균 0.10/10 허용치를 적용한다. 보고서 표시는 **판정기 교체용 재판정(생성 고정 아님)** 이다.
 
+오류 행만 재판정: 같은 명령 + `--retry-errors`(같은 `MODEL_TEST_BASE`·`EVAL_TIMESTAMP` 유지). 기존 `results.json`·`summary.json`, 판정 프로파일 및 예측 행의 순서·식별자·내용이 같아야 하며 불일치는 요청 없이 rc 2다. `score=null` 행만 교체하고 정상 행의 JSON 바이트를 보존한다. summary는 다시 계산하며 `retry_errors.count`와 `retry_errors.history`에 재시도 횟수·회차별 행 idx 목록을 남긴다. 오류가 남으면 저장 후 rc 10이며 derive·발행 검사를 다시 적용한다. 기존 판정 산출물을 지정해 복구하는 기능이므로 생성부터 시작하는 `run_koffvqa.sh`·레인에는 노출하지 않고 직접 Python CLI에서만 제공한다.
+
 `JUDGE_REJUDGE_PURPOSE`는 레인 conf 키가 아니다(공통·FULL_ 모두 unknown key, rc 2). 직접 `run_koffvqa.sh`는 환경변수 `JUDGE_PROMPT_PROFILE`·`JUDGE_REJUDGE_PURPOSE`를 API judge에 전달하지만 항상 같은 세션 생성부터 실행하므로 유효한 migration 재판정에는 위 Python CLI를 쓴다. 같은 세션 또는 세션 식별 불가 상태의 migration 선언은 발행 거부다. full은 `JUDGE_PROMPT_PROFILE`/`FULL_JUDGE_PROMPT_PROFILE`만 지원한다. `tools/output_baseline`은 이 교차 세션 재판정 배치의 의존 파일 복사를 지원하지 않으며 이번 변경 범위 밖이다.
 
 ## 실패 정책

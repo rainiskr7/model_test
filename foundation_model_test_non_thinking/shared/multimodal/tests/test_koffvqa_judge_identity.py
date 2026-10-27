@@ -83,6 +83,14 @@ def test_judge_one_records_only_in_supplied_identity():
         ("- 최종 점수: 10점 만점에 8.5점", None),
         ("- * 최종 점수: 10점 만점에 3점", None),
         ('{"score": 8, "reason": "JSON only"}', None),
+        ("기준을 일부 만족하므로 **최종 점수: 10점 만점에 5점**", 5),
+        ("모든 기준을 충족하며, 최종 점수: 10점 만점에 10점", 10),
+        ("일치하지 않습니다. 최종 점수: 10점 만점에 0점", 0),
+        ("판단 결과 *최종 점수: 10점 만점에 5점.*\n\n", 5),
+        ('{"판단":["충족"],"최종 점수":"10점 만점에 10점"}', None),
+        ("^(^^)" * 20, None), ("[/end of transmission]" * 20, None),
+        ("최종 점수 설명 후 최종 점수: 10점 만점에 5점", None),
+        ("최종 점수: 10점 만점에 5점. 추가 설명", None),
     ):
         response = SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content=text))])
         client.chat.completions.create = Mock(return_value=response)

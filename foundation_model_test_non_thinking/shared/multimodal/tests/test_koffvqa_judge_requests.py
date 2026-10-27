@@ -179,6 +179,7 @@ def test_main_requests_storage_identity(monkeypatch, tmp_path, capsys, fresh_imp
         texts = ["근거\n**최종 점수: 10점 만점에 8점**.", "최종 점수: 10점 만점에 11점"]
         handler.side_effect = [httpx.Response(200, json={
             "id": "fixture", "object": "chat.completion", "created": 0, "model": "served",
+            "provider": "original-provider",
             "choices": [{"index": 0, "finish_reason": "stop", "message": {"role": "assistant", "content": text}}],
         }) for text in texts]
         monkeypatch.setattr(argparse.ArgumentParser, "parse_args", parse_args)
@@ -205,3 +206,128 @@ def test_main_requests_storage_identity(monkeypatch, tmp_path, capsys, fresh_imp
             cli(monkeypatch, [*arguments, *flags])
             assert runner.main() == 2 and handler.call_count == 14
             assert before == {p.name: p.read_bytes() for p in output.iterdir()}
+
+        # Error-only retries validate every input before requesting or overwriting.
+        retry_args = [*arguments, "--judge-prompt-profile", "original", "--rejudge-purpose", "migration", "--retry-errors"]
+        monkeypatch.setattr(argparse.ArgumentParser, "parse_args", parse_args)
+        cli(monkeypatch, retry_args)
+        original_summary = (output / "summary.json").read_bytes()
+        original_results = (output / "results.json").read_bytes()
+        for name in ("summary.json", "results.json"):
+            path = output / name
+            content = path.read_bytes()
+            path.unlink()
+            before = {p.name: p.read_bytes() for p in output.iterdir()}
+            assert runner.main() == 2 and handler.call_count == 14
+            assert before == {p.name: p.read_bytes() for p in output.iterdir()}
+            path.write_bytes(content)
+        for field, value in (("judge_prompt_profile", ""), ("rejudge_purpose", ""),
+                             ("judge_prompt_version", "changed"), ("judge_prompt_template_sha256", "sha256:changed")):
+            changed = json.loads(original_summary)
+            changed[field] = value
+            (output / "summary.json").write_text(json.dumps(changed))
+            before = {p.name: p.read_bytes() for p in output.iterdir()}
+            assert runner.main() == 2 and handler.call_count == 14
+            assert before == {p.name: p.read_bytes() for p in output.iterdir()}
+        for field, value in (("model", "other"), ("provider", "other"), ("reasoning_effort", "none"),
+                             ("temperature_mode", "omit"), ("temperature", 0.5),
+                             ("max_tokens_effective", 2000), ("seed", 8)):
+            changed = json.loads(original_summary)
+            changed["judge_request"][field] = value
+            (output / "summary.json").write_text(json.dumps(changed))
+            before = {p.name: p.read_bytes() for p in output.iterdir()}
+            assert runner.main() == 2 and handler.call_count == 14
+            assert before == {p.name: p.read_bytes() for p in output.iterdir()}
+        for field in ("judge_prompt_version", "judge_prompt_template_sha256"):
+            changed = json.loads(original_summary)
+            changed.pop(field)
+            changed["run_config"]["judge"].pop("prompt_version" if field.endswith("version") else "prompt_template_sha256")
+            (output / "summary.json").write_text(json.dumps(changed))
+            assert runner.main() == 2 and handler.call_count == 14
+        (output / "summary.json").write_bytes(original_summary)
+        for field, value in (("idx", 3), ("dataset_item_id", "other"), ("question", "changed"),
+                             ("response", "changed"), ("criteria", "changed"), ("score", True)):
+            changed = json.loads(original_results)
+            changed[0][field] = value
+            (output / "results.json").write_text(json.dumps(changed))
+            before = {p.name: p.read_bytes() for p in output.iterdir()}
+            assert runner.main() == 2 and handler.call_count == 14
+            assert before == {p.name: p.read_bytes() for p in output.iterdir()}
+        for bad in ("{", "{}", "[]", json.dumps(list(reversed(rows))), json.dumps(rows[:1])):
+            (output / "results.json").write_text(bad)
+            before = {p.name: p.read_bytes() for p in output.iterdir()}
+            assert runner.main() == 2 and handler.call_count == 14
+            assert before == {p.name: p.read_bytes() for p in output.iterdir()}
+
+        # Noncanonical whitespace, escaped Korean and extra record fields survive byte-for-byte.
+        rows[0]["extra"] = {"preserve": "한글 \\n } [ ,"}
+        stable = json.dumps(rows[0], ensure_ascii=True, separators=(", ", " : ")).encode()
+        prefix = b'[\r\n\t' + stable + b',\r\n'
+        (output / "results.json").write_bytes(prefix + json.dumps(rows[1]).encode() + b'\r\n]\r\n')
+        handler.side_effect = [httpx.Response(200, json={
+            "id": "fixture", "object": "chat.completion", "created": 0, "model": "retry-served",
+            "choices": [{"index": 0, "finish_reason": "stop", "message": {"role": "assistant", "content": text}}],
+        }) for text in ("^(^^)" * 20, "기준 충족이므로 **최종 점수: 10점 만점에 10점**")]
+        assert runner.main() == 10 and handler.call_count == 15
+        retry_summary = json.loads((output / "summary.json").read_bytes())
+        assert (retry_summary["total"], retry_summary["scored"], retry_summary["avg_score"]) == (2, 1, 8.0)
+        assert retry_summary["retry_errors"] == {"count": 1, "history": [[1]]}
+        assert (output / "results.json").read_bytes().startswith(prefix)
+        assert runner.main() == 0 and handler.call_count == 16
+        retry_summary = json.loads((output / "summary.json").read_bytes())
+        merged = json.loads((output / "results.json").read_bytes())
+        assert (retry_summary["total"], retry_summary["scored"], retry_summary["avg_score"]) == (2, 2, 9.0)
+        assert retry_summary["retry_errors"] == {"count": 2, "history": [[1], [1]]}
+        assert retry_summary["judge_served_identity"]["model"] == ["retry-served", "served"]
+        assert retry_summary["judge_served_identity"]["provider"] == ["original-provider"]
+        assert merged[0] == rows[0] and merged[1]["score"] == 10 and merged[1]["error"] is None
+        assert [row["idx"] for row in merged] == [0, 1]
+        assert (output / "results.json").read_bytes().startswith(prefix)
+        assert (output / "results.json").read_bytes().endswith(b'\r\n]\r\n')
+        for call in handler.call_args_list[-2:]:
+            body = json.loads(call.args[0].content)
+            assert body == sent[1]
+        before = (output / "results.json").read_bytes()
+        assert runner.main() == 0 and handler.call_count == 16
+        assert (output / "results.json").read_bytes() == before
+        assert json.loads((output / "summary.json").read_bytes())["retry_errors"] == {
+            "count": 3, "history": [[1], [1], []]}
+
+        # Omitting the option still rejudges every row and produces no retry metadata.
+        handler.side_effect = [httpx.Response(200, json={
+            "id": "fixture", "object": "chat.completion", "created": 0, "model": "served",
+            "choices": [{"index": 0, "finish_reason": "stop", "message": {
+                "role": "assistant", "content": "최종 점수: 10점 만점에 5점"}}],
+        }) for _ in range(2)]
+        monkeypatch.setattr(argparse.ArgumentParser, "parse_args", parse_args)
+        cli(monkeypatch, retry_args[:-1])
+        assert runner.main() == 0 and handler.call_count == 18
+        assert "retry_errors" not in json.loads((output / "summary.json").read_bytes())
+
+        # The default JSON profile also retries disjoint errors and keeps the middle row.
+        for path in output.iterdir():
+            path.unlink()
+        sheet.append(["three", "질문3", "기준3", "응답3"])
+        book.save(predfile)
+        handler.side_effect = [httpx.Response(200, json={
+            "id": "fixture", "object": "chat.completion", "created": 0, "model": "served",
+            "choices": [{"index": 0, "finish_reason": "stop", "message": {"role": "assistant", "content": text}}],
+        }) for text in ("bad", '{"score": 6, "reason": "middle"}', "bad",
+                       '{"score": 2, "reason": "first"}', '{"score": 8, "reason": "last"}')]
+        monkeypatch.setattr(argparse.ArgumentParser, "parse_args", parse_args)
+        cli(monkeypatch, [*arguments, "--retry-errors"])
+        assert runner.main() == 2 and handler.call_count == 18
+        monkeypatch.setattr(argparse.ArgumentParser, "parse_args", parse_args)
+        cli(monkeypatch, arguments)
+        assert runner.main() == 10 and handler.call_count == 21
+        initial = (output / "results.json").read_bytes()
+        middle = initial[initial.index(b'  {', initial.index(b'  }') + 1):initial.rindex(b'  {')]
+        monkeypatch.setattr(argparse.ArgumentParser, "parse_args", parse_args)
+        cli(monkeypatch, [*arguments, "--retry-errors"])
+        assert runner.main() == 0 and handler.call_count == 23
+        merged = json.loads((output / "results.json").read_bytes())
+        assert [row["score"] for row in merged] == [2, 6, 8]
+        assert middle in (output / "results.json").read_bytes()
+        final = json.loads((output / "summary.json").read_bytes())
+        assert final["retry_errors"] == {"count": 1, "history": [[0, 2]]}
+        assert (final["total"], final["scored"], final["avg_score"]) == (3, 3, 16 / 3)

@@ -132,6 +132,13 @@ def judge_one(client, judge_model: str, question: str, response: str, criteria,
         if prompt_profile == "original":
             last = next((line.strip() for line in reversed(text.splitlines()) if line.strip()), "")
             last = re.sub(r"^(?:[-*•]|[0-9]+\.)[ \t]+", "", last, count=1)
+            if last.count("최종 점수") == 1:
+                # Retain only the final score clause, including its emphasis.
+                prefix, clause = last.split("최종 점수", 1)
+                opening = re.search(r"\*+$", prefix)
+                prose = prefix[:opening.start()] if opening else prefix
+                if not prose.strip() or re.search(r"[\w가-힣]", prose):
+                    last = (opening[0] if opening else "") + "최종 점수" + clause
             outer_period = last.endswith(".")
             if outer_period:
                 last = last[:-1].rstrip()
@@ -216,6 +223,7 @@ def _parse_args():
     ap.add_argument("--judge-temperature-mode", choices=("", "omit"), default="")
     ap.add_argument("--judge-prompt-profile", choices=("", "original"), default="")
     ap.add_argument("--rejudge-purpose", choices=("", "migration"), default="")
+    ap.add_argument("--retry-errors", action="store_true", help="같은 프로파일의 기존 오류 행만 재판정")
     ap.add_argument("--judge-base-url", required=True, help="judge API base_url")
     ap.add_argument("--judge-api-key", default=None, help="judge API key (환경변수 옵션보다 우선)")
     ap.add_argument("--judge-api-key-env", default=None,
@@ -241,6 +249,7 @@ def _parse_args():
     args.judge_temperature_mode = getattr(args, "judge_temperature_mode", "")
     args.judge_prompt_profile = getattr(args, "judge_prompt_profile", "")
     args.rejudge_purpose = getattr(args, "rejudge_purpose", "")
+    args.retry_errors = getattr(args, "retry_errors", False)
     return args
 
 
@@ -294,12 +303,15 @@ def _prepare_output(args, get_base_dir, get_timestamp, get_results_dir):
     return out_dir
 
 
-def _judge_rows(args, df, q_col, crit_col, resp_col, client):
+def _judge_rows(args, df, q_col, crit_col, resp_col, client, previous=None):
     """Judge workbook rows and collect served identity."""
     identity = ServedIdentity()
-    results = []
+    results = [] if previous is None else list(previous)
     scores = []
-    for i, row in df.iterrows():
+    for position, (i, row) in enumerate(df.iterrows()):
+        if previous is not None and previous[position]["score"] is not None:
+            scores.append(previous[position]["score"])
+            continue
         q = str(row[q_col]) if pd.notna(row[q_col]) else ""
         crit = row[crit_col] if pd.notna(row[crit_col]) else ""
         resp = str(row[resp_col]) if pd.notna(row[resp_col]) else ""
@@ -314,7 +326,7 @@ def _judge_rows(args, df, q_col, crit_col, resp_col, client):
         if score is not None:
             scores.append(score)
 
-        results.append({
+        result = {
             "idx": int(i),
             "dataset_item_id": str(row["index"]) if "index" in df.columns and pd.notna(row["index"]) else str(i),
             "question": q,
@@ -324,7 +336,11 @@ def _judge_rows(args, df, q_col, crit_col, resp_col, client):
             "reason": reason,
             "raw_judge_output": raw_judge,
             "error": err,
-        })
+        }
+        if previous is None:
+            results.append(result)
+        else:
+            results[position] = result
 
         if (i + 1) % 25 == 0:
             avg = sum(scores) / len(scores) if scores else 0.0
@@ -397,9 +413,16 @@ def _build_summary(args, results, scores, identity, build_run_config):
     return summary
 
 
-def _save_results(out_dir, results, summary, save_json):
+def _save_results(out_dir, results, summary, save_json, retry_source=None):
     """Write judge artifacts and print the final score."""
-    save_json(out_dir / "results.json", results)
+    if retry_source is None:
+        save_json(out_dir / "results.json", results)
+    else:
+        source, spans = retry_source
+        # Replace only failed object spans; retain all other bytes, even whitespace.
+        for position, start, end in reversed(spans):
+            source = source[:start] + json.dumps(results[position], ensure_ascii=False, indent=2) + source[end:]
+        (out_dir / "results.json").write_bytes(source.encode("utf-8"))
     save_json(out_dir / "summary.json", summary)
 
     print(f"\n[koffvqa_judge] avg score = {summary['avg_score']}")
@@ -419,9 +442,19 @@ def main():
         get_base_dir, get_timestamp, get_results_dir,
         save_json, build_run_config, make_client,
     )
-    df, q_col, crit_col, resp_col = _load_predictions(args)
+    try:
+        df, q_col, crit_col, resp_col = _load_predictions(args)
+    except (OSError, ValueError, SystemExit) as exc:
+        if not args.retry_errors:
+            raise
+        print(f"[koffvqa_judge] 예측 파일 확인 실패 ({type(exc).__name__}) — 재판정을 시작하지 않는다", file=sys.stderr)
+        return 2
     out_dir = _prepare_output(args, get_base_dir, get_timestamp, get_results_dir)
     summary_path, config_path = out_dir / "summary.json", out_dir / "run_config.json"
+    previous, retry_source = None, None
+    if args.retry_errors and not (summary_path.is_file() and (out_dir / "results.json").is_file()):
+        print("[koffvqa_judge] --retry-errors 인데 기존 results.json·summary.json이 없습니다 — 재판정을 시작하지 않는다", file=sys.stderr)
+        return 2
     if summary_path.exists() or config_path.exists() or (out_dir / "results.json").exists():
         try:
             stored = json.loads((summary_path if summary_path.exists() else config_path).read_text(encoding="utf-8"))
@@ -434,6 +467,8 @@ def main():
             old_purpose = stored.get("rejudge_purpose", (stored_config.get("extra") or {}).get("rejudge_purpose", ""))
             old_version = stored.get("judge_prompt_version", stored_judge.get("prompt_version"))
             old_hash = stored.get("judge_prompt_template_sha256", stored_judge.get("prompt_template_sha256"))
+            if args.retry_errors and (old_version is None or old_hash is None):
+                raise ValueError("retry requires prompt version and template hash")
             version = "koffvqa-original-v1" if args.judge_prompt_profile == "original" else JUDGE_PROMPT_VERSION
             if (old_profile != args.judge_prompt_profile or old_purpose != args.rejudge_purpose
                     or (old_version is not None and old_version != version)
@@ -462,13 +497,57 @@ def main():
             if old != current:
                 print("[koffvqa_judge] 판정기 프로파일 불일치 — 재판정 저장 위치를 나눠라", file=sys.stderr)
                 return 2
+            if args.retry_errors:
+                source = (out_dir / "results.json").read_bytes().decode("utf-8")
+                previous = json.loads(source)
+                if not isinstance(previous, list) or len(previous) != len(df):
+                    raise ValueError("prediction row count mismatch")
+                spans, retry_indices = [], []
+                decoder = json.JSONDecoder()
+                offset = source.index("[") + 1
+                for position, (i, row) in enumerate(df.iterrows()):
+                    expected = {
+                        "idx": int(i),
+                        "dataset_item_id": str(row["index"]) if "index" in df.columns and pd.notna(row["index"]) else str(i),
+                        "question": str(row[q_col]) if pd.notna(row[q_col]) else "",
+                        "response": str(row[resp_col]) if pd.notna(row[resp_col]) else "",
+                        "criteria": str(row[crit_col]) if pd.notna(row[crit_col]) else "",
+                    }
+                    record = previous[position]
+                    if any(record[key] != value or type(record[key]) is not type(value) for key, value in expected.items()):
+                        raise ValueError("prediction row mismatch")
+                    if record["score"] is not None and not valid_score(record["score"]):
+                        raise ValueError("invalid stored score")
+                    while source[offset] in " \t\r\n,":
+                        offset += 1
+                    _, end = decoder.raw_decode(source, offset)
+                    if record["score"] is None:
+                        spans.append((position, offset, end))
+                        retry_indices.append(record["idx"])
+                    offset = end
+                retry_source = source, spans
+                history = stored.get("retry_errors", {"count": 0, "history": []})
+                if (not isinstance(history, dict) or not isinstance(history.get("history"), list)
+                        or type(history.get("count")) is not int or history["count"] != len(history["history"])):
+                    raise ValueError("invalid retry history")
+                old_identity = stored.get("judge_served_identity", {})
+                if not isinstance(old_identity, dict) or any(
+                        not isinstance(values, list) or any(not isinstance(value, str) for value in values)
+                        for values in old_identity.values()):
+                    raise ValueError("invalid served identity")
         except (OSError, ValueError, KeyError, TypeError, AttributeError) as exc:
             print(f"[koffvqa_judge] 기존 판정 기록 확인 실패 ({type(exc).__name__}) — 쓰지 않는다", file=sys.stderr)
             return 2
     client = make_client(args.judge_base_url, judge_api_key)
-    results, scores, identity = _judge_rows(args, df, q_col, crit_col, resp_col, client)
+    results, scores, identity = _judge_rows(args, df, q_col, crit_col, resp_col, client, previous)
+    if args.retry_errors:
+        for field in identity.values:
+            identity.values[field].update(old_identity.get(field, []))
     summary = _build_summary(args, results, scores, identity, build_run_config)
-    _save_results(out_dir, results, summary, save_json)
+    if args.retry_errors:
+        summary["retry_errors"] = {"count": history["count"] + 1, "history": [*history["history"], retry_indices]}
+        print(f"[koffvqa_judge] --retry-errors: {len(retry_indices)}/{len(results)}행 재판정")
+    _save_results(out_dir, results, summary, save_json, retry_source)
     return completion_rc(results, summary)
 
 
