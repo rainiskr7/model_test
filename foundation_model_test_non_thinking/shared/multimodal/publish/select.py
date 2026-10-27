@@ -148,6 +148,15 @@ def select_representatives(
     ambiguous: list[dict[str, Any]] = []
     for key, original_candidates in cohorts.items():
         candidates, folded = _fold_exact_copies(original_candidates)
+        if key[1] == "api_judge_migration":
+            predictions = [((item.get("protocol") or {}).get("recorded") or {}).get("prediction_sha256")
+                           for item in candidates]
+            if any(not value for value in predictions) or len(set(predictions)) != len(predictions):
+                ambiguous.append({
+                    "key": key, "candidates": candidates, "folded_duplicates": folded,
+                    "reason": "migration 반복 집합에 prediction SHA 누락 또는 중복 — 생성 세션마다 1회만 재판정해야 함",
+                })
+                continue
         if len(candidates) == 1:
             selected.append(_with_selection_metadata(candidates[0], candidates, folded))
             continue

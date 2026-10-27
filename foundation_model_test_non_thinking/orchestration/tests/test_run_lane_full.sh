@@ -460,6 +460,8 @@ invalid_setting_message() {
     FULL_JUDGE_MODEL=*) printf 'JUDGE_MODEL must not be empty' ;;
     FULL_JUDGE_MAX_TOKENS=*) printf 'JUDGE_MAX_TOKENS must be a positive integer' ;;
     FULL_JUDGE_TEMPERATURE_MODE=*) printf 'JUDGE_TEMPERATURE_MODE must be empty or omit' ;;
+    FULL_JUDGE_PROMPT_PROFILE=*) printf 'JUDGE_PROMPT_PROFILE must be empty or original' ;;
+    JUDGE_REJUDGE_PURPOSE=*|FULL_JUDGE_REJUDGE_PURPOSE=*) printf 'unknown key: JUDGE_REJUDGE_PURPOSE' ;;
     FULL_JUDGE_REASONING_EFFORT=*) printf 'JUDGE_REASONING_EFFORT must be empty, none, low, medium or high' ;;
     JUDGE_COHORT=*|FULL_JUDGE_COHORT=*) printf 'JUDGE_COHORT must match [a-z0-9][a-z0-9_-]{0,31}' ;;
     *) return 1 ;;
@@ -476,6 +478,7 @@ f6() {
     FULL_REPS=0 FULL_REPS=-1 FULL_REPS=x LANE_DISPLAY= FULL_JUDGE_MODEL= \
     FULL_JUDGE_MAX_TOKENS=0 FULL_JUDGE_MAX_TOKENS=-1 FULL_JUDGE_MAX_TOKENS=x FULL_JUDGE_REASONING_EFFORT=invalid FULL_JUDGE_REASONING_EFFORT=xhigh \
     FULL_JUDGE_TEMPERATURE_MODE=0.5 FULL_JUDGE_TEMPERATURE_MODE=OMIT \
+    FULL_JUDGE_PROMPT_PROFILE=ORIGINAL FULL_JUDGE_PROMPT_PROFILE=unknown JUDGE_REJUDGE_PURPOSE=migration FULL_JUDGE_REJUDGE_PURPOSE=migration \
     JUDGE_COHORT=Oss 'JUDGE_COHORT=a b' FULL_JUDGE_COHORT=.; do
     count=$((count + 1))
     fixture "F6_$count"
@@ -537,6 +540,40 @@ f7() {
         exact "$dir/argv" --judge-temperature-mode && exact "$dir/argv" omit || return 1
       fi
     done
+  done
+  # KOF-only prompt profile: common/scoped options never reach FC.
+  for scope in common full empty; do
+    fixture "F7_prompt_$scope"
+    set_config FULL_REPS=1
+    run_lane 1
+    expect_rc 0 || return 1
+    grep 'shared.functionchat.judge.run_judge ' "$FX/stdout" > "$FX/fc_before"
+    set_config JUDGE_PROMPT_PROFILE=original
+    if [ "$scope" = full ]; then
+      set_config JUDGE_PROMPT_PROFILE=
+      set_config FULL_JUDGE_PROMPT_PROFILE=original
+    elif [ "$scope" = empty ]; then
+      set_config FULL_JUDGE_PROMPT_PROFILE=
+    fi
+    run_lane 1
+    expect_rc 0 || return 1
+    grep 'shared.functionchat.judge.run_judge ' "$FX/stdout" > "$FX/fc_after"
+    diff -u "$FX/fc_before" "$FX/fc_after" || return 1
+    if [ "$scope" = empty ]; then
+      ! grep -q -- '--judge-prompt-profile' "$FX/stdout" || return 1
+    else
+      [ "$(grep -c -- '--judge-prompt-profile original' "$FX/stdout")" -eq 1 ] || return 1
+    fi
+    run_lane
+    expect_rc 0 || return 1
+    check_stage_argv 20261015_full_r1 functionchat_judge || return 1
+    dir="$FX/dump/20261015_full_r1.koffvqa_judge"
+    if [ "$scope" = empty ]; then
+      ! grep -q -- '--judge-prompt-profile' "$dir/argv" || return 1
+    else
+      exact "$dir/argv" --judge-prompt-profile && exact "$dir/argv" original || return 1
+    fi
+    ! grep -q -- '--rejudge-purpose' "$dir/argv" || return 1
   done
   fixture F7_cohort
   set_config FULL_REPS=1

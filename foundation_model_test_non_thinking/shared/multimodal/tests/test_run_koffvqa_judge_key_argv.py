@@ -120,7 +120,7 @@ def test_judge_inherits_same_key_value(keyed_run):
     assert judges[0]["key_matches"] is True
 
 
-@pytest.mark.parametrize("profile", [{}, {"JUDGE_PROVIDER": "deepinfra/bf16", "JUDGE_REASONING_EFFORT": "none", "JUDGE_MAX_TOKENS": "2000", "JUDGE_TEMPERATURE_MODE": "omit"}, {"JUDGE_TEMPERATURE_MODE": "omit"}])
+@pytest.mark.parametrize("profile", [{}, {"JUDGE_PROVIDER": "deepinfra/bf16", "JUDGE_REASONING_EFFORT": "none", "JUDGE_MAX_TOKENS": "2000", "JUDGE_TEMPERATURE_MODE": "omit"}, {"JUDGE_TEMPERATURE_MODE": "omit"}, {"JUDGE_PROMPT_PROFILE": "original", "JUDGE_REJUDGE_PURPOSE": "migration"}])
 @pytest.mark.parametrize("key", [None, ""], ids=["unset", "empty"])
 def test_empty_or_unset_key_omits_both_options(shell_path, tmp_path, key, profile):
     rc, judges, argv = run_isolated(shell_path, tmp_path, key, profile)
@@ -129,7 +129,8 @@ def test_empty_or_unset_key_omits_both_options(shell_path, tmp_path, key, profil
     assert "--judge-api-key" not in judges[0]["argv"]
     assert "--judge-api-key-env" not in judges[0]["argv"]
     for key, option in (("JUDGE_PROVIDER", "--judge-provider"), ("JUDGE_REASONING_EFFORT", "--judge-reasoning-effort"),
-                        ("JUDGE_MAX_TOKENS", "--judge-max-tokens"), ("JUDGE_TEMPERATURE_MODE", "--judge-temperature-mode")):
+                        ("JUDGE_MAX_TOKENS", "--judge-max-tokens"), ("JUDGE_TEMPERATURE_MODE", "--judge-temperature-mode"),
+                        ("JUDGE_PROMPT_PROFILE", "--judge-prompt-profile"), ("JUDGE_REJUDGE_PURPOSE", "--rejudge-purpose")):
         sent = judges[0]["argv"]
         assert (option in sent) is (key in profile)
         if key in profile:

@@ -37,6 +37,25 @@ def test_judge_protocol_end_to_end_and_rejudge():
             assert changed["recorded"].get("seed") == seed
 
 
+    # C3: only opt-in migration hashes the template and excludes prediction bytes.
+    import copy
+    migration = {**summary, "rejudge_purpose": "migration"}
+    config = {"decoding": {"seed": 0, "temperature": 0.0, "max_tokens": 1024}, "extra": {"limit": None}}
+    reference = adapters._judge_protocol(migration, config, "pred-a", "items", True, None)
+    assert "rejudged_prediction_sha256" not in reference["recorded"]
+    assert adapters._judge_protocol(migration, config, "pred-b", "items", True, None)["fingerprint"] == reference["fingerprint"]
+    for key, value in (("judge_model", "other"), ("judge_prompt_version", "original"),
+                       ("judge_prompt_template_sha256", "changed")):
+        changed = adapters._judge_protocol({**migration, key: value}, config, "pred-a", "items", True, None)
+        assert changed["fingerprint"] != reference["fingerprint"]
+    for section, key, value in (("decoding", "seed", 1), ("extra", "limit", 1)):
+        changed_config = copy.deepcopy(config)
+        changed_config[section][key] = value
+        assert adapters._judge_protocol(migration, changed_config, "pred-a", "items", True, None)["fingerprint"] != reference["fingerprint"]
+    assert adapters._judge_protocol(migration, config, "pred-a", "other-items", True, None)["fingerprint"] != reference["fingerprint"]
+    assert adapters._judge_protocol(migration, config, "pred-a", "items", True, "other-revision")["fingerprint"] == reference["fingerprint"]
+
+
 def test_aggregate_judge_rows_rejects_bool_and_preserves_failure_order():
     failures = ['existing']
     counts, scores, item_digest, average = adapters._aggregate_judge_rows(

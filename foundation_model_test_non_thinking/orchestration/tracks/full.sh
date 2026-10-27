@@ -3,7 +3,7 @@
 # FULL_KRETA_WORKERS FULL_KRETA_RESUME FULL_RESUME_FROM MODEL BASE_URL_CHAT BASE_URL_V1
 # TAUBENCH_MAX_CONCURRENCY TAUBENCH_USER_MODEL TAUBENCH_TRIALS SESSION BASE PYTHONPATH LABEL HOST BASE_TS END_LABEL.
 # TAUBENCH_USER_PROVIDER TAUBENCH_USER_QUANTIZATIONS TAUBENCH_USER_REASONING_EFFORT TAUBENCH_USER_TEMPERATURE_MODE TAUBENCH_USER_BASE_URL.
-# JUDGE_MODEL JUDGE_COHORT JUDGE_PROVIDER JUDGE_REASONING_EFFORT JUDGE_MAX_TOKENS JUDGE_TEMPERATURE_MODE.
+# JUDGE_MODEL JUDGE_COHORT JUDGE_PROVIDER JUDGE_REASONING_EFFORT JUDGE_MAX_TOKENS JUDGE_TEMPERATURE_MODE JUDGE_PROMPT_PROFILE.
 # Functions: bad read_key log; results_model_dir is sourced locally at run time.
 track_secrets() { export TAUBENCH_USER_API_KEY="$(read_key TAUBENCH_USER_API_KEY)"; }
 
@@ -49,6 +49,7 @@ track_validate() {
     [[ "$JUDGE_MAX_TOKENS" =~ ^[0-9]+$ ]] && [ "$JUDGE_MAX_TOKENS" -gt 0 ] 2>/dev/null || bad 'JUDGE_MAX_TOKENS must be a positive integer'
   fi
   case "${JUDGE_TEMPERATURE_MODE:-}" in ''|omit) ;; *) bad 'JUDGE_TEMPERATURE_MODE must be empty or omit' ;; esac
+  case "${JUDGE_PROMPT_PROFILE:-}" in ''|original) ;; *) bad 'JUDGE_PROMPT_PROFILE must be empty or original' ;; esac
   case "$JUDGE_REASONING_EFFORT" in ''|none|low|medium|high) ;; *) bad 'JUDGE_REASONING_EFFORT must be empty, none, low, medium or high' ;; esac
   case "$REPS" in ''|*[!0-9]*) bad 'REPS must be positive' ;; esac
   [ "$REPS" -gt 0 ] 2>/dev/null || bad 'REPS must be positive'
@@ -110,7 +111,8 @@ full_command() {
     koffvqa_judge)
       FULL_CMD=(python -m shared.multimodal.benches.koffvqa_api_judge --predfile "$predfile"
         --target-model "$MODEL" --judge-model "$JUDGE_MODEL"
-        --judge-base-url https://openrouter.ai/api/v1 --judge-api-key-env TAUBENCH_USER_API_KEY --seed 0) ;;
+        --judge-base-url https://openrouter.ai/api/v1 --judge-api-key-env TAUBENCH_USER_API_KEY --seed 0)
+      [ -z "${JUDGE_PROMPT_PROFILE:-}" ] || FULL_CMD+=(--judge-prompt-profile "$JUDGE_PROMPT_PROFILE") ;;
     derive)
       FULL_CMD=(python derive_multimodal_publish.py --base . --write
         --source "$RD/$TS/vision/multimodal/koffvqa_api_judge") ;;

@@ -42,6 +42,7 @@ KMMLU/harness는 포함하지 않는다. 같은 mtime의 workbook은 셸 glob �
 | JUDGE_PROVIDER | 선택: OpenRouter 제공자 slug; 지정하면 order 단일 제공자, allow_fallbacks=false, require_parameters=true |
 | JUDGE_REASONING_EFFORT | 빈값(미전송) 또는 none·low·medium·high |
 | JUDGE_TEMPERATURE_MODE | 빈값(기본 temperature=0 전송) 또는 `omit`(키 생략); CLI `--judge-temperature-mode`도 빈값·omit만 허용 |
+| JUDGE_PROMPT_PROFILE | KOFFVQA 전용: 빈값(기존 v3) 또는 `original`(원래 지시문, 엄격 최종줄 파싱); FC에는 전달하지 않음 |
 | JUDGE_MAX_TOKENS | 빈값(FC 700·KOFFVQA 1024 유지) 또는 양의 정수 |
 
 판정 키도 공통 값보다 `FULL_JUDGE_*` 값이 우선한다. full 레인·판정기 직접 CLI와 `shared/multimodal/run_koffvqa.sh`의 선택적 API judge 경로가 모델·provider·effort·토큰·temperature 모드를 전달한다. 별도 `judge_pilot` CLI는 기존 프로파일만 지원하며 이번 옵션 범위 밖이다. FC seed는 전송하지 않고 KOFFVQA full의 `--seed 0`은 유지한다. 제공자 설정은 요청 조건이며 실제 제공자는 기존 served identity 기록으로 확인한다.
@@ -117,7 +118,22 @@ python -m shared.multimodal.benches.koffvqa_judge_complete \
 
 어댑터는 판정 세션의 형제 `koffvqa/*_gen.xlsx`를 우선한다. workbook이 하나도 없고 `summary.predfile`에서 읽은 예측 세션과 판정 세션이 모두 식별되며 서로 다를 때만, 현재 모델 폴더의 `<예측 세션>/vision/multimodal/koffvqa`를 읽는다. 기록된 절대 base 경로는 사용하지 않는다. 형제 workbook이 있는데 SHA가 다르면 원본 세션으로 우회하지 않고 거부한다. 원본 세션을 참조한 재판정 sidecar는 원본 xlsx가 남아 있고 SHA가 같아야 보고서가 받는다. 백업·이동 시 두 세션의 의존 관계를 보존해야 한다.
 
-**재판정 세션은 모델 간 비교에 쓰지 않는다.** `api_judge_rejudge`는 고정 예측에 대한 판정기 비결정성 진단이며, 예측 SHA가 지문에 들어가 다른 예측끼리는 코호트가 갈린다. Stage 2는 KOFFVQA 저장 지원과 FC 비교까지다. KOFFVQA 모델 간 비교를 위한 재생성 또는 비교 계약 변경은 별도 Stage 2b 결정이다. `tools/output_baseline`은 이 교차 세션 재판정 배치의 의존 파일 복사를 지원하지 않으며 이번 변경 범위 밖이다.
+목적을 생략한 재판정(`api_judge_rejudge`)은 고정 예측에 대한 판정기 비결정성 진단이며 모델 간 비교에 쓰지 않는다. 판정기 교체용 비교는 아래처럼 Python CLI에 `--rejudge-purpose migration`을 명시하고, **각 생성 세션마다 한 번** 새 판정 세션에 저장한다. 원본 판정의 존재나 프로파일 차이로 목적을 추론하지 않는다.
+
+```bash
+MODEL_TEST_BASE="$PWD" EVAL_TIMESTAMP=<원본세션>_kofmig_<cohort> \
+python -m shared.multimodal.benches.koffvqa_api_judge \
+  --predfile <RD>/<원본세션>/vision/multimodal/koffvqa/<생성파일> \
+  --target-model <모델> --judge-model openai/gpt-6-luna \
+  --judge-base-url https://openrouter.ai/api/v1 \
+  --judge-api-key-env TAUBENCH_USER_API_KEY --seed 0 \
+  --judge-reasoning-effort none --judge-temperature-mode omit \
+  --judge-prompt-profile original --rejudge-purpose migration
+```
+
+이 명령은 실행 예시이며 기본값을 전환하지 않는다. 이후 위와 같은 derive·완전성 검사 및 발행 검사를 새 판정 경로에 적용한다. `api_judge_migration`은 교차 세션·xlsx SHA를 검증하고 템플릿 해시를 지문에 포함한다. prediction SHA는 정보용이며, end-to-end·진단 재판정과 별도 표에서 모델 간 비교한다. 같은 모델·코호트의 완전 복사본은 기존 규칙으로 접고, 남은 실행의 prediction SHA가 중복이면 그 모델의 대표 선택을 거부하고 strict를 실패시킨다. 서로 다른 생성 결과의 반복에는 end-to-end와 같은 평균 0.10/10 허용치를 적용한다. 보고서 표시는 **판정기 교체용 재판정(생성 고정 아님)** 이다.
+
+`JUDGE_REJUDGE_PURPOSE`는 레인 conf 키가 아니다(공통·FULL_ 모두 unknown key, rc 2). 직접 `run_koffvqa.sh`는 환경변수 `JUDGE_PROMPT_PROFILE`·`JUDGE_REJUDGE_PURPOSE`를 API judge에 전달하지만 항상 같은 세션 생성부터 실행하므로 유효한 migration 재판정에는 위 Python CLI를 쓴다. 같은 세션 또는 세션 식별 불가 상태의 migration 선언은 발행 거부다. full은 `JUDGE_PROMPT_PROFILE`/`FULL_JUDGE_PROMPT_PROFILE`만 지원한다. `tools/output_baseline`은 이 교차 세션 재판정 배치의 의존 파일 복사를 지원하지 않으며 이번 변경 범위 밖이다.
 
 ## 실패 정책
 

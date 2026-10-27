@@ -540,6 +540,8 @@ def _headline(
         out.extend(["발행 가능한 overall 수치가 없습니다.", ""])
         return
     for (benchmark, variant, fingerprint), cohort in _display_cohorts(headline):
+        if variant == "api_judge_migration":
+            out.extend(["판정기 교체용 재판정(생성 고정 아님) — 생성 세션마다 1회; end-to-end와 같은 반복 허용치·strict 정책.", ""])
         rows = [(sidecar, _headline_axis(sidecar)) for sidecar in cohort]
         rows = [(sidecar, axis) for sidecar, axis in rows if axis is not None]
         rows.sort(

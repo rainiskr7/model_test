@@ -128,7 +128,9 @@ def test_main_requests_storage_identity(monkeypatch, tmp_path, capsys, fresh_imp
         assert final["run_config"]["serving_constraints"]["removed_parameters"] == []
         for invalid in (["--judge-model", ""], ["--judge-max-tokens", "0"],
                         ["--judge-max-tokens", "-1"], ["--judge-reasoning-effort", "invalid"], ["--judge-reasoning-effort", "xhigh"],
-                        *(["--judge-temperature-mode", value] for value in ("0.5", "OMIT", "default"))):
+                        *(["--judge-temperature-mode", value] for value in ("0.5", "OMIT", "default")),
+                        ["--judge-prompt-profile", "ORIGINAL"], ["--judge-prompt-profile", "unknown"],
+                        ["--rejudge-purpose", "MIGRATION"], ["--rejudge-purpose", "diagnostic"]):
             monkeypatch.setattr(argparse.ArgumentParser, "parse_args", parse_args)
             cli(monkeypatch, [*arguments, *invalid])
             with pytest.raises(SystemExit) as rejected:
@@ -148,3 +150,58 @@ def test_main_requests_storage_identity(monkeypatch, tmp_path, capsys, fresh_imp
         for index, call in enumerate(handler.call_args_list[8:]):
             assert json.loads(call.args[0].content) == {**captured["calls"][index % 2], "seed": 0, "max_tokens": 1024}
         assert handler.call_count == 12
+
+        # C2: keep legacy summaries/config-only/orphan files untouched on either new option.
+        for kind in ("summary", "legacy", "config-only", "orphan"):
+            for path in output.iterdir():
+                path.unlink()
+            stored = dict(summary)
+            if kind == "legacy":
+                stored.pop("judge_request")
+            if kind in ("summary", "legacy"):
+                (output / "summary.json").write_text(json.dumps(stored))
+            elif kind == "config-only":
+                (output / "run_config.json").write_text(json.dumps(summary["run_config"]))
+            (output / "results.json").write_text("[]")
+            before = {p.name: p.read_bytes() for p in output.iterdir()}
+            for flags in (["--judge-prompt-profile", "original"], ["--rejudge-purpose", "migration"]):
+                monkeypatch.setattr(argparse.ArgumentParser, "parse_args", parse_args)
+                cli(monkeypatch, [*arguments, *flags])
+                assert runner.main() == 2 and handler.call_count == 12
+                assert before == {p.name: p.read_bytes() for p in output.iterdir()}
+        for path in output.iterdir():
+            path.unlink()
+        # Real SDK request serialization for original, with common input normalization.
+        sheet["B2"] = None
+        sheet["C2"] = 42
+        sheet["D2"] = None
+        book.save(predfile)
+        texts = ["근거\n**최종 점수: 10점 만점에 8점**.", "최종 점수: 10점 만점에 11점"]
+        handler.side_effect = [httpx.Response(200, json={
+            "id": "fixture", "object": "chat.completion", "created": 0, "model": "served",
+            "choices": [{"index": 0, "finish_reason": "stop", "message": {"role": "assistant", "content": text}}],
+        }) for text in texts]
+        monkeypatch.setattr(argparse.ArgumentParser, "parse_args", parse_args)
+        cli(monkeypatch, [*arguments, "--judge-prompt-profile", "original", "--rejudge-purpose", "migration"])
+        assert runner.main() == 10
+        sent = [json.loads(call.args[0].content) for call in handler.call_args_list[-2:]]
+        assert sent[0]["messages"] == [{"role": "user", "content": runner.ORIGINAL_JUDGE_PROMPT.format("", "", "42")}]
+        assert sent[1]["messages"] == [{"role": "user", "content": runner.ORIGINAL_JUDGE_PROMPT.format("질문2", "응답2", "기준2")}]
+        assert sent[0]["temperature"] == 0 and sent[0]["seed"] == 7 and sent[0]["max_tokens"] == 37
+        final = read_json(output / "summary.json")
+        rows = read_json(output / "results.json")
+        assert (final["total"], final["scored"], final["avg_score"]) == (2, 1, 8.0)
+        assert final["rejudge_purpose"] == final["run_config"]["extra"]["rejudge_purpose"] == "migration"
+        assert final["judge_prompt_profile"] == final["run_config"]["judge"]["prompt_profile"] == "original"
+        assert final["judge_prompt_version"] == final["run_config"]["judge"]["prompt_version"] == "koffvqa-original-v1"
+        assert final["judge_prompt_template_sha256"] == final["run_config"]["judge"]["prompt_template_sha256"] == runner._prompt_template_hash("original")
+        assert rows[0]["score"] == 8 and rows[0]["error"] is None
+        assert rows[1]["score"] is None and rows[1]["error"]
+        assert [row["reason"] for row in rows] == [row["raw_judge_output"] for row in rows] == texts
+        before = {p.name: p.read_bytes() for p in output.iterdir()}
+        for flags in (["--judge-prompt-profile", "", "--rejudge-purpose", "migration"],
+                      ["--judge-prompt-profile", "original", "--rejudge-purpose", ""]):
+            monkeypatch.setattr(argparse.ArgumentParser, "parse_args", parse_args)
+            cli(monkeypatch, [*arguments, *flags])
+            assert runner.main() == 2 and handler.call_count == 14
+            assert before == {p.name: p.read_bytes() for p in output.iterdir()}

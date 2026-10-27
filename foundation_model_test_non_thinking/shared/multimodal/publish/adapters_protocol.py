@@ -117,7 +117,10 @@ def _judge_protocol(summary: Mapping[str, Any], config: Mapping[str, Any], recor
     # The legacy default stays in decoding.max_tokens; do not fork its cohort.
     if request.get("max_tokens_effective") not in (None, 1024):
         recorded["judge_max_tokens"] = request["max_tokens_effective"]
-    if rejudge:
+    if rejudge and summary.get("rejudge_purpose") == "migration":
+        # Explicit opt-in only; legacy protocols retain their exact fingerprint.
+        recorded["rejudge_purpose"] = "migration"
+    elif rejudge:
         # Diagnostic variant: the predictions are held fixed, so they are part of
         # this protocol's identity rather than informational provenance.
         recorded["rejudged_prediction_sha256"] = recorded_sha

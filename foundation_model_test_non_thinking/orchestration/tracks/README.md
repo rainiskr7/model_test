@@ -35,6 +35,7 @@ root의 `orchestration/tracks`를 전달한다. 모듈 파일의 원본 경로�
 | `TAUBENCH_USER_MODEL` `TAUBENCH_USER_PROVIDER` `TAUBENCH_USER_REASONING_EFFORT` `TAUBENCH_USER_QUANTIZATIONS` `TAUBENCH_USER_TEMPERATURE_MODE` `TAUBENCH_USER_BASE_URL` `TAUBENCH_TRIALS` `TAUBENCH_MAX_CONCURRENCY` `AGENT_REQUEST_TIMEOUT` | P0 | 사용자 모델·동시성·timeout 설정. provider/effort/quantizations는 빈값이면 미전송. effort는 none·low·medium·high, temperature 모드는 빈값(0 전송)·omit(키 생략); 지정 시 openrouter/ 모델만 허용하고 상속 환경의 USER_BASE_URL과 동시 지정 금지(USER_BASE_URL은 conf 키가 아님). 접두 예: `TAUBENCH_STD4_TAUBENCH_USER_PROVIDER`, `FULL_TAUBENCH_USER_PROVIDER`(quantizations도 같은 규칙). quantizations는 중복·빈 토큰 없는 허용 목록이며, 토큰·갱신 절차는 [full 계약](../README_full.md#standard-사용자-프로파일) 참조 |
 | `FULL_AGENT_TASK_TIMEOUT` `FULL_KRETA_WORKERS` `FULL_KRETA_RESUME` `FULL_RESUME_FROM` | P0 | 기존 내부 변수명으로 해석한 설정 |
 | `JUDGE_MODEL` `JUDGE_PROVIDER` `JUDGE_REASONING_EFFORT` `JUDGE_MAX_TOKENS` `JUDGE_TEMPERATURE_MODE` | P0 | full 판정 프로파일; effort는 빈값·none·low·medium·high, temperature 모드는 빈값(0 전송)·omit(키 생략). 다른 선택 옵션은 빈값이면 기존 기본값 유지 |
+| `JUDGE_PROMPT_PROFILE` | P0 | 빈값·original; full의 KOFFVQA judge만 소비. FC argv는 불변. 재판정 목적은 레인 키로 받지 않음 |
 | `JUDGE_COHORT` | P0 | FC 판정 저장 이름; 빈값은 judge.json, 지정 시 judge.<값>.json. KOFFVQA에는 전달하지 않음 |
 | `SESSION` | P0 | 선택 트랙 SESSION 키의 값; 트랙은 이 공통 이름을 사용 |
 | `TRACK` `BASE` `HERE` | P0 | 트랙 이름·코드 루트·orchestration 경로 |

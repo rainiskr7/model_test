@@ -48,6 +48,11 @@ def test_defaults_empty_values_and_internal_destinations():
                     entries = parse(SAMPLE + (scoped + common if first else common + scoped))
                     assert resolve(entries, track, TRACKS, require_session=False)[key] == value
                     assert resolve(entries, "kmmlu", TRACKS)[key] == "omit"
+    assert defaults["JUDGE_PROMPT_PROFILE"] == ""
+    for value in ("", "original"):
+        entries = parse(SAMPLE + "JUDGE_PROMPT_PROFILE=original\nFULL_JUDGE_PROMPT_PROFILE=" + value + "\n")
+        assert resolve(entries, "full", TRACKS, require_session=False)["JUDGE_PROMPT_PROFILE"] == value
+        assert resolve(entries, "kmmlu", TRACKS)["JUDGE_PROMPT_PROFILE"] == "original"
     user_keys = ('TAUBENCH_USER_PROVIDER', 'TAUBENCH_USER_REASONING_EFFORT', 'TAUBENCH_USER_QUANTIZATIONS')
     assert [defaults[key] for key in user_keys] == ['', '', '']
     for track in ('full', 'taubench_std4'):
@@ -77,7 +82,7 @@ def test_track_prefix_forbidden_even_on_unselected_track(key):
     assert str(error.value) == 'key cannot have track prefix: ' + key
 
 
-@pytest.mark.parametrize('key', ['UNKNOWN', 'full_REPS', 'FULL_UNKNOWN', ' REPS', 'REPS '])
+@pytest.mark.parametrize('key', ['UNKNOWN', 'full_REPS', 'FULL_UNKNOWN', ' REPS', 'REPS ', 'JUDGE_REJUDGE_PURPOSE', 'FULL_JUDGE_REJUDGE_PURPOSE'])
 def test_unknown_keys_are_not_silently_filtered(key):
     with pytest.raises(ConfigError, match='unknown key:'):
         resolve(parse(SAMPLE + key + '=1'), 'kmmlu', TRACKS)

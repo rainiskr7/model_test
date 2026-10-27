@@ -77,14 +77,14 @@ class Fixture:
         return subprocess.run(argv, cwd=self.base, env={**self.env, **env},
                               capture_output=True, text=True, timeout=45)
 
-    def judge(self, count=2, **env):
+    def judge(self, count=2, extra_args=(), **env):
         pred = self.base / "results/fixture_model/fixture_r1/vision/multimodal/koffvqa/model_gen.xlsx"
         if not pred.exists():
             workbook(pred, count)
         return self.run([sys.executable, "-B", "-m", "shared.multimodal.benches.koffvqa_api_judge",
                          "--predfile", str(pred), "--target-model", "fixture/model",
                          "--judge-model", "fixture-judge", "--judge-base-url", "http://fixture.invalid/v1",
-                         "--judge-api-key-env", "FIXTURE_KEY", "--seed", "0"],
+                         "--judge-api-key-env", "FIXTURE_KEY", "--seed", "0", *extra_args],
                         **{"FIXTURE_KEY": "synthetic", **env})
 
     def lane(self, **env):

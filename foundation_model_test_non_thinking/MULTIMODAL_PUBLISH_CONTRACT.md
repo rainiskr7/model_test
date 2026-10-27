@@ -382,9 +382,9 @@ direct/32-token protocol을 받았고 지시 준수와 제한 안에서 답을 �
 | `judge_max_tokens` | `judge_request.max_tokens_effective` | 기본 1024가 아닌 값만 **포함**; 기존 decoding.max_tokens도 유지 |
 | `judge_base_url` | 엔드포인트/제공자 | 정보용 |
 | `judge_served_identity` | 응답이 보고한 `model`·`system_fingerprint`·`provider` | 정보용 |
-| `judge_prompt_template_sha256` | 프롬프트 템플릿 **본문의 해시** | 정보용 |
+| `judge_prompt_template_sha256` | 프롬프트 템플릿 **본문의 해시** | 기존 variant는 정보용; `api_judge_migration`만 **포함** |
 
-뒤의 셋을 지문에서 빼는 이유는 §4 의 원칙 그대로다 — **프로비넌스를 더 기록한다고
+기존 variant에서 뒤의 셋을 지문에서 빼는 이유는 §4 의 원칙 그대로다 — **프로비넌스를 더 기록한다고
 프로토콜 정체성이 바뀌어선 안 된다.** 실측으로 겪은 일이다: 이 세 필드를 지문에
 넣었더니 2026-08-26 판정 런이 필드가 없던 2026-08-25 런과 코호트가 갈려 재현성
 비교가 성립하지 않았다. dataset provenance 에 이미 적용돼 있던 규칙과 같다.
@@ -402,17 +402,18 @@ direct/32-token protocol을 받았고 지시 준수와 제한 안에서 답을 �
 
 ### 9-2. 판정 재현성의 측정 대상
 
-판정 런은 서로 다른 두 질문에 답할 수 있다. 하나의 허용치로 섞으면 산포가
+판정 런은 다음 세 가지 측정 목적을 구별한다. 하나의 허용치로 섞으면 산포가
 서빙 탓인지 판정기 탓인지 귀속되지 않는다. variant 로 가른다:
 
 | variant | 뜻 | 지문에 prediction SHA |
 |---|---|---|
 | `api_judge_end_to_end` | 응답 생성부터 다시 하고 판정 — **재현성의 기본 정의** | 아니오(정보용) |
 | `api_judge_rejudge` | 저장된 응답을 다시 판정 — 판정기 비결정성만 보는 진단용 | 예 |
+| `api_judge_migration` | 판정기 교체용 재판정(생성 고정 아님); 생성 세션마다 1회 | 아니오(정보용); 템플릿 해시는 포함 |
 
-판별은 선언이 아니라 산출물로 한다: 예측 파일이 판정 산출물과 **다른 세션**에 있으면
-`rejudge` 다. 계획서 §3 의 `평균 0.10/10` 허용치는 `api_judge_end_to_end` 에만
-적용한다. `rejudge` 는 별도로 보고하고 end-to-end 판정에 합산하지 않는다.
+예측 파일이 판정 산출물과 **다른 세션**에 있으면 재판정이다. 기본은 `api_judge_rejudge`이며, summary에 `rejudge_purpose="migration"`이 기록된 교차 세션만 `api_judge_migration`으로 분류한다. 같은 세션·세션 식별 불가의 migration 선언과 알 수 없는 목적은 failure를 기록하고 발행을 거부한다. 원본 판정 summary는 읽지 않는다.
+
+migration은 생성 세션 r1·r2·r3 각각 1회 재판정한 결과를 반복으로 삼는다. 기존 완전 복사본 접기 이후 같은 모델·migration 코호트에 prediction SHA가 누락되거나 중복되면 해당 모델의 대표 선택 전체를 거부(ambiguous)하고 strict 실패로 처리한다. 개별 sidecar의 채점 유효성을 소급 변경하지 않으며 보고서의 모델 반복 집합이 발행 불가가 된다. `평균 0.10/10` 허용치와 strict 정책은 end-to-end와 동일하다. 세 variant의 표와 반복 집합은 합치지 않는다.
 
 **같은 세션에 판정을 다시 돌리지 않는다.** 판정기는 `results.json` 을 덮어쓰므로
 첫 측정을 파괴한다. 코호트 구성원을 늘리려면 새 세션이어야 한다.
@@ -425,10 +426,7 @@ generation summary를 읽는다. 기존 형제 workbook이 있으면 SHA 불일�
 세션으로 우회하지 않는다. 원본 세션을 참조하는 sidecar의 무결성을 유지하려면
 원본 xlsx도 함께 보존해야 한다.
 
-**재판정 세션은 모델 간 비교에 쓰지 않는다.** `rejudged_prediction_sha256`가
-지문에 포함되므로 같은 판정 프로파일이어도 다른 예측 바이트는 다른 코호트다.
-Stage 2는 저장 지원이며, KOFFVQA 모델 간 비교를 위한 재생성 또는 비교 계약
-변경은 별도 Stage 2b 결정이다. 완전성 검사 CLI의 성공은 발행 가능 판정이 아니다.
+**진단 재판정은 모델 간 비교에 쓰지 않는다.** `rejudged_prediction_sha256`가 지문에 포함되어 다른 예측 바이트는 다른 코호트다. Stage 2b의 명시적 migration만 이 키를 제외하고 `rejudge_purpose`와 `judge_prompt_template_sha256`을 지문에 포함한다. 전역 정보용 필드 목록과 기존 variant의 지문은 유지한다. seed·limit·dataset item digest·판정 모델·요청 프로파일도 기존대로 적용한다. 완전성 검사 CLI의 성공은 발행 가능 판정이 아니다.
 
 ## 9. KOFFVQA 판정기 컬럼 및 점수 계약
 
@@ -466,3 +464,12 @@ v1 에서 고쳤다: fuzzy substring 감지를 제거하고 `question` / `answer
   resume하지 않고 새 `run_kreta.sh`로 시작한다.
 
 저장소 밖 cwd에서 보고서나 루트 CLI(`python3 "$N/derive_multimodal_publish.py"`)를 실행할 때는 `PYTHONPATH="$N${PYTHONPATH:+:$PYTHONPATH}"`를 명령 앞에 지정한다. `--base`는 산출물 위치이며 코드 루트를 바꾸지 않는다.
+
+
+### 9-3. 선택적 원래 지시문과 실행 목적
+
+`--judge-prompt-profile`은 빈값(기존 `v3-anchored-with-examples`) 또는 `original`만 허용한다. original은 upstream `base_judge_prompt.strip()`을 코드 상수로 보존하고 버전 `koffvqa-original-v1`로 구분한다. 해시는 실제 사용한 템플릿에서 계산한다. 입력 정규화는 공통으로 결측을 빈 문자열로, 비문자열 기준은 JSON으로 바꾼 뒤 original의 위치 인자 순서 `(question, prediction, answer)`로 채운다. 원본 평가기의 언어 필터·점수 0 fallback까지 이식하는 옵션은 아니다.
+
+original은 마지막 비어 있지 않은 줄 전체가 `최종 점수: 10점 만점에 X점`(0~10 정수)에 맞아야 한다. 앞뒤 공백, 줄 전체를 감싼 짝 맞는 `*`/`**`, 강조 안 또는 밖의 마침표 하나만 허용한다. 실패는 `score=null`·error로 보존하며 reason과 raw 출력은 응답 전문이다. 저장 후 기존 미완료 rc 10과 발행 거부를 적용한다.
+
+`--rejudge-purpose`는 빈값 또는 `migration`이다. 빈값에서는 summary·내장 run_config에 새 목적 필드를 추가하지 않는다. original 프로파일·해시 및 migration 목적은 선택했을 때만 추가 기록한다. 기존 summary, 레거시 summary, config-only 기록과 프로파일·목적·기록된 버전/해시가 다르면 API 호출·덮어쓰기 전에 rc 2로 거부한다. 고아 results도 거부한다. 다른 측정은 새 세션에 저장한다. 직접 셸의 `JUDGE_PROMPT_PROFILE`·`JUDGE_REJUDGE_PURPOSE` 전달과 교차 세션 CLI 예시는 `orchestration/README_full.md`를 따른다.
