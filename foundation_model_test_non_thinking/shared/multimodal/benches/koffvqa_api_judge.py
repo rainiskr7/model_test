@@ -131,6 +131,7 @@ def judge_one(client, judge_model: str, question: str, response: str, criteria,
         text = resp.choices[0].message.content or ""
         if prompt_profile == "original":
             last = next((line.strip() for line in reversed(text.splitlines()) if line.strip()), "")
+            last = re.sub(r"^(?:[-*•]|[0-9]+\.)[ \t]+", "", last, count=1)
             outer_period = last.endswith(".")
             if outer_period:
                 last = last[:-1].rstrip()

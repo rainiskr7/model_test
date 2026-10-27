@@ -75,6 +75,13 @@ def test_judge_one_records_only_in_supplied_identity():
         ("최종 점수: 10점 만점에 0점", 0), ("최종 점수: 10점 만점에 10점", 10),
         ("근거\n  **최종 점수: 10점 만점에 8점**.  \n\n", 8),
         ("*최종 점수: 10점 만점에 8점.*", 8), ("최종 점수: 10점 만점에 8점.", 8),
+        ("- **최종 점수: 10점 만점에 10점**", 10),
+        ("* 최종 점수: 10점 만점에 7점", 7),
+        ("1. 최종 점수: 10점 만점에 3점.", 3),
+        ("• 최종 점수: 10점 만점에 4점", 4),
+        ("-- 최종 점수: 10점 만점에 3점", None),
+        ("- 최종 점수: 10점 만점에 8.5점", None),
+        ("- * 최종 점수: 10점 만점에 3점", None),
         ('{"score": 8, "reason": "JSON only"}', None),
     ):
         response = SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content=text))])
