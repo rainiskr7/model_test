@@ -86,8 +86,10 @@ fixture() {
   # Every case has a complete temporary orchestration copy and fake base.
   FX="$ARTIFACTS/$1"
   mkdir -p "$FX/bin" "$FX/.venv/bin" "$FX/configs" "$FX/shared" "$FX/rc" "$FX/dump" "$FX/home"
-  # 5a: this complete copy also supplies tracks/ sourced by run_lane.sh.
-  cp -R "$ORCH" "$FX/orchestration"
+  # Copy code and entry links without reading the mutable production confs.
+  mkdir -p "$FX/orchestration/models"
+  cp "$ORCH/run_lane.sh" "$FX/orchestration/run_lane.sh"
+  cp -R "$ORCH/tracks" "$ORCH/laneconf" "$ORCH/lanes" "$FX/orchestration/"
   cp "$REPO/shared/results_dir.sh" "$FX/shared/results_dir.sh"
   # 4d: the isolated lane now sources the real, frozen locking helper.
   mkdir -p "$FX/shared/harness"
@@ -97,8 +99,8 @@ fixture() {
   printf 'export PATH="%s/bin:/usr/bin:/bin"\n' "$FX" > "$FX/.venv/bin/activate"
   printf 'fixture_model\n' > "$FX/model_dir"
   printf 'OPENAI_API_KEY_7=synthetic-model-key\nTAUBENCH_USER_API_KEY=synthetic-judge-key\n' > "$FX/.env"
-  # 5b: one model conf supplies the full session; entry takes its model name.
-  cp "$ORCH/models/qwen35fp8.conf" "$FX/orchestration/models/fixture.conf"
+  # The pinned conf retains the sessions and defaults used by the byte oracle.
+  cp "$HERE/fixtures_models/qwen35fp8.conf" "$FX/orchestration/models/fixture.conf"
   LANE=full
   put_stubs
   local stage path
@@ -595,6 +597,38 @@ f7() {
   diff -u "$FX/expected_cohort_argv" "$FX/dump/20261015_full_r1.functionchat_judge/argv"
 }
 
+f7_luna() {
+  # All five settings are literal test inputs, independent of production confs.
+  fixture F7_luna
+  set_config FULL_REPS=1
+  set_config JUDGE_MODEL=openai/gpt-6-luna
+  set_config JUDGE_REASONING_EFFORT=none
+  set_config JUDGE_TEMPERATURE_MODE=omit
+  set_config JUDGE_PROMPT_PROFILE=original
+  set_config JUDGE_COHORT=luna
+  run_lane 1
+  expect_rc 0 || return 1
+  grep 'shared.functionchat.judge.run_judge\|shared.multimodal.benches.koffvqa_api_judge' "$FX/stdout" > "$FX/judge_commands"
+  cat > "$FX/expected_judge_commands" <<'EXPECTED'
+COMMAND[if-exists]=python -m shared.functionchat.judge.run_judge --results-dir <RD>/20261015_full_r1/language/functionchat --judge-model openai/gpt-6-luna --judge-cohort luna --judge-reasoning-effort none --judge-temperature-mode omit
+COMMAND[if-exists]=python -m shared.multimodal.benches.koffvqa_api_judge --predfile <RD>/20261015_full_r1/vision/multimodal/koffvqa/<latest *_gen.xlsx> --target-model fixture/model --judge-model openai/gpt-6-luna --judge-base-url https://openrouter.ai/api/v1 --judge-api-key-env TAUBENCH_USER_API_KEY --seed 0 --judge-prompt-profile original --judge-reasoning-effort none --judge-temperature-mode omit
+EXPECTED
+  diff -u "$FX/expected_judge_commands" "$FX/judge_commands" || return 1
+  run_lane
+  expect_rc 0 || return 1
+  printf '%s\n' -m shared.functionchat.judge.run_judge --results-dir \
+    "$FX/results/fixture_model/20261015_full_r1/language/functionchat" \
+    --judge-model openai/gpt-6-luna --judge-cohort luna \
+    --judge-reasoning-effort none --judge-temperature-mode omit > "$FX/expected_fc_argv"
+  diff -u "$FX/expected_fc_argv" "$FX/dump/20261015_full_r1.functionchat_judge/argv" || return 1
+  printf '%s\n' -m shared.multimodal.benches.koffvqa_api_judge --predfile \
+    "$FX/results/fixture_model/20261015_full_r1/vision/multimodal/koffvqa/a_new_gen.xlsx" \
+    --target-model fixture/model --judge-model openai/gpt-6-luna \
+    --judge-base-url https://openrouter.ai/api/v1 --judge-api-key-env TAUBENCH_USER_API_KEY --seed 0 \
+    --judge-prompt-profile original --judge-reasoning-effort none --judge-temperature-mode omit > "$FX/expected_kof_argv"
+  diff -u "$FX/expected_kof_argv" "$FX/dump/20261015_full_r1.koffvqa_judge/argv"
+}
+
 put_judge_outputs() {
   local dir="$FX/results/fixture_model/20261015_full_r$1/vision/multimodal/koffvqa_api_judge"
   mkdir -p "$dir"
@@ -666,10 +700,10 @@ cd1() {
   for side in HEAD working; do
     fixture "CD1_$side"
     if [ "$side" = HEAD ]; then
-      for path in orchestration/run_lane.sh orchestration/models/qwen35fp8.conf; do
+      for path in orchestration/run_lane.sh; do
         (cd "$REPO" && git show "015c3c5:./$path") > "$FX/$path" || return 1
       done
-      cp "$FX/orchestration/models/qwen35fp8.conf" "$FX/orchestration/models/fixture.conf"
+      sed 's/^LANE_DISPLAY=/DISPLAY=/' "$HERE/fixtures_models/qwen35fp8.conf" > "$FX/orchestration/models/fixture.conf"
       for file in "$FX/orchestration/laneconf/"*.py; do
         path=orchestration/laneconf/$(basename "$file")
         (cd "$REPO" && git show "015c3c5:./$path") > "$file" || return 1
@@ -716,6 +750,7 @@ if [ "${1:-}" != --cd1 ]; then
   run_case F5 f5
   run_case F6 f6
   run_case F7 f7
+  run_case F7_luna f7_luna
   run_case F8 f8
   run_case F9 f9
 fi

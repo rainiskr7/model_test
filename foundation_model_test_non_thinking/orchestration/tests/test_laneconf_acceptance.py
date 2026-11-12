@@ -4,7 +4,7 @@ import json
 import pytest
 
 from orchestration.tests.laneconf_support import (
-    BASELINE_REVISION, Comparison, REPO, SAMPLE, assignments, host_line,
+    BASELINE_REVISION, Comparison, FIXTURE_MODELS, REPO, SAMPLE, assignments, host_line,
 )
 from orchestration.tests.registry_support import with_completion_check
 
@@ -83,7 +83,7 @@ def test_ca2_synthetic_scope_quotes_defaults(tmp_path, settings, reps, tokenizer
 @pytest.mark.parametrize('model,track', LANES)
 def test_ca3_same_path_head_bytes(tmp_path, model, track):
     fx = Comparison(tmp_path / 'checkout')
-    fx.put(f'orchestration/models/{model}.conf', (REPO / f'orchestration/models/{model}.conf').read_text())
+    fx.put(f'orchestration/models/{model}.conf', (FIXTURE_MODELS / f'{model}.conf').read_text())
     (fx.base / '.env').unlink()  # Both dry runs must succeed without credentials.
     results = []
     for side in ('HEAD', 'working'):

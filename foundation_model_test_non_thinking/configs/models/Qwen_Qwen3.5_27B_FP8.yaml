@@ -27,8 +27,11 @@ backend_reference:
   engine: vllm
   notes: |
     gpustack vllm backend, FP8 양자화. Qwen3.5 dense 27B.
-    thinking 모드 없음 (Qwen3.6 와 다름) — enable_thinking 옵션 불필요.
-    라이브 엔드포인트 확인: reasoning_content 없음(non-thinking).
+    Qwen3.5 는 thinking 을 지원한다(11-10 정정 — 예전 "thinking 모드 없음" 메모는 틀렸다).
+    확인한 템플릿(chat_template.jinja 149~152행)은 enable_thinking 미지정 시 <think> 를 연다.
+    N 평가에서는 서빙 설정 enable_thinking=false 로 끄며, 실제 서빙 상태는 감사 기록으로 확인한다
+    (logs/resume_orch/diffusion_nemotron_prep/audit_qwen_qwen3.5_27b_fp8_20261015_2231.json).
+    라이브 엔드포인트 확인: reasoning_content 없음(생각 끈 상태).
     KRETA 는 direct 모드(max_tokens 32)로 실행 — run_full_eval 앞단에서
     KRETA_SETTING=direct export.
     2026-08-16 재서빙 확인: --enable-auto-tool-choice 적용됨. 라이브 엔드포인트에
@@ -38,5 +41,5 @@ backend_reference:
     생성되어 부족하다 — agent 트랙은 AGENT_REQUEST_TIMEOUT 250 권장.
     2026-10-15 재서빙(aitopatom-337f, 192.168.0.7:18023, 키 OPENAI_API_KEY_7) — 사용자 확인:
       --tool-call-parser qwen3_coder (qwen3.8 과 같은 파서)
-      생각 모드 없음 → reasoning-parser·enable_thinking 불필요. 기동 후 serving_audit.py 로
+      --reasoning-parser qwen3, --default-chat-template-kwargs enable_thinking=false (감사 기록 기준). 기동 후 serving_audit.py 로
       모델 목록·도구 호출·reasoning_content 부재를 확인한 뒤 KMMLU 6과목 진단 관문을 거친다.
