@@ -86,8 +86,10 @@ fixture() {
   # Every case has a complete temporary orchestration copy and fake base.
   FX="$ARTIFACTS/$1"
   mkdir -p "$FX/bin" "$FX/.venv/bin" "$FX/configs" "$FX/shared" "$FX/rc" "$FX/dump" "$FX/home"
-  # 5a: this complete copy also supplies tracks/ sourced by run_lane.sh.
-  cp -R "$ORCH" "$FX/orchestration"
+  # Copy code and entry links without reading the mutable production confs.
+  mkdir -p "$FX/orchestration/models"
+  cp "$ORCH/run_lane.sh" "$FX/orchestration/run_lane.sh"
+  cp -R "$ORCH/tracks" "$ORCH/laneconf" "$ORCH/lanes" "$FX/orchestration/"
   cp "$REPO/shared/results_dir.sh" "$FX/shared/results_dir.sh"
   # 4d: the isolated lane now sources the real, frozen locking helper.
   mkdir -p "$FX/shared/harness"
@@ -97,8 +99,8 @@ fixture() {
   printf 'export PATH="%s/bin:/usr/bin:/bin"\n' "$FX" > "$FX/.venv/bin/activate"
   printf 'fixture_model\n' > "$FX/model_dir"
   printf 'OPENAI_API_KEY_7=synthetic-model-key\nTAUBENCH_USER_API_KEY=synthetic-judge-key\n' > "$FX/.env"
-  # 5b: one model conf supplies the full session; entry takes its model name.
-  cp "$ORCH/models/qwen35fp8.conf" "$FX/orchestration/models/fixture.conf"
+  # The pinned conf retains the sessions and defaults used by the byte oracle.
+  cp "$HERE/fixtures_models/qwen35fp8.conf" "$FX/orchestration/models/fixture.conf"
   LANE=full
   put_stubs
   local stage path
@@ -116,7 +118,7 @@ run_lane() {
     PYTHONDONTWRITEBYTECODE=1 MODEL_TEST_BASE="$FX" LANE_DRY_RUN="${1:-0}" \
     AGENT_REQUEST_TIMEOUT=999 AGENT_TASK_TIMEOUT=9999 NUM_CONCURRENT=99 TAUBENCH_MODE=standard TAUBENCH_TRIALS=9 \
     TAUBENCH_MAX_CONCURRENCY=9 KRETA_WORKERS=9 KRETA_RESUME=1 \
-    TAUBENCH_USER_PROVIDER=inherited/provider TAUBENCH_USER_REASONING_EFFORT=high \
+    TAUBENCH_USER_PROVIDER=inherited/provider TAUBENCH_USER_REASONING_EFFORT=high TAUBENCH_USER_QUANTIZATIONS=fp8 TAUBENCH_USER_TEMPERATURE_MODE=omit \
     /bin/bash "$FX/orchestration/lanes/$LANE.sh" fixture) > "$FX/stdout" 2>&1
   RC=$?
 }
@@ -174,34 +176,51 @@ f1() {
   expect_rc 0 || return 1
   grep '^COMMAND=' "$FX/stdout" > "$FX/std4_command"
   diff -u "$FX/standard_command" "$FX/std4_command" || return 1
-  local selected configured_command= envfile
-  for selected in full taubench_std4; do
-    fixture "F1_profile_$selected"
-    LANE=$selected
-    set_config FULL_REPS=1
-    set_config SESSION_TAUBENCH_STD4=fixture_std4
-    set_config TAUBENCH_USER_MODEL=openrouter/openai/gpt-oss-120b
-    set_config TAUBENCH_USER_PROVIDER=deepinfra/bf16
-    set_config TAUBENCH_USER_REASONING_EFFORT=medium
-    run_lane 1
-    expect_rc 0 || return 1
-    if [ "$selected" = full ]; then
-      configured_command=$(grep '^COMMAND=env TAUBENCH_MODE=standard ' "$FX/stdout")
-    else
-      exact "$FX/stdout" "$configured_command" || return 1
-    fi
-    has "$FX/stdout" 'TAUBENCH_USER_PROVIDER=deepinfra/bf16 TAUBENCH_USER_REASONING_EFFORT=medium bash' || return 1
-    [ ! -e "$FX/logs" ] && [ ! -e "$FX/calls" ] || return 1
-    run_lane
-    expect_rc 0 || return 1
-    for envfile in "$FX/dump/"*/env; do
-      case "$envfile" in
-        *.taubench_standard/env)
-          exact "$envfile" 'TAUBENCH_USER_MODEL=openrouter/openai/gpt-oss-120b' &&
-          exact "$envfile" 'TAUBENCH_USER_PROVIDER=deepinfra/bf16' &&
-          exact "$envfile" 'TAUBENCH_USER_REASONING_EFFORT=medium' || return 1 ;;
-        *) absent "$envfile" '^TAUBENCH_USER_(PROVIDER|REASONING_EFFORT)=' || return 1 ;;
-      esac
+  local selected configured_command= envfile profile provider quantizations setting temperature_mode
+  for profile in pinned quant combined omit; do
+    configured_command=
+    provider=deepinfra/bf16 quantizations= temperature_mode=
+    [ "$profile" = pinned ] || quantizations=bf16,fp8
+    [ "$profile" != quant ] || provider=
+    if [ "$profile" = omit ]; then provider= quantizations= temperature_mode=omit; fi
+    for selected in full taubench_std4; do
+      fixture "F1_profile_${profile}_$selected"
+      LANE=$selected
+      set_config FULL_REPS=1
+      set_config SESSION_TAUBENCH_STD4=fixture_std4
+      set_config TAUBENCH_USER_MODEL=openrouter/openai/gpt-oss-120b
+      set_config "TAUBENCH_USER_PROVIDER=$provider"
+      set_config "TAUBENCH_USER_QUANTIZATIONS=$quantizations"
+      set_config TAUBENCH_USER_REASONING_EFFORT=medium
+      set_config "TAUBENCH_USER_TEMPERATURE_MODE=$temperature_mode"
+      run_lane 1
+      expect_rc 0 || return 1
+      if [ "$selected" = full ]; then
+        configured_command=$(grep '^COMMAND=env TAUBENCH_MODE=standard ' "$FX/stdout")
+      else
+        exact "$FX/stdout" "$configured_command" || return 1
+      fi
+      for setting in "TAUBENCH_USER_PROVIDER=$provider" "TAUBENCH_USER_QUANTIZATIONS=$quantizations" "TAUBENCH_USER_TEMPERATURE_MODE=$temperature_mode"; do
+        if [ -n "${setting#*=}" ]; then has "$FX/stdout" "$setting" || return 1
+        else absent "$FX/stdout" "${setting%%=*}=" || return 1; fi
+      done
+      has "$FX/stdout" 'TAUBENCH_USER_REASONING_EFFORT=medium' || return 1
+      [ ! -e "$FX/logs" ] && [ ! -e "$FX/calls" ] || return 1
+      run_lane
+      expect_rc 0 || return 1
+      for envfile in "$FX/dump/"*/env; do
+        case "$envfile" in
+          *.taubench_standard/env)
+            exact "$envfile" 'TAUBENCH_USER_MODEL=openrouter/openai/gpt-oss-120b' &&
+            exact "$envfile" 'TAUBENCH_USER_REASONING_EFFORT=medium' || return 1
+            for setting in "TAUBENCH_USER_PROVIDER=$provider" "TAUBENCH_USER_QUANTIZATIONS=$quantizations" "TAUBENCH_USER_TEMPERATURE_MODE=$temperature_mode"; do
+              if [ -n "${setting#*=}" ]; then exact "$envfile" "$setting" || return 1
+              elif [ "$selected" = taubench_std4 ]; then exact "$envfile" "$setting" || return 1
+              else absent "$envfile" "^${setting%%=*}=" || return 1; fi
+            done ;;
+          *) absent "$envfile" '^TAUBENCH_USER_(PROVIDER|REASONING_EFFORT|QUANTIZATIONS|TEMPERATURE_MODE)=' || return 1 ;;
+        esac
+      done
     done
   done
 }
@@ -442,7 +461,10 @@ invalid_setting_message() {
     LANE_DISPLAY=) printf 'required key: LANE_DISPLAY' ;;
     FULL_JUDGE_MODEL=*) printf 'JUDGE_MODEL must not be empty' ;;
     FULL_JUDGE_MAX_TOKENS=*) printf 'JUDGE_MAX_TOKENS must be a positive integer' ;;
-    FULL_JUDGE_REASONING_EFFORT=*) printf 'JUDGE_REASONING_EFFORT must be empty, low, medium or high' ;;
+    FULL_JUDGE_TEMPERATURE_MODE=*) printf 'JUDGE_TEMPERATURE_MODE must be empty or omit' ;;
+    FULL_JUDGE_PROMPT_PROFILE=*) printf 'JUDGE_PROMPT_PROFILE must be empty or original' ;;
+    JUDGE_REJUDGE_PURPOSE=*|FULL_JUDGE_REJUDGE_PURPOSE=*) printf 'unknown key: JUDGE_REJUDGE_PURPOSE' ;;
+    FULL_JUDGE_REASONING_EFFORT=*) printf 'JUDGE_REASONING_EFFORT must be empty, none, low, medium or high' ;;
     JUDGE_COHORT=*|FULL_JUDGE_COHORT=*) printf 'JUDGE_COHORT must match [a-z0-9][a-z0-9_-]{0,31}' ;;
     *) return 1 ;;
   esac
@@ -456,7 +478,9 @@ f6() {
     FULL_AGENT_TASK_TIMEOUT=120 FULL_AGENT_TASK_TIMEOUT=300 FULL_AGENT_TASK_TIMEOUT=x \
     FULL_AGENT_REQUEST_TIMEOUT=900 FULL_AGENT_REQUEST_TIMEOUT=0 FULL_AGENT_REQUEST_TIMEOUT=x \
     FULL_REPS=0 FULL_REPS=-1 FULL_REPS=x LANE_DISPLAY= FULL_JUDGE_MODEL= \
-    FULL_JUDGE_MAX_TOKENS=0 FULL_JUDGE_MAX_TOKENS=-1 FULL_JUDGE_MAX_TOKENS=x FULL_JUDGE_REASONING_EFFORT=invalid \
+    FULL_JUDGE_MAX_TOKENS=0 FULL_JUDGE_MAX_TOKENS=-1 FULL_JUDGE_MAX_TOKENS=x FULL_JUDGE_REASONING_EFFORT=invalid FULL_JUDGE_REASONING_EFFORT=xhigh \
+    FULL_JUDGE_TEMPERATURE_MODE=0.5 FULL_JUDGE_TEMPERATURE_MODE=OMIT \
+    FULL_JUDGE_PROMPT_PROFILE=ORIGINAL FULL_JUDGE_PROMPT_PROFILE=unknown JUDGE_REJUDGE_PURPOSE=migration FULL_JUDGE_REJUDGE_PURPOSE=migration \
     JUDGE_COHORT=Oss 'JUDGE_COHORT=a b' FULL_JUDGE_COHORT=.; do
     count=$((count + 1))
     fixture "F6_$count"
@@ -479,13 +503,16 @@ f7() {
   local dir
   for dir in "$FX/dump/"*; do check_stage_env "$dir" 350 1000 || return 1; done
   # C2: common values and full overrides must reach both dry-run and real argv.
-  local scope stage
-  for scope in common full; do
+  local scope stage effort
+  for scope in common full omit; do
+    effort=medium
+    [ "$scope" != omit ] || effort=none
     fixture "F7_judge_$scope"
     set_config FULL_REPS=1
     set_config JUDGE_MODEL=openai/gpt-oss-120b
     set_config JUDGE_PROVIDER=deepinfra/bf16
-    set_config JUDGE_REASONING_EFFORT=medium
+    set_config "JUDGE_REASONING_EFFORT=$effort"
+    [ "$scope" != omit ] || set_config JUDGE_TEMPERATURE_MODE=omit
     set_config JUDGE_MAX_TOKENS=2000
     if [ "$scope" = full ]; then
       set_config JUDGE_MODEL=unused
@@ -500,15 +527,55 @@ f7() {
     run_lane 1
     expect_rc 0 || return 1
     [ "$(grep -c -- '--judge-model openai/gpt-oss-120b' "$FX/stdout")" -eq 2 ] || return 1
-    [ "$(grep -c -- '--judge-provider deepinfra/bf16 --judge-reasoning-effort medium --judge-max-tokens 2000' "$FX/stdout")" -eq 2 ] || return 1
+    [ "$(grep -c -- "--judge-provider deepinfra/bf16 --judge-reasoning-effort $effort" "$FX/stdout")" -eq 2 ] || return 1
+    if [ "$scope" = omit ]; then
+      [ "$(grep -c -- '--judge-temperature-mode omit --judge-max-tokens 2000' "$FX/stdout")" -eq 2 ] || return 1
+    fi
     run_lane
     expect_rc 0 || return 1
     for stage in functionchat_judge koffvqa_judge; do
       dir="$FX/dump/20261015_full_r1.$stage"
-      for value in --judge-model openai/gpt-oss-120b --judge-provider deepinfra/bf16 --judge-reasoning-effort medium --judge-max-tokens 2000; do
+      for value in --judge-model openai/gpt-oss-120b --judge-provider deepinfra/bf16 --judge-reasoning-effort "$effort" --judge-max-tokens 2000; do
         exact "$dir/argv" "$value" || return 1
       done
+      if [ "$scope" = omit ]; then
+        exact "$dir/argv" --judge-temperature-mode && exact "$dir/argv" omit || return 1
+      fi
     done
+  done
+  # KOF-only prompt profile: common/scoped options never reach FC.
+  for scope in common full empty; do
+    fixture "F7_prompt_$scope"
+    set_config FULL_REPS=1
+    run_lane 1
+    expect_rc 0 || return 1
+    grep 'shared.functionchat.judge.run_judge ' "$FX/stdout" > "$FX/fc_before"
+    set_config JUDGE_PROMPT_PROFILE=original
+    if [ "$scope" = full ]; then
+      set_config JUDGE_PROMPT_PROFILE=
+      set_config FULL_JUDGE_PROMPT_PROFILE=original
+    elif [ "$scope" = empty ]; then
+      set_config FULL_JUDGE_PROMPT_PROFILE=
+    fi
+    run_lane 1
+    expect_rc 0 || return 1
+    grep 'shared.functionchat.judge.run_judge ' "$FX/stdout" > "$FX/fc_after"
+    diff -u "$FX/fc_before" "$FX/fc_after" || return 1
+    if [ "$scope" = empty ]; then
+      ! grep -q -- '--judge-prompt-profile' "$FX/stdout" || return 1
+    else
+      [ "$(grep -c -- '--judge-prompt-profile original' "$FX/stdout")" -eq 1 ] || return 1
+    fi
+    run_lane
+    expect_rc 0 || return 1
+    check_stage_argv 20261015_full_r1 functionchat_judge || return 1
+    dir="$FX/dump/20261015_full_r1.koffvqa_judge"
+    if [ "$scope" = empty ]; then
+      ! grep -q -- '--judge-prompt-profile' "$dir/argv" || return 1
+    else
+      exact "$dir/argv" --judge-prompt-profile && exact "$dir/argv" original || return 1
+    fi
+    ! grep -q -- '--rejudge-purpose' "$dir/argv" || return 1
   done
   fixture F7_cohort
   set_config FULL_REPS=1
@@ -528,6 +595,38 @@ f7() {
     "$FX/results/fixture_model/20261015_full_r1/language/functionchat" \
     --judge-model openai/gpt-4.1-mini --judge-cohort oss > "$FX/expected_cohort_argv"
   diff -u "$FX/expected_cohort_argv" "$FX/dump/20261015_full_r1.functionchat_judge/argv"
+}
+
+f7_luna() {
+  # All five settings are literal test inputs, independent of production confs.
+  fixture F7_luna
+  set_config FULL_REPS=1
+  set_config JUDGE_MODEL=openai/gpt-6-luna
+  set_config JUDGE_REASONING_EFFORT=none
+  set_config JUDGE_TEMPERATURE_MODE=omit
+  set_config JUDGE_PROMPT_PROFILE=original
+  set_config JUDGE_COHORT=luna
+  run_lane 1
+  expect_rc 0 || return 1
+  grep 'shared.functionchat.judge.run_judge\|shared.multimodal.benches.koffvqa_api_judge' "$FX/stdout" > "$FX/judge_commands"
+  cat > "$FX/expected_judge_commands" <<'EXPECTED'
+COMMAND[if-exists]=python -m shared.functionchat.judge.run_judge --results-dir <RD>/20261015_full_r1/language/functionchat --judge-model openai/gpt-6-luna --judge-cohort luna --judge-reasoning-effort none --judge-temperature-mode omit
+COMMAND[if-exists]=python -m shared.multimodal.benches.koffvqa_api_judge --predfile <RD>/20261015_full_r1/vision/multimodal/koffvqa/<latest *_gen.xlsx> --target-model fixture/model --judge-model openai/gpt-6-luna --judge-base-url https://openrouter.ai/api/v1 --judge-api-key-env TAUBENCH_USER_API_KEY --seed 0 --judge-prompt-profile original --judge-reasoning-effort none --judge-temperature-mode omit
+EXPECTED
+  diff -u "$FX/expected_judge_commands" "$FX/judge_commands" || return 1
+  run_lane
+  expect_rc 0 || return 1
+  printf '%s\n' -m shared.functionchat.judge.run_judge --results-dir \
+    "$FX/results/fixture_model/20261015_full_r1/language/functionchat" \
+    --judge-model openai/gpt-6-luna --judge-cohort luna \
+    --judge-reasoning-effort none --judge-temperature-mode omit > "$FX/expected_fc_argv"
+  diff -u "$FX/expected_fc_argv" "$FX/dump/20261015_full_r1.functionchat_judge/argv" || return 1
+  printf '%s\n' -m shared.multimodal.benches.koffvqa_api_judge --predfile \
+    "$FX/results/fixture_model/20261015_full_r1/vision/multimodal/koffvqa/a_new_gen.xlsx" \
+    --target-model fixture/model --judge-model openai/gpt-6-luna \
+    --judge-base-url https://openrouter.ai/api/v1 --judge-api-key-env TAUBENCH_USER_API_KEY --seed 0 \
+    --judge-prompt-profile original --judge-reasoning-effort none --judge-temperature-mode omit > "$FX/expected_kof_argv"
+  diff -u "$FX/expected_kof_argv" "$FX/dump/20261015_full_r1.koffvqa_judge/argv"
 }
 
 put_judge_outputs() {
@@ -601,10 +700,10 @@ cd1() {
   for side in HEAD working; do
     fixture "CD1_$side"
     if [ "$side" = HEAD ]; then
-      for path in orchestration/run_lane.sh orchestration/models/qwen35fp8.conf; do
+      for path in orchestration/run_lane.sh; do
         (cd "$REPO" && git show "015c3c5:./$path") > "$FX/$path" || return 1
       done
-      cp "$FX/orchestration/models/qwen35fp8.conf" "$FX/orchestration/models/fixture.conf"
+      sed 's/^LANE_DISPLAY=/DISPLAY=/' "$HERE/fixtures_models/qwen35fp8.conf" > "$FX/orchestration/models/fixture.conf"
       for file in "$FX/orchestration/laneconf/"*.py; do
         path=orchestration/laneconf/$(basename "$file")
         (cd "$REPO" && git show "015c3c5:./$path") > "$file" || return 1
@@ -651,6 +750,7 @@ if [ "${1:-}" != --cd1 ]; then
   run_case F5 f5
   run_case F6 f6
   run_case F7 f7
+  run_case F7_luna f7_luna
   run_case F8 f8
   run_case F9 f9
 fi

@@ -67,7 +67,7 @@ exit 0
         put(tok/'chat_template.jinja','{% set enable_thinking = false %}\n')
         conf=fx/'orchestration/models'/f'{name}.conf'
         if kmmlu:
-            original=(orch/'models'/f'{name}.conf').read_text()
+            original=(orch/'tests/fixtures_models'/f'{name}.conf').read_text()
             changed,n=re.subn(r'^LANE_TOKENIZER=.*$',lambda m:'LANE_TOKENIZER='+str(tok),original,flags=re.M)
             check(name+' conf tokenizer substitution exactly one line',n==1)
             put(conf,changed)

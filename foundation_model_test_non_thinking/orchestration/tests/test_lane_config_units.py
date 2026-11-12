@@ -1,6 +1,10 @@
 """5b entry arguments and literal model/track settings in an isolated BASE."""
 
 import subprocess
+import re
+from pathlib import Path
+
+from shared.taubench.runner.run_taubench import USER_QUANTIZATIONS
 
 import pytest
 
@@ -39,8 +43,9 @@ def test_missing_conf_and_unknown_track(lane):
     assert unknown.returncode == 2 and 'unknown TRACK: unknown' in unknown.stderr
 
 
+@pytest.mark.parametrize('temperature_mode', ['', 'omit'])
 @pytest.mark.parametrize('track', ['kmmlu', 'taubench_std4', 'full'])
-def test_selected_track_requires_its_session(lane, track):
+def test_selected_track_requires_its_session(lane, track, temperature_mode):
     conf = lane.base / 'orchestration/models/sample.conf'
     conf.write_text(conf.read_text().replace('SESSION_KMMLU=sample\n', ''))
     result = run(lane, ['sample'], track)
@@ -50,19 +55,34 @@ def test_selected_track_requires_its_session(lane, track):
         return
     original = conf.read_text() + 'SESSION_' + track.upper() + '=fixture\n'
     prefix = track.upper() + '_'
-    for provider, effort in (('', ''), ('deepinfra/bf16', 'medium'), ('deepinfra/bf16', ''), ('', 'low'), ('', 'high')):
+    track_source = (Path(__file__).resolve().parents[1] / 'tracks' / (track + '.sh')).read_text()
+    shell_tokens = re.search(r"local quant_allowed='([^']+)'", track_source).group(1).split(',')
+    assert len(shell_tokens) == len(set(shell_tokens))
+    assert set(shell_tokens) == USER_QUANTIZATIONS
+    for provider, effort, quantizations in (
+        ('', '', ''), ('deepinfra/bf16', 'medium', ''), ('deepinfra/bf16', '', ''), ('', 'low', ''), ('', 'high', ''),
+        ('', 'none', ''), ('', 'low', 'bf16,fp8'), ('deepinfra/bf16', 'medium', 'fp8,bf16'),
+        *[('', '', token) for token in shell_tokens],
+    ):
         conf.write_text(original + prefix + 'TAUBENCH_USER_PROVIDER=' + provider + '\n' +
-                        prefix + 'TAUBENCH_USER_REASONING_EFFORT=' + effort + '\n')
+                        prefix + 'TAUBENCH_USER_REASONING_EFFORT=' + effort + '\n' +
+                        prefix + 'TAUBENCH_USER_QUANTIZATIONS=' + quantizations + '\n' +
+                        prefix + 'TAUBENCH_USER_TEMPERATURE_MODE=' + temperature_mode + '\n')
         result = run(lane, ['sample'], track)
         assert result.returncode == 0, result.stderr
         commands = [line for line in result.stdout.splitlines() if line.startswith('COMMAND=')]
         standard = next(line for line in commands if 'TAUBENCH_MODE=standard' in line)
-        for key, value in (('TAUBENCH_USER_PROVIDER', provider), ('TAUBENCH_USER_REASONING_EFFORT', effort)):
+        for key, value in (('TAUBENCH_USER_PROVIDER', provider), ('TAUBENCH_USER_REASONING_EFFORT', effort),
+                           ('TAUBENCH_USER_QUANTIZATIONS', quantizations), ('TAUBENCH_USER_TEMPERATURE_MODE', temperature_mode)):
             assert (key + '=' in standard) is bool(value)
             if value:
                 assert key + '=' + value + ' bash ' in standard or key + '=' + value + ' TAUBENCH_' in standard
             assert all(key + '=' not in line for line in commands if line != standard)
     for settings, base_url in (
+        *[('TAUBENCH_USER_TEMPERATURE_MODE=' + value + '\n', '') for value in ('0.5', 'OMIT', 'default')],
+        ('TAUBENCH_USER_REASONING_EFFORT=xhigh\n', ''),
+        ('TAUBENCH_USER_MODEL=local\nTAUBENCH_USER_TEMPERATURE_MODE=omit\n', ''),
+        ('TAUBENCH_USER_TEMPERATURE_MODE=omit\n', 'http://unused/v1'),
         ('TAUBENCH_USER_PROVIDER=Bad/provider\n', ''),
         ('TAUBENCH_USER_PROVIDER=two words\n', ''),
         ('TAUBENCH_USER_PROVIDER=/provider\n', ''),
@@ -73,6 +93,12 @@ def test_selected_track_requires_its_session(lane, track):
         ('TAUBENCH_USER_MODEL=\nTAUBENCH_USER_PROVIDER=deepinfra/bf16\n', ''),
         ('TAUBENCH_USER_PROVIDER=deepinfra/bf16\n', 'http://unused/v1'),
         ('TAUBENCH_USER_REASONING_EFFORT=medium\n', 'http://unused/v1'),
+        *[('TAUBENCH_USER_QUANTIZATIONS=' + value + '\n', '') for value in
+          ('int3', 'bf16,bf16', 'bf16,,fp8', 'bf16,', ',bf16', 'BF16', 'bf16 fp8')],
+        ('TAUBENCH_USER_MODEL=local\nTAUBENCH_USER_QUANTIZATIONS=bf16\n', ''),
+        ('TAUBENCH_USER_MODEL=openai/user\nTAUBENCH_USER_QUANTIZATIONS=bf16\n', ''),
+        ('TAUBENCH_USER_MODEL=\nTAUBENCH_USER_QUANTIZATIONS=bf16\n', ''),
+        ('TAUBENCH_USER_QUANTIZATIONS=bf16\n', 'http://unused/v1'),
     ):
         conf.write_text(original + ''.join(prefix + line + '\n' for line in settings.splitlines()))
         lane.env['TAUBENCH_USER_BASE_URL'] = base_url

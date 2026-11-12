@@ -17,6 +17,8 @@
 | 실서버 스모크 | `bash "$N/orchestration/smoke/run_smoke.sh" <model_conf> [track…]` | 최소 요청: harness·tau preflight, nlu·functionchat·K-DTC 제한 입력. 정식 벤치 완주 아님 | 매 실행 새 임시 BASE; 이어 달리기 없음 | FAIL=1, 그 외 INCONCLUSIVE=77, PASS=0; CLI·설정 오류=2 | [smoke README:23,39,64](orchestration/smoke/README.md#L23) |
 | 단일 트랙 | 예: `bash "$N/shared/functionchat/run_functionchat.sh" <model> <chat_url>` | 해당 트랙만. 예시는 추론→exact 채점 | 트랙별 계약 확인; 공통 재개 보장 없음 | 예시 FunctionChat은 set -e로 실패 중단. 다른 트랙은 각 usage·구현 확인 | [§3.3](#33-단일-트랙-실행), [run_functionchat.sh:3,5,62](shared/functionchat/run_functionchat.sh#L3) |
 
+tau standard 사용자 프로파일은 `TAUBENCH_USER_PROVIDER`·`TAUBENCH_USER_REASONING_EFFORT`·`TAUBENCH_USER_QUANTIZATIONS`로 설정한다. 모두 기본 빈값이며, quantizations는 OpenRouter 양자화 허용 목록이다. provider 없이 지정하면 업체를 고정하지 않는다. effort는 none·low·medium·high를 허용하며 `none`과 빈값은 다르다. `TAUBENCH_USER_TEMPERATURE_MODE`는 빈값이면 기존 temperature=0 전송, `omit`이면 키를 생략하고 별도 프로토콜로 기록한다. 허용 토큰·접두 우선순위·갱신 절차는 [full 사용자 프로파일](orchestration/README_full.md#standard-사용자-프로파일)을 따른다.
+
 Timeout 정책: config 일괄(`run_full_eval.sh`)과 이를 호출하는 반복 실행은 FunctionChat·taubench에만 REQUEST/TASK 기본 **300/900초**를 적용한다. `AGENT_REQUEST_TIMEOUT`·`AGENT_TASK_TIMEOUT`의 비어 있지 않은 호출자 환경값이 우선하며, 미설정·빈 값은 기본값을 쓴다. 두 값은 양의 정수이고 TASK > REQUEST여야 한다. 단독 wrapper 기본값은 FunctionChat 60/120초, taubench 60/600초로 그대로다([run_full_eval.sh:9](run_full_eval.sh#L9), [run_functionchat.sh:40](shared/functionchat/run_functionchat.sh#L40), [run_functionchat.py:353](shared/functionchat/runner/run_functionchat.py#L353), [run_taubench.sh:65](shared/taubench/run_taubench.sh#L65)). 2026-10-20 이전 공식 r1~r3은 request 60초로 측정했으며, 해당 조건은 기존 결과 metadata에 기록되어 있다.
 
 ---

@@ -38,20 +38,35 @@ def test_defaults_empty_values_and_internal_destinations():
         assert [full[key] for key in ('JUDGE_MODEL', 'JUDGE_PROVIDER', 'JUDGE_REASONING_EFFORT', 'JUDGE_MAX_TOKENS')] == [
             'alias', 'deepinfra/bf16', 'medium', '2000']
         assert resolve(entries, 'kmmlu', TRACKS)['JUDGE_MODEL'] == 'common'
-    user_keys = ('TAUBENCH_USER_PROVIDER', 'TAUBENCH_USER_REASONING_EFFORT')
-    assert [defaults[key] for key in user_keys] == ['', '']
+    for prefix in ("FULL_", "TAUBENCH_STD4_"):
+        track = "full" if prefix == "FULL_" else "taubench_std4"
+        for key in ("JUDGE_TEMPERATURE_MODE", "TAUBENCH_USER_TEMPERATURE_MODE"):
+            assert defaults[key] == ""
+            for value in ("", "omit"):
+                common, scoped = key + "=omit\n", prefix + key + "=" + value + "\n"
+                for first in (False, True):
+                    entries = parse(SAMPLE + (scoped + common if first else common + scoped))
+                    assert resolve(entries, track, TRACKS, require_session=False)[key] == value
+                    assert resolve(entries, "kmmlu", TRACKS)[key] == "omit"
+    assert defaults["JUDGE_PROMPT_PROFILE"] == ""
+    for value in ("", "original"):
+        entries = parse(SAMPLE + "JUDGE_PROMPT_PROFILE=original\nFULL_JUDGE_PROMPT_PROFILE=" + value + "\n")
+        assert resolve(entries, "full", TRACKS, require_session=False)["JUDGE_PROMPT_PROFILE"] == value
+        assert resolve(entries, "kmmlu", TRACKS)["JUDGE_PROMPT_PROFILE"] == "original"
+    user_keys = ('TAUBENCH_USER_PROVIDER', 'TAUBENCH_USER_REASONING_EFFORT', 'TAUBENCH_USER_QUANTIZATIONS')
+    assert [defaults[key] for key in user_keys] == ['', '', '']
     for track in ('full', 'taubench_std4'):
         prefix = track.upper() + '_'
-        common = 'TAUBENCH_USER_PROVIDER=other/provider\nTAUBENCH_USER_REASONING_EFFORT=low\n'
-        scoped = prefix + 'TAUBENCH_USER_PROVIDER=deepinfra/bf16\n' + prefix + 'TAUBENCH_USER_REASONING_EFFORT=medium\n'
+        common = 'TAUBENCH_USER_PROVIDER=other/provider\nTAUBENCH_USER_REASONING_EFFORT=low\nTAUBENCH_USER_QUANTIZATIONS=fp8\n'
+        scoped = prefix + 'TAUBENCH_USER_PROVIDER=deepinfra/bf16\n' + prefix + 'TAUBENCH_USER_REASONING_EFFORT=medium\n' + prefix + 'TAUBENCH_USER_QUANTIZATIONS=bf16,fp8\n'
         for first in (False, True):
             entries = parse(SAMPLE + (scoped + common if first else common + scoped))
             selected = resolve(entries, track, TRACKS, require_session=False)
-            assert [selected[key] for key in user_keys] == ['deepinfra/bf16', 'medium']
-            assert [resolve(entries, 'kmmlu', TRACKS)[key] for key in user_keys] == ['other/provider', 'low']
+            assert [selected[key] for key in user_keys] == ['deepinfra/bf16', 'medium', 'bf16,fp8']
+            assert [resolve(entries, 'kmmlu', TRACKS)[key] for key in user_keys] == ['other/provider', 'low', 'fp8']
         empty = resolve(parse(SAMPLE + common + prefix + 'TAUBENCH_USER_PROVIDER=\n' +
-                              prefix + 'TAUBENCH_USER_REASONING_EFFORT=\n'), track, TRACKS, require_session=False)
-        assert [empty[key] for key in user_keys] == ['', '']
+                              prefix + 'TAUBENCH_USER_REASONING_EFFORT=\n' + prefix + 'TAUBENCH_USER_QUANTIZATIONS=\n'), track, TRACKS, require_session=False)
+        assert [empty[key] for key in user_keys] == ['', '', '']
         for key in (*user_keys, *(prefix + key for key in user_keys)):
             with pytest.raises(ConfigError, match='duplicate key: ' + key):
                 parse(SAMPLE + key + '=x\n' + key + '=x\n')
@@ -67,7 +82,7 @@ def test_track_prefix_forbidden_even_on_unselected_track(key):
     assert str(error.value) == 'key cannot have track prefix: ' + key
 
 
-@pytest.mark.parametrize('key', ['UNKNOWN', 'full_REPS', 'FULL_UNKNOWN', ' REPS', 'REPS '])
+@pytest.mark.parametrize('key', ['UNKNOWN', 'full_REPS', 'FULL_UNKNOWN', ' REPS', 'REPS ', 'JUDGE_REJUDGE_PURPOSE', 'FULL_JUDGE_REJUDGE_PURPOSE'])
 def test_unknown_keys_are_not_silently_filtered(key):
     with pytest.raises(ConfigError, match='unknown key:'):
         resolve(parse(SAMPLE + key + '=1'), 'kmmlu', TRACKS)

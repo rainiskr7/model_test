@@ -145,6 +145,15 @@ def adapt_koffvqa_judge(source_dir: Path) -> dict[str, Any]:
     prediction_session = _prediction_session(summary, sibling)
     judge_session = _session_of(source_dir)
     rejudge = bool(prediction_session and judge_session and prediction_session != judge_session)
+    purpose = summary.get("rejudge_purpose", "")
+    migration = rejudge and purpose == "migration"
+    if purpose not in ("", "migration"):
+        failures.append("알 수 없는 rejudge_purpose")
+    if purpose == "migration":
+        if not rejudge:
+            failures.append("migration은 식별 가능한 교차 세션 재판정이어야 함")
+        if not isinstance(summary.get("judge_prompt_template_sha256"), str) or not summary["judge_prompt_template_sha256"]:
+            failures.append("migration 판정 프롬프트 템플릿 SHA 기록이 없음")
     # Keep existing sibling copies authoritative, including SHA mismatches.
     if not candidates and rejudge:
         sibling = source_dir.parents[3] / prediction_session / "vision" / "multimodal" / "koffvqa"
@@ -160,11 +169,9 @@ def adapt_koffvqa_judge(source_dir: Path) -> dict[str, Any]:
         generation_revision = _dataset_revision(_run_config(generation_summary, sibling))
     except Exception:
         generation_revision = None
-    # A judged run answers one of two different questions.  Regenerating the
-    # target responses and judging them measures the whole pipeline; re-judging
-    # bytes that already exist measures only the judge.  Both used to land in one
-    # cohort under one tolerance, so a spread could not be attributed.  The
-    # session that produced the predictions decides which this is.
+    # Prediction sessions separate generation from rejudging. Only an explicit
+    # migration purpose allows comparison across different prediction artifacts;
+    # the default rejudge remains a fixed-prediction diagnostic.
     protocol = _judge_protocol(summary, config, recorded_sha, item_digest, rejudge, generation_revision)
     metrics = {
         "axes": [{"name": "rubric", "value": average, "unit": "score/10", "numerator": sum(scores), "denominator": len(scores)}]
@@ -172,7 +179,7 @@ def adapt_koffvqa_judge(source_dir: Path) -> dict[str, Any]:
     model = str(summary.get("target_model") or (config.get("model") or {}).get("name") or source_dir.parents[3].name)
     return _base_result(
         benchmark_key="koffvqa_api_judge",
-        variant="api_judge_rejudge" if rejudge else "api_judge_end_to_end",
+        variant="api_judge_migration" if migration else "api_judge_rejudge" if rejudge else "api_judge_end_to_end",
         model=model,
         source_dir=source_dir,
         source_files=[raw_path, summary_path] + candidates,

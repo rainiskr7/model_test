@@ -4,7 +4,7 @@ import re
 
 import pytest
 
-from orchestration.tests.laneconf_support import REPO, SAMPLE, assignments
+from orchestration.tests.laneconf_support import FIXTURE_MODELS, REPO, SAMPLE, assignments
 from orchestration.tests.lane_guard_check.fixture import Fixture as GuardFixture
 from orchestration.tests.lane_guard_check.model_cases import process
 from orchestration.tests.registry_support import (
@@ -66,7 +66,7 @@ def test_cb2_common_code_has_no_fixed_track_names_or_comparisons():
 @pytest.mark.parametrize('model,track', LANES)
 def test_cb3_five_lanes_match_bundle_b_head_bytes(tmp_path, model, track):
     fx = RegistryComparison(tmp_path / 'checkout')
-    fx.put(f'orchestration/models/{model}.conf', (REPO / f'orchestration/models/{model}.conf').read_text())
+    fx.put(f'orchestration/models/{model}.conf', (FIXTURE_MODELS / f'{model}.conf').read_text())
     (fx.base / '.env').unlink()
     # Do not rely on the calling pytest disabling bytecode; CLI itself must use -B.
     fx.env.pop('PYTHONDONTWRITEBYTECODE')

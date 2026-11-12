@@ -15,6 +15,7 @@ from shared.resultspath.run_dir import scoring_results_dir
 from shared.resultspath.model_dir import results_model_dir_name, safe_model_name
 from shared.jsonread.object import load_json_object as _load
 from shared.taubench.scoring.passk import pass_hat_k_table
+from shared.taubench.runner.run_taubench import USER_QUANTIZATIONS
 
 
 SCORING_VERSION = "taubench_state_v2"  # v2: 후보 프로토콜 실패(도구 미호출)를 측정된 실패로 센다
@@ -159,8 +160,10 @@ def _validate_user_protocol(
     }
     extra = user_args.get("extra_body")
     extra = extra if isinstance(extra, dict) else {}
-    if integrity.get("user_provider") or extra.get("provider") is not None:
-        provider = extra.get("provider")
+    provider = extra.get("provider")
+    if integrity.get("user_provider") or (provider is not None and (
+        not isinstance(provider, dict) or "order" in provider or "quantizations" not in provider
+    )):
         order = provider.get("order") if isinstance(provider, dict) else None
         if not isinstance(provider, dict):
             value = "invalid:provider_not_object"
@@ -173,11 +176,26 @@ def _validate_user_protocol(
         else:
             value = order[0]
         observed["user_provider"] = value
+    if integrity.get("user_quantizations") or (isinstance(provider, dict) and "quantizations" in provider):
+        quantizations = provider.get("quantizations") if isinstance(provider, dict) else None
+        if not isinstance(quantizations, list) or not quantizations:
+            value = "invalid:quantizations_not_list"
+        elif any(not isinstance(token, str) or token not in USER_QUANTIZATIONS for token in quantizations):
+            value = "invalid:quantizations_token"
+        elif len(quantizations) != len(set(quantizations)):
+            value = "invalid:quantizations_duplicate"
+        elif provider.get("require_parameters") is not True:
+            value = "invalid:require_parameters"
+        else:
+            value = ",".join(quantizations)
+        observed["user_quantizations"] = value
     if integrity.get("user_reasoning_effort") or extra.get("reasoning") is not None:
         reasoning = extra.get("reasoning")
         effort = reasoning.get("effort") if isinstance(reasoning, dict) else None
         observed["user_reasoning_effort"] = effort if isinstance(effort, str) else "invalid:reasoning_effort"
-    if "user_provider" in observed or "user_reasoning_effort" in observed:
+    if integrity.get("user_temperature_mode"):
+        observed["user_temperature_mode"] = "omit" if "temperature" not in user_args else "invalid:temperature_present"
+    if "user_provider" in observed or "user_reasoning_effort" in observed or "user_quantizations" in observed or "user_temperature_mode" in observed:
         observed["source"] = "tau2 results.info.user_info.llm_args (configuration, not wire evidence)"
     declared_timeout = integrity.get("user_request_timeout")
     declared_max_tokens = integrity.get("user_max_tokens")
@@ -207,7 +225,7 @@ def _validate_user_protocol(
         if declared is not None:
             expected[key] = declared
             actual[key] = observed[key]
-    for key in ("user_provider", "user_reasoning_effort"):
+    for key in ("user_provider", "user_reasoning_effort", "user_quantizations", "user_temperature_mode"):
         if integrity.get(key):
             expected[key] = integrity[key]
             actual[key] = observed[key]

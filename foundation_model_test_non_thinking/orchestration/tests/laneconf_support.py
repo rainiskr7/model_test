@@ -7,6 +7,7 @@ import subprocess
 import sys
 
 REPO = Path(__file__).resolve().parents[2]
+FIXTURE_MODELS = Path(__file__).with_name("fixtures_models")
 # HEAD at the start of bundle A. Pin the oracle so later commits retain CA1's regression.
 BASELINE_REVISION = "4e4354e122844ba8423c906057064dae6fd3074c"
 TRACKS = ("kmmlu", "taubench_std4", "full")

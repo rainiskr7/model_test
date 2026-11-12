@@ -98,6 +98,7 @@ FINGERPRINT_INFORMATIONAL_RECORDED = {
     # cohort drift check rather than by silently separating the runs.
     "judge_base_url",
     "judge_served_identity",
+    # Opt-in migration overrides this exclusion in effective_protocol below.
     "judge_prompt_template_sha256",
 }
 
@@ -304,7 +305,11 @@ def effective_protocol(recorded: Mapping[str, Any], inferred: Mapping[str, Any])
     for source in (recorded, inferred):
         is_inferred = source is inferred
         for key, raw in source.items():
-            if key in FINGERPRINT_INFORMATIONAL_RECORDED:
+            # Migration alone binds the template bytes. Keep the global legacy
+            # exclusions unchanged; the opt-in purpose is itself fingerprinted.
+            if key in FINGERPRINT_INFORMATIONAL_RECORDED and not (
+                key == "judge_prompt_template_sha256" and recorded.get("rejudge_purpose") == "migration"
+            ):
                 continue
             value = raw.get("value") if is_inferred and isinstance(raw, Mapping) else raw
             noop = key == "serving_constraints" and _is_noop_serving_constraints(value)

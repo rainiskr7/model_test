@@ -106,16 +106,20 @@ def test_expected_counts_setitem_reaches_registry_adapt_result(tmp_path, monkeyp
     assert rejected["metrics"] == metrics
 
 
-@pytest.mark.parametrize("rejudge,variant", [(False, "api_judge_end_to_end"), (True, "api_judge_rejudge")])
-def test_judge_session_controls_variant_and_prediction_identity(tmp_path, monkeypatch, rejudge, variant):
+@pytest.mark.parametrize("rejudge,variant,purpose", [(False, "api_judge_end_to_end", ""), (True, "api_judge_rejudge", ""), (True, "api_judge_migration", "migration")])
+def test_judge_session_controls_variant_and_prediction_identity(tmp_path, monkeypatch, rejudge, variant, purpose):
     source = _source(tmp_path, "koffvqa_api_judge", rejudge=rejudge)
+    if purpose:
+        summary = json.loads((source / "summary.json").read_text())
+        summary.update(rejudge_purpose=purpose, judge_prompt_template_sha256="sha256:" + "a" * 64)
+        _write_json(source / "summary.json", summary)
     monkeypatch.setitem(adapters.EXPECTED_COUNTS, "koffvqa_api_judge", 1)
     result = koffvqa.adapt_koffvqa_judge(source)
     assert result["variant"] == variant
     recorded = result["protocol"]["recorded"]
     assert recorded["dataset_provenance"] == {"revision": "revision"}
-    assert ("rejudged_prediction_sha256" in recorded) is rejudge
-    if rejudge:
+    assert ("rejudged_prediction_sha256" in recorded) is (rejudge and not purpose)
+    if rejudge and not purpose:
         assert recorded["rejudged_prediction_sha256"] == recorded["prediction_sha256"]
     assert [path.name for path in result["source_files"]] == ["results.json", "summary.json", "model_gen.xlsx"]
     assert result["publishable"] is True and result["failures"] == []
@@ -136,9 +140,9 @@ def test_judge_session_controls_variant_and_prediction_identity(tmp_path, monkey
         relocated = koffvqa.adapt_koffvqa_judge(source)
         assert relocated["status"] == "LEGACY_REVALIDATED"
         assert relocated["publishable"] is True and relocated["failures"] == []
-        assert relocated["variant"] == "api_judge_rejudge"
+        assert relocated["variant"] == variant
         assert relocated["protocol"] == result["protocol"]
-        assert relocated["protocol"]["recorded"]["rejudged_prediction_sha256"] == adapters.sha256_file(prediction)
+        assert relocated["protocol"]["recorded"]["prediction_sha256"] == adapters.sha256_file(prediction)
         assert relocated["source_files"] == [source / "results.json", source / "summary.json", prediction]
         before = {p: p.read_bytes() for p in (source / "results.json", source / "summary.json",
                                               prediction, original / "summary.json")}
@@ -190,9 +194,9 @@ def test_judge_session_controls_variant_and_prediction_identity(tmp_path, monkey
                     "prediction_sha256": adapters.sha256_file(other / "model_gen.xlsx")})
         different = koffvqa.adapt_koffvqa_judge(second)
         assert different["publishable"] is True and different["failures"] == []
-        assert different["variant"] == "api_judge_rejudge"
+        assert different["variant"] == variant
         assert different["protocol"]["recorded"]["judge_model"] == recorded["judge_model"]
-        assert different["protocol"]["fingerprint"] != relocated["protocol"]["fingerprint"]
+        assert (different["protocol"]["fingerprint"] == relocated["protocol"]["fingerprint"]) is bool(purpose)
 
 
 @pytest.mark.parametrize("key", ["koffvqa", "koffvqa_api_judge"])

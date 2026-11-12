@@ -12,8 +12,9 @@ from shared.multimodal.tests._runner_fakes import offline_guard, read_json
 from shared.multimodal.tests._r3_runner_fakes import assert_capture, capture
 
 
+@pytest.mark.parametrize("effort,temperature_mode,provider", [("medium", "", "deepinfra/bf16"), ("none", "", "deepinfra/bf16"), ("none", "omit", "deepinfra/bf16"), ("", "omit", "")])
 @pytest.mark.parametrize("generation_error", [False, True])
-def test_main_payload_votes_and_retry_unresolved(monkeypatch, tmp_path, capsys, generation_error):
+def test_main_payload_votes_and_retry_unresolved(monkeypatch, tmp_path, capsys, generation_error, effort, temperature_mode, provider):
     offline_guard(monkeypatch)
     monkeypatch.setenv("R3_JUDGE_KEY", "synthetic-key")
     pilot = sys.modules[runner.call_judge.__module__]
@@ -70,7 +71,7 @@ def test_main_payload_votes_and_retry_unresolved(monkeypatch, tmp_path, capsys, 
     # C5: no requests or file mutations, for both full reruns and partial retries.
     for retry in ([], ["--retry-unresolved"]):
         for field, value in (("model", "other"), ("provider", "deepinfra/bf16"),
-                             ("reasoning_effort", "medium"), ("max_tokens_effective", 2000)):
+                             ("reasoning_effort", "medium"), ("max_tokens_effective", 2000), ("temperature", None), ("temperature_mode", "omit")):
             stored = json.loads(json.dumps(first))
             stored["judge_request"][field] = value
             (output / "judge.json").write_text(json.dumps(stored))
@@ -111,24 +112,37 @@ def test_main_payload_votes_and_retry_unresolved(monkeypatch, tmp_path, capsys, 
     # C2: all optional values travel from the actual parser to HTTP JSON.
     (output / "judge.json").unlink()
     calls.clear()
-    outcomes = iter(["pass"] * 8)
-    profile = ["--judge-model", "openai/gpt-oss-120b", "--judge-provider", "deepinfra/bf16",
-               "--judge-reasoning-effort", "medium", "--judge-max-tokens", "2000"]
+    outcomes = iter(([TimeoutError("synthetic retry")] if temperature_mode else []) + ["pass"] * 8)
+    profile = ["--judge-model", "openai/gpt-oss-120b", "--judge-provider", provider,
+               "--judge-reasoning-effort", effort, "--judge-max-tokens", "2000",
+               "--judge-temperature-mode", temperature_mode]
     for _ in range(2):
         assert runner.main([*args, *profile, "--repeats", "2"]) == int(generation_error)
-    assert len(calls) == 8
+    assert len(calls) == 8 + bool(temperature_mode)
+    if temperature_mode:
+        assert calls[0]["body"] == calls[1]["body"]
     for call in calls:
         body = json.loads(call["body"])
         assert body["model"] == "openai/gpt-oss-120b" and body["max_tokens"] == 2000
-        assert body["provider"] == {"order": ["deepinfra/bf16"], "allow_fallbacks": False, "require_parameters": True}
-        assert body["reasoning"] == {"effort": "medium"} and "seed" not in body
+        assert body.get("provider") == ({"order": [provider], "allow_fallbacks": False, "require_parameters": True} if provider else None)
+        assert body.get("reasoning") == ({"effort": effort} if effort else None)
+        assert ("temperature" not in body) is bool(temperature_mode)
+        assert "seed" not in body and "extra_body" not in body
     assert read_json(output / "judge.json")["judge_request"] == {
-        "model": "openai/gpt-oss-120b", "provider": "deepinfra/bf16", "reasoning_effort": "medium",
-        "max_tokens_requested": 2000, "max_tokens_effective": 2000, "temperature": 0,
+        "model": "openai/gpt-oss-120b", "provider": provider or None, "reasoning_effort": effort or None,
+        "max_tokens_requested": 2000, "max_tokens_effective": 2000, "temperature": None if temperature_mode else 0,
+        **({"temperature_mode": "omit"} if temperature_mode else {}),
     }
+    saved_profile = (output / "judge.json").read_bytes()
     calls.clear()
+    for retry in ([], ["--retry-unresolved"]):
+        with pytest.raises(SystemExit) as rejected:
+            runner.main([*args, *profile, "--judge-temperature-mode", "" if temperature_mode else "omit", *retry])
+        assert rejected.value.code == 2 and calls == []
+        assert (output / "judge.json").read_bytes() == saved_profile
     for invalid in (["--judge-model", ""], ["--judge-max-tokens", "0"],
-                    ["--judge-max-tokens", "-1"], ["--judge-reasoning-effort", "invalid"],
+                    ["--judge-max-tokens", "-1"], ["--judge-reasoning-effort", "invalid"], ["--judge-reasoning-effort", "xhigh"],
+                    *(["--judge-temperature-mode", value] for value in ("0.5", "OMIT", "default")),
                     *(["--judge-cohort", value] for value in ("Oss", "a b", ".", "a/b", "a" * 33, "a\n"))):
         with pytest.raises(SystemExit) as rejected:
             runner.main([*args, *invalid])
@@ -137,7 +151,8 @@ def test_main_payload_votes_and_retry_unresolved(monkeypatch, tmp_path, capsys, 
     # A distinct filename bypasses only the other file's profile, never its own.
     original = {p.name: p.read_bytes() for p in output.iterdir()}
     outcomes = iter(["pass", "pass", "pass", "fail"])
-    cohort_args = [*args, "--judge-cohort", "oss"]
+    cohort_args = [*args, "--judge-cohort", "oss", "--judge-temperature-mode", temperature_mode,
+                   "--judge-reasoning-effort", effort]
     assert runner.main([*cohort_args, "--repeats", "2"]) == 1
     assert len(calls) == 4
     assert {p.name for p in output.iterdir()} == set(original) | {"judge.oss.json"}
