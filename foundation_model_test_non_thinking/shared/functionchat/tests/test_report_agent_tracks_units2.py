@@ -44,12 +44,16 @@ def test_judge_verdicts_skip_same_model(tmp_path, capsys):
     request = {"model": "alias", "provider": None, "reasoning_effort": None,
                "max_tokens_requested": 700, "max_tokens_effective": 700, "temperature": 0}
     for field, value in (("model", "other"), ("provider", "deepinfra/bf16"),
-                         ("reasoning_effort", "medium"), ("max_tokens_effective", 2000)):
+                         ("reasoning_effort", "medium"), ("max_tokens_effective", 2000), ("reasoning_effort", "none"),
+                         ("temperature", None), ("temperature_mode", "omit")):
         path.write_text(json.dumps({**saved, "judge_request": {**request, field: value}}))
         claims = subject.collect_claims(tmp_path)
         assert claims["judge_verdicts"] == [("a", "b", {
             "comparable": False, "reason": "판정기 프로파일 불일치 — 비교 불가"})]
         assert "판정기 프로파일 불일치 — 비교 불가" in "\n".join(subject._render_claim_verdicts(claims))
+    path.write_text(json.dumps({**saved, "judge_request": {**request, "temperature": None, "temperature_mode": "omit"}}))
+    omitted = subject.collect_claims(tmp_path)
+    assert omitted["judge_credentials"][-1]["judge_profile"][-2:] == ("omit", None)
     path.write_text(json.dumps({**saved, "judge_request": request}))
     assert subject._render_claim_verdicts(subject.collect_claims(tmp_path)) == rendered
 

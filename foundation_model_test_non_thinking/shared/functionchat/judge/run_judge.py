@@ -123,7 +123,8 @@ def _parse_args(argv):
     ap.add_argument("--data-dir", type=Path, default=Path("data/FunctionChat-Bench/data"))
     ap.add_argument("--judge-model", default="openai/gpt-4.1-mini")
     ap.add_argument("--judge-provider", default=None)
-    ap.add_argument("--judge-reasoning-effort", choices=("", "low", "medium", "high"), default=None)
+    ap.add_argument("--judge-reasoning-effort", choices=("", "none", "low", "medium", "high"), default=None)
+    ap.add_argument("--judge-temperature-mode", choices=("", "omit"), default="")
     ap.add_argument("--judge-max-tokens", type=int, default=None)
     # 3회여야 과반이 성립한다. 2회는 갈리면 판정 불가가 되어 분모에서 빠진다 —
     # 2026-08-23 본 실행에서 21건(qwen 12/gemma 9)이 그렇게 사라졌다.
@@ -171,6 +172,10 @@ def _load_inputs(args):
                    if "judge_request" in stored else (stored["judge"]["model"], None, None, 700))
             current = (args.judge_model, args.judge_provider, args.judge_reasoning_effort,
                        args.judge_max_tokens if args.judge_max_tokens is not None else 700)
+            if request is not None and (request.get("temperature_mode") or request.get("temperature", 0) != 0):
+                old += (request.get("temperature_mode", ""), request["temperature"])
+            if args.judge_temperature_mode == "omit":
+                current += ("omit", None)
             if old != current:
                 print("[judge] 판정기 프로파일 불일치 — 재판정 저장 위치를 나눠라", file=sys.stderr)
                 raise SystemExit(2)
@@ -204,7 +209,8 @@ def _judge_item(item: Dict[str, Any], *, rubrics, args, api_key, identity):
     return item, [
         call_judge(prompt, args.judge_model, api_key, args.timeout, args.retries,
                    identity=identity, provider=args.judge_provider,
-                   reasoning_effort=args.judge_reasoning_effort, max_tokens=args.judge_max_tokens)
+                   reasoning_effort=args.judge_reasoning_effort, max_tokens=args.judge_max_tokens,
+                   temperature_mode=args.judge_temperature_mode)
         for _ in range(args.repeats)
     ]
 
@@ -305,7 +311,8 @@ def _build_summary(args, rubrics, records, per_type, errors, identity):
             "reasoning_effort": args.judge_reasoning_effort,
             "max_tokens_requested": args.judge_max_tokens,
             "max_tokens_effective": args.judge_max_tokens if args.judge_max_tokens is not None else 700,
-            "temperature": 0,
+            "temperature": None if args.judge_temperature_mode == "omit" else 0,
+            **({"temperature_mode": "omit"} if args.judge_temperature_mode == "omit" else {}),
         },
         "judge": {
             "model": args.judge_model,
@@ -314,7 +321,8 @@ def _build_summary(args, rubrics, records, per_type, errors, identity):
             # 623건이 2회, 13건만 5회였다. 실제 분포를 기록한다.
             "repeats_requested_this_invocation": args.repeats,
             "votes_per_item": None,  # 아래에서 실측으로 채운다
-            "temperature": 0,
+            "temperature": None if args.judge_temperature_mode == "omit" else 0,
+            **({"temperature_mode": "omit"} if args.judge_temperature_mode == "omit" else {}),
             "output_contract": "json_schema strict {verdict, justification_ko}",
             "rubric_source": "upstream data/rubric_{type}.txt",
             # "unmodified" 라고 적어두는 것은 주장일 뿐이다. 본문 해시를 남긴다.

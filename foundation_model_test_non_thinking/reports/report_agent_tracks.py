@@ -177,6 +177,8 @@ def collect_claims(base: Path, judge_cohort: str = "") -> Dict[str, Any]:
         judge_profile = (request.get("model", (judge.get("judge") or {}).get("model")),
                          request.get("provider") or None, request.get("reasoning_effort") or None,
                          request.get("max_tokens_effective", 700))
+        if request.get("temperature_mode") or request.get("temperature", 0) != 0:
+            judge_profile += (request.get("temperature_mode", ""), request.get("temperature"))
         judge_credentials.append({
             "model": run_dir.parents[2].name,
             "run": run_dir.parents[1].name,

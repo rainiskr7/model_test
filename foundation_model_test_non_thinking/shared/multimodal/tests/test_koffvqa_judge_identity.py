@@ -64,6 +64,53 @@ def test_judge_one_records_only_in_supplied_identity():
         "provider": {"order": ["deepinfra/bf16"], "allow_fallbacks": False, "require_parameters": True},
         "reasoning": {"effort": "medium"},
     }
+    # C2: fixed upstream template hash, independent of an installed data tree.
+    assert judge._prompt_template_hash("original") == "sha256:812c0c23a231e471163a42f7bf6aeb6b68ba52e6a491f4579e0c45d5712c18f2"
+    for text, expected in (
+        ("", None), ("근거만", None), ("최종 점수: 10점 만점에 11점", None),
+        ("최종 점수: 10점 만점에 -1점", None), ("최종 점수: 10점 만점에 8.5점", None),
+        ("최종 점수: 10점 만점에 8점\n추가 문장", None),
+        ("**최종 점수: 10점 만점에 8점*", None), ("최종 점수: 10점 만점에 8점..", None),
+        ("**최종 점수: 10점 만점에 8점.**.", None), ("최종 점수: 10점 만점에 08점", None),
+        ("최종 점수: 10점 만점에 0점", 0), ("최종 점수: 10점 만점에 10점", 10),
+        ("근거\n  **최종 점수: 10점 만점에 8점**.  \n\n", 8),
+        ("*최종 점수: 10점 만점에 8점.*", 8), ("최종 점수: 10점 만점에 8점.", 8),
+        ("- **최종 점수: 10점 만점에 10점**", 10),
+        ("* 최종 점수: 10점 만점에 7점", 7),
+        ("1. 최종 점수: 10점 만점에 3점.", 3),
+        ("• 최종 점수: 10점 만점에 4점", 4),
+        ("-- 최종 점수: 10점 만점에 3점", None),
+        ("- 최종 점수: 10점 만점에 8.5점", None),
+        ("- * 최종 점수: 10점 만점에 3점", None),
+        ('{"score": 8, "reason": "JSON only"}', None),
+        ("기준을 일부 만족하므로 **최종 점수: 10점 만점에 5점**", 5),
+        ("모든 기준을 충족하며, 최종 점수: 10점 만점에 10점", 10),
+        ("일치하지 않습니다. 최종 점수: 10점 만점에 0점", 0),
+        ("판단 결과 *최종 점수: 10점 만점에 5점.*\n\n", 5),
+        ('{"판단":["충족"],"최종 점수":"10점 만점에 10점"}', None),
+        ("^(^^)" * 20, None), ("[/end of transmission]" * 20, None),
+        ("최종 점수 설명 후 최종 점수: 10점 만점에 5점", None),
+        ("최종 점수: 10점 만점에 5점. 추가 설명", None),
+    ):
+        response = SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content=text))])
+        client.chat.completions.create = Mock(return_value=response)
+        outcome = judge.judge_one(client, "alias", "q{question}", "응답", {"기준": 1}, prompt_profile="original")
+        assert outcome[0] == expected and outcome[1] == outcome[3] == text
+        assert bool(outcome[2]) is (expected is None)
+        sent = client.chat.completions.create.call_args.kwargs
+        assert sent["messages"] == [{"role": "user", "content": judge.ORIGINAL_JUDGE_PROMPT.format(
+            "q{question}", "응답", json.dumps({"기준": 1}, ensure_ascii=False, indent=2))}]
+    # Optional upstream comparison is read-only; the pinned hash above always runs.
+    import ast
+    from pathlib import Path
+    import pytest
+    upstream = Path(__file__).resolve().parents[3] / "data/KOFFVQA/src/judges.py"
+    if not upstream.is_file():
+        pytest.skip("optional upstream template comparison: data/KOFFVQA unavailable; fixed SHA and parser checked")
+    node = next(n for n in ast.parse(upstream.read_text()).body if isinstance(n, ast.Assign)
+                and any(isinstance(t, ast.Name) and t.id == "base_judge_prompt" for t in n.targets))
+    assert judge.ORIGINAL_JUDGE_PROMPT == node.value.func.value.value.strip()
+
 
 
 def test_repeated_main_saves_separate_identity_and_preserves_summary_order(monkeypatch, tmp_path):

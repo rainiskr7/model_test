@@ -40,10 +40,12 @@ KMMLU/harness는 포함하지 않는다. 같은 mtime의 workbook은 셸 glob �
 | JUDGE_MODEL | FC·KOFFVQA 판정 모델, 기본 `openai/gpt-4.1-mini`; 빈값 금지 |
 | JUDGE_COHORT | FC 판정 저장 이름, 기본 빈값(`judge.json`); 지정하면 `judge.<값>.json`. 소문자 `[a-z0-9][a-z0-9_-]{0,31}`만 허용. KOFFVQA에는 전달하지 않음 |
 | JUDGE_PROVIDER | 선택: OpenRouter 제공자 slug; 지정하면 order 단일 제공자, allow_fallbacks=false, require_parameters=true |
-| JUDGE_REASONING_EFFORT | 빈값(미전송) 또는 low·medium·high |
+| JUDGE_REASONING_EFFORT | 빈값(미전송) 또는 none·low·medium·high |
+| JUDGE_TEMPERATURE_MODE | 빈값(기본 temperature=0 전송) 또는 `omit`(키 생략); CLI `--judge-temperature-mode`도 빈값·omit만 허용 |
+| JUDGE_PROMPT_PROFILE | KOFFVQA 전용: 빈값(기존 v3) 또는 `original`(원래 지시문, 엄격 최종줄 파싱); FC에는 전달하지 않음 |
 | JUDGE_MAX_TOKENS | 빈값(FC 700·KOFFVQA 1024 유지) 또는 양의 정수 |
 
-판정 키도 공통 값보다 `FULL_JUDGE_*` 값이 우선한다. Stage 1의 설정 전달 범위는 full 레인과 판정기 직접 CLI다. `shared/multimodal/run_koffvqa.sh`의 선택적 API judge 경로는 새 provider·reasoning·토큰 옵션을 전달하지 않는다. FC seed는 전송하지 않고 KOFFVQA full의 `--seed 0`은 유지한다. 제공자 설정은 요청 조건이며 실제 제공자는 기존 served identity 기록으로 확인한다.
+판정 키도 공통 값보다 `FULL_JUDGE_*` 값이 우선한다. full 레인·판정기 직접 CLI와 `shared/multimodal/run_koffvqa.sh`의 선택적 API judge 경로가 모델·provider·effort·토큰·temperature 모드를 전달한다. 별도 `judge_pilot` CLI는 기존 프로파일만 지원하며 이번 옵션 범위 밖이다. FC seed는 전송하지 않고 KOFFVQA full의 `--seed 0`은 유지한다. 제공자 설정은 요청 조건이며 실제 제공자는 기존 served identity 기록으로 확인한다.
 
 알 수 없는 키, 잘못된 REPS/KRETA 값, 유효하지 않은 재개 단계나 반복 번호는 rc 2다. 단계 이름은 위 8개 이름과 정확히 같아야 한다. solo taubench에는 `TAUBENCH_TRIALS=1`을 주입하고 standard에는 conf 값 또는 기본 4를 쓴다. `AGENT_REQUEST_TIMEOUT`(기본 300초)과 `AGENT_TASK_TIMEOUT`(기본 900초)은 conf에서 양의 정수 초로 지정하며, TASK가 REQUEST보다 커야 한다(아니면 rc 2). full 자식 환경에서는 `NUM_CONCURRENT`와 두 timeout의 상속값을 제거한 뒤 FunctionChat·solo tau 단계에만 conf 값 또는 레인 기본값을 `env` 접두로 전달한다. standard에는 REQUEST만 전달하며 TASK는 wrapper 기본 600초다. `AGENT_REQUEST_TIMEOUT>=600`이면 standard의 runner 검증에서 실패한다. nlu·multimodal·judge·derive에는 두 timeout을 전달하지 않는다. 기존 kmmlu·taubench_std4의 timeout 전달은 유지한다. taubench와 KRETA의 단계별 변수도 자식 환경에서 먼저 제거하고 필요한 단계에만 다시 넣는다. loader 출력은 기존 방식으로 적용하며, Python 모듈 호출에만 `PYTHONPATH`를 붙인다.
 
@@ -80,7 +82,7 @@ r1의 8단계와 r2의 앞 3단계는 `skip (resume)` 로그만 남기고 건너
 
 판정부터 다시 진행하려면 conf에 `FULL_RESUME_FROM=rK:koffvqa_judge`를 지정한다. 해당 반복에 prediction xlsx가 없으면 rc 2로 종료한다. 재판정은 실패 행만 이어서 처리하지 않고 xlsx 전체를 다시 채점한다. 10-05의 246/275(크레딧 부족), 10-06의 274/275(JSON parse 오류) 같은 불완전 판정은 원인을 해결한 뒤 이 경로로 재채점한다. `rK:derive`는 저장된 불완전 판정을 복구하지 않는다.
 
-기존 판정과 모델·provider·effort·실효 토큰 상한(추가로 KOFFVQA temperature·seed)이 같으면 재채점한다. 다르거나 기존 판정 기록을 읽거나 식별할 수 없으면 요청 없이 judge rc 2로 거절하고 기존 산출물을 보존한다. full은 이를 판정 실패로 누적하고 해당 derive를 건너뛰어 최종 rc 1을 낸다. FC는 `JUDGE_COHORT`로 선택한 파일 안에서 프로파일을 검사하며 다른 코호트 파일은 읽거나 덮어쓰지 않는다. KOFFVQA의 다른 프로파일 판정은 아래 절차로 새 세션에 저장한다.
+기존 판정과 모델·provider·effort·실효 토큰 상한·temperature 모드/값(추가로 KOFFVQA seed)이 같으면 재채점한다. 다르거나 기존 판정 기록을 읽거나 식별할 수 없으면 요청 없이 judge rc 2로 거절하고 기존 산출물을 보존한다. full은 이를 판정 실패로 누적하고 해당 derive를 건너뛰어 최종 rc 1을 낸다. FC는 `JUDGE_COHORT`로 선택한 파일 안에서 프로파일을 검사하며 다른 코호트 파일은 읽거나 덮어쓰지 않는다. KOFFVQA의 다른 프로파일 판정은 아래 절차로 새 세션에 저장한다.
 
 ## 저장된 예측의 재판정
 
@@ -116,7 +118,24 @@ python -m shared.multimodal.benches.koffvqa_judge_complete \
 
 어댑터는 판정 세션의 형제 `koffvqa/*_gen.xlsx`를 우선한다. workbook이 하나도 없고 `summary.predfile`에서 읽은 예측 세션과 판정 세션이 모두 식별되며 서로 다를 때만, 현재 모델 폴더의 `<예측 세션>/vision/multimodal/koffvqa`를 읽는다. 기록된 절대 base 경로는 사용하지 않는다. 형제 workbook이 있는데 SHA가 다르면 원본 세션으로 우회하지 않고 거부한다. 원본 세션을 참조한 재판정 sidecar는 원본 xlsx가 남아 있고 SHA가 같아야 보고서가 받는다. 백업·이동 시 두 세션의 의존 관계를 보존해야 한다.
 
-**재판정 세션은 모델 간 비교에 쓰지 않는다.** `api_judge_rejudge`는 고정 예측에 대한 판정기 비결정성 진단이며, 예측 SHA가 지문에 들어가 다른 예측끼리는 코호트가 갈린다. Stage 2는 KOFFVQA 저장 지원과 FC 비교까지다. KOFFVQA 모델 간 비교를 위한 재생성 또는 비교 계약 변경은 별도 Stage 2b 결정이다. `tools/output_baseline`은 이 교차 세션 재판정 배치의 의존 파일 복사를 지원하지 않으며 이번 변경 범위 밖이다.
+목적을 생략한 재판정(`api_judge_rejudge`)은 고정 예측에 대한 판정기 비결정성 진단이며 모델 간 비교에 쓰지 않는다. 판정기 교체용 비교는 아래처럼 Python CLI에 `--rejudge-purpose migration`을 명시하고, **각 생성 세션마다 한 번** 새 판정 세션에 저장한다. 원본 판정의 존재나 프로파일 차이로 목적을 추론하지 않는다.
+
+```bash
+MODEL_TEST_BASE="$PWD" EVAL_TIMESTAMP=<원본세션>_kofmig_<cohort> \
+python -m shared.multimodal.benches.koffvqa_api_judge \
+  --predfile <RD>/<원본세션>/vision/multimodal/koffvqa/<생성파일> \
+  --target-model <모델> --judge-model openai/gpt-6-luna \
+  --judge-base-url https://openrouter.ai/api/v1 \
+  --judge-api-key-env TAUBENCH_USER_API_KEY --seed 0 \
+  --judge-reasoning-effort none --judge-temperature-mode omit \
+  --judge-prompt-profile original --rejudge-purpose migration
+```
+
+이 명령은 실행 예시이며 기본값을 전환하지 않는다. 이후 위와 같은 derive·완전성 검사 및 발행 검사를 새 판정 경로에 적용한다. `api_judge_migration`은 교차 세션·xlsx SHA를 검증하고 템플릿 해시를 지문에 포함한다. prediction SHA는 정보용이며, end-to-end·진단 재판정과 별도 표에서 모델 간 비교한다. 같은 모델·코호트의 완전 복사본은 기존 규칙으로 접고, 남은 실행의 prediction SHA가 중복이면 그 모델의 대표 선택을 거부하고 strict를 실패시킨다. 서로 다른 생성 결과의 반복에는 end-to-end와 같은 평균 0.10/10 허용치를 적용한다. 보고서 표시는 **판정기 교체용 재판정(생성 고정 아님)** 이다.
+
+오류 행만 재판정: 같은 명령 + `--retry-errors`(같은 `MODEL_TEST_BASE`·`EVAL_TIMESTAMP` 유지). 기존 `results.json`·`summary.json`, 판정 프로파일 및 예측 행의 순서·식별자·내용이 같아야 하며 불일치는 요청 없이 rc 2다. `score=null` 행만 교체하고 정상 행의 JSON 바이트를 보존한다. summary는 다시 계산하며 `retry_errors.count`와 `retry_errors.history`에 재시도 횟수·회차별 행 idx 목록을 남긴다. 오류가 남으면 저장 후 rc 10이며 derive·발행 검사를 다시 적용한다. 기존 판정 산출물을 지정해 복구하는 기능이므로 생성부터 시작하는 `run_koffvqa.sh`·레인에는 노출하지 않고 직접 Python CLI에서만 제공한다.
+
+`JUDGE_REJUDGE_PURPOSE`는 레인 conf 키가 아니다(공통·FULL_ 모두 unknown key, rc 2). 직접 `run_koffvqa.sh`는 환경변수 `JUDGE_PROMPT_PROFILE`·`JUDGE_REJUDGE_PURPOSE`를 API judge에 전달하지만 항상 같은 세션 생성부터 실행하므로 유효한 migration 재판정에는 위 Python CLI를 쓴다. 같은 세션 또는 세션 식별 불가 상태의 migration 선언은 발행 거부다. full은 `JUDGE_PROMPT_PROFILE`/`FULL_JUDGE_PROMPT_PROFILE`만 지원한다. `tools/output_baseline`은 이 교차 세션 재판정 배치의 의존 파일 복사를 지원하지 않으며 이번 변경 범위 밖이다.
 
 ## 실패 정책
 
@@ -131,9 +150,9 @@ python -m shared.multimodal.benches.koffvqa_judge_complete \
 ## 코드 확인 사항과 명세의 전제 보정
 
 - FunctionChat `shared.functionchat.judge.run_judge`는 정식 패키지 `python -m`으로 호출한다. 세션 경로는 EVAL_TIMESTAMP에서 추론하지 않고 필수 `--results-dir`에서 받는다. 기본 `--data-dir=data/FunctionChat-Bench/data`는 cwd 의존성이 있다. 기존 러너의 `cd "$BASE"`를 유지해 저장소 루트의 data를 해석한다. judge 하위 디렉터리로 cd하면 오히려 잘못된 경로가 된다.
-  직접 CLI는 `--judge-model`, `--judge-provider`, `--judge-reasoning-effort`, `--judge-max-tokens`, `--judge-cohort`를 받는다. 구형 FC 기록은 `(judge.model, None, None, 700)`으로 비교한다. 동일 프로파일의 `--retry-unresolved`는 repeats 변경을 허용하고 확정 레코드와 이전 served identity를 보존한다. 보고서는 같은 정규화 프로파일끼리만 judge 우열을 비교한다.
+  직접 CLI는 `--judge-model`, `--judge-provider`, `--judge-reasoning-effort`, `--judge-max-tokens`, `--judge-temperature-mode`, `--judge-cohort`를 받는다. 구형 FC 기록은 기본 temperature=0인 `(judge.model, None, None, 700)`으로 비교하며 생략 모드만 비교 키를 확장한다. 동일 프로파일의 `--retry-unresolved`는 repeats 변경을 허용하고 확정 레코드와 이전 served identity를 보존한다. 보고서는 같은 정규화 프로파일끼리만 judge 우열을 비교한다.
 - KOFFVQA `shared.multimodal.benches.koffvqa_api_judge` 역시 `python -m` 호출이다. `benches.paths.get_base_dir/get_timestamp`가 MODEL_TEST_BASE/EVAL_TIMESTAMP를 우선하고 `get_results_dir`가 기존 모델 철자를 재사용한다. 결과는 같은 세션의 `vision/multimodal/koffvqa_api_judge`에 저장된다.
-  두 판정기 모두 요약 최상위 `judge_request`에 model·provider·reasoning_effort·max_tokens_requested·max_tokens_effective·temperature를 기록하며 KOFFVQA는 seed도 기록한다. 토큰 옵션 생략은 requested=null, effective는 실제 700/1024다. KOFFVQA의 구형 summary는 judge_model·run_config.decoding을 사용하고, summary가 없으면 같은 폴더 run_config.json의 judge.model·decoding으로 확인한다. 식별 기록 없이 results.json만 남은 경우에는 덮어쓰지 않는다.
+  두 판정기 모두 요약 최상위 `judge_request`에 model·provider·reasoning_effort·max_tokens_requested·max_tokens_effective·temperature를 기록하며 KOFFVQA는 seed도 기록한다. 토큰 옵션 생략은 requested=null, effective는 실제 700/1024다. temperature 생략은 `temperature_mode="omit"`·`temperature=null`로 기록하고 기본값에는 모드 필드를 추가하지 않는다. KOFFVQA의 decoding/decoding_requested에도 같은 표식을 남겨 발행 지문에서 unknown과 구별한다. effort `none`은 문자열 그대로 보내며 미설정과 다르다. provider의 require_parameters=true는 유지하고 temperature 생략이 seed나 재시도 정책을 바꾸지 않는다. KOFFVQA의 구형 summary는 judge_model·run_config.decoding을 사용하고, summary가 없으면 같은 폴더 run_config.json의 judge.model·decoding으로 확인한다. 식별 기록 없이 results.json만 남은 경우에는 덮어쓰지 않는다.
 - `derive_multimodal_publish.py --source`는 세션 디렉터리가 아닌 벤치 디렉터리(또는 KRETA JSONL) 하나를 받는다. `publish.adapters.ADAPTERS`에 `koffvqa_api_judge`가 등록돼 있다. 따라서 `--base . --write --source <RD>/<TS>/vision/multimodal/koffvqa_api_judge`만 호출한다. 다른 세션이나 다른 벤치의 sidecar를 일괄 갱신하지 않는다. derive를 생략하거나 레인 밖 수동 작업으로 돌릴 필요는 없다.
 - `shared/multimodal/run_all.sh`는 KRETA_RESUME=1이면 `run_kreta_resume.sh`를 호출하고 실패하면 1회 재시도한다. NLU/FunctionChat/taubench와 달리 내부 벤치들의 rc는 `run_checked`가 일반 실패 수로 바꿀 수 있다. 새 레인은 run_all 자체가 반환한 rc만 판정한다. 내부 rc 3/130이 항상 보존된다고 가정하지 않는다. 보호 파일은 변경하지 않는다.
 - `run_repeated_eval.sh`의 기존 세션 거부는 rc 1이지만 full은 명세가 지정한 rc 2를 쓴다.
@@ -189,8 +208,16 @@ nohup perl -e 'setpgrp; exec @ARGV' /bin/bash "$N/orchestration/lanes/full.sh" q
 | 키 | full 계약 |
 | --- | --- |
 | TAUBENCH_USER_PROVIDER | 기본 빈값(미전송). `[a-z0-9][a-z0-9/_.-]*` 제공자 slug; 지정하면 order 단일 제공자, allow_fallbacks=false, require_parameters=true |
-| TAUBENCH_USER_REASONING_EFFORT | 기본 빈값(미전송) 또는 low·medium·high; LiteLLM 모델 맵과 무관하게 extra_body.reasoning.effort로 전달 |
+| TAUBENCH_USER_REASONING_EFFORT | 기본 빈값(미전송) 또는 none·low·medium·high; LiteLLM 모델 맵과 무관하게 extra_body.reasoning.effort로 전달 |
+| TAUBENCH_USER_TEMPERATURE_MODE | 빈값(기본 temperature=0 전송) 또는 `omit`(키 생략); CLI `--user-temperature-mode`도 빈값·omit만 허용 |
+| TAUBENCH_USER_QUANTIZATIONS | 기본 빈값(미전송). 쉼표 허용 목록; 2026-10-27 OpenRouter 문서 열거값 `int4,int8,fp4,mxfp4,nvfp4,fp6,fp8,mxfp8,fp16,bf16,fp32,unknown`. 미지 토큰·중복·빈 토큰은 rc 2 |
 
-공통 값보다 `FULL_TAUBENCH_USER_PROVIDER`·`FULL_TAUBENCH_USER_REASONING_EFFORT`가 우선한다. 두 옵션은 standard 단계에만 전달한다. 하나라도 지정하면 사용자 모델은 `openrouter/` 접두여야 하고 `TAUBENCH_USER_BASE_URL` 환경값과 동시에 지정할 수 없다(rc 2). `OPENROUTER_API_BASE`는 막지 않으며, 새 옵션을 쓸 때 manifest의 `user_openrouter_api_base_set`에 비어 있지 않은 환경값의 존재만 기록한다. 값 자체는 기록하지 않는다.
+공통 값보다 `FULL_TAUBENCH_USER_PROVIDER`·`FULL_TAUBENCH_USER_REASONING_EFFORT`·`FULL_TAUBENCH_USER_QUANTIZATIONS`·`FULL_TAUBENCH_USER_TEMPERATURE_MODE`가 우선하며 scoped 빈값은 공통 omit을 해제한다. 네 옵션은 standard 단계에만 전달한다. 하나라도 지정하면 사용자 모델은 `openrouter/` 접두여야 하고 `TAUBENCH_USER_BASE_URL` 환경값과 동시에 지정할 수 없다(rc 2). `OPENROUTER_API_BASE`는 막지 않으며, 새 옵션을 쓸 때 manifest의 `user_openrouter_api_base_set`에 비어 있지 않은 환경값의 존재만 기록한다. 값 자체는 기록하지 않는다.
 
-provider·effort가 비어 있으면 기존 요청·manifest·summary·코호트를 유지한다. 지정한 값은 manifest와 비교 지문에 들어가며 tau2 results.json의 설정 기록과 대조한다(실제 전송 또는 실제 제공자의 증거가 아님). 제공자 정책 플래그·order·effort가 다르거나 잘못된 타입이면 summary를 남기고 발행·후보 간 비교를 거부한다. low/medium 선택과 도구 호출·추론 누출·지연·지원 파라미터는 전환 전 실 요청 검증 대상이다.
+provider·effort·quantizations가 모두 비어 있으면 기존 요청·manifest·summary·코호트를 유지한다. 지정한 값은 manifest와 비교 지문에 들어가며 tau2 results.json의 설정 기록과 대조한다(실제 전송 또는 실제 제공자의 증거가 아님). 제공자 정책 플래그·order·effort·quantizations가 다르거나 잘못된 타입이면 summary를 남기고 발행·후보 간 비교를 거부한다. low/medium 선택과 도구 호출·추론 누출·지연·지원 파라미터는 전환 전 실 요청 검증 대상이다.
+
+temperature 생략은 manifest에 `user_temperature_mode="omit"`·`user_temperature=null`로 기록하며, 이 모드만 지문·보고에 추가한다. 채점은 tau2 저장 설정에서 temperature 키 부재를 확인하고 재삽입된 0·null 모두 불일치로 남긴다. 의도적 생략은 서빙 제약으로 제거된 기록과 다르며, 생략만으로 provider/extra_body를 만들지 않는다. 기본 요청·기록·지문은 유지한다. 기존 스모크는 외부 judge·OpenRouter 사용자를 호출하지 않으므로 이 옵션의 요청 검증을 대신하지 않는다.
+
+quantizations는 제외 목록이 아니라 허용 목록이다. 현재 열거값에서 int4만 제외하려면 `int8,fp4,mxfp4,nvfp4,fp6,fp8,mxfp8,fp16,bf16,fp32,unknown`을 지정한다. provider가 비어 있으면 `order`·`allow_fallbacks`를 보내지 않고 `quantizations`·`require_parameters=true`만 보내므로 업체를 고정하지 않는다. provider를 함께 지정하면 기존 단일 업체·fallback 금지 정책에 목록을 추가한다. 입력 순서를 요청·manifest·지문에 그대로 보존하므로 같은 원소라도 순서가 다르면 별도 지문이다.
+
+새 OpenRouter 토큰은 자동 허용하지 않는다. 지원하려면 (1) `shared/taubench/runner/run_taubench.py`의 `USER_QUANTIZATIONS`(채점도 재사용), (2) `orchestration/tracks/{taubench_std4,full}.sh`의 `quant_allowed`, (3) 위 허용값 표를 함께 갱신하고 `test_lane_config_units.py`의 집합 동일성·거절 시험을 통과시킨다. int4 제외 설정에도 새 허용 토큰을 명시적으로 추가해야 한다. 실제 서빙 업체는 results.json 메시지의 raw_data.provider에 남으며 이번 보고서는 업체 분포를 집계하지 않는다.

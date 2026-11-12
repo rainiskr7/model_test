@@ -131,6 +131,9 @@ def test_raw_timeout_detected_even_with_rc_zero(monkeypatch, tmp_path):
 def test_cli_outside_cwd_missing_template_is_inconclusive(monkeypatch, tmp_path):
     with fixture(ROOT, "127.0.0.1:1") as root:
         monkeypatch.setenv("SMOKE_FIXTURE_HOST", "127.0.0.1:1")
+        conf = root / "orchestration/models/fixture.conf"
+        conf.write_text(conf.read_text() + "JUDGE_TEMPERATURE_MODE=omit\nFULL_JUDGE_REASONING_EFFORT=none\n"
+                        "TAUBENCH_USER_TEMPERATURE_MODE=omit\nFULL_TAUBENCH_USER_TEMPERATURE_MODE=\n")
         (root / "tokenizer/chat_template.jinja").unlink()
         shutil.copytree(ROOT / "orchestration/smoke", root / "orchestration/smoke")
         output = tmp_path / "summary.json"

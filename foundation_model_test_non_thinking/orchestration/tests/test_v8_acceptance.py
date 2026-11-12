@@ -3,7 +3,7 @@ import json
 
 import pytest
 
-from orchestration.tests.laneconf_support import REPO, SAMPLE
+from orchestration.tests.laneconf_support import FIXTURE_MODELS, SAMPLE
 from orchestration.tests.registry_support import RegistryComparison, with_completion_check
 
 
@@ -17,7 +17,7 @@ LANES = [(model, 'kmmlu') for model in ('qwen38', 'qwenfp8', 'qwen35fp8', 'qwen3
 @pytest.mark.parametrize('model,track', LANES)
 def test_cd3_five_lane_bytes_match_pre_v8(tmp_path, model, track):
     fx = V8Comparison(tmp_path / 'checkout')
-    fx.put(f'orchestration/models/{model}.conf', (REPO / f'orchestration/models/{model}.conf').read_text())
+    fx.put(f'orchestration/models/{model}.conf', (FIXTURE_MODELS / f'{model}.conf').read_text())
     (fx.base / '.env').unlink()
     outputs = []
     for side in ('HEAD', 'working'):
